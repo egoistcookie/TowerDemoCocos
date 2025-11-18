@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, EventTarget } from 'cc';
+import { _decorator, Component, Node, EventTarget, instantiate } from 'cc';
 const { ccclass, property } = _decorator;
 
 const eventTarget = new EventTarget();
@@ -41,7 +41,7 @@ export class Crystal extends Component {
         
         // 触发爆炸效果
         if (this.explosionEffect) {
-            const explosion = Node.instantiate(this.explosionEffect);
+            const explosion = instantiate(this.explosionEffect);
             explosion.setParent(this.node.parent);
             explosion.setWorldPosition(this.node.worldPosition);
             

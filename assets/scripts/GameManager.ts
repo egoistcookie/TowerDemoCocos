@@ -75,7 +75,8 @@ export class GameManager extends Component {
         if (this.timerLabel) {
             const minutes = Math.floor(this.gameTime / 60);
             const seconds = Math.floor(this.gameTime % 60);
-            this.timerLabel.string = `时间: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+            const secondsStr = seconds < 10 ? `0${seconds}` : `${seconds}`;
+            this.timerLabel.string = `时间: ${minutes}:${secondsStr}`;
         }
     }
 

@@ -56,8 +56,8 @@ export class Tower extends Component {
 
         for (const enemy of enemies) {
             if (enemy.active) {
-                const enemyScript = enemy.getComponent('Enemy');
-                if (enemyScript && enemyScript.isAlive()) {
+                const enemyScript = enemy.getComponent('Enemy') as any;
+                if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                     const distance = Vec3.distance(this.node.worldPosition, enemy.worldPosition);
                     if (distance <= this.attackRange && distance < minDistance) {
                         minDistance = distance;
@@ -75,14 +75,16 @@ export class Tower extends Component {
             return;
         }
 
-        const enemyScript = this.currentTarget.getComponent('Enemy');
-        if (enemyScript && enemyScript.isAlive()) {
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any;
+        if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
             // 创建子弹或直接造成伤害
             if (this.bulletPrefab) {
                 this.createBullet();
             } else {
                 // 直接伤害
-                enemyScript.takeDamage(this.attackDamage);
+                if (enemyScript.takeDamage) {
+                    enemyScript.takeDamage(this.attackDamage);
+                }
             }
         }
     }
@@ -102,8 +104,8 @@ export class Tower extends Component {
         direction.normalize();
 
         // 直接造成伤害（简化处理）
-        const enemyScript = this.currentTarget.getComponent('Enemy');
-        if (enemyScript) {
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any;
+        if (enemyScript && enemyScript.takeDamage) {
             enemyScript.takeDamage(this.attackDamage);
         }
 
@@ -137,7 +139,7 @@ export class Tower extends Component {
 
         // 触发爆炸效果
         if (this.explosionEffect) {
-            const explosion = Node.instantiate(this.explosionEffect);
+            const explosion = instantiate(this.explosionEffect);
             explosion.setParent(this.node.parent);
             explosion.setWorldPosition(this.node.worldPosition);
 
