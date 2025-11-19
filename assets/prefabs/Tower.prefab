@@ -150,7 +150,7 @@
     "__prefab": {
       "__id__": 7
     },
-    "maxHealth": 50,
+    "maxHealth": 20,
     "attackRange": 200,
     "attackDamage": 10,
     "attackInterval": 1,
@@ -236,6 +236,7 @@
       "__id__": 0
     },
     "fileId": "41CKFguCVDobF3B4bpvYyq",
+    "instance": null,
     "targetOverrides": null
   }
 ]

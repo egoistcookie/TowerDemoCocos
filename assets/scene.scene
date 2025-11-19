@@ -472,8 +472,8 @@
       "a": 255
     },
     "_string": "水晶血量: 100",
-    "_horizontalAlign": 1,
-    "_verticalAlign": 1,
+    "_horizontalAlign": 0,
+    "_verticalAlign": 0,
     "_actualFontSize": 24,
     "_fontSize": 24,
     "_fontFamily": "Arial",
@@ -534,7 +534,7 @@
     "_prefab": null,
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": -271.252,
+      "x": -270.252,
       "y": 791.525,
       "z": 0
     },
@@ -785,8 +785,8 @@
     "_prefab": null,
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": -0.867,
-      "y": -301.729,
+      "x": 13.329,
+      "y": -252.044,
       "z": 0
     },
     "_lrot": {
@@ -1104,8 +1104,8 @@
     "_prefab": null,
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": 11.012,
-      "y": 62.099,
+      "x": 13.777,
+      "y": 150.586,
       "z": 0
     },
     "_lrot": {
@@ -1270,8 +1270,8 @@
     "_prefab": null,
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": -6.816,
-      "y": 234.011,
+      "x": 11.158,
+      "y": 336.324,
       "z": 0
     },
     "_lrot": {
@@ -1922,7 +1922,7 @@
     "_prefab": null,
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": -300,
+      "x": -301,
       "y": 737.484,
       "z": 0
     },
@@ -1992,8 +1992,8 @@
       "a": 255
     },
     "_string": "金币: 10",
-    "_horizontalAlign": 1,
-    "_verticalAlign": 1,
+    "_horizontalAlign": 0,
+    "_verticalAlign": 0,
     "_actualFontSize": 24,
     "_fontSize": 24,
     "_fontFamily": "Arial",
