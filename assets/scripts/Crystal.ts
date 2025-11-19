@@ -42,10 +42,22 @@ export class Crystal extends Component {
         // 触发爆炸效果
         if (this.explosionEffect) {
             const explosion = instantiate(this.explosionEffect);
+            
+            // 先设置父节点和位置
             explosion.setParent(this.node.parent);
             explosion.setWorldPosition(this.node.worldPosition);
             
-            // 延迟销毁爆炸效果节点
+            // 立即设置缩放为0，确保不会显示在屏幕中央
+            explosion.setScale(0, 0, 1);
+            
+            // 延迟一小段时间后开始动画（确保位置已正确设置）
+            this.scheduleOnce(() => {
+                if (explosion && explosion.isValid) {
+                    // 爆炸效果会自动在ExplosionEffect的start()中开始动画
+                }
+            }, 0.01);
+            
+            // 延迟销毁爆炸效果节点（动画完成后）
             this.scheduleOnce(() => {
                 if (explosion && explosion.isValid) {
                     explosion.destroy();

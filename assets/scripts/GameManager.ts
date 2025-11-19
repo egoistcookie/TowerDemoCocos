@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Label, director } from 'cc';
+import { _decorator, Component, Node, Label, director, find } from 'cc';
 import { Crystal } from './Crystal';
 const { ccclass, property } = _decorator;
 
@@ -25,9 +25,13 @@ export class GameManager extends Component {
     @property(Label)
     gameOverLabel: Label = null!;
 
+    @property(Label)
+    goldLabel: Label = null!;
+
     private gameState: GameState = GameState.Playing;
     private gameTime: number = 180; // 3分钟 = 180秒
     private crystalScript: Crystal = null!;
+    private gold: number = 10; // 初始金币
 
     start() {
         if (this.crystal) {
@@ -78,6 +82,11 @@ export class GameManager extends Component {
             const secondsStr = seconds < 10 ? `0${seconds}` : `${seconds}`;
             this.timerLabel.string = `时间: ${minutes}:${secondsStr}`;
         }
+
+        // 更新金币显示
+        if (this.goldLabel) {
+            this.goldLabel.string = `金币: ${this.gold}`;
+        }
     }
 
     onCrystalDestroyed() {
@@ -87,10 +96,12 @@ export class GameManager extends Component {
     }
 
     endGame(state: GameState) {
+        console.log(`GameManager: endGame called with state: ${state} (${state === GameState.Victory ? 'Victory' : state === GameState.Defeat ? 'Defeat' : 'Unknown'})`);
         this.gameState = state;
         
         if (this.gameOverPanel) {
             this.gameOverPanel.active = true;
+            console.log('GameManager: GameOverPanel activated');
         }
 
         if (this.gameOverLabel) {
@@ -99,22 +110,124 @@ export class GameManager extends Component {
             } else {
                 this.gameOverLabel.string = '失败！';
             }
+            console.log(`GameManager: GameOverLabel set to: ${this.gameOverLabel.string}`);
         }
+        
+        // 确保游戏状态已更新
+        console.log(`GameManager: Current game state: ${this.gameState}`);
     }
 
     getGameState(): GameState {
         return this.gameState;
     }
 
+    // 金币相关方法
+    getGold(): number {
+        return this.gold;
+    }
+
+    addGold(amount: number) {
+        this.gold += amount;
+        this.updateUI();
+    }
+
+    spendGold(amount: number): boolean {
+        if (this.gold >= amount) {
+            this.gold -= amount;
+            this.updateUI();
+            return true;
+        }
+        return false;
+    }
+
+    canAfford(amount: number): boolean {
+        return this.gold >= amount;
+    }
+
     restartGame() {
         console.log('GameManager: restartGame called');
-        const sceneName = director.getScene()?.name;
+        
+        // 清理所有敌人和防御塔（如果场景重载失败时的备用方案）
+        this.cleanupAllUnits();
+        
+        const scene = director.getScene();
+        let sceneName = scene?.name;
+        
+        // 如果场景名称为空，尝试使用默认名称
+        if (!sceneName || sceneName === '') {
+            sceneName = 'scene';
+            console.log('GameManager: Scene name is empty, using default name "scene"');
+        }
+        
         if (sceneName) {
             console.log('GameManager: Reloading scene:', sceneName);
-            director.loadScene(sceneName);
+            director.loadScene(sceneName, (error: Error | null) => {
+                if (error) {
+                    console.error('GameManager: Failed to reload scene:', error);
+                } else {
+                    console.log('GameManager: Scene reloaded successfully');
+                }
+            });
         } else {
             console.error('GameManager: Cannot get current scene name!');
         }
+    }
+
+    cleanupAllUnits() {
+        // 使用递归查找节点
+        const findNodeRecursive = (node: Node, name: string): Node | null => {
+            if (node.name === name) {
+                return node;
+            }
+            for (const child of node.children) {
+                const found = findNodeRecursive(child, name);
+                if (found) return found;
+            }
+            return null;
+        };
+
+        const scene = director.getScene();
+        if (!scene) return;
+
+        // 清理所有敌人
+        let enemiesNode = find('Enemies');
+        if (!enemiesNode && scene) {
+            enemiesNode = findNodeRecursive(scene, 'Enemies');
+        }
+        if (enemiesNode) {
+            const enemies = enemiesNode.children.slice(); // 复制数组，避免在遍历时修改
+            for (const enemy of enemies) {
+                if (enemy && enemy.isValid) {
+                    const enemyScript = enemy.getComponent('Enemy') as any;
+                    if (enemyScript && enemyScript.die) {
+                        enemyScript.die();
+                    } else {
+                        enemy.destroy();
+                    }
+                }
+            }
+        }
+
+        // 清理所有防御塔
+        let towersNode = find('Towers');
+        if (!towersNode && scene) {
+            towersNode = findNodeRecursive(scene, 'Towers');
+        }
+        if (towersNode) {
+            const towers = towersNode.children.slice(); // 复制数组
+            for (const tower of towers) {
+                if (tower && tower.isValid) {
+                    const towerScript = tower.getComponent('Tower') as any;
+                    if (towerScript && towerScript.destroyTower) {
+                        towerScript.destroyTower();
+                    } else {
+                        tower.destroy();
+                    }
+                }
+            }
+        }
+
+        console.log('GameManager: Cleaned up all enemies and towers');
     }
 }
 

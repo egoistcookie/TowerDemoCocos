@@ -1,7 +1,7 @@
 [
   {
     "__type__": "cc.Prefab",
-    "_name": "Enemy",
+    "_name": "Explosion",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_native": "",
@@ -13,7 +13,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "Enemy",
+    "_name": "Explosion",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": null,
@@ -35,8 +35,8 @@
     },
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": -321.113,
-      "y": -624.008,
+      "x": 6.322,
+      "y": 0.861,
       "z": 0
     },
     "_lrot": {
@@ -76,8 +76,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 40,
-      "height": 40
+      "width": 100,
+      "height": 100
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -88,7 +88,7 @@
   },
   {
     "__type__": "cc.CompPrefabInfo",
-    "fileId": "99MgJQyCBILJZJBmScrA6z"
+    "fileId": "1aTNGi80dBVJK4BoRFsAIk"
   },
   {
     "__type__": "cc.Sprite",
@@ -107,9 +107,9 @@
     "_dstBlendFactor": 4,
     "_color": {
       "__type__": "cc.Color",
-      "r": 250,
-      "g": 0,
-      "b": 0,
+      "r": 240,
+      "g": 183,
+      "b": 3,
       "a": 255
     },
     "_spriteFrame": {
@@ -133,10 +133,10 @@
   },
   {
     "__type__": "cc.CompPrefabInfo",
-    "fileId": "a1i3CSKplKsZgwrdWCBrCq"
+    "fileId": "30M95CmmZI4ZKt3ZSQDse/"
   },
   {
-    "__type__": "59420K+peNH0YMgEpB2OcPB",
+    "__type__": "410a6GEI79HVa68cSV3hGc/",
     "_name": "",
     "_objFlags": 0,
     "__editorExtras__": {},
@@ -147,22 +147,13 @@
     "__prefab": {
       "__id__": 7
     },
-    "maxHealth": 30,
-    "moveSpeed": 50,
-    "attackDamage": 5,
-    "attackInterval": 2,
-    "attackRange": 50,
-    "targetCrystal": null,
-    "damageNumberPrefab": {
-      "__uuid__": "af17709f-82d8-43eb-bc51-d67f9a836193",
-      "__expectedType__": "cc.Prefab"
-    },
-    "goldReward": 2,
+    "duration": 0.5,
+    "maxScale": 2,
     "_id": ""
   },
   {
     "__type__": "cc.CompPrefabInfo",
-    "fileId": "2fX0c4KA1EM5tckN4fM5zQ"
+    "fileId": "10+TMBtMdCyZqjZUk55txz"
   },
   {
     "__type__": "cc.PrefabInfo",
@@ -172,7 +163,7 @@
     "asset": {
       "__id__": 0
     },
-    "fileId": "d0bXHKLctARYfmImJyBgH4",
+    "fileId": "53kYbc4LxAU47InDWVZ82F",
     "targetOverrides": null
   }
 ]

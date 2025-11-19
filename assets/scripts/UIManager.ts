@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Button, Label, find } from 'cc';
+import { _decorator, Component, Node, Button, Label, find, director } from 'cc';
 import { GameManager } from './GameManager';
 const { ccclass, property } = _decorator;
 
@@ -17,13 +17,7 @@ export class UIManager extends Component {
 
     start() {
         // 查找游戏管理器
-        const gmNode = find('GameManager');
-        if (gmNode) {
-            this.gameManager = gmNode.getComponent(GameManager);
-            console.log('UIManager: Found GameManager');
-        } else {
-            console.warn('UIManager: GameManager not found!');
-        }
+        this.findGameManager();
 
         // 绑定按钮事件
         if (this.buildButton) {
@@ -48,6 +42,39 @@ export class UIManager extends Component {
         }
     }
 
+    findGameManager() {
+        // 方法1: 通过节点名称查找
+        let gmNode = find('GameManager');
+        if (gmNode) {
+            this.gameManager = gmNode.getComponent(GameManager);
+            if (this.gameManager) {
+                console.log('UIManager: Found GameManager by name');
+                return;
+            }
+        }
+        
+        // 方法2: 从场景根节点递归查找
+        const scene = director.getScene();
+        if (scene) {
+            const findInScene = (node: Node, componentType: any): any => {
+                const comp = node.getComponent(componentType);
+                if (comp) return comp;
+                for (const child of node.children) {
+                    const found = findInScene(child, componentType);
+                    if (found) return found;
+                }
+                return null;
+            };
+            this.gameManager = findInScene(scene, GameManager);
+            if (this.gameManager) {
+                console.log('UIManager: Found GameManager by recursive search');
+                return;
+            }
+        }
+        
+        console.warn('UIManager: GameManager not found!');
+    }
+
     onBuildButtonClick() {
         console.log('UIManager: BuildButton clicked!');
         if (this.towerBuilder) {
@@ -69,11 +96,25 @@ export class UIManager extends Component {
 
     onRestartButtonClick() {
         console.log('UIManager: RestartButton clicked!');
+        
+        // 重新查找GameManager
+        this.findGameManager();
+        
         if (this.gameManager) {
             console.log('UIManager: Calling GameManager.restartGame');
             this.gameManager.restartGame();
         } else {
-            console.error('UIManager: GameManager is null!');
+            console.warn('UIManager: GameManager is null! Trying to reload scene directly.');
+            // 如果还是找不到，尝试直接重新加载场景
+            const scene = director.getScene();
+            if (scene && scene.name) {
+                console.log('UIManager: Reloading scene:', scene.name);
+                director.loadScene(scene.name);
+            } else {
+                // 如果场景名称为空，尝试使用默认场景名称
+                console.log('UIManager: Scene name is empty, trying default name "scene"');
+                director.loadScene('scene');
+            }
         }
     }
 }

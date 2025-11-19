@@ -1,4 +1,5 @@
-import { _decorator, Component, Node, Prefab, instantiate, Vec3, EventTouch, input, Input, Camera, find } from 'cc';
+import { _decorator, Component, Node, Prefab, instantiate, Vec3, EventTouch, input, Input, Camera, find, view, UITransform } from 'cc';
+import { GameManager } from './GameManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('TowerBuilder')
@@ -18,12 +19,19 @@ export class TowerBuilder extends Component {
     @property(Node)
     towerContainer: Node = null!;
 
+    @property
+    towerCost: number = 5; // 防御塔建造成本
+
     private isBuildingMode: boolean = false;
     private previewTower: Node = null!;
+    private gameManager: GameManager = null!;
 
     start() {
         console.log('TowerBuilder: start() called');
         console.log('TowerBuilder: towerPrefab:', this.towerPrefab ? 'set' : 'null');
+        
+        // 查找游戏管理器
+        this.findGameManager();
         
         // 查找水晶
         if (!this.targetCrystal) {
@@ -52,6 +60,32 @@ export class TowerBuilder extends Component {
 
     onDestroy() {
         input.off(Input.EventType.TOUCH_END, this.onTouchEnd, this);
+    }
+
+    findGameManager() {
+        // 方法1: 通过节点名称查找
+        let gmNode = find('GameManager');
+        if (gmNode) {
+            this.gameManager = gmNode.getComponent(GameManager);
+            if (this.gameManager) {
+                return;
+            }
+        }
+        
+        // 方法2: 从场景根节点递归查找GameManager组件
+        const scene = this.node.scene;
+        if (scene) {
+            const findInScene = (node: Node, componentType: any): any => {
+                const comp = node.getComponent(componentType);
+                if (comp) return comp;
+                for (const child of node.children) {
+                    const found = findInScene(child, componentType);
+                    if (found) return found;
+                }
+                return null;
+            };
+            this.gameManager = findInScene(scene, GameManager);
+        }
     }
 
     enableBuildingMode() {
@@ -90,7 +124,8 @@ export class TowerBuilder extends Component {
         }
 
         // 获取触摸位置
-        const touchLocation = event.getUILocation();
+        // 注意：在2D场景中，可能需要使用不同的坐标转换方法
+        const touchLocation = event.getLocation();
         console.log('TowerBuilder: Touch location:', touchLocation);
         
         // 查找Camera节点
@@ -107,12 +142,22 @@ export class TowerBuilder extends Component {
         }
 
         // 将屏幕坐标转换为世界坐标
+        // 对于2D正交相机，需要正确转换坐标
         const screenPos = new Vec3(touchLocation.x, touchLocation.y, 0);
         const worldPos = new Vec3();
-        camera.screenToWorld(screenPos, worldPos);
-        worldPos.z = 0; // 确保z坐标为0
         
-        console.log('TowerBuilder: Screen pos:', screenPos, 'World pos:', worldPos);
+        // 使用camera的screenToWorld方法转换坐标
+        // 对于2D场景，可能需要调整z值
+        camera.screenToWorld(screenPos, worldPos);
+        
+        // 对于2D正交相机，z坐标应该保持为0或相机的z值
+        // 但worldPos的z可能不是0，需要设置为0
+        worldPos.z = 0;
+        
+        console.log('TowerBuilder: Touch screen location:', touchLocation);
+        console.log('TowerBuilder: Screen pos:', screenPos);
+        console.log('TowerBuilder: World pos:', worldPos);
+        console.log('TowerBuilder: Crystal world pos:', this.targetCrystal.worldPosition);
 
         // 检查是否可以建造
         const canBuild = this.canBuildAt(worldPos);
@@ -165,6 +210,17 @@ export class TowerBuilder extends Component {
     }
 
     buildTower(position: Vec3) {
+        // 检查金币是否足够
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        
+        if (this.gameManager && !this.gameManager.canAfford(this.towerCost)) {
+            console.log('TowerBuilder.buildTower: Not enough gold! Need', this.towerCost, 'but have', this.gameManager.getGold());
+            this.disableBuildingMode();
+            return;
+        }
+
         // 再次检查towerPrefab
         if (!this.towerPrefab) {
             console.error('TowerBuilder.buildTower: towerPrefab is null! Cannot build.');
@@ -184,11 +240,32 @@ export class TowerBuilder extends Component {
             }
         }
 
+        // 消耗金币
+        if (this.gameManager) {
+            this.gameManager.spendGold(this.towerCost);
+            console.log('TowerBuilder.buildTower: Spent', this.towerCost, 'gold. Remaining:', this.gameManager.getGold());
+        }
+
         console.log('TowerBuilder.buildTower: Instantiating tower at:', position);
         const tower = instantiate(this.towerPrefab);
         tower.setParent(this.towerContainer || this.node);
         tower.setWorldPosition(position);
+        
+        // 确保防御塔节点是激活的
+        tower.active = true;
+        
+        // 确保防御塔脚本组件存在并已初始化
+        const towerScript = tower.getComponent('Tower') as any;
+        if (towerScript) {
+            // 设置防御塔的建造成本（用于回收和升级）
+            towerScript.buildCost = this.towerCost;
+            console.log('TowerBuilder.buildTower: Tower script found, tower should start attacking enemies');
+        } else {
+            console.error('TowerBuilder.buildTower: Tower script not found on tower prefab!');
+        }
+        
         console.log('TowerBuilder.buildTower: Tower created successfully at:', tower.worldPosition);
+        console.log('TowerBuilder.buildTower: Tower container has', (this.towerContainer?.children.length || 0), 'towers');
 
         // 退出建造模式
         this.disableBuildingMode();
@@ -198,6 +275,16 @@ export class TowerBuilder extends Component {
     // 可以通过按钮调用
     onBuildButtonClick() {
         console.log('TowerBuilder: onBuildButtonClick called');
+        
+        // 检查金币是否足够
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        
+        if (this.gameManager && !this.gameManager.canAfford(this.towerCost)) {
+            console.log('TowerBuilder: Not enough gold! Need', this.towerCost, 'but have', this.gameManager.getGold());
+            return;
+        }
         
         // 检查towerPrefab是否设置
         if (!this.towerPrefab) {

@@ -1,5 +1,5 @@
 import { _decorator, Component, Node, Prefab, instantiate, Vec3, view, find } from 'cc';
-import { GameManager } from './GameManager';
+import { GameManager, GameState } from './GameManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('EnemySpawner')
@@ -25,11 +25,8 @@ export class EnemySpawner extends Component {
     start() {
         this.spawnTimer = 0;
         
-        // 查找游戏管理器
-        const gmNode = find('GameManager');
-        if (gmNode) {
-            this.gameManager = gmNode.getComponent(GameManager);
-        }
+        // 查找游戏管理器（使用递归查找，更可靠）
+        this.findGameManager();
 
         // 查找水晶
         if (!this.targetCrystal) {
@@ -43,21 +40,83 @@ export class EnemySpawner extends Component {
         }
     }
 
+    findGameManager() {
+        // 方法1: 通过节点名称查找
+        let gmNode = find('GameManager');
+        if (gmNode) {
+            this.gameManager = gmNode.getComponent(GameManager);
+            if (this.gameManager) {
+                return;
+            }
+        }
+        
+        // 方法2: 从场景根节点递归查找GameManager组件
+        const scene = this.node.scene;
+        if (scene) {
+            const findInScene = (node: Node, componentType: any): any => {
+                const comp = node.getComponent(componentType);
+                if (comp) return comp;
+                for (const child of node.children) {
+                    const found = findInScene(child, componentType);
+                    if (found) return found;
+                }
+                return null;
+            };
+            this.gameManager = findInScene(scene, GameManager);
+            if (this.gameManager) {
+                return;
+            }
+        }
+        
+        // 如果还是找不到，输出警告但不阻止运行
+        console.warn('EnemySpawner: GameManager not found, will continue trying to find it');
+    }
+
     update(deltaTime: number) {
-        // 检查游戏状态
-        if (this.gameManager && this.gameManager.getGameState() !== 0) { // 0 = Playing
-            return;
+        // 检查游戏状态 - 如果GameManager不存在，尝试重新查找
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        
+        // 检查游戏状态，如果不是Playing状态，停止刷新
+        if (this.gameManager) {
+            const gameState = this.gameManager.getGameState();
+            if (gameState !== GameState.Playing) {
+                // 游戏已结束，停止刷新
+                // 重置计时器，防止累积
+                this.spawnTimer = 0;
+                return;
+            }
+        } else {
+            // 如果找不到GameManager，继续尝试查找，但不停止刷新（避免误判）
+            // 只在连续多次找不到时才警告
+            if (Math.random() < 0.001) { // 约每1000帧一次
+                console.warn('EnemySpawner: GameManager not found, continuing to search...');
+            }
+            // 继续运行，允许生成敌人（如果GameManager真的不存在，游戏本身就有问题）
         }
 
         this.spawnTimer += deltaTime;
 
         if (this.spawnTimer >= this.spawnInterval) {
-            this.spawnEnemy();
+            // 再次检查游戏状态，确保在spawnEnemy调用前游戏仍在进行
+            if (this.gameManager && this.gameManager.getGameState() === GameState.Playing) {
+                this.spawnEnemy();
+            } else if (!this.gameManager) {
+                // 如果还是没有GameManager，但仍然允许生成敌人（避免完全停止）
+                this.spawnEnemy();
+            }
             this.spawnTimer = 0;
         }
     }
 
     spawnEnemy() {
+        // 再次检查游戏状态，确保游戏仍在进行
+        if (this.gameManager && this.gameManager.getGameState() !== GameState.Playing) {
+            console.log('EnemySpawner: Game ended, canceling enemy spawn');
+            return;
+        }
+        
         if (!this.enemyPrefab || !this.targetCrystal) {
             return;
         }

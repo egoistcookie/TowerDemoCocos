@@ -1,4 +1,7 @@
-import { _decorator, Component, Node, Vec3, Prefab, instantiate, find } from 'cc';
+import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, tween, EventTouch, input, Input } from 'cc';
+import { GameManager, GameState } from './GameManager';
+import { HealthBar } from './HealthBar';
+import { DamageNumber } from './DamageNumber';
 const { ccclass, property } = _decorator;
 
 @ccclass('Tower')
@@ -21,20 +24,103 @@ export class Tower extends Component {
     @property(Node)
     explosionEffect: Node = null!;
 
+    @property(Prefab)
+    damageNumberPrefab: Prefab = null!;
+
+    @property
+    buildCost: number = 5; // 建造成本（用于回收和升级）
+    
+    @property
+    level: number = 1; // 防御塔等级
+
     private currentHealth: number = 50;
+    private healthBar: HealthBar = null!;
+    private healthBarNode: Node = null!;
+    private selectionPanel: Node = null!; // 选择面板
     private isDestroyed: boolean = false;
     private attackTimer: number = 0;
     private currentTarget: Node = null!;
+    private gameManager: GameManager = null!;
 
     start() {
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
         this.attackTimer = 0;
+        this.currentTarget = null!;
+        
+        // 查找游戏管理器
+        this.findGameManager();
+        
+        // 创建血条
+        this.createHealthBar();
+        
+        // 监听点击事件
+        this.node.on(Node.EventType.TOUCH_END, this.onTowerClick, this);
+        
+        console.log('Tower: Started at position:', this.node.worldPosition);
+    }
+
+    createHealthBar() {
+        // 创建血条节点
+        this.healthBarNode = new Node('HealthBar');
+        this.healthBarNode.setParent(this.node);
+        this.healthBarNode.setPosition(0, 30, 0); // 在防御塔上方
+        
+        // 添加HealthBar组件
+        this.healthBar = this.healthBarNode.addComponent(HealthBar);
+        if (this.healthBar) {
+            this.healthBar.setMaxHealth(this.maxHealth);
+            this.healthBar.setHealth(this.currentHealth);
+        }
+    }
+
+    findGameManager() {
+        // 方法1: 通过节点名称查找
+        let gmNode = find('GameManager');
+        if (gmNode) {
+            this.gameManager = gmNode.getComponent(GameManager);
+            if (this.gameManager) {
+                return;
+            }
+        }
+        
+        // 方法2: 从场景根节点递归查找GameManager组件
+        const scene = this.node.scene;
+        if (scene) {
+            const findInScene = (node: Node, componentType: any): any => {
+                const comp = node.getComponent(componentType);
+                if (comp) return comp;
+                for (const child of node.children) {
+                    const found = findInScene(child, componentType);
+                    if (found) return found;
+                }
+                return null;
+            };
+            this.gameManager = findInScene(scene, GameManager);
+            if (this.gameManager) {
+                return;
+            }
+        }
     }
 
     update(deltaTime: number) {
         if (this.isDestroyed) {
             return;
+        }
+
+        // 检查游戏状态 - 如果GameManager不存在，尝试重新查找
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        
+        // 检查游戏状态，如果不是Playing状态，停止攻击
+        if (this.gameManager) {
+            const gameState = this.gameManager.getGameState();
+            if (gameState !== GameState.Playing) {
+                // 游戏已结束，停止攻击
+                this.currentTarget = null!;
+                return;
+            }
         }
 
         this.attackTimer += deltaTime;
@@ -44,27 +130,66 @@ export class Tower extends Component {
 
         // 攻击目标
         if (this.currentTarget && this.attackTimer >= this.attackInterval) {
-            this.attack();
-            this.attackTimer = 0;
+            // 再次检查游戏状态，确保游戏仍在进行
+            if (this.gameManager && this.gameManager.getGameState() === GameState.Playing) {
+                this.attack();
+                this.attackTimer = 0;
+            }
         }
     }
 
     findTarget() {
-        const enemies = find('Enemies')?.children || [];
+        // 使用递归查找Enemies容器（更可靠）
+        const findNodeRecursive = (node: Node, name: string): Node | null => {
+            if (node.name === name) {
+                return node;
+            }
+            for (const child of node.children) {
+                const found = findNodeRecursive(child, name);
+                if (found) return found;
+            }
+            return null;
+        };
+        
+        const scene = this.node.scene;
+        let enemiesNode = find('Enemies');
+        
+        // 如果直接查找失败，尝试递归查找
+        if (!enemiesNode && scene) {
+            enemiesNode = findNodeRecursive(scene, 'Enemies');
+        }
+        
+        if (!enemiesNode) {
+            // 调试：每60帧输出一次，避免刷屏
+            if (Math.random() < 0.016) {
+                console.warn('Tower: Enemies container not found!');
+            }
+            this.currentTarget = null!;
+            return;
+        }
+        
+        const enemies = enemiesNode.children || [];
         let nearestEnemy: Node = null!;
         let minDistance = Infinity;
 
         for (const enemy of enemies) {
-            if (enemy.active) {
+            if (enemy && enemy.active && enemy.isValid) {
                 const enemyScript = enemy.getComponent('Enemy') as any;
+                // 检查敌人是否存活
                 if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                     const distance = Vec3.distance(this.node.worldPosition, enemy.worldPosition);
+                    // 在攻击范围内，选择最近的敌人
                     if (distance <= this.attackRange && distance < minDistance) {
                         minDistance = distance;
                         nearestEnemy = enemy;
                     }
                 }
             }
+        }
+
+        // 如果找到目标，输出调试信息（每60帧一次）
+        if (nearestEnemy && Math.random() < 0.016) {
+            console.log(`Tower: Found target enemy at distance ${minDistance.toFixed(2)}, attacking!`);
         }
 
         this.currentTarget = nearestEnemy;
@@ -75,8 +200,17 @@ export class Tower extends Component {
             return;
         }
 
+        // 再次检查目标是否有效
+        if (!this.currentTarget.isValid || !this.currentTarget.active) {
+            this.currentTarget = null!;
+            return;
+        }
+
         const enemyScript = this.currentTarget.getComponent('Enemy') as any;
         if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
+            // 创建激光特效（从防御塔到敌人）
+            this.createLaserEffect(this.currentTarget.worldPosition);
+            
             // 创建子弹或直接造成伤害
             if (this.bulletPrefab) {
                 this.createBullet();
@@ -84,8 +218,100 @@ export class Tower extends Component {
                 // 直接伤害
                 if (enemyScript.takeDamage) {
                     enemyScript.takeDamage(this.attackDamage);
+                    console.log(`Tower: Attacked enemy, dealt ${this.attackDamage} damage`);
                 }
             }
+        } else {
+            // 目标已死亡，清除目标
+            this.currentTarget = null!;
+        }
+    }
+
+    createLaserEffect(targetPos: Vec3) {
+        // 创建激光效果节点
+        const laserNode = new Node('Laser');
+        
+        // 将激光节点添加到Canvas或场景根节点，确保在最上层显示
+        const canvas = find('Canvas');
+        if (canvas) {
+            laserNode.setParent(canvas);
+            // 如果添加到Canvas，需要UITransform组件
+            const uiTransform = laserNode.addComponent(UITransform);
+            if (uiTransform) {
+                // 设置足够大的内容区域，确保激光线不会被裁剪
+                uiTransform.setContentSize(2000, 2000);
+            }
+        } else {
+            const scene = this.node.scene;
+            if (scene) {
+                laserNode.setParent(scene);
+            } else {
+                laserNode.setParent(this.node.parent);
+            }
+        }
+        
+        // 设置激光节点的世界位置为防御塔位置
+        laserNode.setWorldPosition(this.node.worldPosition);
+        
+        // 添加Graphics组件用于绘制激光
+        const graphics = laserNode.addComponent(Graphics);
+        if (graphics) {
+            // 设置激光颜色为亮红色，更醒目
+            graphics.strokeColor.set(255, 0, 0, 255); // 纯红色，更明显
+            graphics.lineWidth = 6; // 加粗，更容易看到
+            
+            // 计算起点和终点（本地坐标）
+            const fromPos = new Vec3(0, 0, 0); // 本地坐标原点
+            const toPos = new Vec3();
+            // 将目标位置转换为激光节点的本地坐标
+            Vec3.subtract(toPos, targetPos, laserNode.worldPosition);
+            
+            // 绘制激光线
+            graphics.moveTo(fromPos.x, fromPos.y);
+            graphics.lineTo(toPos.x, toPos.y);
+            graphics.stroke();
+            
+            // 每次攻击都输出日志，方便调试
+            console.log(`Tower: Created laser effect from tower at (${this.node.worldPosition.x.toFixed(2)}, ${this.node.worldPosition.y.toFixed(2)}) to enemy at (${targetPos.x.toFixed(2)}, ${targetPos.y.toFixed(2)})`);
+            
+            // 添加渐隐效果
+            const startAlpha = 255;
+            const fadeDuration = 0.2; // 稍微延长显示时间
+            const fadeTimer = 0.02; // 每帧更新间隔
+            
+            let elapsed = 0;
+            const fadeUpdate = () => {
+                elapsed += fadeTimer;
+                if (elapsed < fadeDuration && laserNode && laserNode.isValid && graphics) {
+                    const alpha = Math.floor(startAlpha * (1 - elapsed / fadeDuration));
+                    // Color对象的属性是只读的，需要clone后修改
+                    const fadeColor = graphics.strokeColor.clone();
+                    fadeColor.a = alpha;
+                    graphics.strokeColor = fadeColor;
+                    graphics.clear();
+                    graphics.moveTo(fromPos.x, fromPos.y);
+                    graphics.lineTo(toPos.x, toPos.y);
+                    graphics.stroke();
+                    this.scheduleOnce(fadeUpdate, fadeTimer);
+                } else {
+                    // 渐隐完成，销毁节点
+                    if (laserNode && laserNode.isValid) {
+                        laserNode.destroy();
+                    }
+                }
+            };
+            
+            // 开始渐隐
+            this.scheduleOnce(fadeUpdate, fadeTimer);
+            
+            // 备用：如果渐隐失败，0.3秒后强制销毁
+            this.scheduleOnce(() => {
+                if (laserNode && laserNode.isValid) {
+                    laserNode.destroy();
+                }
+            }, 0.3);
+        } else {
+            console.error('Tower: Failed to add Graphics component to laser node!');
         }
     }
 
@@ -122,11 +348,77 @@ export class Tower extends Component {
             return;
         }
 
+        // 显示伤害数字
+        this.showDamageNumber(damage);
+
         this.currentHealth -= damage;
+
+        // 更新血条
+        if (this.healthBar) {
+            this.healthBar.setHealth(this.currentHealth);
+        }
 
         if (this.currentHealth <= 0) {
             this.currentHealth = 0;
             this.destroyTower();
+        }
+    }
+
+    showDamageNumber(damage: number) {
+        // 创建伤害数字节点
+        let damageNode: Node;
+        if (this.damageNumberPrefab) {
+            damageNode = instantiate(this.damageNumberPrefab);
+        } else {
+            // 如果没有预制体，创建简单的Label节点
+            damageNode = new Node('DamageNumber');
+            const label = damageNode.addComponent(Label);
+            label.string = `-${Math.floor(damage)}`;
+            label.fontSize = 20;
+            label.color = Color.WHITE;
+        }
+        
+        // 添加到Canvas或场景
+        const canvas = find('Canvas');
+        if (canvas) {
+            damageNode.setParent(canvas);
+        } else {
+            damageNode.setParent(this.node.scene);
+        }
+        
+        // 设置位置（在防御塔上方）
+        damageNode.setWorldPosition(this.node.worldPosition.clone().add3f(0, 30, 0));
+        
+        // 如果有DamageNumber组件，设置伤害值
+        const damageScript = damageNode.getComponent(DamageNumber);
+        if (damageScript) {
+            damageScript.setDamage(damage);
+        } else {
+            // 如果没有组件，手动添加动画
+            const label = damageNode.getComponent(Label);
+            if (label) {
+                const startPos = damageNode.position.clone();
+                const endPos = startPos.clone();
+                endPos.y += 50;
+                
+                tween(damageNode)
+                    .to(1.0, { position: endPos })
+                    .parallel(
+                        tween().to(1.0, {}, {
+                            onUpdate: (target, ratio) => {
+                                const color = label.color.clone();
+                                color.a = 255 * (1 - ratio);
+                                label.color = color;
+                            }
+                        })
+                    )
+                    .call(() => {
+                        if (damageNode && damageNode.isValid) {
+                            damageNode.destroy();
+                        }
+                    })
+                    .start();
+            }
         }
     }
 
@@ -137,12 +429,31 @@ export class Tower extends Component {
 
         this.isDestroyed = true;
 
+        // 移除点击事件监听
+        this.node.off(Node.EventType.TOUCH_END, this.onTowerClick, this);
+
+        // 隐藏选择面板
+        this.hideSelectionPanel();
+
         // 触发爆炸效果
         if (this.explosionEffect) {
             const explosion = instantiate(this.explosionEffect);
+            
+            // 先设置父节点和位置
             explosion.setParent(this.node.parent);
             explosion.setWorldPosition(this.node.worldPosition);
+            
+            // 立即设置缩放为0，确保不会显示在屏幕中央
+            explosion.setScale(0, 0, 1);
+            
+            // 延迟一小段时间后开始动画（确保位置已正确设置）
+            this.scheduleOnce(() => {
+                if (explosion && explosion.isValid) {
+                    // 爆炸效果会自动在ExplosionEffect的start()中开始动画
+                }
+            }, 0.01);
 
+            // 延迟销毁爆炸效果节点（动画完成后）
             this.scheduleOnce(() => {
                 if (explosion && explosion.isValid) {
                     explosion.destroy();
@@ -150,8 +461,17 @@ export class Tower extends Component {
             }, 1.0);
         }
 
-        // 隐藏防御塔
-        this.node.active = false;
+        // 销毁血条节点
+        if (this.healthBarNode && this.healthBarNode.isValid) {
+            this.healthBarNode.destroy();
+        }
+
+        // 真正销毁防御塔节点
+        this.scheduleOnce(() => {
+            if (this.node && this.node.isValid) {
+                this.node.destroy();
+            }
+        }, 0.1); // 延迟一小段时间，确保爆炸效果已创建
     }
 
     getHealth(): number {
@@ -160,6 +480,145 @@ export class Tower extends Component {
 
     isAlive(): boolean {
         return !this.isDestroyed && this.currentHealth > 0;
+    }
+
+    onTowerClick(event: EventTouch) {
+        // 如果游戏已结束，不显示选择面板
+        if (this.gameManager && this.gameManager.getGameState() !== GameState.Playing) {
+            return;
+        }
+
+        // 阻止事件冒泡
+        event.propagationStopped = true;
+
+        // 如果已有选择面板，先关闭
+        if (this.selectionPanel) {
+            this.hideSelectionPanel();
+            return;
+        }
+
+        // 显示选择面板
+        this.showSelectionPanel();
+    }
+
+    showSelectionPanel() {
+        // 创建选择面板
+        const canvas = find('Canvas');
+        if (!canvas) return;
+
+        this.selectionPanel = new Node('TowerSelectionPanel');
+        this.selectionPanel.setParent(canvas);
+
+        // 添加UITransform
+        const uiTransform = this.selectionPanel.addComponent(UITransform);
+        uiTransform.setContentSize(120, 40);
+
+        // 设置位置（在防御塔上方）
+        const worldPos = this.node.worldPosition.clone();
+        worldPos.y += 50;
+        this.selectionPanel.setWorldPosition(worldPos);
+
+        // 添加半透明背景
+        const graphics = this.selectionPanel.addComponent(Graphics);
+        graphics.fillColor = new Color(0, 0, 0, 180); // 半透明黑色
+        graphics.rect(-60, -20, 120, 40);
+        graphics.fill();
+
+        // 创建回收按钮
+        const sellBtn = new Node('SellButton');
+        sellBtn.setParent(this.selectionPanel);
+        const sellBtnTransform = sellBtn.addComponent(UITransform);
+        sellBtnTransform.setContentSize(50, 30);
+        sellBtn.setPosition(-35, 0);
+
+        const sellLabel = sellBtn.addComponent(Label);
+        sellLabel.string = '回收';
+        sellLabel.fontSize = 16;
+        sellLabel.color = Color.WHITE;
+
+        // 创建升级按钮
+        const upgradeBtn = new Node('UpgradeButton');
+        upgradeBtn.setParent(this.selectionPanel);
+        const upgradeBtnTransform = upgradeBtn.addComponent(UITransform);
+        upgradeBtnTransform.setContentSize(50, 30);
+        upgradeBtn.setPosition(35, 0);
+
+        const upgradeLabel = upgradeBtn.addComponent(Label);
+        upgradeLabel.string = '升级';
+        upgradeLabel.fontSize = 16;
+        upgradeLabel.color = Color.WHITE;
+
+        // 添加按钮点击事件
+        sellBtn.on(Node.EventType.TOUCH_END, this.onSellClick, this);
+        upgradeBtn.on(Node.EventType.TOUCH_END, this.onUpgradeClick, this);
+
+        // 点击其他地方关闭面板
+        this.scheduleOnce(() => {
+            if (canvas) {
+                canvas.once(Node.EventType.TOUCH_END, this.hideSelectionPanel, this);
+            }
+        }, 0.1);
+    }
+
+    hideSelectionPanel() {
+        if (this.selectionPanel && this.selectionPanel.isValid) {
+            this.selectionPanel.destroy();
+            this.selectionPanel = null!;
+        }
+    }
+
+    onSellClick(event: EventTouch) {
+        event.propagationStopped = true;
+        
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+
+        if (this.gameManager) {
+            // 回收80%金币
+            const refund = Math.floor(this.buildCost * 0.8);
+            this.gameManager.addGold(refund);
+            console.log(`Tower: Sold, refunded ${refund} gold`);
+        }
+
+        // 隐藏面板
+        this.hideSelectionPanel();
+        
+        // 销毁防御塔（会真正从场景中移除）
+        this.destroyTower();
+    }
+
+    onUpgradeClick(event: EventTouch) {
+        event.propagationStopped = true;
+        
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+
+        if (!this.gameManager) {
+            return;
+        }
+
+        // 升级成本是建造成本的2倍
+        const upgradeCost = this.buildCost * 2;
+        
+        if (!this.gameManager.canAfford(upgradeCost)) {
+            console.log(`Tower: Not enough gold for upgrade! Need ${upgradeCost}, have ${this.gameManager.getGold()}`);
+            return;
+        }
+
+        // 消耗金币
+        this.gameManager.spendGold(upgradeCost);
+
+        // 升级防御塔
+        this.level++;
+        this.attackDamage = Math.floor(this.attackDamage * 1.5); // 攻击力增加50%
+        this.attackInterval = this.attackInterval / 1.5; // 攻击速度增加50%（间隔减少）
+
+        console.log(`Tower: Upgraded to level ${this.level}, damage: ${this.attackDamage}, interval: ${this.attackInterval.toFixed(2)}`);
+
+        // 隐藏面板
+        this.hideSelectionPanel();
     }
 }
 
