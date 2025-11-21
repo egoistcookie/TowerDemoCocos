@@ -1,7 +1,8 @@
-import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, tween, EventTouch, input, Input } from 'cc';
+import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, tween, EventTouch, input, Input, resources } from 'cc';
 import { GameManager, GameState } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
+import { Arrow } from './Arrow';
 const { ccclass, property } = _decorator;
 
 @ccclass('Tower')
@@ -21,8 +22,11 @@ export class Tower extends Component {
     @property(Prefab)
     bulletPrefab: Prefab = null!;
 
-    @property(Node)
-    explosionEffect: Node = null!;
+    @property(Prefab)
+    arrowPrefab: Prefab = null!; // 弓箭预制体（支持后期更新贴图）
+
+    @property(Prefab)
+    explosionEffect: Prefab = null!;
 
     @property(Prefab)
     damageNumberPrefab: Prefab = null!;
@@ -208,14 +212,14 @@ export class Tower extends Component {
 
         const enemyScript = this.currentTarget.getComponent('Enemy') as any;
         if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
-            // 创建激光特效（从防御塔到敌人）
-            this.createLaserEffect(this.currentTarget.worldPosition);
-            
-            // 创建子弹或直接造成伤害
-            if (this.bulletPrefab) {
+            // 创建弓箭特效（抛物线轨迹）
+            if (this.arrowPrefab) {
+                this.createArrow();
+            } else if (this.bulletPrefab) {
+                // 如果没有弓箭预制体，使用旧的子弹系统
                 this.createBullet();
             } else {
-                // 直接伤害
+                // 直接伤害（无特效）
                 if (enemyScript.takeDamage) {
                     enemyScript.takeDamage(this.attackDamage);
                     console.log(`Tower: Attacked enemy, dealt ${this.attackDamage} damage`);
@@ -313,6 +317,77 @@ export class Tower extends Component {
         } else {
             console.error('Tower: Failed to add Graphics component to laser node!');
         }
+    }
+
+    createArrow() {
+        if (!this.arrowPrefab) {
+            console.warn('Tower: arrowPrefab is not set!');
+            return;
+        }
+
+        if (!this.currentTarget) {
+            console.warn('Tower: currentTarget is null!');
+            return;
+        }
+
+        // 检查目标是否有效
+        if (!this.currentTarget.isValid || !this.currentTarget.active) {
+            console.warn('Tower: currentTarget is invalid or inactive!');
+            return;
+        }
+
+        console.log(`Tower: Creating arrow, target: ${this.currentTarget.name}, position: ${this.currentTarget.worldPosition}`);
+
+        // 创建弓箭节点
+        const arrow = instantiate(this.arrowPrefab);
+        
+        // 设置父节点（添加到场景或Canvas）
+        const canvas = find('Canvas');
+        const scene = this.node.scene;
+        const parentNode = canvas || scene || this.node.parent;
+        if (parentNode) {
+            arrow.setParent(parentNode);
+            console.log(`Tower: Arrow parent set to ${parentNode.name}`);
+        } else {
+            arrow.setParent(this.node.parent);
+            console.log(`Tower: Arrow parent set to tower parent`);
+        }
+
+        // 设置初始位置（防御塔位置）
+        const startPos = this.node.worldPosition.clone();
+        arrow.setWorldPosition(startPos);
+        console.log(`Tower: Arrow initial position: (${startPos.x.toFixed(2)}, ${startPos.y.toFixed(2)})`);
+
+        // 确保节点激活
+        arrow.active = true;
+
+        // 获取或添加Arrow组件
+        let arrowScript = arrow.getComponent(Arrow);
+        if (!arrowScript) {
+            console.log('Tower: Arrow component not found, adding it...');
+            arrowScript = arrow.addComponent(Arrow);
+        } else {
+            console.log('Tower: Arrow component found');
+        }
+
+        // 初始化弓箭，设置命中回调
+        console.log(`Tower: Initializing arrow with damage: ${this.attackDamage}`);
+        arrowScript.init(
+            startPos,
+            this.currentTarget,
+            this.attackDamage,
+            (damage: number) => {
+                // 命中目标时造成伤害
+                console.log(`Tower: Arrow hit callback called with damage: ${damage}`);
+                const enemyScript = this.currentTarget?.getComponent('Enemy') as any;
+                if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
+                    if (enemyScript.takeDamage) {
+                        enemyScript.takeDamage(damage);
+                        console.log(`Tower: Arrow hit enemy, dealt ${damage} damage`);
+                    }
+                }
+            }
+        );
     }
 
     createBullet() {
@@ -436,30 +511,70 @@ export class Tower extends Component {
         this.hideSelectionPanel();
 
         // 触发爆炸效果
-        if (this.explosionEffect) {
-            const explosion = instantiate(this.explosionEffect);
-            
-            // 先设置父节点和位置
-            explosion.setParent(this.node.parent);
-            explosion.setWorldPosition(this.node.worldPosition);
-            
-            // 立即设置缩放为0，确保不会显示在屏幕中央
-            explosion.setScale(0, 0, 1);
-            
-            // 延迟一小段时间后开始动画（确保位置已正确设置）
-            this.scheduleOnce(() => {
-                if (explosion && explosion.isValid) {
-                    // 爆炸效果会自动在ExplosionEffect的start()中开始动画
+        let explosionPrefab = this.explosionEffect;
+        
+        // 如果explosionEffect未设置，尝试从资源中加载
+        if (!explosionPrefab) {
+            console.warn('Tower: explosionEffect prefab is not set, trying to load from resources...');
+            // 尝试从resources/prefabs加载Explosion预制体
+            resources.load('prefabs/Explosion', Prefab, (err, prefab) => {
+                if (err) {
+                    console.error('Tower: Failed to load Explosion prefab from resources:', err);
+                    return;
                 }
-            }, 0.01);
-
-            // 延迟销毁爆炸效果节点（动画完成后）
-            this.scheduleOnce(() => {
-                if (explosion && explosion.isValid) {
-                    explosion.destroy();
-                }
-            }, 1.0);
+                explosionPrefab = prefab;
+                this.createExplosionEffect(explosionPrefab);
+            });
+            return;
         }
+        
+        this.createExplosionEffect(explosionPrefab);
+    }
+
+    private createExplosionEffect(explosionPrefab: Prefab) {
+        if (!explosionPrefab) {
+            console.error('Tower: Cannot create explosion effect, prefab is null!');
+            return;
+        }
+
+        console.log('Tower: Creating explosion effect at position:', this.node.worldPosition);
+        const explosion = instantiate(explosionPrefab);
+        
+        // 确保节点激活
+        explosion.active = true;
+        
+        // 先设置父节点和位置（使用场景根节点或Canvas，确保不会被防御塔销毁影响）
+        const canvas = find('Canvas');
+        const scene = this.node.scene;
+        const parentNode = canvas || scene || this.node.parent;
+        if (parentNode) {
+            explosion.setParent(parentNode);
+            explosion.setWorldPosition(this.node.worldPosition);
+            console.log('Tower: Explosion effect parent set, position:', explosion.worldPosition);
+        } else {
+            console.error('Tower: Cannot find parent node for explosion effect!');
+            explosion.destroy();
+            return;
+        }
+        
+        // 立即设置缩放为0，确保不会显示在屏幕中央
+        explosion.setScale(0, 0, 1);
+        
+        // 检查ExplosionEffect组件是否存在
+        const explosionScript = explosion.getComponent('ExplosionEffect');
+        if (explosionScript) {
+            console.log('Tower: ExplosionEffect component found, animation should start automatically');
+        } else {
+            console.warn('Tower: ExplosionEffect component not found on explosion prefab!');
+        }
+
+        // 延迟销毁爆炸效果节点（动画完成后，ExplosionEffect会自动销毁，这里作为备用）
+        this.scheduleOnce(() => {
+            if (explosion && explosion.isValid) {
+                console.log('Tower: Cleaning up explosion effect');
+                explosion.destroy();
+            }
+        }, 2.0); // 延长到2秒，确保动画完成
 
         // 销毁血条节点
         if (this.healthBarNode && this.healthBarNode.isValid) {

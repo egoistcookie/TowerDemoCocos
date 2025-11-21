@@ -8,7 +8,7 @@ export class EnemySpawner extends Component {
     enemyPrefab: Prefab = null!;
 
     @property
-    spawnInterval: number = 2.5; // 生成间隔（秒）
+    spawnInterval: number = 1.5; // 生成间隔（秒）
 
     @property
     spawnDistance: number = 400; // 从中心生成的距离

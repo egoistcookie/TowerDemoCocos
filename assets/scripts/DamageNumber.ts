@@ -49,6 +49,14 @@ export class DamageNumber extends Component {
     }
 
     setDamage(damage: number) {
+        // 确保label已初始化
+        if (!this.label) {
+            this.label = this.node.getComponent(Label);
+            if (!this.label) {
+                this.label = this.node.addComponent(Label);
+            }
+        }
+        
         if (this.label) {
             this.label.string = `-${Math.floor(damage)}`;
             this.label.fontSize = 20;
