@@ -82,7 +82,7 @@ export class EnemySpawner extends Component {
         if (this.gameManager) {
             const gameState = this.gameManager.getGameState();
             if (gameState !== GameState.Playing) {
-                // 游戏已结束，停止刷新
+                // 游戏已结束（胜利或失败），停止刷新
                 // 重置计时器，防止累积
                 this.spawnTimer = 0;
                 return;
@@ -96,14 +96,22 @@ export class EnemySpawner extends Component {
             // 继续运行，允许生成敌人（如果GameManager真的不存在，游戏本身就有问题）
         }
 
+        // 只有在游戏进行中时才更新计时器
         this.spawnTimer += deltaTime;
 
         if (this.spawnTimer >= this.spawnInterval) {
             // 再次检查游戏状态，确保在spawnEnemy调用前游戏仍在进行
-            if (this.gameManager && this.gameManager.getGameState() === GameState.Playing) {
-                this.spawnEnemy();
-            } else if (!this.gameManager) {
+            if (this.gameManager) {
+                const gameState = this.gameManager.getGameState();
+                if (gameState === GameState.Playing) {
+                    this.spawnEnemy();
+                } else {
+                    // 游戏已结束，不生成敌人
+                    console.log(`EnemySpawner: Game state is ${gameState === GameState.Victory ? 'Victory' : 'Defeat'}, stopping enemy spawn`);
+                }
+            } else {
                 // 如果还是没有GameManager，但仍然允许生成敌人（避免完全停止）
+                // 但这种情况应该很少发生
                 this.spawnEnemy();
             }
             this.spawnTimer = 0;
@@ -112,9 +120,12 @@ export class EnemySpawner extends Component {
 
     spawnEnemy() {
         // 再次检查游戏状态，确保游戏仍在进行
-        if (this.gameManager && this.gameManager.getGameState() !== GameState.Playing) {
-            console.log('EnemySpawner: Game ended, canceling enemy spawn');
-            return;
+        if (this.gameManager) {
+            const gameState = this.gameManager.getGameState();
+            if (gameState !== GameState.Playing) {
+                console.log(`EnemySpawner: Game ended (state: ${gameState === GameState.Victory ? 'Victory' : 'Defeat'}), canceling enemy spawn`);
+                return;
+            }
         }
         
         if (!this.enemyPrefab || !this.targetCrystal) {
