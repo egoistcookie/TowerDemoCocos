@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<spritesheet>
+  <meta>
+    <app>HPPTools</app>
+    <version>1.0.0</version>
+    <image>arrow-attack_spritesheet.png</image>
+    <size width="1440" height="480"/>
+  </meta>
+  <frames>
+    <frame id="1" name="frame_0001">
+      <x>0</x>
+      <y>0</y>
+      <width>240</width>
+      <height>240</height>
+      <duration>50</duration>
+    </frame>
+    <frame id="2" name="frame_0002">
+      <x>240</x>
+      <y>0</y>
+      <width>240</width>
+      <height>240</height>
+      <duration>50</duration>
+    </frame>
+    <frame id="3" name="frame_0003">
+      <x>480</x>
+      <y>0</y>
+      <width>240</width>
+      <height>240</height>
+      <duration>50</duration>
+    </frame>
+    <frame id="4" name="frame_0004">
+      <x>720</x>
+      <y>0</y>
+      <width>240</width>
+      <height>240</height>
+      <duration>50</duration>
+    </frame>
+    <frame id="5" name="frame_0005">
+      <x>960</x>
+      <y>0</y>
+      <width>240</width>
+      <height>240</height>
+      <duration>50</duration>
+    </frame>
+    <frame id="6" name="frame_0006">
+      <x>1200</x>
+      <y>0</y>
+      <width>240</width>
+      <height>240</height>
+      <duration>50</duration>
+    </frame>
+    <frame id="7" name="frame_0007">
+      <x>0</x>
+      <y>240</y>
+      <width>240</width>
+      <height>240</height>
+      <duration>50</duration>
+    </frame>
+    <frame id="8" name="frame_0008">
+      <x>240</x>
+      <y>240</y>
+      <width>240</width>
+      <height>240</height>
+      <duration>50</duration>
+    </frame>
+    <frame id="9" name="frame_0009">
+      <x>480</x>
+      <y>240</y>
+      <width>240</width>
+      <height>240</height>
+      <duration>50</duration>
+    </frame>
+    <frame id="10" name="frame_0010">
+      <x>720</x>
+      <y>240</y>
+      <width>240</width>
+      <height>240</height>
+      <duration>50</duration>
+    </frame>
+    <frame id="11" name="frame_0011">
+      <x>960</x>
+      <y>240</y>
+      <width>240</width>
+      <height>240</height>
+      <duration>50</duration>
+    </frame>
+    <frame id="12" name="frame_0012">
+      <x>1200</x>
+      <y>240</y>
+      <width>240</width>
+      <height>240</height>
+      <duration>50</duration>
+    </frame>
+  </frames>
+  <animations>
+    <animation name="arrow-attack">
+      <frames>1,8,14,18,27,31,33,36,38,44,54,64</frames>
+      <fps>20</fps>
+    </animation>
+  </animations>
+</spritesheet>

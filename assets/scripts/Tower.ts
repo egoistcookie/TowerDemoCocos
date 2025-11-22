@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, tween, EventTouch, input, Input, resources } from 'cc';
+import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, tween, EventTouch, input, Input, resources, Sprite, SpriteFrame, Texture2D } from 'cc';
 import { GameManager, GameState } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
@@ -37,6 +37,22 @@ export class Tower extends Component {
     @property
     level: number = 1; // 防御塔等级
 
+    // 攻击动画相关属性
+    @property(SpriteFrame)
+    attackAnimationFrames: SpriteFrame[] = []; // 攻击动画帧数组（推荐：在编辑器中手动设置）
+
+    @property(Texture2D)
+    attackAnimationTexture: Texture2D = null!; // 攻击动画纹理（12帧图片）
+
+    @property
+    framesPerRow: number = 12; // 每行帧数（横向排列为12，3x4网格为3，4x3网格为4）
+
+    @property
+    totalFrames: number = 12; // 总帧数
+
+    @property
+    attackAnimationDuration: number = 0.5; // 攻击动画时长（秒）
+
     private currentHealth: number = 50;
     private healthBar: HealthBar = null!;
     private healthBarNode: Node = null!;
@@ -45,12 +61,32 @@ export class Tower extends Component {
     private attackTimer: number = 0;
     private currentTarget: Node = null!;
     private gameManager: GameManager = null!;
+    private sprite: Sprite = null!; // Sprite组件引用
+    private defaultSpriteFrame: SpriteFrame = null!; // 默认SpriteFrame（动画结束后恢复）
+    private defaultScale: Vec3 = new Vec3(1, 1, 1); // 默认缩放（用于恢复翻转）
+    private isPlayingAttackAnimation: boolean = false; // 是否正在播放攻击动画
 
     start() {
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
         this.attackTimer = 0;
         this.currentTarget = null!;
+        this.isPlayingAttackAnimation = false;
+        
+        // 获取Sprite组件
+        this.sprite = this.node.getComponent(Sprite);
+        if (this.sprite) {
+            // 保存默认SpriteFrame
+            this.defaultSpriteFrame = this.sprite.spriteFrame;
+            // 保存默认缩放
+            this.defaultScale = this.node.scale.clone();
+            console.log('Tower: Sprite component found, default spriteFrame and scale saved');
+        } else {
+            console.error('Tower: Sprite component not found! Attack animation will not work.');
+        }
+        
+        // 初始化攻击动画帧
+        this.initAttackAnimation();
         
         // 查找游戏管理器
         this.findGameManager();
@@ -64,11 +100,52 @@ export class Tower extends Component {
         console.log('Tower: Started at position:', this.node.worldPosition);
     }
 
+    initAttackAnimation() {
+        // 如果已经在编辑器中设置了attackAnimationFrames，直接使用
+        if (this.attackAnimationFrames && this.attackAnimationFrames.length > 0) {
+            const validFrames = this.attackAnimationFrames.filter(frame => frame != null);
+            console.log(`Tower: Using ${validFrames.length} valid frames from attackAnimationFrames array (total: ${this.attackAnimationFrames.length})`);
+            if (validFrames.length < this.attackAnimationFrames.length) {
+                console.warn(`Tower: Warning - ${this.attackAnimationFrames.length - validFrames.length} frames are null or invalid!`);
+            }
+            return;
+        }
+
+        // 如果没有设置帧数组，尝试从纹理中加载
+        if (this.attackAnimationTexture) {
+            console.log('Tower: Loading attack animation frames from texture...');
+            this.loadFramesFromTexture();
+        } else {
+            console.warn('Tower: No attack animation frames or texture set. Attack animation will not play.');
+        }
+    }
+
+    loadFramesFromTexture() {
+        // 注意：Cocos Creator中，从Texture2D直接分割SpriteFrame需要手动计算
+        // 这里提供一个基础实现，但推荐在编辑器中手动设置SpriteFrame数组
+        
+        // 如果纹理已导入为SpriteAtlas，应该使用SpriteAtlas的方式
+        // 这里假设纹理是单行排列的12帧
+        
+        if (!this.sprite) {
+            console.error('Tower: Sprite component not found!');
+            return;
+        }
+
+        // 由于Cocos Creator的API限制，从Texture2D直接创建SpriteFrame比较复杂
+        // 推荐做法：在编辑器中手动设置attackAnimationFrames数组
+        // 或者使用SpriteAtlas资源
+        
+        console.warn('Tower: Auto-loading frames from texture is not fully supported. Please set attackAnimationFrames array in editor, or use SpriteAtlas.');
+    }
+
     createHealthBar() {
         // 创建血条节点
         this.healthBarNode = new Node('HealthBar');
         this.healthBarNode.setParent(this.node);
         this.healthBarNode.setPosition(0, 30, 0); // 在防御塔上方
+        // 确保血条初始缩放为正数（正常朝向）
+        this.healthBarNode.setScale(1, 1, 1);
         
         // 添加HealthBar组件
         this.healthBar = this.healthBarNode.addComponent(HealthBar);
@@ -212,23 +289,188 @@ export class Tower extends Component {
 
         const enemyScript = this.currentTarget.getComponent('Enemy') as any;
         if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
-            // 创建弓箭特效（抛物线轨迹）
-            if (this.arrowPrefab) {
-                this.createArrow();
-            } else if (this.bulletPrefab) {
-                // 如果没有弓箭预制体，使用旧的子弹系统
-                this.createBullet();
-            } else {
-                // 直接伤害（无特效）
-                if (enemyScript.takeDamage) {
-                    enemyScript.takeDamage(this.attackDamage);
-                    console.log(`Tower: Attacked enemy, dealt ${this.attackDamage} damage`);
-                }
-            }
+            // 播放攻击动画，动画完成后才射出弓箭
+            console.log('Tower: Attack triggered, playing attack animation...');
+            this.playAttackAnimation(() => {
+                // 动画播放完成后的回调，在这里创建弓箭
+                this.executeAttack();
+            });
         } else {
             // 目标已死亡，清除目标
             this.currentTarget = null!;
         }
+    }
+
+    executeAttack() {
+        // 再次检查目标是否有效
+        if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active || this.isDestroyed) {
+            return;
+        }
+
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any;
+        if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
+            this.currentTarget = null!;
+            return;
+        }
+
+        // 创建弓箭特效（抛物线轨迹）
+        if (this.arrowPrefab) {
+            this.createArrow();
+        } else if (this.bulletPrefab) {
+            // 如果没有弓箭预制体，使用旧的子弹系统
+            this.createBullet();
+        } else {
+            // 直接伤害（无特效）
+            if (enemyScript.takeDamage) {
+                enemyScript.takeDamage(this.attackDamage);
+                console.log(`Tower: Attacked enemy, dealt ${this.attackDamage} damage`);
+            }
+        }
+    }
+
+    playAttackAnimation(onComplete?: () => void) {
+        // 如果正在播放动画，不重复播放
+        if (this.isPlayingAttackAnimation) {
+            console.log('Tower: Animation already playing, skipping...');
+            return;
+        }
+
+        // 如果没有Sprite组件或没有动画帧，直接返回
+        if (!this.sprite) {
+            console.warn('Tower: Sprite component not found, cannot play attack animation');
+            // 尝试重新获取Sprite组件
+            this.sprite = this.node.getComponent(Sprite);
+            if (!this.sprite) {
+                console.error('Tower: Failed to get Sprite component!');
+                return;
+            }
+        }
+
+        // 如果没有设置动画帧，直接返回
+        if (!this.attackAnimationFrames || this.attackAnimationFrames.length === 0) {
+            console.warn('Tower: Attack animation frames not set, skipping animation');
+            console.warn(`Tower: attackAnimationFrames is ${this.attackAnimationFrames ? 'defined but empty' : 'null/undefined'}`);
+            return;
+        }
+
+        // 检查帧是否有效
+        const validFrames = this.attackAnimationFrames.filter(frame => frame != null);
+        if (validFrames.length === 0) {
+            console.error('Tower: All animation frames are null or invalid!');
+            return;
+        }
+
+        console.log(`Tower: Starting attack animation with ${validFrames.length} frames, duration: ${this.attackAnimationDuration}s`);
+
+        // 根据敌人位置决定是否翻转
+        let shouldFlip = false;
+        if (this.currentTarget && this.currentTarget.isValid) {
+            const towerPos = this.node.worldPosition;
+            const enemyPos = this.currentTarget.worldPosition;
+            // 如果敌人在左侧（敌人x < 防御塔x），需要翻转
+            shouldFlip = enemyPos.x < towerPos.x;
+            
+            if (shouldFlip) {
+                // 水平翻转：scale.x = -1
+                this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+                // 血条需要反向翻转，保持正常朝向
+                if (this.healthBarNode && this.healthBarNode.isValid) {
+                    const healthBarScale = this.healthBarNode.scale.clone();
+                    this.healthBarNode.setScale(-Math.abs(healthBarScale.x), healthBarScale.y, healthBarScale.z);
+                }
+                console.log('Tower: Enemy on left, flipping attack animation');
+            } else {
+                // 保持原样：scale.x = 1
+                this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+                // 血条保持正常朝向
+                if (this.healthBarNode && this.healthBarNode.isValid) {
+                    const healthBarScale = this.healthBarNode.scale.clone();
+                    this.healthBarNode.setScale(Math.abs(healthBarScale.x), healthBarScale.y, healthBarScale.z);
+                }
+                console.log('Tower: Enemy on right, keeping normal orientation');
+            }
+        }
+
+        // 标记正在播放动画
+        this.isPlayingAttackAnimation = true;
+
+        const frames = validFrames;
+        const frameCount = frames.length;
+        const frameDuration = this.attackAnimationDuration / frameCount; // 每帧的时长
+        let currentFrameIndex = 0;
+
+        console.log(`Tower: Frame duration: ${frameDuration.toFixed(3)}s per frame`);
+
+        // 使用update方法播放动画（更可靠）
+        let animationTimer = 0;
+        let lastFrameIndex = -1; // 记录上一帧的索引，避免重复设置
+        
+        // 立即播放第一帧
+        if (frames[0]) {
+            this.sprite.spriteFrame = frames[0];
+            lastFrameIndex = 0;
+            console.log(`Tower: Playing frame 1/${frameCount}`);
+        }
+        
+        // 使用update方法逐帧播放
+        const animationUpdate = (deltaTime: number) => {
+            if (!this.sprite || !this.sprite.isValid || this.isDestroyed) {
+                console.warn('Tower: Animation stopped - sprite invalid or tower destroyed');
+                this.isPlayingAttackAnimation = false;
+                this.unschedule(animationUpdate);
+                return;
+            }
+
+            animationTimer += deltaTime;
+            
+            // 计算当前应该显示的帧索引
+            const targetFrameIndex = Math.min(Math.floor(animationTimer / frameDuration), frameCount - 1);
+            
+            // 检查动画是否完成
+            if (animationTimer >= this.attackAnimationDuration) {
+                // 确保播放最后一帧
+                if (lastFrameIndex < frameCount - 1 && frames[frameCount - 1]) {
+                    this.sprite.spriteFrame = frames[frameCount - 1];
+                    console.log(`Tower: Playing frame ${frameCount}/${frameCount}`);
+                }
+                // 动画播放完成，恢复默认SpriteFrame
+                console.log('Tower: Attack animation completed, restoring default sprite');
+                this.restoreDefaultSprite();
+                this.unschedule(animationUpdate);
+                
+                // 调用完成回调（在恢复默认SpriteFrame之后）
+                if (onComplete) {
+                    onComplete();
+                }
+                return;
+            }
+            
+            // 更新到当前帧（只在帧变化时更新）
+            if (targetFrameIndex !== lastFrameIndex && targetFrameIndex < frameCount && frames[targetFrameIndex]) {
+                this.sprite.spriteFrame = frames[targetFrameIndex];
+                lastFrameIndex = targetFrameIndex;
+                console.log(`Tower: Playing frame ${targetFrameIndex + 1}/${frameCount}`);
+            }
+        };
+        
+        // 开始动画更新（每帧更新）
+        this.schedule(animationUpdate, 0);
+    }
+
+    restoreDefaultSprite() {
+        // 恢复默认SpriteFrame
+        if (this.sprite && this.sprite.isValid && this.defaultSpriteFrame) {
+            this.sprite.spriteFrame = this.defaultSpriteFrame;
+        }
+        // 恢复默认缩放（取消翻转）
+        if (this.node && this.node.isValid) {
+            this.node.setScale(this.defaultScale.x, this.defaultScale.y, this.defaultScale.z);
+        }
+        // 恢复血条的正常朝向
+        if (this.healthBarNode && this.healthBarNode.isValid) {
+            this.healthBarNode.setScale(1, 1, 1);
+        }
+        this.isPlayingAttackAnimation = false;
     }
 
     createLaserEffect(targetPos: Vec3) {

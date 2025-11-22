@@ -1,0 +1,728 @@
+{
+  "meta": {
+    "app": "HPPTools",
+    "version": "1.0.0",
+    "image": "arrow-attack_spritesheet.png",
+    "size": {
+      "w": 1440,
+      "h": 480
+    },
+    "scale": "1",
+    "format": "RGBA8888",
+    "frameTags": [
+      {
+        "name": "arrow-attack",
+        "from": 0,
+        "to": 11,
+        "direction": "forward",
+        "frameCount": 12,
+        "duration": 600
+      }
+    ],
+    "layers": [],
+    "slices": []
+  },
+  "frames": {
+    "frame_0001": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 240,
+        "h": 240
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 240,
+        "h": 240
+      },
+      "sourceSize": {
+        "w": 240,
+        "h": 240
+      },
+      "duration": 50,
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "uv": {
+        "x": 0,
+        "y": 0,
+        "w": 0.16666666666666666,
+        "h": 0.5
+      },
+      "index": 0,
+      "gridPosition": {
+        "col": 0,
+        "row": 0
+      },
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 240,
+        "height": 240
+      },
+      "center": {
+        "x": 120,
+        "y": 120
+      }
+    },
+    "frame_0002": {
+      "frame": {
+        "x": 240,
+        "y": 0,
+        "w": 240,
+        "h": 240
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 240,
+        "h": 240
+      },
+      "sourceSize": {
+        "w": 240,
+        "h": 240
+      },
+      "duration": 50,
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "uv": {
+        "x": 0.16666666666666666,
+        "y": 0,
+        "w": 0.16666666666666666,
+        "h": 0.5
+      },
+      "index": 1,
+      "gridPosition": {
+        "col": 1,
+        "row": 0
+      },
+      "bounds": {
+        "x": 240,
+        "y": 0,
+        "width": 240,
+        "height": 240
+      },
+      "center": {
+        "x": 360,
+        "y": 120
+      }
+    },
+    "frame_0003": {
+      "frame": {
+        "x": 480,
+        "y": 0,
+        "w": 240,
+        "h": 240
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 240,
+        "h": 240
+      },
+      "sourceSize": {
+        "w": 240,
+        "h": 240
+      },
+      "duration": 50,
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "uv": {
+        "x": 0.3333333333333333,
+        "y": 0,
+        "w": 0.16666666666666666,
+        "h": 0.5
+      },
+      "index": 2,
+      "gridPosition": {
+        "col": 2,
+        "row": 0
+      },
+      "bounds": {
+        "x": 480,
+        "y": 0,
+        "width": 240,
+        "height": 240
+      },
+      "center": {
+        "x": 600,
+        "y": 120
+      }
+    },
+    "frame_0004": {
+      "frame": {
+        "x": 720,
+        "y": 0,
+        "w": 240,
+        "h": 240
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 240,
+        "h": 240
+      },
+      "sourceSize": {
+        "w": 240,
+        "h": 240
+      },
+      "duration": 50,
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "uv": {
+        "x": 0.5,
+        "y": 0,
+        "w": 0.16666666666666666,
+        "h": 0.5
+      },
+      "index": 3,
+      "gridPosition": {
+        "col": 3,
+        "row": 0
+      },
+      "bounds": {
+        "x": 720,
+        "y": 0,
+        "width": 240,
+        "height": 240
+      },
+      "center": {
+        "x": 840,
+        "y": 120
+      }
+    },
+    "frame_0005": {
+      "frame": {
+        "x": 960,
+        "y": 0,
+        "w": 240,
+        "h": 240
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 240,
+        "h": 240
+      },
+      "sourceSize": {
+        "w": 240,
+        "h": 240
+      },
+      "duration": 50,
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "uv": {
+        "x": 0.6666666666666666,
+        "y": 0,
+        "w": 0.16666666666666666,
+        "h": 0.5
+      },
+      "index": 4,
+      "gridPosition": {
+        "col": 4,
+        "row": 0
+      },
+      "bounds": {
+        "x": 960,
+        "y": 0,
+        "width": 240,
+        "height": 240
+      },
+      "center": {
+        "x": 1080,
+        "y": 120
+      }
+    },
+    "frame_0006": {
+      "frame": {
+        "x": 1200,
+        "y": 0,
+        "w": 240,
+        "h": 240
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 240,
+        "h": 240
+      },
+      "sourceSize": {
+        "w": 240,
+        "h": 240
+      },
+      "duration": 50,
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "uv": {
+        "x": 0.8333333333333334,
+        "y": 0,
+        "w": 0.16666666666666666,
+        "h": 0.5
+      },
+      "index": 5,
+      "gridPosition": {
+        "col": 5,
+        "row": 0
+      },
+      "bounds": {
+        "x": 1200,
+        "y": 0,
+        "width": 240,
+        "height": 240
+      },
+      "center": {
+        "x": 1320,
+        "y": 120
+      }
+    },
+    "frame_0007": {
+      "frame": {
+        "x": 0,
+        "y": 240,
+        "w": 240,
+        "h": 240
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 240,
+        "h": 240
+      },
+      "sourceSize": {
+        "w": 240,
+        "h": 240
+      },
+      "duration": 50,
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "uv": {
+        "x": 0,
+        "y": 0.5,
+        "w": 0.16666666666666666,
+        "h": 0.5
+      },
+      "index": 6,
+      "gridPosition": {
+        "col": 0,
+        "row": 1
+      },
+      "bounds": {
+        "x": 0,
+        "y": 240,
+        "width": 240,
+        "height": 240
+      },
+      "center": {
+        "x": 120,
+        "y": 360
+      }
+    },
+    "frame_0008": {
+      "frame": {
+        "x": 240,
+        "y": 240,
+        "w": 240,
+        "h": 240
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 240,
+        "h": 240
+      },
+      "sourceSize": {
+        "w": 240,
+        "h": 240
+      },
+      "duration": 50,
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "uv": {
+        "x": 0.16666666666666666,
+        "y": 0.5,
+        "w": 0.16666666666666666,
+        "h": 0.5
+      },
+      "index": 7,
+      "gridPosition": {
+        "col": 1,
+        "row": 1
+      },
+      "bounds": {
+        "x": 240,
+        "y": 240,
+        "width": 240,
+        "height": 240
+      },
+      "center": {
+        "x": 360,
+        "y": 360
+      }
+    },
+    "frame_0009": {
+      "frame": {
+        "x": 480,
+        "y": 240,
+        "w": 240,
+        "h": 240
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 240,
+        "h": 240
+      },
+      "sourceSize": {
+        "w": 240,
+        "h": 240
+      },
+      "duration": 50,
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "uv": {
+        "x": 0.3333333333333333,
+        "y": 0.5,
+        "w": 0.16666666666666666,
+        "h": 0.5
+      },
+      "index": 8,
+      "gridPosition": {
+        "col": 2,
+        "row": 1
+      },
+      "bounds": {
+        "x": 480,
+        "y": 240,
+        "width": 240,
+        "height": 240
+      },
+      "center": {
+        "x": 600,
+        "y": 360
+      }
+    },
+    "frame_0010": {
+      "frame": {
+        "x": 720,
+        "y": 240,
+        "w": 240,
+        "h": 240
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 240,
+        "h": 240
+      },
+      "sourceSize": {
+        "w": 240,
+        "h": 240
+      },
+      "duration": 50,
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "uv": {
+        "x": 0.5,
+        "y": 0.5,
+        "w": 0.16666666666666666,
+        "h": 0.5
+      },
+      "index": 9,
+      "gridPosition": {
+        "col": 3,
+        "row": 1
+      },
+      "bounds": {
+        "x": 720,
+        "y": 240,
+        "width": 240,
+        "height": 240
+      },
+      "center": {
+        "x": 840,
+        "y": 360
+      }
+    },
+    "frame_0011": {
+      "frame": {
+        "x": 960,
+        "y": 240,
+        "w": 240,
+        "h": 240
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 240,
+        "h": 240
+      },
+      "sourceSize": {
+        "w": 240,
+        "h": 240
+      },
+      "duration": 50,
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "uv": {
+        "x": 0.6666666666666666,
+        "y": 0.5,
+        "w": 0.16666666666666666,
+        "h": 0.5
+      },
+      "index": 10,
+      "gridPosition": {
+        "col": 4,
+        "row": 1
+      },
+      "bounds": {
+        "x": 960,
+        "y": 240,
+        "width": 240,
+        "height": 240
+      },
+      "center": {
+        "x": 1080,
+        "y": 360
+      }
+    },
+    "frame_0012": {
+      "frame": {
+        "x": 1200,
+        "y": 240,
+        "w": 240,
+        "h": 240
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 240,
+        "h": 240
+      },
+      "sourceSize": {
+        "w": 240,
+        "h": 240
+      },
+      "duration": 50,
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "uv": {
+        "x": 0.8333333333333334,
+        "y": 0.5,
+        "w": 0.16666666666666666,
+        "h": 0.5
+      },
+      "index": 11,
+      "gridPosition": {
+        "col": 5,
+        "row": 1
+      },
+      "bounds": {
+        "x": 1200,
+        "y": 240,
+        "width": 240,
+        "height": 240
+      },
+      "center": {
+        "x": 1320,
+        "y": 360
+      }
+    }
+  },
+  "animations": {
+    "arrow-attack": {
+      "name": "arrow-attack",
+      "frames": [
+        "frame_0001",
+        "frame_0008",
+        "frame_0014",
+        "frame_0018",
+        "frame_0027",
+        "frame_0031",
+        "frame_0033",
+        "frame_0036",
+        "frame_0038",
+        "frame_0044",
+        "frame_0054",
+        "frame_0064"
+      ],
+      "duration": 600,
+      "fps": 20,
+      "loop": false,
+      "frameIndices": [
+        0,
+        7,
+        13,
+        17,
+        26,
+        30,
+        32,
+        35,
+        37,
+        43,
+        53,
+        63
+      ],
+      "totalFrames": 12,
+      "frameTime": 50,
+      "speed": 1,
+      "priority": 1,
+      "blendMode": "normal",
+      "events": [],
+      "transitions": {},
+      "timeline": [
+        {
+          "frame": 0,
+          "time": 0,
+          "event": null
+        },
+        {
+          "frame": 1,
+          "time": 50,
+          "event": null
+        },
+        {
+          "frame": 2,
+          "time": 100,
+          "event": null
+        },
+        {
+          "frame": 3,
+          "time": 150,
+          "event": null
+        },
+        {
+          "frame": 4,
+          "time": 200,
+          "event": null
+        },
+        {
+          "frame": 5,
+          "time": 250,
+          "event": null
+        },
+        {
+          "frame": 6,
+          "time": 300,
+          "event": null
+        },
+        {
+          "frame": 7,
+          "time": 350,
+          "event": null
+        },
+        {
+          "frame": 8,
+          "time": 400,
+          "event": null
+        },
+        {
+          "frame": 9,
+          "time": 450,
+          "event": null
+        },
+        {
+          "frame": 10,
+          "time": 500,
+          "event": null
+        },
+        {
+          "frame": 11,
+          "time": 550,
+          "event": null
+        }
+      ]
+    }
+  },
+  "frameTags": [
+    {
+      "name": "arrow-attack",
+      "from": 0,
+      "to": 11,
+      "direction": "forward",
+      "frameCount": 12,
+      "duration": 600
+    }
+  ],
+  "gameEngine": {
+    "engine": "universal",
+    "supportedEngines": [
+      "Unity",
+      "Unreal",
+      "Godot",
+      "Phaser",
+      "Cocos2d",
+      "LÖVE2D",
+      "Construct",
+      "GameMaker"
+    ],
+    "frameRate": 20,
+    "totalFrames": 12,
+    "frameSize": {
+      "w": 240,
+      "h": 240
+    },
+    "gridSize": {
+      "rows": 2,
+      "cols": 6
+    },
+    "collisionBox": {
+      "w": 240,
+      "h": 240
+    },
+    "origin": {
+      "x": 120,
+      "y": 240
+    },
+    "scale": 1,
+    "rotation": 0,
+    "alpha": 1
+  }
+}

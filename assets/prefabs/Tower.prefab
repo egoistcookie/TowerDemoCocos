@@ -79,7 +79,7 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 50,
+      "width": 25,
       "height": 50
     },
     "_anchorPoint": {
@@ -116,7 +116,7 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "a433227a-e370-4340-901d-c859040bb246@f9941",
+      "__uuid__": "16fe3869-4a44-4f0b-882f-76981cbf5d95@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 0,
@@ -172,6 +172,60 @@
     },
     "buildCost": 5,
     "level": 1,
+    "attackAnimationFrames": [
+      {
+        "__uuid__": "16fe3869-4a44-4f0b-882f-76981cbf5d95@f9941",
+        "__expectedType__": "cc.SpriteFrame"
+      },
+      {
+        "__uuid__": "3d58b2b3-6d31-42df-b02b-0ea3addc3be8@f9941",
+        "__expectedType__": "cc.SpriteFrame"
+      },
+      {
+        "__uuid__": "d2fe7ff7-4bfb-490f-b274-96665c09e41d@f9941",
+        "__expectedType__": "cc.SpriteFrame"
+      },
+      {
+        "__uuid__": "d93b4599-3530-4e9d-b428-2bf8594c15ca@f9941",
+        "__expectedType__": "cc.SpriteFrame"
+      },
+      {
+        "__uuid__": "08286a23-d239-4d9e-af80-46d7188602d5@f9941",
+        "__expectedType__": "cc.SpriteFrame"
+      },
+      {
+        "__uuid__": "04a24c78-eeee-4235-a824-71ec45252340@f9941",
+        "__expectedType__": "cc.SpriteFrame"
+      },
+      {
+        "__uuid__": "571fd72d-a19b-492a-aa63-5930b8ef3b84@f9941",
+        "__expectedType__": "cc.SpriteFrame"
+      },
+      {
+        "__uuid__": "d67b7329-9c9b-46a0-89db-1556a9b5ac36@f9941",
+        "__expectedType__": "cc.SpriteFrame"
+      },
+      {
+        "__uuid__": "f7776458-ff26-45f2-a3de-c8bde1c28fb1@f9941",
+        "__expectedType__": "cc.SpriteFrame"
+      },
+      {
+        "__uuid__": "9a4d760b-80cb-4db2-8dd2-904d1ef9913a@f9941",
+        "__expectedType__": "cc.SpriteFrame"
+      },
+      {
+        "__uuid__": "5830aa3c-e5f9-47f0-a2f6-953d788bd1e1@f9941",
+        "__expectedType__": "cc.SpriteFrame"
+      },
+      {
+        "__uuid__": "8282de64-0e81-4763-8cc9-94d469175c7a@f9941",
+        "__expectedType__": "cc.SpriteFrame"
+      }
+    ],
+    "attackAnimationTexture": null,
+    "framesPerRow": 12,
+    "totalFrames": 12,
+    "attackAnimationDuration": 0.5,
     "_id": ""
   },
   {
