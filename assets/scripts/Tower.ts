@@ -53,6 +53,19 @@ export class Tower extends Component {
     @property
     attackAnimationDuration: number = 0.5; // 攻击动画时长（秒）
 
+    // 移动相关属性
+    @property
+    moveSpeed: number = 100; // 移动速度（像素/秒）
+
+    @property(SpriteFrame)
+    moveAnimationFrames: SpriteFrame[] = []; // 移动动画帧数组（可选）
+
+    @property
+    moveAnimationDuration: number = 0.3; // 移动动画时长（秒）
+
+    @property
+    collisionRadius: number = 30; // 碰撞半径（像素）
+
     private currentHealth: number = 50;
     private healthBar: HealthBar = null!;
     private healthBarNode: Node = null!;
@@ -65,6 +78,12 @@ export class Tower extends Component {
     private defaultSpriteFrame: SpriteFrame = null!; // 默认SpriteFrame（动画结束后恢复）
     private defaultScale: Vec3 = new Vec3(1, 1, 1); // 默认缩放（用于恢复翻转）
     private isPlayingAttackAnimation: boolean = false; // 是否正在播放攻击动画
+    private isMoving: boolean = false; // 是否正在移动
+    private moveTarget: Node = null!; // 移动目标（敌人）
+    private isPlayingMoveAnimation: boolean = false; // 是否正在播放移动动画
+    private avoidDirection: Vec3 = new Vec3(); // 避障方向
+    private avoidTimer: number = 0; // 避障计时器
+    private collisionCheckCount: number = 0; // 碰撞检测调用计数（用于调试）
 
     start() {
         this.currentHealth = this.maxHealth;
@@ -209,13 +228,47 @@ export class Tower extends Component {
         // 查找目标
         this.findTarget();
 
-        // 攻击目标
-        if (this.currentTarget && this.attackTimer >= this.attackInterval) {
-            // 再次检查游戏状态，确保游戏仍在进行
-            if (this.gameManager && this.gameManager.getGameState() === GameState.Playing) {
-                this.attack();
-                this.attackTimer = 0;
+        // 无论是否移动，都要检查碰撞（防止重叠）
+        const currentPos = this.node.worldPosition.clone();
+        const hasCollisionNow = this.checkCollisionAtPosition(currentPos);
+        if (hasCollisionNow) {
+            // 即使不移动，如果有碰撞也要推开
+            console.log(`Tower: Collision detected even when not moving! Position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)})`);
+            const pushDirection = this.calculatePushAwayDirection(currentPos);
+            if (pushDirection.length() > 0.1) {
+                const pushDistance = this.moveSpeed * deltaTime * 1.5;
+                const pushPos = new Vec3();
+                Vec3.scaleAndAdd(pushPos, currentPos, pushDirection, pushDistance);
+                const finalPushPos = this.checkCollisionAndAdjust(currentPos, pushPos);
+                this.node.setWorldPosition(finalPushPos);
+                console.log(`Tower: Pushing away from collision (not moving) at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}) to (${finalPushPos.x.toFixed(1)}, ${finalPushPos.y.toFixed(1)})`);
             }
+        }
+
+        // 处理移动和攻击逻辑
+        if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
+            const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
+            
+            if (distance <= this.attackRange) {
+                // 在攻击范围内，停止移动并攻击
+                this.stopMoving();
+                if (this.attackTimer >= this.attackInterval) {
+                    // 再次检查游戏状态，确保游戏仍在进行
+                    if (this.gameManager && this.gameManager.getGameState() === GameState.Playing) {
+                        this.attack();
+                        this.attackTimer = 0;
+                    }
+                }
+            } else if (distance <= this.attackRange * 2) {
+                // 在2倍攻击范围内，朝敌人移动
+                this.moveTowardsTarget(deltaTime);
+            } else {
+                // 超出2倍攻击范围，停止移动
+                this.stopMoving();
+            }
+        } else {
+            // 没有目标，停止移动
+            this.stopMoving();
         }
     }
 
@@ -252,6 +305,7 @@ export class Tower extends Component {
         const enemies = enemiesNode.children || [];
         let nearestEnemy: Node = null!;
         let minDistance = Infinity;
+        const detectionRange = this.attackRange * 2; // 2倍攻击范围用于检测
 
         for (const enemy of enemies) {
             if (enemy && enemy.active && enemy.isValid) {
@@ -259,8 +313,8 @@ export class Tower extends Component {
                 // 检查敌人是否存活
                 if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                     const distance = Vec3.distance(this.node.worldPosition, enemy.worldPosition);
-                    // 在攻击范围内，选择最近的敌人
-                    if (distance <= this.attackRange && distance < minDistance) {
+                    // 在2倍攻击范围内，选择最近的敌人
+                    if (distance <= detectionRange && distance < minDistance) {
                         minDistance = distance;
                         nearestEnemy = enemy;
                     }
@@ -270,10 +324,608 @@ export class Tower extends Component {
 
         // 如果找到目标，输出调试信息（每60帧一次）
         if (nearestEnemy && Math.random() < 0.016) {
-            console.log(`Tower: Found target enemy at distance ${minDistance.toFixed(2)}, attacking!`);
+            if (minDistance <= this.attackRange) {
+                console.log(`Tower: Found target enemy at distance ${minDistance.toFixed(2)}, attacking!`);
+            } else {
+                console.log(`Tower: Found target enemy at distance ${minDistance.toFixed(2)}, moving towards it!`);
+            }
         }
 
         this.currentTarget = nearestEnemy;
+    }
+
+    moveTowardsTarget(deltaTime: number) {
+        if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active || this.isDestroyed) {
+            this.stopMoving();
+            return;
+        }
+
+        // 检查目标是否仍然存活
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any;
+        if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
+            this.stopMoving();
+            return;
+        }
+
+        const towerPos = this.node.worldPosition.clone(); // 使用clone确保获取最新位置
+        const targetPos = this.currentTarget.worldPosition;
+        const distance = Vec3.distance(towerPos, targetPos);
+        
+        // 调试：每60帧输出一次位置信息
+        if (Math.random() < 0.016) {
+            console.log(`Tower: Moving towards target. Position: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}), Target: (${targetPos.x.toFixed(1)}, ${targetPos.y.toFixed(1)}), Distance: ${distance.toFixed(1)}`);
+        }
+
+        // 如果已经在攻击范围内，停止移动
+        if (distance <= this.attackRange) {
+            this.stopMoving();
+            return;
+        }
+
+        // 首先检查当前位置是否有碰撞，如果有，先推开
+        console.log(`Tower: Checking collision before moving at (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)})`);
+        const hasCollision = this.checkCollisionAtPosition(towerPos);
+        console.log(`Tower: Collision check result: ${hasCollision}`);
+        
+        if (hasCollision) {
+            // 当前位置有碰撞，先推开
+            console.log(`Tower: Current position has collision! Position: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}), calculating push direction...`);
+            const pushDirection = this.calculatePushAwayDirection(towerPos);
+            console.log(`Tower: Push direction: (${pushDirection.x.toFixed(2)}, ${pushDirection.y.toFixed(2)}), length: ${pushDirection.length().toFixed(2)}`);
+            if (pushDirection.length() > 0.1) {
+                const pushDistance = this.moveSpeed * deltaTime * 1.5; // 推开速度更快
+                const pushPos = new Vec3();
+                Vec3.scaleAndAdd(pushPos, towerPos, pushDirection, pushDistance);
+                
+                // 确保推开后的位置没有碰撞
+                const finalPushPos = this.checkCollisionAndAdjust(towerPos, pushPos);
+                this.node.setWorldPosition(finalPushPos);
+                
+                console.log(`Tower: Pushing away from collision at (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}) to (${finalPushPos.x.toFixed(1)}, ${finalPushPos.y.toFixed(1)})`);
+                return; // 先推开，下一帧再移动
+            } else {
+                console.warn(`Tower: Has collision but push direction is too weak! Position: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)})`);
+            }
+        } else {
+            // 调试：每60帧输出一次，确认碰撞检测在工作
+            if (Math.random() < 0.016) {
+                console.log(`Tower: No collision at position (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}), collisionRadius: ${this.collisionRadius}`);
+            }
+        }
+
+        // 计算移动方向
+        const direction = new Vec3();
+        Vec3.subtract(direction, targetPos, towerPos);
+        direction.normalize();
+
+        // 应用避障逻辑（增强避障权重）
+        const finalDirection = this.calculateAvoidanceDirection(towerPos, direction, deltaTime);
+
+        // 计算移动距离
+        const moveDistance = this.moveSpeed * deltaTime;
+        const newPos = new Vec3();
+        Vec3.scaleAndAdd(newPos, towerPos, finalDirection, moveDistance);
+
+        // 检查新位置是否有碰撞，并调整
+        const adjustedPos = this.checkCollisionAndAdjust(towerPos, newPos);
+        
+        // 如果调整后的位置与原始位置不同，说明发生了避障
+        if (Vec3.distance(adjustedPos, newPos) > 1.0) {
+            console.log(`Tower: Adjusted position due to collision. Original: (${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)}), Adjusted: (${adjustedPos.x.toFixed(1)}, ${adjustedPos.y.toFixed(1)})`);
+        }
+
+        // 更新位置
+        this.node.setWorldPosition(adjustedPos);
+
+        // 更新血条位置（血条是子节点，会自动跟随，但需要确保位置正确）
+        if (this.healthBarNode && this.healthBarNode.isValid) {
+            // 血条位置已经在createHealthBar中设置为相对位置，会自动跟随
+        }
+
+        // 根据移动方向翻转防御塔
+        if (direction.x < 0) {
+            // 向左移动，翻转
+            this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+            // 血条反向翻转，保持正常朝向
+            if (this.healthBarNode && this.healthBarNode.isValid) {
+                this.healthBarNode.setScale(-1, 1, 1);
+            }
+        } else {
+            // 向右移动，正常朝向
+            this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+            // 血条正常朝向
+            if (this.healthBarNode && this.healthBarNode.isValid) {
+                this.healthBarNode.setScale(1, 1, 1);
+            }
+        }
+
+        // 播放移动动画
+        if (!this.isMoving) {
+            this.isMoving = true;
+            this.playMoveAnimation();
+        }
+    }
+
+    stopMoving() {
+        if (this.isMoving) {
+            this.isMoving = false;
+            this.stopMoveAnimation();
+        }
+    }
+
+    playMoveAnimation() {
+        // 如果正在播放移动动画，不重复播放
+        if (this.isPlayingMoveAnimation) {
+            return;
+        }
+
+        // 如果没有移动动画帧，使用默认SpriteFrame
+        if (!this.moveAnimationFrames || this.moveAnimationFrames.length === 0) {
+            return;
+        }
+
+        if (!this.sprite) {
+            return;
+        }
+
+        // 检查帧是否有效
+        const validFrames = this.moveAnimationFrames.filter(frame => frame != null);
+        if (validFrames.length === 0) {
+            return;
+        }
+
+        this.isPlayingMoveAnimation = true;
+
+        const frames = validFrames;
+        const frameCount = frames.length;
+        const frameDuration = this.moveAnimationDuration / frameCount;
+        let animationTimer = 0;
+        let lastFrameIndex = -1;
+
+        // 立即播放第一帧
+        if (frames[0]) {
+            this.sprite.spriteFrame = frames[0];
+            lastFrameIndex = 0;
+        }
+
+        // 使用update方法逐帧播放
+        const animationUpdate = (deltaTime: number) => {
+            if (!this.isMoving || !this.sprite || !this.sprite.isValid || this.isDestroyed) {
+                this.isPlayingMoveAnimation = false;
+                this.unschedule(animationUpdate);
+                // 恢复默认SpriteFrame
+                if (this.sprite && this.sprite.isValid && this.defaultSpriteFrame) {
+                    this.sprite.spriteFrame = this.defaultSpriteFrame;
+                }
+                return;
+            }
+
+            animationTimer += deltaTime;
+
+            // 循环播放动画
+            const targetFrameIndex = Math.floor(animationTimer / frameDuration) % frameCount;
+
+            if (targetFrameIndex !== lastFrameIndex && frames[targetFrameIndex]) {
+                this.sprite.spriteFrame = frames[targetFrameIndex];
+                lastFrameIndex = targetFrameIndex;
+            }
+        };
+
+        // 开始动画更新
+        this.schedule(animationUpdate, 0);
+    }
+
+    stopMoveAnimation() {
+        this.isPlayingMoveAnimation = false;
+        // 恢复默认SpriteFrame
+        if (this.sprite && this.sprite.isValid && this.defaultSpriteFrame) {
+            this.sprite.spriteFrame = this.defaultSpriteFrame;
+        }
+    }
+
+    /**
+     * 检查位置是否有碰撞
+     * @param position 要检查的位置
+     * @returns 如果有碰撞返回true
+     */
+    checkCollisionAtPosition(position: Vec3): boolean {
+        // 调试：总是输出，确认方法被调用（但限制频率避免刷屏）
+        this.collisionCheckCount++;
+        if (this.collisionCheckCount % 10 === 0) { // 每10次调用输出一次
+            console.log(`Tower: checkCollisionAtPosition called #${this.collisionCheckCount} at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), collisionRadius: ${this.collisionRadius}`);
+        }
+        
+        // 检查与水晶的碰撞
+        const crystal = find('Crystal');
+        if (!crystal) {
+            // 尝试递归查找
+            const findNodeRecursive = (node: Node, name: string): Node | null => {
+                if (node.name === name) {
+                    return node;
+                }
+                for (const child of node.children) {
+                    const found = findNodeRecursive(child, name);
+                    if (found) return found;
+                }
+                return null;
+            };
+            const scene = this.node.scene;
+            if (scene) {
+                const foundCrystal = findNodeRecursive(scene, 'Crystal');
+                if (foundCrystal && foundCrystal.isValid && foundCrystal.active) {
+                    const crystalDistance = Vec3.distance(position, foundCrystal.worldPosition);
+                    const crystalRadius = 50;
+                    const minDistance = this.collisionRadius + crystalRadius;
+                    if (crystalDistance < minDistance) {
+                        console.log(`Tower: Collision with crystal! Distance: ${crystalDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, Tower at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Crystal at (${foundCrystal.worldPosition.x.toFixed(1)}, ${foundCrystal.worldPosition.y.toFixed(1)})`);
+                        return true;
+                    }
+                }
+            }
+        } else if (crystal && crystal.isValid && crystal.active) {
+            const crystalDistance = Vec3.distance(position, crystal.worldPosition);
+            const crystalRadius = 50; // 增大水晶半径，确保不会太近
+            const minDistance = this.collisionRadius + crystalRadius;
+            if (crystalDistance < minDistance) {
+                console.log(`Tower: Collision with crystal! Distance: ${crystalDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, Tower at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Crystal at (${crystal.worldPosition.x.toFixed(1)}, ${crystal.worldPosition.y.toFixed(1)})`);
+                return true;
+            }
+        }
+
+        // 检查与其他防御塔的碰撞
+        let towersNode = find('Towers');
+        // 如果直接查找失败，尝试递归查找
+        if (!towersNode) {
+            const findNodeRecursive = (node: Node, name: string): Node | null => {
+                if (node.name === name) {
+                    return node;
+                }
+                for (const child of node.children) {
+                    const found = findNodeRecursive(child, name);
+                    if (found) return found;
+                }
+                return null;
+            };
+            const scene = this.node.scene;
+            if (scene) {
+                towersNode = findNodeRecursive(scene, 'Towers');
+            }
+        }
+        
+        if (towersNode) {
+            const towers = towersNode.children || [];
+            let towerCount = 0;
+            for (const tower of towers) {
+                if (tower && tower.isValid && tower.active && tower !== this.node) {
+                    towerCount++;
+                    const towerDistance = Vec3.distance(position, tower.worldPosition);
+                    // 获取另一个防御塔的碰撞半径（如果有）
+                    const otherTowerScript = tower.getComponent('Tower') as any;
+                    const otherRadius = otherTowerScript && otherTowerScript.collisionRadius ? otherTowerScript.collisionRadius : this.collisionRadius;
+                    const minDistance = (this.collisionRadius + otherRadius) * 1.2; // 增加20%的安全距离
+                    
+                    // 调试：当距离较近时总是输出日志（降低阈值，确保能检测到）
+                    if (towerDistance < 200) { // 使用固定值200像素，确保能检测到
+                        console.log(`Tower: Checking distance to other tower #${towerCount}. Distance: ${towerDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, This: (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Other: (${tower.worldPosition.x.toFixed(1)}, ${tower.worldPosition.y.toFixed(1)}), This radius: ${this.collisionRadius}, Other radius: ${otherRadius}`);
+                    }
+                    
+                    if (towerDistance < minDistance) {
+                        console.log(`Tower: *** COLLISION DETECTED with other tower! *** Distance: ${towerDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, This tower at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Other tower at (${tower.worldPosition.x.toFixed(1)}, ${tower.worldPosition.y.toFixed(1)}), This radius: ${this.collisionRadius}, Other radius: ${otherRadius}`);
+                        return true;
+                    }
+                }
+            }
+            
+            // 调试：如果没有找到其他防御塔
+            if (towerCount === 0 && Math.random() < 0.016) {
+                console.log(`Tower: No other towers found in container (total: ${towers.length})`);
+            }
+        } else {
+            // 调试：如果找不到Towers节点（降低警告频率，避免刷屏）
+            if (this.collisionCheckCount % 100 === 0) {
+                console.warn(`Tower: Towers node not found! Cannot check collision with other towers. (check #${this.collisionCheckCount})`);
+            }
+        }
+
+        // 检查与敌人的碰撞
+        const enemiesNode = find('Enemies');
+        if (enemiesNode) {
+            const enemies = enemiesNode.children || [];
+            for (const enemy of enemies) {
+                if (enemy && enemy.isValid && enemy.active) {
+                    const enemyScript = enemy.getComponent('Enemy') as any;
+                    if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
+                        const enemyDistance = Vec3.distance(position, enemy.worldPosition);
+                        const enemyRadius = 30; // 增大敌人半径
+                        const minDistance = this.collisionRadius + enemyRadius;
+                        if (enemyDistance < minDistance) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * 检查碰撞并调整位置
+     * @param currentPos 当前位置
+     * @param newPos 新位置
+     * @returns 调整后的位置
+     */
+    checkCollisionAndAdjust(currentPos: Vec3, newPos: Vec3): Vec3 {
+        // 如果新位置没有碰撞，直接返回
+        if (!this.checkCollisionAtPosition(newPos)) {
+            return newPos;
+        }
+
+        // 如果有碰撞，尝试寻找替代路径
+        const direction = new Vec3();
+        Vec3.subtract(direction, newPos, currentPos);
+        const moveDistance = Vec3.distance(currentPos, newPos);
+        
+        if (moveDistance < 0.1) {
+            // 移动距离太小，尝试推开
+            const pushDir = this.calculatePushAwayDirection(currentPos);
+            if (pushDir.length() > 0.1) {
+                const pushPos = new Vec3();
+                Vec3.scaleAndAdd(pushPos, currentPos, pushDir, this.collisionRadius * 0.5);
+                if (!this.checkCollisionAtPosition(pushPos)) {
+                    return pushPos;
+                }
+            }
+            return currentPos;
+        }
+
+        direction.normalize();
+
+        // 尝试多个角度偏移（更密集的角度）
+        const offsetAngles = [-30, 30, -60, 60, -90, 90, -120, 120, -150, 150, 180]; // 尝试更多角度
+        for (const angle of offsetAngles) {
+            const rad = angle * Math.PI / 180;
+            const offsetDir = new Vec3(
+                direction.x * Math.cos(rad) - direction.y * Math.sin(rad),
+                direction.x * Math.sin(rad) + direction.y * Math.cos(rad),
+                0
+            );
+            offsetDir.normalize();
+
+            // 尝试不同距离
+            for (let distMultiplier = 1.0; distMultiplier >= 0.3; distMultiplier -= 0.2) {
+                const testPos = new Vec3();
+                Vec3.scaleAndAdd(testPos, currentPos, offsetDir, moveDistance * distMultiplier);
+
+                if (!this.checkCollisionAtPosition(testPos)) {
+                    return testPos;
+                }
+            }
+        }
+
+        // 如果所有方向都有碰撞，尝试推开
+        const pushDir = this.calculatePushAwayDirection(currentPos);
+        if (pushDir.length() > 0.1) {
+            const pushPos = new Vec3();
+            Vec3.scaleAndAdd(pushPos, currentPos, pushDir, this.collisionRadius * 0.3);
+            if (!this.checkCollisionAtPosition(pushPos)) {
+                return pushPos;
+            }
+        }
+
+        // 如果所有方法都失败，保持当前位置
+        return currentPos;
+    }
+
+    /**
+     * 计算推开方向（当当前位置有碰撞时使用）
+     * @param currentPos 当前位置
+     * @returns 推开方向
+     */
+    calculatePushAwayDirection(currentPos: Vec3): Vec3 {
+        const pushForce = new Vec3(0, 0, 0);
+        let obstacleCount = 0;
+        let maxPushStrength = 0;
+
+        // 检查水晶
+        const crystal = find('Crystal');
+        if (crystal && crystal.isValid && crystal.active) {
+            const crystalPos = crystal.worldPosition;
+            const distance = Vec3.distance(currentPos, crystalPos);
+            const crystalRadius = 50;
+            const minDistance = this.collisionRadius + crystalRadius;
+            if (distance < minDistance && distance > 0.1) {
+                const pushDir = new Vec3();
+                Vec3.subtract(pushDir, currentPos, crystalPos);
+                pushDir.normalize();
+                // 增强推力，确保能推开
+                const strength = Math.max(1.0, (minDistance - distance) / minDistance * 2.0);
+                Vec3.scaleAndAdd(pushForce, pushForce, pushDir, strength);
+                maxPushStrength = Math.max(maxPushStrength, strength);
+                obstacleCount++;
+                console.log(`Tower: Pushing away from crystal, distance: ${distance.toFixed(1)}, strength: ${strength.toFixed(2)}`);
+            }
+        }
+
+        // 检查其他防御塔
+        const towersNode = find('Towers');
+        if (towersNode) {
+            const towers = towersNode.children || [];
+            for (const tower of towers) {
+                if (tower && tower.isValid && tower.active && tower !== this.node) {
+                    const towerPos = tower.worldPosition;
+                    const distance = Vec3.distance(currentPos, towerPos);
+                    // 获取另一个防御塔的碰撞半径
+                    const otherTowerScript = tower.getComponent('Tower') as any;
+                    const otherRadius = otherTowerScript && otherTowerScript.collisionRadius ? otherTowerScript.collisionRadius : this.collisionRadius;
+                    const minDistance = (this.collisionRadius + otherRadius) * 1.2;
+                    if (distance < minDistance && distance > 0.1) {
+                        const pushDir = new Vec3();
+                        Vec3.subtract(pushDir, currentPos, towerPos);
+                        pushDir.normalize();
+                        // 增强推力，重叠越多推力越大
+                        const strength = Math.max(2.0, (minDistance - distance) / minDistance * 3.0);
+                        Vec3.scaleAndAdd(pushForce, pushForce, pushDir, strength);
+                        maxPushStrength = Math.max(maxPushStrength, strength);
+                        obstacleCount++;
+                        console.log(`Tower: Pushing away from other tower, distance: ${distance.toFixed(1)}, minDistance: ${minDistance.toFixed(1)}, strength: ${strength.toFixed(2)}`);
+                    }
+                }
+            }
+        }
+
+        // 检查敌人
+        const enemiesNode = find('Enemies');
+        if (enemiesNode) {
+            const enemies = enemiesNode.children || [];
+            for (const enemy of enemies) {
+                if (enemy && enemy.isValid && enemy.active) {
+                    const enemyScript = enemy.getComponent('Enemy') as any;
+                    if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
+                        const enemyPos = enemy.worldPosition;
+                        const distance = Vec3.distance(currentPos, enemyPos);
+                        const enemyRadius = 30;
+                        const minDistance = this.collisionRadius + enemyRadius;
+                        if (distance < minDistance && distance > 0.1) {
+                            const pushDir = new Vec3();
+                            Vec3.subtract(pushDir, currentPos, enemyPos);
+                            pushDir.normalize();
+                            const strength = Math.max(1.0, (minDistance - distance) / minDistance * 2.0);
+                            Vec3.scaleAndAdd(pushForce, pushForce, pushDir, strength);
+                            maxPushStrength = Math.max(maxPushStrength, strength);
+                            obstacleCount++;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (obstacleCount > 0 && pushForce.length() > 0.1) {
+            pushForce.normalize();
+            // 根据推力强度调整最终推力
+            const finalPushForce = new Vec3();
+            Vec3.multiplyScalar(finalPushForce, pushForce, Math.min(maxPushStrength, 2.0));
+            return finalPushForce;
+        }
+
+        return new Vec3(0, 0, 0);
+    }
+
+    /**
+     * 计算避障方向
+     * @param currentPos 当前位置
+     * @param desiredDirection 期望移动方向
+     * @param deltaTime 时间增量
+     * @returns 调整后的移动方向
+     */
+    calculateAvoidanceDirection(currentPos: Vec3, desiredDirection: Vec3, deltaTime: number): Vec3 {
+        const avoidanceForce = new Vec3(0, 0, 0);
+        let obstacleCount = 0;
+        let maxStrength = 0;
+
+        // 检测附近的障碍物并计算避障力
+        const detectionRange = this.collisionRadius * 4; // 增大检测范围
+
+        // 检查水晶
+        const crystal = find('Crystal');
+        if (crystal && crystal.isValid && crystal.active) {
+            const crystalPos = crystal.worldPosition;
+            const distance = Vec3.distance(currentPos, crystalPos);
+            const crystalRadius = 40;
+            const minDistance = this.collisionRadius + crystalRadius;
+            if (distance < detectionRange && distance > 0.1) {
+                const avoidDir = new Vec3();
+                Vec3.subtract(avoidDir, currentPos, crystalPos);
+                avoidDir.normalize();
+                // 距离越近，避障力越强
+                let strength = 1 - (distance / detectionRange);
+                // 如果已经在碰撞范围内，大幅增强避障力
+                if (distance < minDistance) {
+                    strength = 2.0; // 强制避障
+                }
+                Vec3.scaleAndAdd(avoidanceForce, avoidanceForce, avoidDir, strength);
+                maxStrength = Math.max(maxStrength, strength);
+                obstacleCount++;
+            }
+        }
+
+        // 检查其他防御塔
+        const towersNode = find('Towers');
+        if (towersNode) {
+            const towers = towersNode.children || [];
+            for (const tower of towers) {
+                if (tower && tower.isValid && tower.active && tower !== this.node) {
+                    const towerPos = tower.worldPosition;
+                    const distance = Vec3.distance(currentPos, towerPos);
+                    // 获取另一个防御塔的碰撞半径
+                    const otherTowerScript = tower.getComponent('Tower') as any;
+                    const otherRadius = otherTowerScript && otherTowerScript.collisionRadius ? otherTowerScript.collisionRadius : this.collisionRadius;
+                    const minDistance = (this.collisionRadius + otherRadius) * 1.2;
+                    if (distance < detectionRange && distance > 0.1) {
+                        const avoidDir = new Vec3();
+                        Vec3.subtract(avoidDir, currentPos, towerPos);
+                        avoidDir.normalize();
+                        let strength = 1 - (distance / detectionRange);
+                        if (distance < minDistance) {
+                            strength = 3.0; // 大幅增强避障力
+                        }
+                        Vec3.scaleAndAdd(avoidanceForce, avoidanceForce, avoidDir, strength);
+                        maxStrength = Math.max(maxStrength, strength);
+                        obstacleCount++;
+                    }
+                }
+            }
+        }
+
+        // 检查敌人
+        const enemiesNode = find('Enemies');
+        if (enemiesNode) {
+            const enemies = enemiesNode.children || [];
+            for (const enemy of enemies) {
+                if (enemy && enemy.isValid && enemy.active) {
+                    const enemyScript = enemy.getComponent('Enemy') as any;
+                    if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
+                        const enemyPos = enemy.worldPosition;
+                        const distance = Vec3.distance(currentPos, enemyPos);
+                        const enemyRadius = 25;
+                        const minDistance = this.collisionRadius + enemyRadius;
+                        if (distance < detectionRange && distance > 0.1) {
+                            const avoidDir = new Vec3();
+                            Vec3.subtract(avoidDir, currentPos, enemyPos);
+                            avoidDir.normalize();
+                            let strength = 1 - (distance / detectionRange);
+                            if (distance < minDistance) {
+                                strength = 2.0;
+                            }
+                            Vec3.scaleAndAdd(avoidanceForce, avoidanceForce, avoidDir, strength);
+                            maxStrength = Math.max(maxStrength, strength);
+                            obstacleCount++;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 如果有障碍物，应用避障力
+        if (obstacleCount > 0 && avoidanceForce.length() > 0.1) {
+            avoidanceForce.normalize();
+            // 根据障碍物强度调整混合比例
+            // 如果障碍物很近（maxStrength > 1），优先避障
+            const avoidanceWeight = maxStrength > 2.0 ? 0.9 : (maxStrength > 1.0 ? 0.7 : 0.5); // 50%-90%避障
+            const finalDir = new Vec3();
+            Vec3.lerp(finalDir, desiredDirection, avoidanceForce, avoidanceWeight);
+            finalDir.normalize();
+            
+            // 调试：如果避障权重很高，输出日志
+            if (avoidanceWeight > 0.7) {
+                console.log(`Tower: Strong avoidance! Weight: ${avoidanceWeight.toFixed(2)}, MaxStrength: ${maxStrength.toFixed(2)}, ObstacleCount: ${obstacleCount}`);
+            }
+            
+            return finalDir;
+        }
+
+        // 没有障碍物，返回期望方向
+        return desiredDirection;
     }
 
     attack() {
@@ -286,6 +938,9 @@ export class Tower extends Component {
             this.currentTarget = null!;
             return;
         }
+
+        // 攻击时停止移动
+        this.stopMoving();
 
         const enemyScript = this.currentTarget.getComponent('Enemy') as any;
         if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
@@ -409,7 +1064,6 @@ export class Tower extends Component {
         if (frames[0]) {
             this.sprite.spriteFrame = frames[0];
             lastFrameIndex = 0;
-            console.log(`Tower: Playing frame 1/${frameCount}`);
         }
         
         // 使用update方法逐帧播放
@@ -431,7 +1085,6 @@ export class Tower extends Component {
                 // 确保播放最后一帧
                 if (lastFrameIndex < frameCount - 1 && frames[frameCount - 1]) {
                     this.sprite.spriteFrame = frames[frameCount - 1];
-                    console.log(`Tower: Playing frame ${frameCount}/${frameCount}`);
                 }
                 // 动画播放完成，恢复默认SpriteFrame
                 console.log('Tower: Attack animation completed, restoring default sprite');
@@ -449,7 +1102,6 @@ export class Tower extends Component {
             if (targetFrameIndex !== lastFrameIndex && targetFrameIndex < frameCount && frames[targetFrameIndex]) {
                 this.sprite.spriteFrame = frames[targetFrameIndex];
                 lastFrameIndex = targetFrameIndex;
-                console.log(`Tower: Playing frame ${targetFrameIndex + 1}/${frameCount}`);
             }
         };
         
@@ -471,6 +1123,11 @@ export class Tower extends Component {
             this.healthBarNode.setScale(1, 1, 1);
         }
         this.isPlayingAttackAnimation = false;
+        
+        // 如果正在移动，恢复移动动画
+        if (this.isMoving) {
+            this.playMoveAnimation();
+        }
     }
 
     createLaserEffect(targetPos: Vec3) {

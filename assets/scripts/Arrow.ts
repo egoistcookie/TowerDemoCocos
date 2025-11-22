@@ -71,13 +71,13 @@ export class Arrow extends Component {
             this.node.setRotationFromEuler(0, 0, angle);
         }
 
-        console.log(`Arrow: Initialized successfully!`);
-        console.log(`  Start: (${this.startPos.x.toFixed(2)}, ${this.startPos.y.toFixed(2)})`);
-        console.log(`  Target: (${this.targetPos.x.toFixed(2)}, ${this.targetPos.y.toFixed(2)})`);
-        console.log(`  Distance: ${distance.toFixed(2)}`);
-        console.log(`  Speed: ${this.speed}`);
-        console.log(`  TravelTime: ${this.travelTime.toFixed(2)}s`);
-        console.log(`  Node active: ${this.node.active}, isValid: ${this.node.isValid}`);
+        // console.log(`Arrow: Initialized successfully!`);
+        // console.log(`  Start: (${this.startPos.x.toFixed(2)}, ${this.startPos.y.toFixed(2)})`);
+        // console.log(`  Target: (${this.targetPos.x.toFixed(2)}, ${this.targetPos.y.toFixed(2)})`);
+        // console.log(`  Distance: ${distance.toFixed(2)}`);
+        // console.log(`  Speed: ${this.speed}`);
+        // console.log(`  TravelTime: ${this.travelTime.toFixed(2)}s`);
+        // console.log(`  Node active: ${this.node.active}, isValid: ${this.node.isValid}`);
     }
 
     /**
@@ -107,7 +107,7 @@ export class Arrow extends Component {
         }
 
         this.isFlying = false;
-        console.log(`Arrow: Hit target at position (${this.node.worldPosition.x.toFixed(2)}, ${this.node.worldPosition.y.toFixed(2)})`);
+        // console.log(`Arrow: Hit target at position (${this.node.worldPosition.x.toFixed(2)}, ${this.node.worldPosition.y.toFixed(2)})`);
 
         // 调用命中回调
         if (this.onHitCallback) {
@@ -133,7 +133,7 @@ export class Arrow extends Component {
         // 调试：每0.5秒输出一次位置信息
         if (Math.floor(this.elapsedTime * 2) !== Math.floor((this.elapsedTime - deltaTime) * 2)) {
             const currentPos = this.calculateParabolicPosition(Math.min(this.elapsedTime / this.travelTime, 1));
-            console.log(`Arrow: Flying, elapsed: ${this.elapsedTime.toFixed(2)}s, position: (${currentPos.x.toFixed(2)}, ${currentPos.y.toFixed(2)}), target: (${this.targetPos.x.toFixed(2)}, ${this.targetPos.y.toFixed(2)})`);
+            // console.log(`Arrow: Flying, elapsed: ${this.elapsedTime.toFixed(2)}s, position: (${currentPos.x.toFixed(2)}, ${currentPos.y.toFixed(2)}), target: (${this.targetPos.x.toFixed(2)}, ${this.targetPos.y.toFixed(2)})`);
         }
         
         // 如果目标已失效，提前销毁
