@@ -175,7 +175,7 @@ export class Enemy extends Component {
             return null;
         };
         
-        // 优先查找附近的防御塔（在攻击范围内）
+        // 优先查找附近的防御塔和战争古树（在攻击范围内）
         let towers: Node[] = [];
         let towersNode = find('Towers');
         
@@ -186,14 +186,19 @@ export class Enemy extends Component {
         
         if (towersNode) {
             towers = towersNode.children;
-        } else {
-            // 调试：每60帧输出一次，避免刷屏
-            if (Math.random() < 0.016) {
-                // console.warn('Enemy: Towers container not found!');
-            }
+        }
+
+        // 查找战争古树
+        let trees: Node[] = [];
+        let treesNode = find('WarAncientTrees');
+        if (!treesNode && this.node.scene) {
+            treesNode = findNodeRecursive(this.node.scene, 'WarAncientTrees');
+        }
+        if (treesNode) {
+            trees = treesNode.children;
         }
         
-        let nearestTower: Node = null!;
+        let nearestTarget: Node = null!;
         let minDistance = Infinity;
 
         // 查找攻击范围内的防御塔（优先攻击防御塔）
@@ -206,19 +211,31 @@ export class Enemy extends Component {
                     // 如果防御塔在攻击范围内，优先选择最近的
                     if (distance <= this.attackRange && distance < minDistance) {
                         minDistance = distance;
-                        nearestTower = tower;
+                        nearestTarget = tower;
                     }
                 }
             }
         }
 
-        // 如果找到防御塔，优先攻击防御塔
-        if (nearestTower) {
-            // 调试：找到防御塔时输出日志（每60帧一次）
-            if (Math.random() < 0.016) {
-                // console.debug(`Enemy: Found target tower at distance ${minDistance.toFixed(2)}, attacking tower!`);
+        // 查找攻击范围内的战争古树（如果防御塔不在范围内，攻击战争古树）
+        for (const tree of trees) {
+            if (tree && tree.active && tree.isValid) {
+                const treeScript = tree.getComponent('WarAncientTree') as any;
+                // 检查战争古树是否存活
+                if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
+                    const distance = Vec3.distance(this.node.worldPosition, tree.worldPosition);
+                    // 如果战争古树在攻击范围内，选择最近的
+                    if (distance <= this.attackRange && distance < minDistance) {
+                        minDistance = distance;
+                        nearestTarget = tree;
+                    }
+                }
             }
-            this.currentTarget = nearestTower;
+        }
+
+        // 如果找到防御塔或战争古树，优先攻击
+        if (nearestTarget) {
+            this.currentTarget = nearestTarget;
             return;
         }
         
@@ -299,14 +316,17 @@ export class Enemy extends Component {
         }
 
         const towerScript = this.currentTarget.getComponent('Tower') as any;
+        const treeScript = this.currentTarget.getComponent('WarAncientTree') as any;
         const crystalScript = this.currentTarget.getComponent('Crystal') as any;
-        const targetScript = towerScript || crystalScript;
+        const targetScript = towerScript || treeScript || crystalScript;
         
         if (targetScript && targetScript.takeDamage) {
             targetScript.takeDamage(this.attackDamage);
             // 根据目标类型输出日志
             if (towerScript) {
                 console.debug(`Enemy: Attacked tower, dealt ${this.attackDamage} damage`);
+            } else if (treeScript) {
+                console.debug(`Enemy: Attacked war ancient tree, dealt ${this.attackDamage} damage`);
             } else if (crystalScript) {
                 console.debug(`Enemy: Attacked crystal, dealt ${this.attackDamage} damage`);
             }

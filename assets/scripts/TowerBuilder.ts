@@ -5,7 +5,7 @@ const { ccclass, property } = _decorator;
 @ccclass('TowerBuilder')
 export class TowerBuilder extends Component {
     @property(Prefab)
-    towerPrefab: Prefab = null!;
+    warAncientTreePrefab: Prefab = null!; // 战争古树预制体
 
     @property
     buildRange: number = 800; // 建造范围（距离水晶），增大范围以便更容易建造
@@ -19,8 +19,11 @@ export class TowerBuilder extends Component {
     @property(Node)
     towerContainer: Node = null!;
 
+    @property(Node)
+    warAncientTreeContainer: Node = null!; // 战争古树容器
+
     @property
-    towerCost: number = 5; // 防御塔建造成本
+    towerCost: number = 10; // 战争古树建造成本（10金币）
 
     private isBuildingMode: boolean = false;
     private previewTower: Node = null!;
@@ -44,6 +47,22 @@ export class TowerBuilder extends Component {
             } else {
                 this.towerContainer = new Node('Towers');
                 this.towerContainer.setParent(this.node.scene);
+            }
+        }
+
+        // 创建战争古树容器
+        if (!this.warAncientTreeContainer) {
+            const existingTrees = find('WarAncientTrees');
+            if (existingTrees) {
+                this.warAncientTreeContainer = existingTrees;
+            } else {
+                this.warAncientTreeContainer = new Node('WarAncientTrees');
+                const canvas = find('Canvas');
+                if (canvas) {
+                    this.warAncientTreeContainer.setParent(canvas);
+                } else if (this.node.scene) {
+                    this.warAncientTreeContainer.setParent(this.node.scene);
+                }
             }
         }
 
@@ -152,7 +171,7 @@ export class TowerBuilder extends Component {
             }
         }
         
-        if (!this.towerPrefab || !this.targetCrystal) {
+        if (!this.warAncientTreePrefab || !this.targetCrystal) {
             this.disableBuildingMode();
             return;
         }
@@ -212,6 +231,17 @@ export class TowerBuilder extends Component {
             }
         }
 
+        // 检查是否与现有战争古树重叠
+        const trees = this.warAncientTreeContainer?.children || [];
+        for (const tree of trees) {
+            if (tree.active) {
+                const treeDistance = Vec3.distance(position, tree.worldPosition);
+                if (treeDistance < 80) { // 战争古树之间的最小距离（稍大一些）
+                    return false;
+                }
+            }
+        }
+
         return true;
     }
 
@@ -227,49 +257,49 @@ export class TowerBuilder extends Component {
             return;
         }
 
-        // 再次检查towerPrefab
-        if (!this.towerPrefab) {
-            console.error('TowerBuilder.buildTower: towerPrefab is null! Cannot build.');
+        // 再次检查warAncientTreePrefab
+        if (!this.warAncientTreePrefab) {
+            console.error('TowerBuilder.buildTower: warAncientTreePrefab is null! Cannot build.');
             this.disableBuildingMode();
             return;
         }
 
-        // 检查towerContainer
-        if (!this.towerContainer) {
-            console.error('TowerBuilder.buildTower: towerContainer is null! Creating new one.');
-            const existingTowers = find('Towers');
-            if (existingTowers) {
-                this.towerContainer = existingTowers;
+        // 检查warAncientTreeContainer
+        if (!this.warAncientTreeContainer) {
+            console.error('TowerBuilder.buildTower: warAncientTreeContainer is null! Creating new one.');
+            const existingTrees = find('WarAncientTrees');
+            if (existingTrees) {
+                this.warAncientTreeContainer = existingTrees;
             } else {
-                this.towerContainer = new Node('Towers');
-                this.towerContainer.setParent(this.node.scene);
+                this.warAncientTreeContainer = new Node('WarAncientTrees');
+                const canvas = find('Canvas');
+                if (canvas) {
+                    this.warAncientTreeContainer.setParent(canvas);
+                } else if (this.node.scene) {
+                    this.warAncientTreeContainer.setParent(this.node.scene);
+                }
             }
         }
         
-        // 确保防御塔容器在Canvas下（根据场景设置文档，Towers应该在Canvas下）
+        // 确保战争古树容器在Canvas下
         const containerCanvasNode = find('Canvas');
-        if (containerCanvasNode && this.towerContainer.parent !== containerCanvasNode) {
-            console.warn('TowerBuilder.buildTower: Tower container is not under Canvas, moving to Canvas');
-            const oldWorldPos = this.towerContainer.worldPosition;
-            this.towerContainer.setParent(containerCanvasNode);
-            // 保持世界位置不变
-            this.towerContainer.setWorldPosition(oldWorldPos);
+        if (containerCanvasNode && this.warAncientTreeContainer.parent !== containerCanvasNode) {
+            console.warn('TowerBuilder.buildTower: WarAncientTree container is not under Canvas, moving to Canvas');
+            const oldWorldPos = this.warAncientTreeContainer.worldPosition;
+            this.warAncientTreeContainer.setParent(containerCanvasNode);
+            this.warAncientTreeContainer.setWorldPosition(oldWorldPos);
             console.log('TowerBuilder.buildTower: Moved container to Canvas');
         }
 
         // 消耗金币
-        console.log('TowerBuilder.buildTower: Checking gameManager before spending gold');
-        console.log('TowerBuilder.buildTower: gameManager exists:', this.gameManager ? 'yes' : 'no');
         if (!this.gameManager) {
-            console.warn('TowerBuilder.buildTower: gameManager is null! Trying to find it...');
             this.findGameManager();
-            console.log('TowerBuilder.buildTower: After findGameManager, gameManager exists:', this.gameManager ? 'yes' : 'no');
         }
         
         if (this.gameManager) {
             const goldBefore = this.gameManager.getGold();
             console.log('TowerBuilder.buildTower: Gold before spending:', goldBefore);
-            console.log('TowerBuilder.buildTower: Tower cost:', this.towerCost);
+            console.log('TowerBuilder.buildTower: WarAncientTree cost:', this.towerCost);
             console.log('TowerBuilder.buildTower: Can afford:', this.gameManager.canAfford(this.towerCost));
             
             this.gameManager.spendGold(this.towerCost);
@@ -280,51 +310,51 @@ export class TowerBuilder extends Component {
         }
 
         
-        if (!this.towerPrefab) {
-            console.error('TowerBuilder.buildTower: towerPrefab is null! Cannot build tower.');
+        if (!this.warAncientTreePrefab) {
+            console.error('TowerBuilder.buildTower: warAncientTreePrefab is null! Cannot build war ancient tree.');
             return;
         }
         
-        const tower = instantiate(this.towerPrefab);
+        const tree = instantiate(this.warAncientTreePrefab);
         
         // 设置父节点
-        const parent = this.towerContainer || this.node;
+        const parent = this.warAncientTreeContainer || this.node;
         
         // 确保父节点是激活的
         if (parent && !parent.active) {
             parent.active = true;
         }
         
-        tower.setParent(parent);
+        tree.setParent(parent);
         
-        // 立即激活防御塔节点
-        tower.active = true;
+        // 立即激活战争古树节点
+        tree.active = true;
         
-        // 重置防御塔的本地位置和旋转
-        tower.setPosition(0, 0, 0);
-        tower.setRotationFromEuler(0, 0, 0);
-        tower.setScale(1, 1, 1);
+        // 重置战争古树的本地位置和旋转
+        tree.setPosition(0, 0, 0);
+        tree.setRotationFromEuler(0, 0, 0);
+        tree.setScale(1, 1, 1);
         
-        // 直接使用世界坐标设置位置（与EnemySpawner和Tower移动逻辑一致）
-        tower.setWorldPosition(worldPosition);
+        // 直接使用世界坐标设置位置
+        tree.setWorldPosition(worldPosition);
         
-        // 确保防御塔脚本组件存在并设置建造成本
-        const towerScript = tower.getComponent('Tower') as any;
-        if (towerScript) {
-            towerScript.buildCost = this.towerCost;
+        // 确保战争古树脚本组件存在并设置建造成本
+        const treeScript = tree.getComponent('WarAncientTree') as any;
+        if (treeScript) {
+            treeScript.buildCost = this.towerCost;
         } else {
-            console.error('TowerBuilder.buildTower: Tower script not found on tower prefab!');
+            console.error('TowerBuilder.buildTower: WarAncientTree script not found on prefab!');
         }
         
         // 确保所有组件和子节点都是激活的
-        const towerUITransform = tower.getComponent(UITransform);
-        const towerSprite = tower.getComponent('Sprite') as any;
+        const treeUITransform = tree.getComponent(UITransform);
+        const treeSprite = tree.getComponent('Sprite') as any;
         
-        if (towerUITransform) {
-            towerUITransform.enabled = true;
+        if (treeUITransform) {
+            treeUITransform.enabled = true;
         }
-        if (towerSprite) {
-            towerSprite.enabled = true;
+        if (treeSprite) {
+            treeSprite.enabled = true;
         }
         
         const setNodeActive = (node: Node, active: boolean) => {
@@ -333,10 +363,10 @@ export class TowerBuilder extends Component {
                 setNodeActive(child, active);
             }
         };
-        setNodeActive(tower, true);
+        setNodeActive(tree, true);
         
         // 强制更新节点变换，确保立即渲染
-        tower.updateWorldTransform();
+        tree.updateWorldTransform();
 
         // 退出建造模式
         this.disableBuildingMode();
@@ -353,9 +383,9 @@ export class TowerBuilder extends Component {
             return;
         }
         
-        // 检查towerPrefab是否设置
-        if (!this.towerPrefab) {
-            console.error('TowerBuilder: Cannot enable building mode - towerPrefab is not set!');
+        // 检查warAncientTreePrefab是否设置
+        if (!this.warAncientTreePrefab) {
+            console.error('TowerBuilder: Cannot enable building mode - warAncientTreePrefab is not set!');
             return;
         }
         
