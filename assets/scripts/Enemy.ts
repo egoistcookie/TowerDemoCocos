@@ -68,18 +68,18 @@ export class Enemy extends Component {
             
             if (crystalNode) {
                 this.targetCrystal = crystalNode;
-                console.log('Enemy: Found crystal node:', crystalNode.name, 'at position:', crystalNode.worldPosition);
+                console.debug('Enemy: Found crystal node:', crystalNode.name, 'at position:', crystalNode.worldPosition);
             } else {
                 console.error('Enemy: Cannot find Crystal node!');
             }
         } else {
-            console.log('Enemy: targetCrystal already set:', this.targetCrystal.name, 'at position:', this.targetCrystal.worldPosition);
+            console.debug('Enemy: targetCrystal already set:', this.targetCrystal.name, 'at position:', this.targetCrystal.worldPosition);
         }
         
         // 创建血条
         this.createHealthBar();
         
-        console.log('Enemy: Start at position:', this.node.worldPosition);
+        // console.debug('Enemy: Start at position:', this.node.worldPosition);
     }
 
     createHealthBar() {
@@ -154,9 +154,9 @@ export class Enemy extends Component {
             } else {
                 // 调试：如果没有目标水晶
                 if (!this.targetCrystal) {
-                    console.warn('Enemy: No targetCrystal set!');
+                    // console.warn('Enemy: No targetCrystal set!');
                 } else if (!this.targetCrystal.isValid) {
-                    console.warn('Enemy: targetCrystal is invalid!');
+                    // console.warn('Enemy: targetCrystal is invalid!');
                 }
             }
         }
@@ -189,7 +189,7 @@ export class Enemy extends Component {
         } else {
             // 调试：每60帧输出一次，避免刷屏
             if (Math.random() < 0.016) {
-                console.warn('Enemy: Towers container not found!');
+                // console.warn('Enemy: Towers container not found!');
             }
         }
         
@@ -216,7 +216,7 @@ export class Enemy extends Component {
         if (nearestTower) {
             // 调试：找到防御塔时输出日志（每60帧一次）
             if (Math.random() < 0.016) {
-                console.log(`Enemy: Found target tower at distance ${minDistance.toFixed(2)}, attacking tower!`);
+                // console.debug(`Enemy: Found target tower at distance ${minDistance.toFixed(2)}, attacking tower!`);
             }
             this.currentTarget = nearestTower;
             return;
@@ -273,12 +273,12 @@ export class Enemy extends Component {
             
             // 调试日志（每60帧输出一次，避免刷屏）
             if (Math.random() < 0.016) { // 约每60帧一次
-                console.log('Enemy moving:', {
-                    from: enemyWorldPos,
-                    to: crystalWorldPos,
-                    distance: distance.toFixed(2),
-                    moveDistance: moveDistance.toFixed(2)
-                });
+                // console.debug('Enemy moving:', {
+                //     from: enemyWorldPos,
+                //     to: crystalWorldPos,
+                //     distance: distance.toFixed(2),
+                //     moveDistance: moveDistance.toFixed(2)
+                // });
             }
         }
     }
@@ -306,9 +306,9 @@ export class Enemy extends Component {
             targetScript.takeDamage(this.attackDamage);
             // 根据目标类型输出日志
             if (towerScript) {
-                console.log(`Enemy: Attacked tower, dealt ${this.attackDamage} damage`);
+                console.debug(`Enemy: Attacked tower, dealt ${this.attackDamage} damage`);
             } else if (crystalScript) {
-                console.log(`Enemy: Attacked crystal, dealt ${this.attackDamage} damage`);
+                console.debug(`Enemy: Attacked crystal, dealt ${this.attackDamage} damage`);
             }
         } else {
             // 目标无效，清除目标
@@ -409,7 +409,7 @@ export class Enemy extends Component {
         }
         if (this.gameManager) {
             this.gameManager.addGold(this.goldReward);
-            console.log(`Enemy: Died, rewarded ${this.goldReward} gold`);
+            console.debug(`Enemy: Died, rewarded ${this.goldReward} gold`);
         }
 
         // 销毁血条节点

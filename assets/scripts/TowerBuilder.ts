@@ -8,7 +8,7 @@ export class TowerBuilder extends Component {
     towerPrefab: Prefab = null!;
 
     @property
-    buildRange: number = 300; // 建造范围（距离水晶）
+    buildRange: number = 800; // 建造范围（距离水晶），增大范围以便更容易建造
 
     @property
     minBuildDistance: number = 80; // 最小建造距离（距离水晶）
@@ -27,16 +27,12 @@ export class TowerBuilder extends Component {
     private gameManager: GameManager = null!;
 
     start() {
-        console.log('TowerBuilder: start() called');
-        console.log('TowerBuilder: towerPrefab:', this.towerPrefab ? 'set' : 'null');
-        
         // 查找游戏管理器
         this.findGameManager();
         
         // 查找水晶
         if (!this.targetCrystal) {
             this.targetCrystal = find('Crystal');
-            console.log('TowerBuilder: Found crystal:', this.targetCrystal ? this.targetCrystal.name : 'null');
         }
 
         // 创建防御塔容器
@@ -45,20 +41,30 @@ export class TowerBuilder extends Component {
             const existingTowers = find('Towers');
             if (existingTowers) {
                 this.towerContainer = existingTowers;
-                console.log('TowerBuilder: Found existing Towers container');
             } else {
                 this.towerContainer = new Node('Towers');
                 this.towerContainer.setParent(this.node.scene);
-                console.log('TowerBuilder: Created new Towers container');
             }
         }
 
-        // 监听触摸事件
-        input.on(Input.EventType.TOUCH_END, this.onTouchEnd, this);
-        console.log('TowerBuilder: Touch event listener registered');
+        // 监听触摸事件 - 使用Canvas节点事件，不使用capture阶段，避免干扰SelectionManager
+        const canvasNode = find('Canvas');
+        if (canvasNode) {
+            // 不使用capture阶段，让SelectionManager先处理，只在建造模式下才处理
+            canvasNode.on(Node.EventType.TOUCH_END, this.onTouchEnd, this);
+        } else {
+            // 如果没有Canvas，使用全局输入事件作为后备
+            input.on(Input.EventType.TOUCH_END, this.onTouchEnd, this);
+        }
     }
 
     onDestroy() {
+        // 移除Canvas节点事件监听
+        const canvasNode = find('Canvas');
+        if (canvasNode) {
+            canvasNode.off(Node.EventType.TOUCH_END, this.onTouchEnd, this);
+        }
+        // 移除全局输入事件监听（如果使用了）
         input.off(Input.EventType.TOUCH_END, this.onTouchEnd, this);
     }
 
@@ -100,116 +106,116 @@ export class TowerBuilder extends Component {
         }
     }
 
+    /**
+     * 获取是否在建造模式下（供外部调用）
+     */
+    getIsBuildingMode(): boolean {
+        return this.isBuildingMode;
+    }
+
     onTouchEnd(event: EventTouch) {
-        console.log('TowerBuilder: Touch event received, isBuildingMode:', this.isBuildingMode);
-        console.log('TowerBuilder: towerPrefab check:', this.towerPrefab ? 'exists' : 'null');
-        
+        // 只在建造模式下处理
         if (!this.isBuildingMode) {
-            console.log('TowerBuilder: Not in building mode, ignoring touch');
+            // 不在建造模式，不阻止事件传播，让SelectionManager处理
             return;
         }
         
-        // 重新检查towerPrefab，如果为null则尝试重新获取
-        if (!this.towerPrefab) {
-            console.error('TowerBuilder: towerPrefab is null! Cannot build tower.');
-            console.error('TowerBuilder: Please check TowerBuilder node properties - towerPrefab must be assigned!');
-            // 退出建造模式，避免卡住
+        // 检查是否点击在UI元素上（如按钮），如果是则不处理
+        const targetNode = event.target as Node;
+        if (targetNode) {
+            const nodeName = targetNode.name.toLowerCase();
+            // 检查节点名称
+            if (nodeName.includes('button') || 
+                nodeName.includes('panel') || 
+                nodeName.includes('label') ||
+                nodeName.includes('selection')) {
+                return;
+            }
+            // 检查父节点
+            let parent = targetNode.parent;
+            while (parent) {
+                const parentName = parent.name.toLowerCase();
+                if (parentName.includes('ui') || 
+                    parentName.includes('panel') ||
+                    parentName === 'canvas') {
+                    // 检查是否是Canvas的直接子节点（UI层）
+                    if (parent.name === 'Canvas') {
+                        // 检查是否是UI相关的子节点
+                        const uiChildren = ['UI', 'UIManager', 'HealthLabel', 'TimerLabel'];
+                        if (uiChildren.some(name => targetNode.name.includes(name) || 
+                            targetNode.getPathInHierarchy().includes(name))) {
+                            return;
+                        }
+                    }
+                }
+                parent = parent.parent;
+            }
+        }
+        
+        if (!this.towerPrefab || !this.targetCrystal) {
             this.disableBuildingMode();
             return;
         }
-        
-        if (!this.targetCrystal) {
-            console.error('TowerBuilder: targetCrystal is null!');
-            return;
-        }
+
+        // 阻止事件继续传播，避免SelectionManager处理
+        event.propagationStopped = true;
 
         // 获取触摸位置
-        // 注意：在2D场景中，可能需要使用不同的坐标转换方法
         const touchLocation = event.getLocation();
-        console.log('TowerBuilder: Touch location:', touchLocation);
         
         // 查找Camera节点
         const cameraNode = find('Canvas/Camera') || this.node.scene?.getChildByName('Camera');
         if (!cameraNode) {
-            console.error('TowerBuilder: Camera node not found!');
             return;
         }
         
         const camera = cameraNode.getComponent(Camera);
         if (!camera) {
-            console.error('TowerBuilder: Camera component not found!');
             return;
         }
 
         // 将屏幕坐标转换为世界坐标
-        // 对于2D正交相机，需要正确转换坐标
         const screenPos = new Vec3(touchLocation.x, touchLocation.y, 0);
         const worldPos = new Vec3();
-        
-        // 使用camera的screenToWorld方法转换坐标
-        // 对于2D场景，可能需要调整z值
         camera.screenToWorld(screenPos, worldPos);
-        
-        // 对于2D正交相机，z坐标应该保持为0或相机的z值
-        // 但worldPos的z可能不是0，需要设置为0
         worldPos.z = 0;
-        
-        console.log('TowerBuilder: Touch screen location:', touchLocation);
-        console.log('TowerBuilder: Screen pos:', screenPos);
-        console.log('TowerBuilder: World pos:', worldPos);
-        console.log('TowerBuilder: Crystal world pos:', this.targetCrystal.worldPosition);
 
         // 检查是否可以建造
         const canBuild = this.canBuildAt(worldPos);
-        console.log('TowerBuilder: Can build at position:', canBuild);
         
         if (canBuild) {
-            console.log('TowerBuilder: Building tower at:', worldPos);
             this.buildTower(worldPos);
-        } else {
-            console.log('TowerBuilder: Cannot build at this position');
         }
     }
 
     canBuildAt(position: Vec3): boolean {
         if (!this.targetCrystal) {
-            console.log('TowerBuilder.canBuildAt: targetCrystal is null');
             return false;
         }
 
         // 检查距离水晶的距离
         const crystalPos = this.targetCrystal.worldPosition;
         const distance = Vec3.distance(position, crystalPos);
-        console.log('TowerBuilder.canBuildAt: Distance to crystal:', distance.toFixed(2), 'min:', this.minBuildDistance, 'max:', this.buildRange);
         
-        if (distance < this.minBuildDistance) {
-            console.log('TowerBuilder.canBuildAt: Too close to crystal');
-            return false;
-        }
-        
-        if (distance > this.buildRange) {
-            console.log('TowerBuilder.canBuildAt: Too far from crystal');
+        if (distance < this.minBuildDistance || distance > this.buildRange) {
             return false;
         }
 
         // 检查是否与现有防御塔重叠
         const towers = this.towerContainer?.children || [];
-        console.log('TowerBuilder.canBuildAt: Checking', towers.length, 'existing towers');
         for (const tower of towers) {
             if (tower.active) {
                 const towerDistance = Vec3.distance(position, tower.worldPosition);
                 if (towerDistance < 60) { // 防御塔之间的最小距离
-                    console.log('TowerBuilder.canBuildAt: Too close to existing tower:', towerDistance.toFixed(2));
                     return false;
                 }
             }
         }
 
-        console.log('TowerBuilder.canBuildAt: Position is valid for building');
         return true;
     }
 
-    buildTower(position: Vec3) {
+    buildTower(worldPosition: Vec3) {
         // 检查金币是否足够
         if (!this.gameManager) {
             this.findGameManager();
@@ -239,63 +245,122 @@ export class TowerBuilder extends Component {
                 this.towerContainer.setParent(this.node.scene);
             }
         }
-
-        // 消耗金币
-        if (this.gameManager) {
-            this.gameManager.spendGold(this.towerCost);
-            console.log('TowerBuilder.buildTower: Spent', this.towerCost, 'gold. Remaining:', this.gameManager.getGold());
+        
+        // 确保防御塔容器在Canvas下（根据场景设置文档，Towers应该在Canvas下）
+        const containerCanvasNode = find('Canvas');
+        if (containerCanvasNode && this.towerContainer.parent !== containerCanvasNode) {
+            console.warn('TowerBuilder.buildTower: Tower container is not under Canvas, moving to Canvas');
+            const oldWorldPos = this.towerContainer.worldPosition;
+            this.towerContainer.setParent(containerCanvasNode);
+            // 保持世界位置不变
+            this.towerContainer.setWorldPosition(oldWorldPos);
+            console.log('TowerBuilder.buildTower: Moved container to Canvas');
         }
 
-        console.log('TowerBuilder.buildTower: Instantiating tower at:', position);
-        const tower = instantiate(this.towerPrefab);
-        tower.setParent(this.towerContainer || this.node);
-        tower.setWorldPosition(position);
+        // 消耗金币
+        console.log('TowerBuilder.buildTower: Checking gameManager before spending gold');
+        console.log('TowerBuilder.buildTower: gameManager exists:', this.gameManager ? 'yes' : 'no');
+        if (!this.gameManager) {
+            console.warn('TowerBuilder.buildTower: gameManager is null! Trying to find it...');
+            this.findGameManager();
+            console.log('TowerBuilder.buildTower: After findGameManager, gameManager exists:', this.gameManager ? 'yes' : 'no');
+        }
         
-        // 确保防御塔节点是激活的
+        if (this.gameManager) {
+            const goldBefore = this.gameManager.getGold();
+            console.log('TowerBuilder.buildTower: Gold before spending:', goldBefore);
+            console.log('TowerBuilder.buildTower: Tower cost:', this.towerCost);
+            console.log('TowerBuilder.buildTower: Can afford:', this.gameManager.canAfford(this.towerCost));
+            
+            this.gameManager.spendGold(this.towerCost);
+            const goldAfter = this.gameManager.getGold();
+            console.log('TowerBuilder.buildTower: Spent', this.towerCost, 'gold. Before:', goldBefore, 'After:', goldAfter);
+        } else {
+            console.error('TowerBuilder.buildTower: Cannot spend gold - gameManager is null!');
+        }
+
+        
+        if (!this.towerPrefab) {
+            console.error('TowerBuilder.buildTower: towerPrefab is null! Cannot build tower.');
+            return;
+        }
+        
+        const tower = instantiate(this.towerPrefab);
+        
+        // 设置父节点
+        const parent = this.towerContainer || this.node;
+        
+        // 确保父节点是激活的
+        if (parent && !parent.active) {
+            parent.active = true;
+        }
+        
+        tower.setParent(parent);
+        
+        // 立即激活防御塔节点
         tower.active = true;
         
-        // 确保防御塔脚本组件存在并已初始化
+        // 重置防御塔的本地位置和旋转
+        tower.setPosition(0, 0, 0);
+        tower.setRotationFromEuler(0, 0, 0);
+        tower.setScale(1, 1, 1);
+        
+        // 直接使用世界坐标设置位置（与EnemySpawner和Tower移动逻辑一致）
+        tower.setWorldPosition(worldPosition);
+        
+        // 确保防御塔脚本组件存在并设置建造成本
         const towerScript = tower.getComponent('Tower') as any;
         if (towerScript) {
-            // 设置防御塔的建造成本（用于回收和升级）
             towerScript.buildCost = this.towerCost;
-            console.log('TowerBuilder.buildTower: Tower script found, tower should start attacking enemies');
         } else {
             console.error('TowerBuilder.buildTower: Tower script not found on tower prefab!');
         }
         
-        console.log('TowerBuilder.buildTower: Tower created successfully at:', tower.worldPosition);
-        console.log('TowerBuilder.buildTower: Tower container has', (this.towerContainer?.children.length || 0), 'towers');
+        // 确保所有组件和子节点都是激活的
+        const towerUITransform = tower.getComponent(UITransform);
+        const towerSprite = tower.getComponent('Sprite') as any;
+        
+        if (towerUITransform) {
+            towerUITransform.enabled = true;
+        }
+        if (towerSprite) {
+            towerSprite.enabled = true;
+        }
+        
+        const setNodeActive = (node: Node, active: boolean) => {
+            node.active = active;
+            for (const child of node.children) {
+                setNodeActive(child, active);
+            }
+        };
+        setNodeActive(tower, true);
+        
+        // 强制更新节点变换，确保立即渲染
+        tower.updateWorldTransform();
 
         // 退出建造模式
         this.disableBuildingMode();
-        console.log('TowerBuilder.buildTower: Building mode disabled');
     }
 
     // 可以通过按钮调用
     onBuildButtonClick() {
-        console.log('TowerBuilder: onBuildButtonClick called');
-        
         // 检查金币是否足够
         if (!this.gameManager) {
             this.findGameManager();
         }
         
         if (this.gameManager && !this.gameManager.canAfford(this.towerCost)) {
-            console.log('TowerBuilder: Not enough gold! Need', this.towerCost, 'but have', this.gameManager.getGold());
             return;
         }
         
         // 检查towerPrefab是否设置
         if (!this.towerPrefab) {
             console.error('TowerBuilder: Cannot enable building mode - towerPrefab is not set!');
-            console.error('TowerBuilder: Please assign Tower prefab to TowerBuilder node in the editor!');
             return;
         }
         
         // 检查targetCrystal是否设置
         if (!this.targetCrystal) {
-            console.warn('TowerBuilder: targetCrystal not set, trying to find it...');
             this.targetCrystal = find('Crystal');
             if (!this.targetCrystal) {
                 console.error('TowerBuilder: Cannot find Crystal node!');
@@ -304,8 +369,6 @@ export class TowerBuilder extends Component {
         }
         
         this.enableBuildingMode();
-        console.log('TowerBuilder: Building mode enabled:', this.isBuildingMode);
-        console.log('TowerBuilder: Ready to build. Click on the map to place a tower.');
     }
 }
 

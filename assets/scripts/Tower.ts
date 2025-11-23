@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, tween, EventTouch, input, Input, resources, Sprite, SpriteFrame, Texture2D } from 'cc';
+import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, tween, EventTouch, input, Input, resources, Sprite, SpriteFrame, Texture2D, Camera } from 'cc';
 import { GameManager, GameState } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
@@ -84,6 +84,11 @@ export class Tower extends Component {
     private avoidDirection: Vec3 = new Vec3(); // 避障方向
     private avoidTimer: number = 0; // 避障计时器
     private collisionCheckCount: number = 0; // 碰撞检测调用计数（用于调试）
+    private manualMoveTarget: Vec3 | null = null!; // 手动移动目标位置
+    private isManuallyControlled: boolean = false; // 是否正在手动控制
+    private globalTouchHandler: ((event: EventTouch) => void) | null = null!; // 全局触摸事件处理器
+    private isHighlighted: boolean = false; // 是否高亮显示
+    private highlightNode: Node = null!; // 高亮效果节点
 
     start() {
         this.currentHealth = this.maxHealth;
@@ -99,7 +104,7 @@ export class Tower extends Component {
             this.defaultSpriteFrame = this.sprite.spriteFrame;
             // 保存默认缩放
             this.defaultScale = this.node.scale.clone();
-            console.log('Tower: Sprite component found, default spriteFrame and scale saved');
+            console.debug('Tower: Sprite component found, default spriteFrame and scale saved');
         } else {
             console.error('Tower: Sprite component not found! Attack animation will not work.');
         }
@@ -116,14 +121,14 @@ export class Tower extends Component {
         // 监听点击事件
         this.node.on(Node.EventType.TOUCH_END, this.onTowerClick, this);
         
-        console.log('Tower: Started at position:', this.node.worldPosition);
+        console.debug('Tower: Started at position:', this.node.worldPosition);
     }
 
     initAttackAnimation() {
         // 如果已经在编辑器中设置了attackAnimationFrames，直接使用
         if (this.attackAnimationFrames && this.attackAnimationFrames.length > 0) {
             const validFrames = this.attackAnimationFrames.filter(frame => frame != null);
-            console.log(`Tower: Using ${validFrames.length} valid frames from attackAnimationFrames array (total: ${this.attackAnimationFrames.length})`);
+            console.debug(`Tower: Using ${validFrames.length} valid frames from attackAnimationFrames array (total: ${this.attackAnimationFrames.length})`);
             if (validFrames.length < this.attackAnimationFrames.length) {
                 console.warn(`Tower: Warning - ${this.attackAnimationFrames.length - validFrames.length} frames are null or invalid!`);
             }
@@ -132,7 +137,7 @@ export class Tower extends Component {
 
         // 如果没有设置帧数组，尝试从纹理中加载
         if (this.attackAnimationTexture) {
-            console.log('Tower: Loading attack animation frames from texture...');
+            console.debug('Tower: Loading attack animation frames from texture...');
             this.loadFramesFromTexture();
         } else {
             console.warn('Tower: No attack animation frames or texture set. Attack animation will not play.');
@@ -225,15 +230,35 @@ export class Tower extends Component {
 
         this.attackTimer += deltaTime;
 
-        // 查找目标
-        this.findTarget();
+        // 优先处理手动移动目标
+        if (this.manualMoveTarget) {
+            const distanceToManualTarget = Vec3.distance(this.node.worldPosition, this.manualMoveTarget);
+            const arrivalThreshold = 10; // 到达阈值（像素）
+            
+            if (distanceToManualTarget <= arrivalThreshold) {
+                // 到达手动移动目标，清除手动目标
+                console.debug(`Tower: Reached manual move target at (${this.manualMoveTarget.x.toFixed(1)}, ${this.manualMoveTarget.y.toFixed(1)})`);
+                this.manualMoveTarget = null!;
+                this.isManuallyControlled = false;
+                this.stopMoving();
+            } else {
+                // 移动到手动目标位置
+                this.moveToPosition(this.manualMoveTarget, deltaTime);
+                return; // 手动移动时，不执行自动寻敌
+            }
+        }
+
+        // 查找目标（只有在没有手动移动目标时才执行）
+        if (!this.manualMoveTarget) {
+            this.findTarget();
+        }
 
         // 无论是否移动，都要检查碰撞（防止重叠）
         const currentPos = this.node.worldPosition.clone();
         const hasCollisionNow = this.checkCollisionAtPosition(currentPos);
         if (hasCollisionNow) {
             // 即使不移动，如果有碰撞也要推开
-            console.log(`Tower: Collision detected even when not moving! Position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)})`);
+            console.debug(`Tower: Collision detected even when not moving! Position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)})`);
             const pushDirection = this.calculatePushAwayDirection(currentPos);
             if (pushDirection.length() > 0.1) {
                 const pushDistance = this.moveSpeed * deltaTime * 1.5;
@@ -241,7 +266,7 @@ export class Tower extends Component {
                 Vec3.scaleAndAdd(pushPos, currentPos, pushDirection, pushDistance);
                 const finalPushPos = this.checkCollisionAndAdjust(currentPos, pushPos);
                 this.node.setWorldPosition(finalPushPos);
-                console.log(`Tower: Pushing away from collision (not moving) at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}) to (${finalPushPos.x.toFixed(1)}, ${finalPushPos.y.toFixed(1)})`);
+                console.debug(`Tower: Pushing away from collision (not moving) at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}) to (${finalPushPos.x.toFixed(1)}, ${finalPushPos.y.toFixed(1)})`);
             }
         }
 
@@ -269,6 +294,84 @@ export class Tower extends Component {
         } else {
             // 没有目标，停止移动
             this.stopMoving();
+        }
+    }
+
+    /**
+     * 移动到指定位置（用于手动控制）
+     * @param targetPos 目标位置
+     * @param deltaTime 时间增量
+     */
+    moveToPosition(targetPos: Vec3, deltaTime: number) {
+        if (this.isDestroyed) {
+            return;
+        }
+
+        const towerPos = this.node.worldPosition.clone();
+        const distance = Vec3.distance(towerPos, targetPos);
+
+        // 如果已经到达目标位置，停止移动
+        if (distance <= 10) {
+            this.stopMoving();
+            return;
+        }
+
+        // 首先检查当前位置是否有碰撞，如果有，先推开
+        const hasCollision = this.checkCollisionAtPosition(towerPos);
+        
+        if (hasCollision) {
+            // 当前位置有碰撞，先推开
+            const pushDirection = this.calculatePushAwayDirection(towerPos);
+            if (pushDirection.length() > 0.1) {
+                const pushDistance = this.moveSpeed * deltaTime * 1.5;
+                const pushPos = new Vec3();
+                Vec3.scaleAndAdd(pushPos, towerPos, pushDirection, pushDistance);
+                const finalPushPos = this.checkCollisionAndAdjust(towerPos, pushPos);
+                this.node.setWorldPosition(finalPushPos);
+                return; // 先推开，下一帧再移动
+            }
+        }
+
+        // 计算移动方向
+        const direction = new Vec3();
+        Vec3.subtract(direction, targetPos, towerPos);
+        direction.normalize();
+
+        // 应用避障逻辑
+        const finalDirection = this.calculateAvoidanceDirection(towerPos, direction, deltaTime);
+
+        // 计算移动距离
+        const moveDistance = this.moveSpeed * deltaTime;
+        const newPos = new Vec3();
+        Vec3.scaleAndAdd(newPos, towerPos, finalDirection, moveDistance);
+
+        // 检查新位置是否有碰撞，并调整
+        const adjustedPos = this.checkCollisionAndAdjust(towerPos, newPos);
+
+        // 更新位置
+        this.node.setWorldPosition(adjustedPos);
+
+        // 根据移动方向翻转防御塔
+        if (direction.x < 0) {
+            // 向左移动，翻转
+            this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+            // 血条反向翻转，保持正常朝向
+            if (this.healthBarNode && this.healthBarNode.isValid) {
+                this.healthBarNode.setScale(-1, 1, 1);
+            }
+        } else {
+            // 向右移动，正常朝向
+            this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+            // 血条正常朝向
+            if (this.healthBarNode && this.healthBarNode.isValid) {
+                this.healthBarNode.setScale(1, 1, 1);
+            }
+        }
+
+        // 播放移动动画
+        if (!this.isMoving) {
+            this.isMoving = true;
+            this.playMoveAnimation();
         }
     }
 
@@ -325,9 +428,9 @@ export class Tower extends Component {
         // 如果找到目标，输出调试信息（每60帧一次）
         if (nearestEnemy && Math.random() < 0.016) {
             if (minDistance <= this.attackRange) {
-                console.log(`Tower: Found target enemy at distance ${minDistance.toFixed(2)}, attacking!`);
+                console.debug(`Tower: Found target enemy at distance ${minDistance.toFixed(2)}, attacking!`);
             } else {
-                console.log(`Tower: Found target enemy at distance ${minDistance.toFixed(2)}, moving towards it!`);
+                console.debug(`Tower: Found target enemy at distance ${minDistance.toFixed(2)}, moving towards it!`);
             }
         }
 
@@ -353,7 +456,7 @@ export class Tower extends Component {
         
         // 调试：每60帧输出一次位置信息
         if (Math.random() < 0.016) {
-            console.log(`Tower: Moving towards target. Position: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}), Target: (${targetPos.x.toFixed(1)}, ${targetPos.y.toFixed(1)}), Distance: ${distance.toFixed(1)}`);
+            console.debug(`Tower: Moving towards target. Position: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}), Target: (${targetPos.x.toFixed(1)}, ${targetPos.y.toFixed(1)}), Distance: ${distance.toFixed(1)}`);
         }
 
         // 如果已经在攻击范围内，停止移动
@@ -363,15 +466,15 @@ export class Tower extends Component {
         }
 
         // 首先检查当前位置是否有碰撞，如果有，先推开
-        console.log(`Tower: Checking collision before moving at (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)})`);
+        console.debug(`Tower: Checking collision before moving at (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)})`);
         const hasCollision = this.checkCollisionAtPosition(towerPos);
-        console.log(`Tower: Collision check result: ${hasCollision}`);
+        console.debug(`Tower: Collision check result: ${hasCollision}`);
         
         if (hasCollision) {
             // 当前位置有碰撞，先推开
-            console.log(`Tower: Current position has collision! Position: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}), calculating push direction...`);
+            console.debug(`Tower: Current position has collision! Position: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}), calculating push direction...`);
             const pushDirection = this.calculatePushAwayDirection(towerPos);
-            console.log(`Tower: Push direction: (${pushDirection.x.toFixed(2)}, ${pushDirection.y.toFixed(2)}), length: ${pushDirection.length().toFixed(2)}`);
+            console.debug(`Tower: Push direction: (${pushDirection.x.toFixed(2)}, ${pushDirection.y.toFixed(2)}), length: ${pushDirection.length().toFixed(2)}`);
             if (pushDirection.length() > 0.1) {
                 const pushDistance = this.moveSpeed * deltaTime * 1.5; // 推开速度更快
                 const pushPos = new Vec3();
@@ -381,7 +484,7 @@ export class Tower extends Component {
                 const finalPushPos = this.checkCollisionAndAdjust(towerPos, pushPos);
                 this.node.setWorldPosition(finalPushPos);
                 
-                console.log(`Tower: Pushing away from collision at (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}) to (${finalPushPos.x.toFixed(1)}, ${finalPushPos.y.toFixed(1)})`);
+                console.debug(`Tower: Pushing away from collision at (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}) to (${finalPushPos.x.toFixed(1)}, ${finalPushPos.y.toFixed(1)})`);
                 return; // 先推开，下一帧再移动
             } else {
                 console.warn(`Tower: Has collision but push direction is too weak! Position: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)})`);
@@ -389,7 +492,7 @@ export class Tower extends Component {
         } else {
             // 调试：每60帧输出一次，确认碰撞检测在工作
             if (Math.random() < 0.016) {
-                console.log(`Tower: No collision at position (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}), collisionRadius: ${this.collisionRadius}`);
+                console.debug(`Tower: No collision at position (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}), collisionRadius: ${this.collisionRadius}`);
             }
         }
 
@@ -411,7 +514,7 @@ export class Tower extends Component {
         
         // 如果调整后的位置与原始位置不同，说明发生了避障
         if (Vec3.distance(adjustedPos, newPos) > 1.0) {
-            console.log(`Tower: Adjusted position due to collision. Original: (${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)}), Adjusted: (${adjustedPos.x.toFixed(1)}, ${adjustedPos.y.toFixed(1)})`);
+            console.debug(`Tower: Adjusted position due to collision. Original: (${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)}), Adjusted: (${adjustedPos.x.toFixed(1)}, ${adjustedPos.y.toFixed(1)})`);
         }
 
         // 更新位置
@@ -532,7 +635,7 @@ export class Tower extends Component {
         // 调试：总是输出，确认方法被调用（但限制频率避免刷屏）
         this.collisionCheckCount++;
         if (this.collisionCheckCount % 10 === 0) { // 每10次调用输出一次
-            console.log(`Tower: checkCollisionAtPosition called #${this.collisionCheckCount} at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), collisionRadius: ${this.collisionRadius}`);
+            console.debug(`Tower: checkCollisionAtPosition called #${this.collisionCheckCount} at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), collisionRadius: ${this.collisionRadius}`);
         }
         
         // 检查与水晶的碰撞
@@ -557,7 +660,7 @@ export class Tower extends Component {
                     const crystalRadius = 50;
                     const minDistance = this.collisionRadius + crystalRadius;
                     if (crystalDistance < minDistance) {
-                        console.log(`Tower: Collision with crystal! Distance: ${crystalDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, Tower at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Crystal at (${foundCrystal.worldPosition.x.toFixed(1)}, ${foundCrystal.worldPosition.y.toFixed(1)})`);
+                        console.debug(`Tower: Collision with crystal! Distance: ${crystalDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, Tower at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Crystal at (${foundCrystal.worldPosition.x.toFixed(1)}, ${foundCrystal.worldPosition.y.toFixed(1)})`);
                         return true;
                     }
                 }
@@ -567,7 +670,7 @@ export class Tower extends Component {
             const crystalRadius = 50; // 增大水晶半径，确保不会太近
             const minDistance = this.collisionRadius + crystalRadius;
             if (crystalDistance < minDistance) {
-                console.log(`Tower: Collision with crystal! Distance: ${crystalDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, Tower at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Crystal at (${crystal.worldPosition.x.toFixed(1)}, ${crystal.worldPosition.y.toFixed(1)})`);
+                console.debug(`Tower: Collision with crystal! Distance: ${crystalDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, Tower at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Crystal at (${crystal.worldPosition.x.toFixed(1)}, ${crystal.worldPosition.y.toFixed(1)})`);
                 return true;
             }
         }
@@ -606,11 +709,11 @@ export class Tower extends Component {
                     
                     // 调试：当距离较近时总是输出日志（降低阈值，确保能检测到）
                     if (towerDistance < 200) { // 使用固定值200像素，确保能检测到
-                        console.log(`Tower: Checking distance to other tower #${towerCount}. Distance: ${towerDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, This: (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Other: (${tower.worldPosition.x.toFixed(1)}, ${tower.worldPosition.y.toFixed(1)}), This radius: ${this.collisionRadius}, Other radius: ${otherRadius}`);
+                        // console.debug(`Tower: Checking distance to other tower #${towerCount}. Distance: ${towerDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, This: (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Other: (${tower.worldPosition.x.toFixed(1)}, ${tower.worldPosition.y.toFixed(1)}), This radius: ${this.collisionRadius}, Other radius: ${otherRadius}`);
                     }
                     
                     if (towerDistance < minDistance) {
-                        console.log(`Tower: *** COLLISION DETECTED with other tower! *** Distance: ${towerDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, This tower at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Other tower at (${tower.worldPosition.x.toFixed(1)}, ${tower.worldPosition.y.toFixed(1)}), This radius: ${this.collisionRadius}, Other radius: ${otherRadius}`);
+                        // console.debug(`Tower: *** COLLISION DETECTED with other tower! *** Distance: ${towerDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, This tower at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Other tower at (${tower.worldPosition.x.toFixed(1)}, ${tower.worldPosition.y.toFixed(1)}), This radius: ${this.collisionRadius}, Other radius: ${otherRadius}`);
                         return true;
                     }
                 }
@@ -618,12 +721,12 @@ export class Tower extends Component {
             
             // 调试：如果没有找到其他防御塔
             if (towerCount === 0 && Math.random() < 0.016) {
-                console.log(`Tower: No other towers found in container (total: ${towers.length})`);
+                // console.debug(`Tower: No other towers found in container (total: ${towers.length})`);
             }
         } else {
             // 调试：如果找不到Towers节点（降低警告频率，避免刷屏）
             if (this.collisionCheckCount % 100 === 0) {
-                console.warn(`Tower: Towers node not found! Cannot check collision with other towers. (check #${this.collisionCheckCount})`);
+                // console.warn(`Tower: Towers node not found! Cannot check collision with other towers. (check #${this.collisionCheckCount})`);
             }
         }
 
@@ -743,7 +846,7 @@ export class Tower extends Component {
                 Vec3.scaleAndAdd(pushForce, pushForce, pushDir, strength);
                 maxPushStrength = Math.max(maxPushStrength, strength);
                 obstacleCount++;
-                console.log(`Tower: Pushing away from crystal, distance: ${distance.toFixed(1)}, strength: ${strength.toFixed(2)}`);
+                console.debug(`Tower: Pushing away from crystal, distance: ${distance.toFixed(1)}, strength: ${strength.toFixed(2)}`);
             }
         }
 
@@ -768,7 +871,7 @@ export class Tower extends Component {
                         Vec3.scaleAndAdd(pushForce, pushForce, pushDir, strength);
                         maxPushStrength = Math.max(maxPushStrength, strength);
                         obstacleCount++;
-                        console.log(`Tower: Pushing away from other tower, distance: ${distance.toFixed(1)}, minDistance: ${minDistance.toFixed(1)}, strength: ${strength.toFixed(2)}`);
+                        console.debug(`Tower: Pushing away from other tower, distance: ${distance.toFixed(1)}, minDistance: ${minDistance.toFixed(1)}, strength: ${strength.toFixed(2)}`);
                     }
                 }
             }
@@ -918,7 +1021,7 @@ export class Tower extends Component {
             
             // 调试：如果避障权重很高，输出日志
             if (avoidanceWeight > 0.7) {
-                console.log(`Tower: Strong avoidance! Weight: ${avoidanceWeight.toFixed(2)}, MaxStrength: ${maxStrength.toFixed(2)}, ObstacleCount: ${obstacleCount}`);
+                console.debug(`Tower: Strong avoidance! Weight: ${avoidanceWeight.toFixed(2)}, MaxStrength: ${maxStrength.toFixed(2)}, ObstacleCount: ${obstacleCount}`);
             }
             
             return finalDir;
@@ -945,7 +1048,7 @@ export class Tower extends Component {
         const enemyScript = this.currentTarget.getComponent('Enemy') as any;
         if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
             // 播放攻击动画，动画完成后才射出弓箭
-            console.log('Tower: Attack triggered, playing attack animation...');
+            console.debug('Tower: Attack triggered, playing attack animation...');
             this.playAttackAnimation(() => {
                 // 动画播放完成后的回调，在这里创建弓箭
                 this.executeAttack();
@@ -978,7 +1081,7 @@ export class Tower extends Component {
             // 直接伤害（无特效）
             if (enemyScript.takeDamage) {
                 enemyScript.takeDamage(this.attackDamage);
-                console.log(`Tower: Attacked enemy, dealt ${this.attackDamage} damage`);
+                console.debug(`Tower: Attacked enemy, dealt ${this.attackDamage} damage`);
             }
         }
     }
@@ -986,7 +1089,7 @@ export class Tower extends Component {
     playAttackAnimation(onComplete?: () => void) {
         // 如果正在播放动画，不重复播放
         if (this.isPlayingAttackAnimation) {
-            console.log('Tower: Animation already playing, skipping...');
+            console.debug('Tower: Animation already playing, skipping...');
             return;
         }
 
@@ -1015,7 +1118,7 @@ export class Tower extends Component {
             return;
         }
 
-        console.log(`Tower: Starting attack animation with ${validFrames.length} frames, duration: ${this.attackAnimationDuration}s`);
+        console.debug(`Tower: Starting attack animation with ${validFrames.length} frames, duration: ${this.attackAnimationDuration}s`);
 
         // 根据敌人位置决定是否翻转
         let shouldFlip = false;
@@ -1033,7 +1136,7 @@ export class Tower extends Component {
                     const healthBarScale = this.healthBarNode.scale.clone();
                     this.healthBarNode.setScale(-Math.abs(healthBarScale.x), healthBarScale.y, healthBarScale.z);
                 }
-                console.log('Tower: Enemy on left, flipping attack animation');
+                console.debug('Tower: Enemy on left, flipping attack animation');
             } else {
                 // 保持原样：scale.x = 1
                 this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
@@ -1042,7 +1145,7 @@ export class Tower extends Component {
                     const healthBarScale = this.healthBarNode.scale.clone();
                     this.healthBarNode.setScale(Math.abs(healthBarScale.x), healthBarScale.y, healthBarScale.z);
                 }
-                console.log('Tower: Enemy on right, keeping normal orientation');
+                console.debug('Tower: Enemy on right, keeping normal orientation');
             }
         }
 
@@ -1054,7 +1157,7 @@ export class Tower extends Component {
         const frameDuration = this.attackAnimationDuration / frameCount; // 每帧的时长
         let currentFrameIndex = 0;
 
-        console.log(`Tower: Frame duration: ${frameDuration.toFixed(3)}s per frame`);
+        console.debug(`Tower: Frame duration: ${frameDuration.toFixed(3)}s per frame`);
 
         // 使用update方法播放动画（更可靠）
         let animationTimer = 0;
@@ -1087,7 +1190,7 @@ export class Tower extends Component {
                     this.sprite.spriteFrame = frames[frameCount - 1];
                 }
                 // 动画播放完成，恢复默认SpriteFrame
-                console.log('Tower: Attack animation completed, restoring default sprite');
+                console.debug('Tower: Attack animation completed, restoring default sprite');
                 this.restoreDefaultSprite();
                 this.unschedule(animationUpdate);
                 
@@ -1175,7 +1278,7 @@ export class Tower extends Component {
             graphics.stroke();
             
             // 每次攻击都输出日志，方便调试
-            console.log(`Tower: Created laser effect from tower at (${this.node.worldPosition.x.toFixed(2)}, ${this.node.worldPosition.y.toFixed(2)}) to enemy at (${targetPos.x.toFixed(2)}, ${targetPos.y.toFixed(2)})`);
+            console.debug(`Tower: Created laser effect from tower at (${this.node.worldPosition.x.toFixed(2)}, ${this.node.worldPosition.y.toFixed(2)}) to enemy at (${targetPos.x.toFixed(2)}, ${targetPos.y.toFixed(2)})`);
             
             // 添加渐隐效果
             const startAlpha = 255;
@@ -1235,7 +1338,7 @@ export class Tower extends Component {
             return;
         }
 
-        console.log(`Tower: Creating arrow, target: ${this.currentTarget.name}, position: ${this.currentTarget.worldPosition}`);
+        console.debug(`Tower: Creating arrow, target: ${this.currentTarget.name}, position: ${this.currentTarget.worldPosition}`);
 
         // 创建弓箭节点
         const arrow = instantiate(this.arrowPrefab);
@@ -1246,16 +1349,16 @@ export class Tower extends Component {
         const parentNode = canvas || scene || this.node.parent;
         if (parentNode) {
             arrow.setParent(parentNode);
-            console.log(`Tower: Arrow parent set to ${parentNode.name}`);
+            console.debug(`Tower: Arrow parent set to ${parentNode.name}`);
         } else {
             arrow.setParent(this.node.parent);
-            console.log(`Tower: Arrow parent set to tower parent`);
+            console.debug(`Tower: Arrow parent set to tower parent`);
         }
 
         // 设置初始位置（防御塔位置）
         const startPos = this.node.worldPosition.clone();
         arrow.setWorldPosition(startPos);
-        console.log(`Tower: Arrow initial position: (${startPos.x.toFixed(2)}, ${startPos.y.toFixed(2)})`);
+        console.debug(`Tower: Arrow initial position: (${startPos.x.toFixed(2)}, ${startPos.y.toFixed(2)})`);
 
         // 确保节点激活
         arrow.active = true;
@@ -1263,26 +1366,26 @@ export class Tower extends Component {
         // 获取或添加Arrow组件
         let arrowScript = arrow.getComponent(Arrow);
         if (!arrowScript) {
-            console.log('Tower: Arrow component not found, adding it...');
+            console.debug('Tower: Arrow component not found, adding it...');
             arrowScript = arrow.addComponent(Arrow);
         } else {
-            console.log('Tower: Arrow component found');
+            console.debug('Tower: Arrow component found');
         }
 
         // 初始化弓箭，设置命中回调
-        console.log(`Tower: Initializing arrow with damage: ${this.attackDamage}`);
+        console.debug(`Tower: Initializing arrow with damage: ${this.attackDamage}`);
         arrowScript.init(
             startPos,
             this.currentTarget,
             this.attackDamage,
             (damage: number) => {
                 // 命中目标时造成伤害
-                console.log(`Tower: Arrow hit callback called with damage: ${damage}`);
+                console.debug(`Tower: Arrow hit callback called with damage: ${damage}`);
                 const enemyScript = this.currentTarget?.getComponent('Enemy') as any;
                 if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                     if (enemyScript.takeDamage) {
                         enemyScript.takeDamage(damage);
-                        console.log(`Tower: Arrow hit enemy, dealt ${damage} damage`);
+                        console.debug(`Tower: Arrow hit enemy, dealt ${damage} damage`);
                     }
                 }
             }
@@ -1406,8 +1509,15 @@ export class Tower extends Component {
         // 移除点击事件监听
         this.node.off(Node.EventType.TOUCH_END, this.onTowerClick, this);
 
-        // 隐藏选择面板
+        // 隐藏选择面板（会移除全局触摸监听）
         this.hideSelectionPanel();
+        
+        // 清除手动移动目标
+        this.manualMoveTarget = null!;
+        this.isManuallyControlled = false;
+        
+        // 移除高亮效果
+        this.removeHighlight();
 
         // 触发爆炸效果
         let explosionPrefab = this.explosionEffect;
@@ -1436,7 +1546,7 @@ export class Tower extends Component {
             return;
         }
 
-        console.log('Tower: Creating explosion effect at position:', this.node.worldPosition);
+        console.debug('Tower: Creating explosion effect at position:', this.node.worldPosition);
         const explosion = instantiate(explosionPrefab);
         
         // 确保节点激活
@@ -1449,7 +1559,7 @@ export class Tower extends Component {
         if (parentNode) {
             explosion.setParent(parentNode);
             explosion.setWorldPosition(this.node.worldPosition);
-            console.log('Tower: Explosion effect parent set, position:', explosion.worldPosition);
+            console.debug('Tower: Explosion effect parent set, position:', explosion.worldPosition);
         } else {
             console.error('Tower: Cannot find parent node for explosion effect!');
             explosion.destroy();
@@ -1462,7 +1572,7 @@ export class Tower extends Component {
         // 检查ExplosionEffect组件是否存在
         const explosionScript = explosion.getComponent('ExplosionEffect');
         if (explosionScript) {
-            console.log('Tower: ExplosionEffect component found, animation should start automatically');
+            console.debug('Tower: ExplosionEffect component found, animation should start automatically');
         } else {
             console.warn('Tower: ExplosionEffect component not found on explosion prefab!');
         }
@@ -1470,7 +1580,7 @@ export class Tower extends Component {
         // 延迟销毁爆炸效果节点（动画完成后，ExplosionEffect会自动销毁，这里作为备用）
         this.scheduleOnce(() => {
             if (explosion && explosion.isValid) {
-                console.log('Tower: Cleaning up explosion effect');
+                console.debug('Tower: Cleaning up explosion effect');
                 explosion.destroy();
             }
         }, 2.0); // 延长到2秒，确保动画完成
@@ -1566,19 +1676,105 @@ export class Tower extends Component {
         sellBtn.on(Node.EventType.TOUCH_END, this.onSellClick, this);
         upgradeBtn.on(Node.EventType.TOUCH_END, this.onUpgradeClick, this);
 
-        // 点击其他地方关闭面板
+        // 点击其他地方关闭面板或设置移动目标
         this.scheduleOnce(() => {
             if (canvas) {
-                canvas.once(Node.EventType.TOUCH_END, this.hideSelectionPanel, this);
+                // 创建全局触摸事件处理器
+                this.globalTouchHandler = (event: EventTouch) => {
+                    // 检查点击是否在选择面板或其子节点上
+                    if (this.selectionPanel && this.selectionPanel.isValid) {
+                        const targetNode = event.target as Node;
+                        if (targetNode) {
+                            // 检查目标节点是否是选择面板或其子节点
+                            let currentNode: Node | null = targetNode;
+                            while (currentNode) {
+                                if (currentNode === this.selectionPanel) {
+                                    // 点击在选择面板上，不处理移动
+                                    return;
+                                }
+                                currentNode = currentNode.parent;
+                            }
+                        }
+                    }
+                    
+                    // 点击不在选择面板上，设置移动目标
+                    this.setManualMoveTarget(event);
+                };
+                
+                canvas.on(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
             }
         }, 0.1);
     }
 
+    /**
+     * 设置手动移动目标位置（用于多选移动）
+     * @param worldPos 世界坐标位置
+     */
+    setManualMoveTargetPosition(worldPos: Vec3) {
+        // 设置手动移动目标
+        this.manualMoveTarget = worldPos.clone();
+        this.isManuallyControlled = true;
+        
+        console.debug(`Tower: Manual move target set to (${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
+        
+        // 清除当前自动寻敌目标，优先执行手动移动
+        this.currentTarget = null!;
+    }
+
+    /**
+     * 设置手动移动目标（用于单选移动）
+     * @param event 触摸事件
+     */
+    setManualMoveTarget(event: EventTouch) {
+        // 阻止事件冒泡，避免触发其他点击事件
+        event.propagationStopped = true;
+        
+        // 获取触摸位置
+        const touchLocation = event.getLocation();
+        
+        // 查找Camera节点
+        const cameraNode = find('Canvas/Camera') || this.node.scene?.getChildByName('Camera');
+        if (!cameraNode) {
+            console.error('Tower: Camera node not found!');
+            return;
+        }
+        
+        const camera = cameraNode.getComponent(Camera);
+        if (!camera) {
+            console.error('Tower: Camera component not found!');
+            return;
+        }
+        
+        // 将屏幕坐标转换为世界坐标
+        const screenPos = new Vec3(touchLocation.x, touchLocation.y, 0);
+        const worldPos = new Vec3();
+        camera.screenToWorld(screenPos, worldPos);
+        worldPos.z = 0;
+        
+        // 使用setManualMoveTargetPosition方法设置移动目标
+        this.setManualMoveTargetPosition(worldPos);
+        
+        // 隐藏选择面板（这会移除全局触摸监听，确保只有一次控制机会）
+        this.hideSelectionPanel();
+    }
+
     hideSelectionPanel() {
+        // 移除全局触摸事件监听
+        if (this.globalTouchHandler) {
+            const canvas = find('Canvas');
+            if (canvas) {
+                canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
+            }
+            this.globalTouchHandler = null!;
+        }
+        
         if (this.selectionPanel && this.selectionPanel.isValid) {
             this.selectionPanel.destroy();
             this.selectionPanel = null!;
         }
+        
+        // 注意：不清除手动移动目标，让防御单位继续移动到目标位置
+        // 只有在到达目标位置后才会清除
     }
 
     onSellClick(event: EventTouch) {
@@ -1592,7 +1788,7 @@ export class Tower extends Component {
             // 回收80%金币
             const refund = Math.floor(this.buildCost * 0.8);
             this.gameManager.addGold(refund);
-            console.log(`Tower: Sold, refunded ${refund} gold`);
+            console.debug(`Tower: Sold, refunded ${refund} gold`);
         }
 
         // 隐藏面板
@@ -1617,7 +1813,7 @@ export class Tower extends Component {
         const upgradeCost = this.buildCost * 2;
         
         if (!this.gameManager.canAfford(upgradeCost)) {
-            console.log(`Tower: Not enough gold for upgrade! Need ${upgradeCost}, have ${this.gameManager.getGold()}`);
+            console.debug(`Tower: Not enough gold for upgrade! Need ${upgradeCost}, have ${this.gameManager.getGold()}`);
             return;
         }
 
@@ -1629,10 +1825,76 @@ export class Tower extends Component {
         this.attackDamage = Math.floor(this.attackDamage * 1.5); // 攻击力增加50%
         this.attackInterval = this.attackInterval / 1.5; // 攻击速度增加50%（间隔减少）
 
-        console.log(`Tower: Upgraded to level ${this.level}, damage: ${this.attackDamage}, interval: ${this.attackInterval.toFixed(2)}`);
+        console.debug(`Tower: Upgraded to level ${this.level}, damage: ${this.attackDamage}, interval: ${this.attackInterval.toFixed(2)}`);
 
         // 隐藏面板
         this.hideSelectionPanel();
+    }
+
+    /**
+     * 设置高亮显示
+     * @param highlight 是否高亮
+     */
+    setHighlight(highlight: boolean) {
+        if (this.isHighlighted === highlight) {
+            return; // 状态相同，不需要更新
+        }
+
+        this.isHighlighted = highlight;
+
+        if (highlight) {
+            // 创建高亮效果
+            this.createHighlight();
+        } else {
+            // 移除高亮效果
+            this.removeHighlight();
+        }
+    }
+
+    /**
+     * 创建高亮效果
+     */
+    createHighlight() {
+        if (this.highlightNode && this.highlightNode.isValid) {
+            return; // 已经存在高亮节点
+        }
+
+        // 创建高亮节点
+        this.highlightNode = new Node('Highlight');
+        this.highlightNode.setParent(this.node);
+        this.highlightNode.setPosition(0, 0, 0);
+
+        // 添加Graphics组件绘制高亮边框
+        const graphics = this.highlightNode.addComponent(Graphics);
+        graphics.strokeColor.set(100, 200, 255, 255); // 亮蓝色边框
+        graphics.lineWidth = 3;
+
+        // 绘制圆形高亮边框（根据防御单位的碰撞半径）
+        const radius = this.collisionRadius + 5; // 稍微大一点
+        graphics.circle(0, 0, radius);
+        graphics.stroke();
+
+        // 添加半透明填充
+        graphics.fillColor.set(100, 200, 255, 50); // 半透明蓝色
+        graphics.circle(0, 0, radius);
+        graphics.fill();
+    }
+
+    /**
+     * 移除高亮效果
+     */
+    removeHighlight() {
+        if (this.highlightNode && this.highlightNode.isValid) {
+            this.highlightNode.destroy();
+            this.highlightNode = null!;
+        }
+    }
+
+    /**
+     * 获取是否高亮
+     */
+    getIsHighlighted(): boolean {
+        return this.isHighlighted;
     }
 }
 
