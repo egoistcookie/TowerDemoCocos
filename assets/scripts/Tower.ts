@@ -1711,11 +1711,14 @@ export class Tower extends Component {
      * @param worldPos 世界坐标位置
      */
     setManualMoveTargetPosition(worldPos: Vec3) {
+        // 智能调整目标位置，避免与单位重叠
+        const adjustedPos = this.findAvailableMovePosition(worldPos);
+        
         // 设置手动移动目标
-        this.manualMoveTarget = worldPos.clone();
+        this.manualMoveTarget = adjustedPos.clone();
         this.isManuallyControlled = true;
         
-        console.debug(`Tower: Manual move target set to (${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
+        console.debug(`Tower: Manual move target set to (${adjustedPos.x.toFixed(1)}, ${adjustedPos.y.toFixed(1)})`);
         
         // 清除当前自动寻敌目标，优先执行手动移动
         this.currentTarget = null!;
@@ -1756,6 +1759,139 @@ export class Tower extends Component {
         
         // 隐藏选择面板（这会移除全局触摸监听，确保只有一次控制机会）
         this.hideSelectionPanel();
+    }
+
+    findAvailableMovePosition(initialPos: Vec3): Vec3 {
+        const checkRadius = this.collisionRadius;
+        const offsetStep = 40; // 每次平移的距离
+        const maxAttempts = 5; // 最多尝试5次（左右各2次）
+
+        // 检查初始位置是否可用
+        if (!this.hasUnitAtMovePosition(initialPos, checkRadius)) {
+            return initialPos;
+        }
+
+        // 尝试左右平移
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            // 先尝试右侧
+            const rightPos = new Vec3(initialPos.x + offsetStep * attempt, initialPos.y, initialPos.z);
+            if (!this.hasUnitAtMovePosition(rightPos, checkRadius)) {
+                console.debug(`Tower: Found available move position at right offset ${offsetStep * attempt}`);
+                return rightPos;
+            }
+
+            // 再尝试左侧
+            const leftPos = new Vec3(initialPos.x - offsetStep * attempt, initialPos.y, initialPos.z);
+            if (!this.hasUnitAtMovePosition(leftPos, checkRadius)) {
+                console.debug(`Tower: Found available move position at left offset ${offsetStep * attempt}`);
+                return leftPos;
+            }
+        }
+
+        // 如果所有位置都被占用，返回初始位置（让Tower自己处理碰撞）
+        console.warn('Tower: Could not find available move position, using initial position');
+        return initialPos;
+    }
+
+    hasUnitAtMovePosition(position: Vec3, radius: number): boolean {
+        // 检查与水晶的碰撞
+        const findNodeRecursive = (node: Node, name: string): Node | null => {
+            if (node.name === name) {
+                return node;
+            }
+            for (const child of node.children) {
+                const found = findNodeRecursive(child, name);
+                if (found) return found;
+            }
+            return null;
+        };
+
+        const crystal = find('Crystal');
+        if (!crystal && this.node.scene) {
+            const scene = this.node.scene;
+            const foundCrystal = findNodeRecursive(scene, 'Crystal');
+            if (foundCrystal && foundCrystal.isValid && foundCrystal.active) {
+                const distance = Vec3.distance(position, foundCrystal.worldPosition);
+                const crystalRadius = 50;
+                if (distance < radius + crystalRadius) {
+                    return true;
+                }
+            }
+        } else if (crystal && crystal.isValid && crystal.active) {
+            const distance = Vec3.distance(position, crystal.worldPosition);
+            const crystalRadius = 50;
+            if (distance < radius + crystalRadius) {
+                return true;
+            }
+        }
+
+        // 检查与其他Tower的碰撞
+        let towersNode = find('Towers');
+        if (!towersNode && this.node.scene) {
+            towersNode = findNodeRecursive(this.node.scene, 'Towers');
+        }
+        
+        if (towersNode) {
+            const towers = towersNode.children || [];
+            for (const tower of towers) {
+                if (tower && tower.isValid && tower.active && tower !== this.node) {
+                    const towerScript = tower.getComponent('Tower') as any;
+                    if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
+                        const distance = Vec3.distance(position, tower.worldPosition);
+                        const otherRadius = towerScript.collisionRadius || radius;
+                        if (distance < radius + otherRadius) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 检查与战争古树的碰撞
+        let treesNode = find('WarAncientTrees');
+        if (!treesNode && this.node.scene) {
+            treesNode = findNodeRecursive(this.node.scene, 'WarAncientTrees');
+        }
+        
+        if (treesNode) {
+            const trees = treesNode.children || [];
+            for (const tree of trees) {
+                if (tree && tree.isValid && tree.active) {
+                    const treeScript = tree.getComponent('WarAncientTree') as any;
+                    if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
+                        const distance = Vec3.distance(position, tree.worldPosition);
+                        const treeRadius = 50; // 战争古树的半径
+                        if (distance < radius + treeRadius) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 检查与敌人的碰撞
+        let enemiesNode = find('Enemies');
+        if (!enemiesNode && this.node.scene) {
+            enemiesNode = findNodeRecursive(this.node.scene, 'Enemies');
+        }
+        
+        if (enemiesNode) {
+            const enemies = enemiesNode.children || [];
+            for (const enemy of enemies) {
+                if (enemy && enemy.isValid && enemy.active) {
+                    const enemyScript = enemy.getComponent('Enemy') as any;
+                    if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
+                        const distance = Vec3.distance(position, enemy.worldPosition);
+                        const enemyRadius = 30;
+                        if (distance < radius + enemyRadius) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     hideSelectionPanel() {

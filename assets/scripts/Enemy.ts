@@ -274,6 +274,9 @@ export class Enemy extends Component {
             return;
         }
 
+        // 在移动前检查路径上是否有战争古树或防御塔
+        this.checkForTargetsOnPath();
+
         const crystalWorldPos = this.targetCrystal.worldPosition;
         const enemyWorldPos = this.node.worldPosition;
         
@@ -296,6 +299,68 @@ export class Enemy extends Component {
                 //     distance: distance.toFixed(2),
                 //     moveDistance: moveDistance.toFixed(2)
                 // });
+            }
+        }
+    }
+
+    checkForTargetsOnPath() {
+        // 检查路径上是否有防御塔或战争古树（检测范围比攻击范围稍大）
+        const detectionRange = this.attackRange * 1.5; // 1.5倍攻击范围用于检测路径上的目标
+        
+        const findNodeRecursive = (node: Node, name: string): Node | null => {
+            if (node.name === name) {
+                return node;
+            }
+            for (const child of node.children) {
+                const found = findNodeRecursive(child, name);
+                if (found) return found;
+            }
+            return null;
+        };
+
+        // 检查防御塔
+        let towersNode = find('Towers');
+        if (!towersNode && this.node.scene) {
+            towersNode = findNodeRecursive(this.node.scene, 'Towers');
+        }
+        
+        if (towersNode) {
+            const towers = towersNode.children || [];
+            for (const tower of towers) {
+                if (tower && tower.active && tower.isValid) {
+                    const towerScript = tower.getComponent('Tower') as any;
+                    if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
+                        const distance = Vec3.distance(this.node.worldPosition, tower.worldPosition);
+                        if (distance <= detectionRange) {
+                            // 找到路径上的防御塔，设置为目标
+                            this.currentTarget = tower;
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 检查战争古树
+        let treesNode = find('WarAncientTrees');
+        if (!treesNode && this.node.scene) {
+            treesNode = findNodeRecursive(this.node.scene, 'WarAncientTrees');
+        }
+        
+        if (treesNode) {
+            const trees = treesNode.children || [];
+            for (const tree of trees) {
+                if (tree && tree.active && tree.isValid) {
+                    const treeScript = tree.getComponent('WarAncientTree') as any;
+                    if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
+                        const distance = Vec3.distance(this.node.worldPosition, tree.worldPosition);
+                        if (distance <= detectionRange) {
+                            // 找到路径上的战争古树，设置为目标
+                            this.currentTarget = tree;
+                            return;
+                        }
+                    }
+                }
             }
         }
     }

@@ -49,11 +49,16 @@ export class WarAncientTree extends Component {
     productionInterval: number = 2.0; // 每2秒生产一个
 
     @property
-    spawnOffset: number = 20; // Tower出现在前方20像素
+    spawnOffset: number = 100; // Tower出现在下方100像素
+
+    @property
+    moveAwayDistance: number = 80; // Tower生成后往前跑开的距离
 
     private currentHealth: number = 100;
     private healthBar: HealthBar = null!;
     private healthBarNode: Node = null!;
+    private productionProgressBar: Node = null!; // 生产进度条节点
+    private productionProgressGraphics: Graphics = null!; // 生产进度条Graphics组件
     private isDestroyed: boolean = false;
     private attackTimer: number = 0;
     private currentTarget: Node = null!;
@@ -64,8 +69,10 @@ export class WarAncientTree extends Component {
     private isPlayingAttackAnimation: boolean = false;
 
     // 生产相关
-    private producedTowerCount: number = 0; // 已生产的Tower数量
+    private producedTowers: Node[] = []; // 已生产的Tower列表
     private productionTimer: number = 0; // 生产计时器
+    private productionProgress: number = 0; // 生产进度（0-1）
+    private isProducing: boolean = false; // 是否正在生产
     private towerContainer: Node = null!; // Tower容器
 
     start() {
@@ -74,8 +81,10 @@ export class WarAncientTree extends Component {
         this.attackTimer = 0;
         this.currentTarget = null!;
         this.isPlayingAttackAnimation = false;
-        this.producedTowerCount = 0;
+        this.producedTowers = [];
         this.productionTimer = 0;
+        this.productionProgress = 0;
+        this.isProducing = false;
 
         // 获取Sprite组件
         this.sprite = this.node.getComponent(Sprite);
@@ -92,6 +101,9 @@ export class WarAncientTree extends Component {
 
         // 创建血条
         this.createHealthBar();
+
+        // 创建生产进度条
+        this.createProductionProgressBar();
     }
 
     findGameManager() {
@@ -157,6 +169,54 @@ export class WarAncientTree extends Component {
         }
     }
 
+    createProductionProgressBar() {
+        // 创建生产进度条节点（位于血量条下方）
+        this.productionProgressBar = new Node('ProductionProgressBar');
+        this.productionProgressBar.setParent(this.node);
+        this.productionProgressBar.setPosition(0, 30, 0); // 血量条下方
+
+        // 添加UITransform组件
+        const uiTransform = this.productionProgressBar.addComponent(UITransform);
+        uiTransform.setContentSize(40, 4);
+
+        // 添加Graphics组件
+        this.productionProgressGraphics = this.productionProgressBar.addComponent(Graphics);
+        
+        // 初始隐藏进度条
+        this.productionProgressBar.active = false;
+    }
+
+    updateProductionProgressBar() {
+        if (!this.productionProgressBar || !this.productionProgressGraphics) {
+            return;
+        }
+
+        if (!this.isProducing) {
+            this.productionProgressBar.active = false;
+            return;
+        }
+
+        this.productionProgressBar.active = true;
+        this.productionProgressGraphics.clear();
+
+        const barWidth = 40;
+        const barHeight = 4;
+        const barX = -barWidth / 2;
+        const barY = 0;
+
+        // 绘制背景（灰色）
+        this.productionProgressGraphics.fillColor = new Color(100, 100, 100, 255);
+        this.productionProgressGraphics.rect(barX, barY, barWidth, barHeight);
+        this.productionProgressGraphics.fill();
+
+        // 绘制进度（蓝色）
+        if (this.productionProgress > 0) {
+            this.productionProgressGraphics.fillColor = new Color(0, 150, 255, 255);
+            this.productionProgressGraphics.rect(barX, barY, barWidth * this.productionProgress, barHeight);
+            this.productionProgressGraphics.fill();
+        }
+    }
+
     update(deltaTime: number) {
         if (this.isDestroyed) {
             return;
@@ -182,12 +242,42 @@ export class WarAncientTree extends Component {
             }
         }
 
+        // 清理已死亡的Tower
+        this.cleanupDeadTowers();
+
         // 生产Tower逻辑
-        if (this.producedTowerCount < this.maxTowerCount) {
+        const aliveTowerCount = this.producedTowers.length;
+        if (aliveTowerCount < this.maxTowerCount) {
+            if (!this.isProducing) {
+                // 开始生产
+                this.isProducing = true;
+                this.productionTimer = 0;
+                this.productionProgress = 0;
+                this.updateProductionProgressBar();
+            }
+
             this.productionTimer += deltaTime;
+            
+            // 更新生产进度（每0.5秒前进一格，共4格）
+            const progressStep = 0.5; // 每0.5秒一格
+            const totalSteps = this.productionInterval / progressStep; // 总格数（2.0 / 0.5 = 4格）
+            const currentStep = Math.floor(this.productionTimer / progressStep);
+            this.productionProgress = Math.min(currentStep / totalSteps, 1.0);
+            this.updateProductionProgressBar();
+
             if (this.productionTimer >= this.productionInterval) {
                 this.produceTower();
                 this.productionTimer = 0;
+                this.productionProgress = 0;
+                this.isProducing = false;
+                this.updateProductionProgressBar();
+            }
+        } else {
+            // 已达到最大数量，停止生产
+            if (this.isProducing) {
+                this.isProducing = false;
+                this.productionProgress = 0;
+                this.updateProductionProgressBar();
             }
         }
     }
@@ -429,13 +519,16 @@ export class WarAncientTree extends Component {
             return;
         }
 
-        if (this.producedTowerCount >= this.maxTowerCount) {
+        if (this.producedTowers.length >= this.maxTowerCount) {
             return;
         }
 
         // 计算Tower出现位置（战争古树下方100像素）
         const treePos = this.node.worldPosition.clone();
-        const spawnPos = new Vec3(treePos.x, treePos.y - this.spawnOffset, treePos.z);
+        let spawnPos = new Vec3(treePos.x, treePos.y - this.spawnOffset, treePos.z);
+
+        // 检查生成位置是否有单位，如果有则左右平移
+        spawnPos = this.findAvailableSpawnPosition(spawnPos);
 
         // 创建Tower
         const tower = instantiate(this.towerPrefab);
@@ -449,8 +542,208 @@ export class WarAncientTree extends Component {
             towerScript.buildCost = 0; // 由战争古树生产的Tower建造成本为0
         }
 
-        this.producedTowerCount++;
-        console.log(`WarAncientTree: Produced tower ${this.producedTowerCount}/${this.maxTowerCount} at position (${spawnPos.x.toFixed(2)}, ${spawnPos.y.toFixed(2)})`);
+        // 添加到生产的Tower列表
+        this.producedTowers.push(tower);
+
+        // 计算Tower的目标位置（往前跑开一段距离）
+        // 根据已生产的Tower数量，分散到不同位置
+        const towerIndex = this.producedTowers.length - 1;
+        const angleOffset = (towerIndex % 2 === 0 ? 1 : -1) * 15; // 左右分散
+        const forwardDirection = new Vec3(0, 1, 0); // 前方方向（向上）
+        
+        // 旋转方向向量
+        const radian = angleOffset * Math.PI / 180;
+        const cos = Math.cos(radian);
+        const sin = Math.sin(radian);
+        const rotatedX = forwardDirection.x * cos - forwardDirection.y * sin;
+        const rotatedY = forwardDirection.x * sin + forwardDirection.y * cos;
+        const direction = new Vec3(rotatedX, rotatedY, 0);
+        
+        // 计算目标位置（前方跑开）
+        const targetPos = new Vec3();
+        Vec3.scaleAndAdd(targetPos, spawnPos, direction, this.moveAwayDistance);
+
+        // 让Tower移动到目标位置
+        if (towerScript) {
+            // 使用schedule在下一帧开始移动，确保Tower已完全初始化
+            this.scheduleOnce(() => {
+                if (tower && tower.isValid && towerScript) {
+                    // 使用setManualMoveTargetPosition方法设置移动目标
+                    if (towerScript.setManualMoveTargetPosition) {
+                        towerScript.setManualMoveTargetPosition(targetPos);
+                    } else if (towerScript.moveToPosition) {
+                        // 如果没有setManualMoveTargetPosition方法，使用moveToPosition
+                        const moveUpdate = (deltaTime: number) => {
+                            if (!tower || !tower.isValid || !towerScript) {
+                                this.unschedule(moveUpdate);
+                                return;
+                            }
+                            
+                            const currentPos = tower.worldPosition;
+                            const distance = Vec3.distance(currentPos, targetPos);
+                            
+                            if (distance <= 10) {
+                                // 到达目标位置，停止移动
+                                if (towerScript.stopMoving) {
+                                    towerScript.stopMoving();
+                                }
+                                this.unschedule(moveUpdate);
+                            } else {
+                                // 继续移动
+                                towerScript.moveToPosition(targetPos, deltaTime);
+                            }
+                        };
+                        this.schedule(moveUpdate, 0);
+                    }
+                }
+            }, 0.1);
+        }
+
+        console.log(`WarAncientTree: Produced tower ${this.producedTowers.length}/${this.maxTowerCount} at position (${spawnPos.x.toFixed(2)}, ${spawnPos.y.toFixed(2)})`);
+    }
+
+    findAvailableSpawnPosition(initialPos: Vec3): Vec3 {
+        const checkRadius = 30; // Tower的碰撞半径
+        const offsetStep = 40; // 每次平移的距离
+        const maxAttempts = 5; // 最多尝试5次（左右各2次）
+
+        // 检查初始位置是否可用
+        if (!this.hasUnitAtPosition(initialPos, checkRadius)) {
+            return initialPos;
+        }
+
+        // 尝试左右平移
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            // 先尝试右侧
+            const rightPos = new Vec3(initialPos.x + offsetStep * attempt, initialPos.y, initialPos.z);
+            if (!this.hasUnitAtPosition(rightPos, checkRadius)) {
+                console.log(`WarAncientTree: Found available position at right offset ${offsetStep * attempt}`);
+                return rightPos;
+            }
+
+            // 再尝试左侧
+            const leftPos = new Vec3(initialPos.x - offsetStep * attempt, initialPos.y, initialPos.z);
+            if (!this.hasUnitAtPosition(leftPos, checkRadius)) {
+                console.log(`WarAncientTree: Found available position at left offset ${offsetStep * attempt}`);
+                return leftPos;
+            }
+        }
+
+        // 如果所有位置都被占用，返回初始位置（让Tower自己处理碰撞）
+        console.warn('WarAncientTree: Could not find available spawn position, using initial position');
+        return initialPos;
+    }
+
+    hasUnitAtPosition(position: Vec3, radius: number): boolean {
+        const minDistance = radius * 2; // 最小距离（两个半径）
+
+        // 检查与水晶的碰撞
+        const crystal = find('Crystal');
+        if (crystal && crystal.isValid && crystal.active) {
+            const distance = Vec3.distance(position, crystal.worldPosition);
+            const crystalRadius = 50;
+            if (distance < radius + crystalRadius) {
+                return true;
+            }
+        }
+
+        // 检查与其他Tower的碰撞
+        if (this.towerContainer) {
+            const towers = this.towerContainer.children || [];
+            for (const tower of towers) {
+                if (tower && tower.isValid && tower.active) {
+                    // 排除自己生产的Tower（因为它们可能会移动）
+                    let isProducedTower = false;
+                    for (const producedTower of this.producedTowers) {
+                        if (producedTower === tower) {
+                            isProducedTower = true;
+                            break;
+                        }
+                    }
+                    if (isProducedTower) {
+                        continue;
+                    }
+                    
+                    const towerScript = tower.getComponent('Tower') as any;
+                    if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
+                        const distance = Vec3.distance(position, tower.worldPosition);
+                        const otherRadius = towerScript.collisionRadius || radius;
+                        if (distance < radius + otherRadius) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 检查与战争古树的碰撞
+        const findNodeRecursive = (node: Node, name: string): Node | null => {
+            if (node.name === name) {
+                return node;
+            }
+            for (const child of node.children) {
+                const found = findNodeRecursive(child, name);
+                if (found) return found;
+            }
+            return null;
+        };
+
+        let treesNode = find('WarAncientTrees');
+        if (!treesNode && this.node.scene) {
+            treesNode = findNodeRecursive(this.node.scene, 'WarAncientTrees');
+        }
+        
+        if (treesNode) {
+            const trees = treesNode.children || [];
+            for (const tree of trees) {
+                if (tree && tree.isValid && tree.active && tree !== this.node) {
+                    const treeScript = tree.getComponent('WarAncientTree') as any;
+                    if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
+                        const distance = Vec3.distance(position, tree.worldPosition);
+                        const treeRadius = 50; // 战争古树的半径
+                        if (distance < radius + treeRadius) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 检查与敌人的碰撞
+        const enemiesNode = find('Enemies');
+        if (enemiesNode) {
+            const enemies = enemiesNode.children || [];
+            for (const enemy of enemies) {
+                if (enemy && enemy.isValid && enemy.active) {
+                    const enemyScript = enemy.getComponent('Enemy') as any;
+                    if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
+                        const distance = Vec3.distance(position, enemy.worldPosition);
+                        const enemyRadius = 30;
+                        if (distance < radius + enemyRadius) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    cleanupDeadTowers() {
+        // 清理已死亡的Tower
+        this.producedTowers = this.producedTowers.filter(tower => {
+            if (!tower || !tower.isValid || !tower.active) {
+                return false;
+            }
+            
+            const towerScript = tower.getComponent('Tower') as any;
+            if (towerScript && towerScript.isAlive) {
+                return towerScript.isAlive();
+            }
+            
+            return true;
+        });
     }
 
     takeDamage(damage: number) {
