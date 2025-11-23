@@ -99,6 +99,9 @@ export class GameManager extends Component {
         console.log(`GameManager: endGame called with state: ${state} (${state === GameState.Victory ? 'Victory' : state === GameState.Defeat ? 'Defeat' : 'Unknown'})`);
         this.gameState = state;
         
+        // 游戏结束时，清理所有单位（敌人直接消失，塔停止移动）
+        this.cleanupAllUnitsForEndGame();
+        
         if (this.gameOverPanel) {
             this.gameOverPanel.active = true;
             console.log('GameManager: GameOverPanel activated');
@@ -115,6 +118,59 @@ export class GameManager extends Component {
         
         // 确保游戏状态已更新
         console.log(`GameManager: Current game state: ${this.gameState}`);
+    }
+
+    cleanupAllUnitsForEndGame() {
+        // 使用递归查找节点
+        const findNodeRecursive = (node: Node, name: string): Node | null => {
+            if (node.name === name) {
+                return node;
+            }
+            for (const child of node.children) {
+                const found = findNodeRecursive(child, name);
+                if (found) return found;
+            }
+            return null;
+        };
+
+        const scene = director.getScene();
+        if (!scene) return;
+
+        // 清理所有敌人（直接销毁）
+        let enemiesNode = find('Enemies');
+        if (!enemiesNode && scene) {
+            enemiesNode = findNodeRecursive(scene, 'Enemies');
+        }
+        if (enemiesNode) {
+            const enemies = enemiesNode.children.slice(); // 复制数组
+            for (const enemy of enemies) {
+                if (enemy && enemy.isValid) {
+                    // 直接销毁，不播放死亡动画
+                    enemy.destroy();
+                }
+            }
+        }
+
+        // 停止所有防御塔移动
+        let towersNode = find('Towers');
+        if (!towersNode && scene) {
+            towersNode = findNodeRecursive(scene, 'Towers');
+        }
+        if (towersNode) {
+            const towers = towersNode.children; // 不需要复制数组，因为不销毁
+            for (const tower of towers) {
+                if (tower && tower.isValid) {
+                    const towerScript = tower.getComponent('Tower') as any;
+                    if (towerScript && towerScript.stopMoving) {
+                        towerScript.stopMoving();
+                        // 也要停止攻击动画和逻辑
+                        if (towerScript.currentTarget) {
+                            towerScript.currentTarget = null!;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     getGameState(): GameState {
@@ -218,10 +274,21 @@ export class GameManager extends Component {
             for (const tower of towers) {
                 if (tower && tower.isValid) {
                     const towerScript = tower.getComponent('Tower') as any;
-                    if (towerScript && towerScript.destroyTower) {
-                        towerScript.destroyTower();
-                    } else {
-                        tower.destroy();
+                    if (towerScript) {
+                        // 如果游戏结束，停止所有塔的移动
+                        if (towerScript.stopMoving) {
+                            towerScript.stopMoving();
+                        }
+                        // 只有在非游戏结束时的清理才销毁塔（例如重启游戏时）
+                        // 但这里的cleanupAllUnits目前主要用于重启游戏
+                        // 我们需要区分是"游戏结束清理"还是"重启清理"
+                        // 为了简单起见，这里保持原来的销毁逻辑用于重启
+                        // 但我们需要一个新的方法来处理游戏结束时的状态冻结
+                        if (towerScript.destroyTower) {
+                            towerScript.destroyTower();
+                        } else {
+                            tower.destroy();
+                        }
                     }
                 }
             }

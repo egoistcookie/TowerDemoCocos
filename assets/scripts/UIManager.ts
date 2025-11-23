@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Button, Label, find, director } from 'cc';
+import { _decorator, Component, Node, Button, Label, find, director, UITransform, Color, Graphics, tween, Vec3, UIOpacity } from 'cc';
 import { GameManager } from './GameManager';
 const { ccclass, property } = _decorator;
 
@@ -14,6 +14,8 @@ export class UIManager extends Component {
     towerBuilder: Node = null!;
 
     private gameManager: GameManager = null!;
+    private warningNode: Node = null!;
+    private announcementNode: Node = null!;
 
     start() {
         // 查找游戏管理器
@@ -40,6 +42,118 @@ export class UIManager extends Component {
         } else {
             console.warn('UIManager: TowerBuilder node not set!');
         }
+        
+        // 初始化特效节点
+        this.createEffects();
+    }
+
+    createEffects() {
+        // 创建红边警告特效节点
+        if (!this.warningNode) {
+            this.warningNode = new Node('WarningEffect');
+            const canvas = find('Canvas');
+            if (canvas) {
+                this.warningNode.setParent(canvas);
+                this.warningNode.setSiblingIndex(0); 
+
+                // 读取画布实际尺寸
+                const canvasTransform = canvas.getComponent(UITransform);
+                let width = 960;
+                let height = 640;
+                if (canvasTransform) {
+                    width = canvasTransform.width;
+                    height = canvasTransform.height;
+                }
+
+                const uiTransform = this.warningNode.addComponent(UITransform);
+                uiTransform.setContentSize(width, height); // 和画布同大
+
+                const graphics = this.warningNode.addComponent(Graphics);
+                graphics.lineWidth = 20;
+                graphics.strokeColor = new Color(255, 0, 0, 255); // 不透明红色
+
+                // 在画布四边画一圈矩形边框（紧贴画布边缘）
+                graphics.rect(-width / 2, -height / 2, width, height);
+                graphics.stroke();
+
+                this.warningNode.addComponent(UIOpacity).opacity = 0;
+            }
+        }
+
+        // 创建公告提示节点
+        if (!this.announcementNode) {
+            this.announcementNode = new Node('Announcement');
+            const canvas = find('Canvas');
+            if (canvas) {
+                this.announcementNode.setParent(canvas);
+                this.announcementNode.setPosition(0, 100, 0); // 屏幕上方
+                
+                const label = this.announcementNode.addComponent(Label);
+                label.string = "";
+                label.fontSize = 40;
+                label.color = Color.RED;
+                label.isBold = true;
+                
+                this.announcementNode.active = false;
+            }
+        }
+    }
+
+    /**
+     * 显示红边警告特效
+     */
+    showWarningEffect() {
+        if (!this.warningNode) return;
+        
+        const opacityComp = this.warningNode.getComponent(UIOpacity);
+        if (!opacityComp) return;
+        
+        this.warningNode.active = true;
+        opacityComp.opacity = 0;
+        
+        // 闪烁动画
+        tween(opacityComp)
+            .to(0.2, { opacity: 150 })
+            .to(0.2, { opacity: 0 })
+            .to(0.2, { opacity: 150 })
+            .to(0.2, { opacity: 0 })
+            .to(0.2, { opacity: 150 })
+            .to(0.5, { opacity: 0 })
+            .call(() => {
+                // this.warningNode.active = false; // 保持节点存在，只是不可见
+            })
+            .start();
+            
+        // 如果Graphics不支持设置透明度，我们可以用Sprite创建红色图片，这里假设Graphics可以
+    }
+
+    /**
+     * 显示屏幕中间公告
+     * @param message 公告内容
+     */
+    showAnnouncement(message: string) {
+        if (!this.announcementNode) return;
+        
+        const label = this.announcementNode.getComponent(Label);
+        if (label) {
+            label.string = message;
+        }
+        
+        this.announcementNode.active = true;
+        this.announcementNode.setScale(0, 0, 1);
+        const uiOpacity = this.announcementNode.getComponent(UIOpacity) || this.announcementNode.addComponent(UIOpacity);
+        uiOpacity.opacity = 255;
+        
+        // 弹跳出现的动画
+        tween(this.announcementNode)
+            .to(0.5, { scale: new Vec3(1.2, 1.2, 1) }, { easing: 'backOut' })
+            .to(0.2, { scale: new Vec3(1, 1, 1) })
+            .delay(1.5)
+            .to(0.3, { scale: new Vec3(0, 0, 1) }) // 或者淡出
+            .call(() => {
+                this.announcementNode.active = false;
+            })
+            .start();
     }
 
     findGameManager() {

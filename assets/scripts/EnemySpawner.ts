@@ -1,5 +1,6 @@
 import { _decorator, Component, Node, Prefab, instantiate, Vec3, view, find } from 'cc';
 import { GameManager, GameState } from './GameManager';
+import { UIManager } from './UIManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('EnemySpawner')
@@ -20,13 +21,24 @@ export class EnemySpawner extends Component {
     enemyContainer: Node = null!;
 
     private spawnTimer: number = 0;
+    private totalTime: number = 0; // 游戏总运行时间
+    private lastDifficultyLevel: number = 0; // 上一次的难度等级
     private gameManager: GameManager = null!;
+    private uiManager: UIManager = null!;
 
     start() {
         this.spawnTimer = 0;
+        this.totalTime = 0;
+        this.lastDifficultyLevel = 0;
         
         // 查找游戏管理器（使用递归查找，更可靠）
         this.findGameManager();
+        
+        // 查找UIManager
+        const uiNode = find('UI') || find('Canvas/UI');
+        if (uiNode) {
+            this.uiManager = uiNode.getComponent(UIManager) || find('Canvas')?.getComponentInChildren(UIManager);
+        }
 
         // 查找水晶
         if (!this.targetCrystal) {
@@ -98,8 +110,37 @@ export class EnemySpawner extends Component {
 
         // 只有在游戏进行中时才更新计时器
         this.spawnTimer += deltaTime;
+        this.totalTime += deltaTime;
 
-        if (this.spawnTimer >= this.spawnInterval) {
+        // 计算当前的生成间隔
+        // 每隔30秒，刷新速度提升一倍（即间隔减半）
+        const difficultyLevel = Math.floor(this.totalTime / 30);
+        // 限制最小间隔为0.1秒，防止生成过多导致卡顿
+        const currentInterval = Math.max(0.1, this.spawnInterval / Math.pow(2, difficultyLevel));
+
+        // 当难度等级提升时
+        if (difficultyLevel > this.lastDifficultyLevel) {
+            this.lastDifficultyLevel = difficultyLevel;
+            console.log(`EnemySpawner: Difficulty increased to level ${difficultyLevel}, spawn interval: ${currentInterval.toFixed(3)}s`);
+            
+            // 触发UI提示
+            if (this.uiManager) {
+                this.uiManager.showAnnouncement("敌军增援到达！小心！");
+                this.uiManager.showWarningEffect();
+            } else {
+                // 尝试重新查找
+                const uiNode = find('UI') || find('Canvas/UI');
+                if (uiNode) {
+                    this.uiManager = uiNode.getComponent(UIManager) || find('Canvas')?.getComponentInChildren(UIManager);
+                    if (this.uiManager) {
+                        this.uiManager.showAnnouncement("敌军增援到达！小心！");
+                        this.uiManager.showWarningEffect();
+                    }
+                }
+            }
+        }
+
+        if (this.spawnTimer >= currentInterval) {
             // 再次检查游戏状态，确保在spawnEnemy调用前游戏仍在进行
             if (this.gameManager) {
                 const gameState = this.gameManager.getGameState();
@@ -107,7 +148,7 @@ export class EnemySpawner extends Component {
                     this.spawnEnemy();
                 } else {
                     // 游戏已结束，不生成敌人
-                    console.log(`EnemySpawner: Game state is ${gameState === GameState.Victory ? 'Victory' : 'Defeat'}, stopping enemy spawn`);
+                    console.debug(`EnemySpawner: Game state is ${gameState === GameState.Victory ? 'Victory' : 'Defeat'}, stopping enemy spawn`);
                 }
             } else {
                 // 如果还是没有GameManager，但仍然允许生成敌人（避免完全停止）
@@ -123,7 +164,7 @@ export class EnemySpawner extends Component {
         if (this.gameManager) {
             const gameState = this.gameManager.getGameState();
             if (gameState !== GameState.Playing) {
-                console.log(`EnemySpawner: Game ended (state: ${gameState === GameState.Victory ? 'Victory' : 'Defeat'}), canceling enemy spawn`);
+                console.debug(`EnemySpawner: Game ended (state: ${gameState === GameState.Victory ? 'Victory' : 'Defeat'}), canceling enemy spawn`);
                 return;
             }
         }
@@ -157,15 +198,14 @@ export class EnemySpawner extends Component {
         if (enemyScript) {
             if (this.targetCrystal) {
                 enemyScript.targetCrystal = this.targetCrystal;
-                console.log('EnemySpawner: Set targetCrystal for enemy:', this.targetCrystal.name, 'at', this.targetCrystal.worldPosition);
+                console.debug('EnemySpawner: Set targetCrystal for enemy:', this.targetCrystal.name, 'at', this.targetCrystal.worldPosition);
             } else {
                 // 如果EnemySpawner没有设置targetCrystal，让Enemy自己查找
                 console.warn('EnemySpawner: targetCrystal not set, Enemy will try to find it');
             }
-            console.log('EnemySpawner: Spawned enemy at:', spawnPos);
+            console.debug('EnemySpawner: Spawned enemy at:', spawnPos);
         } else {
             console.error('EnemySpawner: Enemy script not found on enemy prefab');
         }
     }
 }
-
