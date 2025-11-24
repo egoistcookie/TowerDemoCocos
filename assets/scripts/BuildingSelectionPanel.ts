@@ -27,21 +27,28 @@ export class BuildingSelectionPanel extends Component {
     private onBuildingSelectedCallback: ((building: BuildingType) => void) | null = null;
     private onBuildCallback: ((building: BuildingType, position: Vec3) => void) | null = null;
     private canvasNode: Node = null!;
+    private touchEndHandled: boolean = false; // 标记触摸结束事件是否已处理
 
     start() {
+        console.log('BuildingSelectionPanel.start: Initializing');
         this.findGameManager();
         this.node.active = false; // 初始隐藏
         
         // 监听Canvas的触摸移动事件，用于拖拽预览
         this.canvasNode = find('Canvas');
         if (this.canvasNode) {
+            console.log('BuildingSelectionPanel.start: Canvas found, setting up touch listeners');
             this.canvasNode.on(Node.EventType.TOUCH_MOVE, this.onCanvasTouchMove, this);
+            this.canvasNode.on(Node.EventType.TOUCH_END, this.onCanvasTouchEnd, this);
+        } else {
+            console.error('BuildingSelectionPanel.start: Canvas not found!');
         }
     }
 
     onDestroy() {
         if (this.canvasNode) {
             this.canvasNode.off(Node.EventType.TOUCH_MOVE, this.onCanvasTouchMove, this);
+            this.canvasNode.off(Node.EventType.TOUCH_END, this.onCanvasTouchEnd, this);
         }
         this.clearDragPreview();
     }
@@ -53,6 +60,85 @@ export class BuildingSelectionPanel extends Component {
         if (this.isDragging && this.dragPreview && this.selectedBuilding) {
             const location = event.getLocation();
             this.updateDragPreview(new Vec3(location.x, location.y, 0));
+        }
+    }
+
+    /**
+     * Canvas触摸结束事件（处理拖拽到游戏界面中松开的情况）
+     */
+    onCanvasTouchEnd(event: EventTouch) {
+        console.log('BuildingSelectionPanel.onCanvasTouchEnd: touchEndHandled=', this.touchEndHandled, 'isDragging=', this.isDragging, 'selectedBuilding=', !!this.selectedBuilding, 'dragPreview=', !!this.dragPreview);
+        
+        // 如果触摸结束事件已经被处理（在BuildingItem上），则不处理
+        if (this.touchEndHandled) {
+            console.log('BuildingSelectionPanel.onCanvasTouchEnd: Already handled, skipping');
+            this.touchEndHandled = false; // 重置标志
+            return;
+        }
+
+        // 如果正在拖拽且有选中的建筑物，处理建造逻辑
+        if (this.isDragging && this.selectedBuilding && this.dragPreview) {
+            console.log('BuildingSelectionPanel.onCanvasTouchEnd: Processing drag end');
+            const location = event.getLocation();
+            const startLocation = event.getStartLocation();
+            const dragDistance = Math.sqrt(
+                Math.pow(location.x - startLocation.x, 2) + 
+                Math.pow(location.y - startLocation.y, 2)
+            );
+
+            // 如果拖拽距离超过5像素，检查是否可以建造
+            if (dragDistance > 5) {
+                // 检查触摸结束位置是否在建筑物选择面板区域内
+                let isInPanelArea = false;
+                if (this.node && this.node.active) {
+                    const panelTransform = this.node.getComponent(UITransform);
+                    if (panelTransform) {
+                        const panelWorldPos = this.node.worldPosition;
+                        const panelSize = panelTransform.contentSize;
+                        
+                        const cameraNode = find('Canvas/Camera');
+                        if (cameraNode) {
+                            const camera = cameraNode.getComponent(Camera);
+                            if (camera) {
+                                const panelScreenPos = new Vec3();
+                                camera.worldToScreen(panelWorldPos, panelScreenPos);
+                                
+                                const panelScreenRect = {
+                                    x: panelScreenPos.x - panelSize.width / 2,
+                                    y: panelScreenPos.y - panelSize.height / 2,
+                                    width: panelSize.width,
+                                    height: panelSize.height
+                                };
+                                
+                                if (location.x >= panelScreenRect.x && 
+                                    location.x <= panelScreenRect.x + panelScreenRect.width &&
+                                    location.y >= panelScreenRect.y && 
+                                    location.y <= panelScreenRect.y + panelScreenRect.height) {
+                                    isInPanelArea = true;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 如果不在面板区域内，尝试建造
+                if (!isInPanelArea) {
+                    const worldPos = this.getWorldPositionFromScreen(new Vec3(location.x, location.y, 0));
+                    if (worldPos && this.onBuildCallback) {
+                        console.log('BuildingSelectionPanel.onCanvasTouchEnd: Calling onBuildCallback');
+                        this.onBuildCallback(this.selectedBuilding, worldPos);
+                        
+                        // 清除拖拽预览和状态
+                        this.clearDragPreview();
+                        this.selectedBuilding = null;
+                        this.isDragging = false;
+                        
+                        // 阻止事件传播
+                        event.propagationStopped = true;
+                        return;
+                    }
+                }
+            }
         }
     }
 
@@ -89,6 +175,7 @@ export class BuildingSelectionPanel extends Component {
      * 显示面板
      */
     show() {
+        console.log('BuildingSelectionPanel.show: Showing panel, buildingTypes count=', this.buildingTypes.length);
         this.node.active = true;
         // 动画显示
         this.node.setScale(0, 1, 1);
@@ -115,6 +202,8 @@ export class BuildingSelectionPanel extends Component {
      * 更新面板内容
      */
     updatePanel() {
+        console.log('BuildingSelectionPanel.updatePanel: Updating panel with', this.buildingTypes.length, 'buildings');
+        
         // 如果没有指定内容容器，尝试查找或创建
         if (!this.panelContent) {
             // 尝试查找Content子节点
@@ -136,7 +225,10 @@ export class BuildingSelectionPanel extends Component {
         this.buildingTypes.forEach((building, index) => {
             const item = this.createBuildingItem(building, index);
             this.panelContent.addChild(item);
+            console.log('BuildingSelectionPanel.updatePanel: Added item', building.name, 'to panel');
         });
+        
+        console.log('BuildingSelectionPanel.updatePanel: Panel updated, children count=', this.panelContent.children.length);
     }
 
     /**
@@ -194,23 +286,33 @@ export class BuildingSelectionPanel extends Component {
         costLabelComp.fontSize = 14;
         costLabelComp.color = Color.YELLOW;
 
+        // 确保节点可以接收触摸事件
+        // 在 Cocos Creator 中，节点需要有 UITransform 才能接收触摸事件
+        // 我们已经添加了 UITransform，所以应该可以工作
+        
         // 添加触摸事件
+        console.log('BuildingSelectionPanel.createBuildingItem: Creating item for', building.name);
         item.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+            console.log('BuildingSelectionPanel: TOUCH_START event received on', building.name);
             this.onBuildingItemTouchStart(building, event);
         }, this);
 
         item.on(Node.EventType.TOUCH_MOVE, (event: EventTouch) => {
+            console.log('BuildingSelectionPanel: TOUCH_MOVE event received on', building.name);
             this.onBuildingItemTouchMove(building, event);
         }, this);
 
         item.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
+            console.log('BuildingSelectionPanel: TOUCH_END event received on', building.name);
             this.onBuildingItemTouchEnd(building, event);
         }, this);
 
         item.on(Node.EventType.TOUCH_CANCEL, (event: EventTouch) => {
+            console.log('BuildingSelectionPanel: TOUCH_CANCEL event received on', building.name);
             this.onBuildingItemTouchCancel(building, event);
         }, this);
 
+        console.log('BuildingSelectionPanel.createBuildingItem: Item created, UITransform size=', transform.contentSize);
         return item;
     }
 
@@ -218,16 +320,21 @@ export class BuildingSelectionPanel extends Component {
      * 建筑物选项触摸开始
      */
     onBuildingItemTouchStart(building: BuildingType, event: EventTouch) {
+        console.log('BuildingSelectionPanel.onBuildingItemTouchStart: Building=', building.name);
+        
         // 检查金币是否足够
         if (this.gameManager && !this.gameManager.canAfford(building.cost)) {
+            console.log('BuildingSelectionPanel.onBuildingItemTouchStart: Not enough gold!');
             return;
         }
 
         this.selectedBuilding = building;
         this.isDragging = false;
+        this.touchEndHandled = false; // 重置标志
 
         // 创建拖拽预览（初始位置在触摸点）
         const location = event.getLocation();
+        console.log('BuildingSelectionPanel.onBuildingItemTouchStart: Location=', location);
         this.createDragPreview(building, new Vec3(location.x, location.y, 0));
 
         if (this.onBuildingSelectedCallback) {
@@ -257,6 +364,7 @@ export class BuildingSelectionPanel extends Component {
         // 如果移动距离超过10像素，认为是拖拽
         if (dragDistance > 10) {
             if (!this.isDragging) {
+                console.log('BuildingSelectionPanel.onBuildingItemTouchMove: Start dragging');
                 this.isDragging = true;
             }
             
@@ -272,62 +380,92 @@ export class BuildingSelectionPanel extends Component {
      * 建筑物选项触摸结束
      */
     onBuildingItemTouchEnd(building: BuildingType, event: EventTouch) {
+        console.log('BuildingSelectionPanel.onBuildingItemTouchEnd: Building=', building.name, 'selectedBuilding=', this.selectedBuilding?.name);
+        
         if (this.selectedBuilding !== building) {
+            console.log('BuildingSelectionPanel.onBuildingItemTouchEnd: Selected building mismatch');
             return;
         }
 
-        if (this.isDragging) {
-            // 检查是否点击在UI元素上（如面板、按钮等），如果是则不建造
-            const targetNode = event.target as Node;
-            let isUIElement = false;
-            
-            if (targetNode) {
-                const nodeName = targetNode.name.toLowerCase();
-                // 检查节点名称
-                if (nodeName.includes('button') || 
-                    nodeName.includes('panel') || 
-                    nodeName.includes('label') ||
-                    nodeName.includes('selection') ||
-                    nodeName.includes('buildingitem') ||
-                    nodeName.includes('buildingselection')) {
-                    isUIElement = true;
-                } else {
-                    // 检查父节点
-                    let parent = targetNode.parent;
-                    while (parent) {
-                        const parentName = parent.name.toLowerCase();
-                        if (parentName.includes('ui') || 
-                            parentName.includes('panel') ||
-                            parentName.includes('buildingselection')) {
-                            // 检查是否是Canvas的直接子节点（UI层）
-                            if (parent.name === 'Canvas') {
-                                // 检查是否是UI相关的子节点
-                                const uiChildren = ['UI', 'UIManager', 'HealthLabel', 'TimerLabel', 'BuildingSelectionPanel'];
-                                if (uiChildren.some(name => targetNode.name.includes(name) || 
-                                    targetNode.getPathInHierarchy().includes(name))) {
-                                    isUIElement = true;
-                                    break;
-                                }
-                            } else {
-                                // 如果父节点是UI相关，不建造
-                                isUIElement = true;
-                                break;
-                            }
+        // 检查是否发生了拖拽（移动距离超过5像素）
+        const location = event.getLocation();
+        const startLocation = event.getStartLocation();
+        const dragDistance = Math.sqrt(
+            Math.pow(location.x - startLocation.x, 2) + 
+            Math.pow(location.y - startLocation.y, 2)
+        );
+
+        // 如果没有发生拖拽，不处理
+        if (dragDistance <= 5) {
+            this.clearDragPreview();
+            this.selectedBuilding = null;
+            this.isDragging = false;
+            event.propagationStopped = true;
+            return;
+        }
+
+        // 检查触摸结束位置是否在建筑物选择面板区域内
+        // 使用更简单的方法：检查触摸位置是否在面板节点的屏幕坐标范围内
+        let isInPanelArea = false;
+        if (this.node && this.node.active) {
+            const panelTransform = this.node.getComponent(UITransform);
+            if (panelTransform) {
+                // 获取面板的世界坐标和尺寸
+                const panelWorldPos = this.node.worldPosition;
+                const panelSize = panelTransform.contentSize;
+                
+                // 将面板的世界坐标转换为屏幕坐标
+                const cameraNode = find('Canvas/Camera');
+                if (cameraNode) {
+                    const camera = cameraNode.getComponent(Camera);
+                    if (camera) {
+                        // 将面板的世界坐标转换为屏幕坐标
+                        const panelScreenPos = new Vec3();
+                        camera.worldToScreen(panelWorldPos, panelScreenPos);
+                        
+                        // 计算面板在屏幕上的边界
+                        const panelScreenRect = {
+                            x: panelScreenPos.x - panelSize.width / 2,
+                            y: panelScreenPos.y - panelSize.height / 2,
+                            width: panelSize.width,
+                            height: panelSize.height
+                        };
+                        
+                        // 检查触摸位置是否在面板的屏幕坐标范围内
+                        if (location.x >= panelScreenRect.x && 
+                            location.x <= panelScreenRect.x + panelScreenRect.width &&
+                            location.y >= panelScreenRect.y && 
+                            location.y <= panelScreenRect.y + panelScreenRect.height) {
+                            isInPanelArea = true;
                         }
-                        parent = parent.parent;
                     }
                 }
             }
+        }
 
-            if (!isUIElement) {
-                // 拖拽结束，尝试建造（不在UI元素上）
-                const location = event.getLocation();
-                const worldPos = this.getWorldPositionFromScreen(new Vec3(location.x, location.y, 0));
-                if (worldPos && this.onBuildCallback) {
-                    this.onBuildCallback(building, worldPos);
-                }
+        // 如果不在面板区域内，且有拖拽预览，则尝试建造
+        if (!isInPanelArea && this.dragPreview && this.selectedBuilding) {
+            // 拖拽结束，尝试建造（不在UI元素上）
+            const worldPos = this.getWorldPositionFromScreen(new Vec3(location.x, location.y, 0));
+            if (worldPos && this.onBuildCallback) {
+                // 标记触摸结束事件已处理（成功建造）
+                this.touchEndHandled = true;
+                this.onBuildCallback(building, worldPos);
+                // 成功建造后，清除状态
+                this.clearDragPreview();
+                this.selectedBuilding = null;
+                this.isDragging = false;
+                event.propagationStopped = true;
+                return;
             }
         }
+        
+        // 如果没有成功建造，清除状态
+        // 注意：如果触摸结束在BuildingItem上但没有成功建造，不设置touchEndHandled
+        // 这样onCanvasTouchEnd可以处理（如果事件传播到Canvas）
+        this.clearDragPreview();
+        this.selectedBuilding = null;
+        this.isDragging = false;
 
         // 清除拖拽预览和状态
         this.clearDragPreview();
@@ -342,6 +480,81 @@ export class BuildingSelectionPanel extends Component {
      * 建筑物选项触摸取消
      */
     onBuildingItemTouchCancel(building: BuildingType, event: EventTouch) {
+        console.log('BuildingSelectionPanel.onBuildingItemTouchCancel: Building=', building.name, 'selectedBuilding=', this.selectedBuilding?.name, 'isDragging=', this.isDragging);
+        
+        if (this.selectedBuilding !== building) {
+            this.clearDragPreview();
+            this.selectedBuilding = null;
+            this.isDragging = false;
+            event.propagationStopped = true;
+            return;
+        }
+
+        // 如果正在拖拽，尝试处理建造逻辑（和TOUCH_END相同的逻辑）
+        if (this.isDragging && this.selectedBuilding && this.dragPreview) {
+            // 检查是否发生了拖拽（移动距离超过5像素）
+            const location = event.getLocation();
+            const startLocation = event.getStartLocation();
+            const dragDistance = Math.sqrt(
+                Math.pow(location.x - startLocation.x, 2) + 
+                Math.pow(location.y - startLocation.y, 2)
+            );
+
+            // 如果拖拽距离超过5像素，检查是否可以建造
+            if (dragDistance > 5) {
+                // 检查触摸结束位置是否在建筑物选择面板区域内
+                let isInPanelArea = false;
+                if (this.node && this.node.active) {
+                    const panelTransform = this.node.getComponent(UITransform);
+                    if (panelTransform) {
+                        const panelWorldPos = this.node.worldPosition;
+                        const panelSize = panelTransform.contentSize;
+                        
+                        const cameraNode = find('Canvas/Camera');
+                        if (cameraNode) {
+                            const camera = cameraNode.getComponent(Camera);
+                            if (camera) {
+                                const panelScreenPos = new Vec3();
+                                camera.worldToScreen(panelWorldPos, panelScreenPos);
+                                
+                                const panelScreenRect = {
+                                    x: panelScreenPos.x - panelSize.width / 2,
+                                    y: panelScreenPos.y - panelSize.height / 2,
+                                    width: panelSize.width,
+                                    height: panelSize.height
+                                };
+                                
+                                if (location.x >= panelScreenRect.x && 
+                                    location.x <= panelScreenRect.x + panelScreenRect.width &&
+                                    location.y >= panelScreenRect.y && 
+                                    location.y <= panelScreenRect.y + panelScreenRect.height) {
+                                    isInPanelArea = true;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 如果不在面板区域内，尝试建造
+                if (!isInPanelArea) {
+                    const worldPos = this.getWorldPositionFromScreen(new Vec3(location.x, location.y, 0));
+                    if (worldPos && this.onBuildCallback) {
+                        console.log('BuildingSelectionPanel.onBuildingItemTouchCancel: Calling onBuildCallback');
+                        // 标记触摸结束事件已处理（成功建造）
+                        this.touchEndHandled = true;
+                        this.onBuildCallback(building, worldPos);
+                        // 成功建造后，清除状态
+                        this.clearDragPreview();
+                        this.selectedBuilding = null;
+                        this.isDragging = false;
+                        event.propagationStopped = true;
+                        return;
+                    }
+                }
+            }
+        }
+
+        // 如果没有成功建造，清除状态
         this.clearDragPreview();
         this.selectedBuilding = null;
         this.isDragging = false;
@@ -360,6 +573,27 @@ export class BuildingSelectionPanel extends Component {
 
         // 创建预览节点
         this.dragPreview = instantiate(building.prefab);
+        
+        // 只禁用功能性的组件（如WarAncientTree），保留视觉组件（如Sprite）
+        const disableFunctionalComponents = (node: Node) => {
+            // 禁用WarAncientTree组件（防止开始生产Tower）
+            const warAncientTree = node.getComponent('WarAncientTree');
+            if (warAncientTree) {
+                warAncientTree.enabled = false;
+            }
+            
+            // 禁用其他可能执行逻辑的组件
+            const tower = node.getComponent('Tower');
+            if (tower) {
+                tower.enabled = false;
+            }
+            
+            // 递归处理子节点
+            node.children.forEach(child => {
+                disableFunctionalComponents(child);
+            });
+        };
+        disableFunctionalComponents(this.dragPreview);
         
         // 设置父节点
         const canvas = find('Canvas');

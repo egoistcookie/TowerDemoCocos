@@ -173,6 +173,7 @@
     "maxTowerCount": 4,
     "productionInterval": 2,
     "spawnOffset": 100,
+    "moveAwayDistance": 50,
     "_id": ""
   },
   {

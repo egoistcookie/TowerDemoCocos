@@ -325,7 +325,7 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "088b03dd-21b0-4e0f-826c-1138cc2d8a7c@f9941",
+      "__uuid__": "75c2d5f6-0f0f-4035-8772-2c1f132e1585@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 0,
@@ -467,8 +467,8 @@
     "_prefab": null,
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": 4.468,
-      "y": 73.232,
+      "x": 0.112,
+      "y": 86.3,
       "z": 0
     },
     "_lrot": {
@@ -537,7 +537,7 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "b9d1bd23-7925-4a81-86e0-9598e052246d@f9941",
+      "__uuid__": "c6661bb1-773e-4bd4-8250-67afd17dab9f@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 0,
@@ -1941,6 +1941,8 @@
       "__uuid__": "be50baf7-2a47-44a1-85e1-8116927ef58e",
       "__expectedType__": "cc.Prefab"
     },
+    "warAncientTreeIcon": null,
+    "buildingSelectionPanel": null,
     "buildRange": 800,
     "minBuildDistance": 80,
     "targetCrystal": {

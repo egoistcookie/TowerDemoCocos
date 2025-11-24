@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Sprite, SpriteFrame, Color, Graphics, UITransform } from 'cc';
+import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Sprite, SpriteFrame, Color, Graphics, UITransform, Label, EventTouch } from 'cc';
 import { GameManager } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
@@ -75,6 +75,10 @@ export class WarAncientTree extends Component {
     private isProducing: boolean = false; // 是否正在生产
     private towerContainer: Node = null!; // Tower容器
 
+    // 选择面板相关
+    private selectionPanel: Node = null!; // 选择面板节点
+    private globalTouchHandler: ((event: EventTouch) => void) | null = null; // 全局触摸事件处理器
+
     start() {
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
@@ -104,6 +108,9 @@ export class WarAncientTree extends Component {
 
         // 创建生产进度条
         this.createProductionProgressBar();
+
+        // 添加点击事件监听
+        this.node.on(Node.EventType.TOUCH_END, this.onWarAncientTreeClick, this);
     }
 
     findGameManager() {
@@ -545,23 +552,18 @@ export class WarAncientTree extends Component {
         // 添加到生产的Tower列表
         this.producedTowers.push(tower);
 
-        // 计算Tower的目标位置（往前跑开一段距离）
+        // 计算Tower的目标位置（向左右两侧跑开）
         // 根据已生产的Tower数量，分散到不同位置
         const towerIndex = this.producedTowers.length - 1;
-        const angleOffset = (towerIndex % 2 === 0 ? 1 : -1) * 15; // 左右分散
-        const forwardDirection = new Vec3(0, 1, 0); // 前方方向（向上）
+        // 左右分散：偶数索引向右，奇数索引向左
+        const directionX = (towerIndex % 2 === 0 ? 1 : -1);
         
-        // 旋转方向向量
-        const radian = angleOffset * Math.PI / 180;
-        const cos = Math.cos(radian);
-        const sin = Math.sin(radian);
-        const rotatedX = forwardDirection.x * cos - forwardDirection.y * sin;
-        const rotatedY = forwardDirection.x * sin + forwardDirection.y * cos;
-        const direction = new Vec3(rotatedX, rotatedY, 0);
-        
-        // 计算目标位置（前方跑开）
-        const targetPos = new Vec3();
-        Vec3.scaleAndAdd(targetPos, spawnPos, direction, this.moveAwayDistance);
+        // 计算目标位置（只改变x坐标，y坐标不变）
+        const targetPos = new Vec3(
+            spawnPos.x + directionX * this.moveAwayDistance,
+            spawnPos.y, // y坐标保持不变
+            spawnPos.z
+        );
 
         // 让Tower移动到目标位置
         if (towerScript) {
@@ -604,33 +606,74 @@ export class WarAncientTree extends Component {
 
     findAvailableSpawnPosition(initialPos: Vec3): Vec3 {
         const checkRadius = 30; // Tower的碰撞半径
-        const offsetStep = 40; // 每次平移的距离
-        const maxAttempts = 5; // 最多尝试5次（左右各2次）
+        const offsetStep = 50; // 每次平移的距离（增大步长，确保不会重叠）
+        const maxAttempts = 20; // 最多尝试20次（左右各10次）
 
         // 检查初始位置是否可用
         if (!this.hasUnitAtPosition(initialPos, checkRadius)) {
+            console.log(`WarAncientTree.findAvailableSpawnPosition: Initial position is available at (${initialPos.x.toFixed(1)}, ${initialPos.y.toFixed(1)})`);
             return initialPos;
         }
 
-        // 尝试左右平移
+        console.log(`WarAncientTree.findAvailableSpawnPosition: Initial position (${initialPos.x.toFixed(1)}, ${initialPos.y.toFixed(1)}) is occupied, searching for available position...`);
+
+        // 尝试左右平移，交替检查左右两侧
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             // 先尝试右侧
             const rightPos = new Vec3(initialPos.x + offsetStep * attempt, initialPos.y, initialPos.z);
             if (!this.hasUnitAtPosition(rightPos, checkRadius)) {
-                console.log(`WarAncientTree: Found available position at right offset ${offsetStep * attempt}`);
+                console.log(`WarAncientTree.findAvailableSpawnPosition: Found available position at right offset ${offsetStep * attempt}, position: (${rightPos.x.toFixed(1)}, ${rightPos.y.toFixed(1)})`);
                 return rightPos;
             }
 
             // 再尝试左侧
             const leftPos = new Vec3(initialPos.x - offsetStep * attempt, initialPos.y, initialPos.z);
             if (!this.hasUnitAtPosition(leftPos, checkRadius)) {
-                console.log(`WarAncientTree: Found available position at left offset ${offsetStep * attempt}`);
+                console.log(`WarAncientTree.findAvailableSpawnPosition: Found available position at left offset ${offsetStep * attempt}, position: (${leftPos.x.toFixed(1)}, ${leftPos.y.toFixed(1)})`);
                 return leftPos;
             }
         }
 
+        // 如果左右平移都找不到，尝试上下方向
+        console.log(`WarAncientTree.findAvailableSpawnPosition: Horizontal search failed, trying vertical directions...`);
+        for (let attempt = 1; attempt <= maxAttempts / 2; attempt++) {
+            // 尝试上方
+            const upPos = new Vec3(initialPos.x, initialPos.y + offsetStep * attempt, initialPos.z);
+            if (!this.hasUnitAtPosition(upPos, checkRadius)) {
+                console.log(`WarAncientTree.findAvailableSpawnPosition: Found available position at up offset ${offsetStep * attempt}, position: (${upPos.x.toFixed(1)}, ${upPos.y.toFixed(1)})`);
+                return upPos;
+            }
+
+            // 尝试下方
+            const downPos = new Vec3(initialPos.x, initialPos.y - offsetStep * attempt, initialPos.z);
+            if (!this.hasUnitAtPosition(downPos, checkRadius)) {
+                console.log(`WarAncientTree.findAvailableSpawnPosition: Found available position at down offset ${offsetStep * attempt}, position: (${downPos.x.toFixed(1)}, ${downPos.y.toFixed(1)})`);
+                return downPos;
+            }
+        }
+
+        // 如果所有位置都被占用，尝试对角线方向
+        console.log(`WarAncientTree.findAvailableSpawnPosition: Vertical search failed, trying diagonal directions...`);
+        for (let attempt = 1; attempt <= maxAttempts / 2; attempt++) {
+            const diagonalOffset = offsetStep * attempt;
+            // 尝试四个对角线方向
+            const positions = [
+                new Vec3(initialPos.x + diagonalOffset, initialPos.y + diagonalOffset, initialPos.z), // 右上
+                new Vec3(initialPos.x - diagonalOffset, initialPos.y + diagonalOffset, initialPos.z), // 左上
+                new Vec3(initialPos.x + diagonalOffset, initialPos.y - diagonalOffset, initialPos.z), // 右下
+                new Vec3(initialPos.x - diagonalOffset, initialPos.y - diagonalOffset, initialPos.z), // 左下
+            ];
+
+            for (const pos of positions) {
+                if (!this.hasUnitAtPosition(pos, checkRadius)) {
+                    console.log(`WarAncientTree.findAvailableSpawnPosition: Found available position at diagonal offset, position: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})`);
+                    return pos;
+                }
+            }
+        }
+
         // 如果所有位置都被占用，返回初始位置（让Tower自己处理碰撞）
-        console.warn('WarAncientTree: Could not find available spawn position, using initial position');
+        console.warn(`WarAncientTree.findAvailableSpawnPosition: Could not find available spawn position after ${maxAttempts * 2} attempts, using initial position`);
         return initialPos;
     }
 
@@ -642,38 +685,68 @@ export class WarAncientTree extends Component {
         if (crystal && crystal.isValid && crystal.active) {
             const distance = Vec3.distance(position, crystal.worldPosition);
             const crystalRadius = 50;
-            if (distance < radius + crystalRadius) {
+            // 使用安全距离，确保不会重叠
+            const minDistance = (radius + crystalRadius) * 1.1;
+            if (distance < minDistance) {
                 return true;
             }
         }
 
         // 检查与其他Tower的碰撞
-        if (this.towerContainer) {
-            const towers = this.towerContainer.children || [];
+        // 每次都重新查找Towers节点，确保获取到所有Tower（包括手动建造的）
+        const findTowersNodeRecursive = (node: Node, name: string): Node | null => {
+            if (node.name === name) {
+                return node;
+            }
+            for (const child of node.children) {
+                const found = findTowersNodeRecursive(child, name);
+                if (found) return found;
+            }
+            return null;
+        };
+
+        let towersNode = find('Towers');
+        if (!towersNode && this.node.scene) {
+            towersNode = findTowersNodeRecursive(this.node.scene, 'Towers');
+        }
+        
+        if (towersNode) {
+            const towers = towersNode.children || [];
+            console.log(`WarAncientTree.hasUnitAtPosition: Checking ${towers.length} towers at position (${position.x.toFixed(1)}, ${position.y.toFixed(1)})`);
+            
             for (const tower of towers) {
                 if (tower && tower.isValid && tower.active) {
-                    // 排除自己生产的Tower（因为它们可能会移动）
-                    let isProducedTower = false;
-                    for (const producedTower of this.producedTowers) {
-                        if (producedTower === tower) {
-                            isProducedTower = true;
-                            break;
-                        }
-                    }
-                    if (isProducedTower) {
-                        continue;
-                    }
-                    
                     const towerScript = tower.getComponent('Tower') as any;
                     if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
-                        const distance = Vec3.distance(position, tower.worldPosition);
+                        // 获取Tower的实时位置（包括正在移动的Tower）
+                        const towerPos = tower.worldPosition;
+                        const distance = Vec3.distance(position, towerPos);
                         const otherRadius = towerScript.collisionRadius || radius;
-                        if (distance < radius + otherRadius) {
+                        // 使用1.2倍的安全距离，确保不会重叠（和Tower的checkCollisionAtPosition保持一致）
+                        const minDistance = (radius + otherRadius) * 1.2;
+                        
+                        if (distance < minDistance) {
+                            // 检查是否是自己生产的Tower
+                            let isProducedTower = false;
+                            for (const producedTower of this.producedTowers) {
+                                if (producedTower === tower) {
+                                    isProducedTower = true;
+                                    break;
+                                }
+                            }
+                            
+                            if (isProducedTower) {
+                                console.log(`WarAncientTree.hasUnitAtPosition: Collision detected with produced Tower at distance ${distance.toFixed(1)}, minDistance: ${minDistance.toFixed(1)}, towerPos: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)})`);
+                            } else {
+                                console.log(`WarAncientTree.hasUnitAtPosition: Collision detected with other Tower at distance ${distance.toFixed(1)}, minDistance: ${minDistance.toFixed(1)}, towerPos: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)})`);
+                            }
                             return true;
                         }
                     }
                 }
             }
+        } else {
+            console.warn('WarAncientTree.hasUnitAtPosition: Towers node not found!');
         }
 
         // 检查与战争古树的碰撞
@@ -701,7 +774,9 @@ export class WarAncientTree extends Component {
                     if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
                         const distance = Vec3.distance(position, tree.worldPosition);
                         const treeRadius = 50; // 战争古树的半径
-                        if (distance < radius + treeRadius) {
+                        // 使用安全距离，确保不会重叠
+                        const minDistance = (radius + treeRadius) * 1.1;
+                        if (distance < minDistance) {
                             return true;
                         }
                     }
@@ -719,7 +794,9 @@ export class WarAncientTree extends Component {
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const distance = Vec3.distance(position, enemy.worldPosition);
                         const enemyRadius = 30;
-                        if (distance < radius + enemyRadius) {
+                        // 使用安全距离，确保不会重叠
+                        const minDistance = (radius + enemyRadius) * 1.1;
+                        if (distance < minDistance) {
                             return true;
                         }
                     }
@@ -805,6 +882,203 @@ export class WarAncientTree extends Component {
 
     isAlive(): boolean {
         return !this.isDestroyed && this.currentHealth > 0;
+    }
+
+    /**
+     * 战争古树点击事件
+     */
+    onWarAncientTreeClick(event: EventTouch) {
+        // 阻止事件传播
+        event.propagationStopped = true;
+
+        // 如果已经显示选择面板，先隐藏
+        if (this.selectionPanel && this.selectionPanel.isValid) {
+            this.hideSelectionPanel();
+            return;
+        }
+
+        // 显示选择面板
+        this.showSelectionPanel();
+    }
+
+    /**
+     * 显示选择面板
+     */
+    showSelectionPanel() {
+        // 创建选择面板
+        const canvas = find('Canvas');
+        if (!canvas) return;
+
+        this.selectionPanel = new Node('WarAncientTreeSelectionPanel');
+        this.selectionPanel.setParent(canvas);
+
+        // 添加UITransform
+        const uiTransform = this.selectionPanel.addComponent(UITransform);
+        uiTransform.setContentSize(120, 40);
+
+        // 设置位置（在战争古树上方）
+        const worldPos = this.node.worldPosition.clone();
+        worldPos.y += 50;
+        this.selectionPanel.setWorldPosition(worldPos);
+
+        // 添加半透明背景
+        const graphics = this.selectionPanel.addComponent(Graphics);
+        graphics.fillColor = new Color(0, 0, 0, 180); // 半透明黑色
+        graphics.rect(-60, -20, 120, 40);
+        graphics.fill();
+
+        // 创建拆除按钮
+        const sellBtn = new Node('SellButton');
+        sellBtn.setParent(this.selectionPanel);
+        const sellBtnTransform = sellBtn.addComponent(UITransform);
+        sellBtnTransform.setContentSize(50, 30);
+        sellBtn.setPosition(-35, 0);
+
+        const sellLabel = sellBtn.addComponent(Label);
+        sellLabel.string = '拆除';
+        sellLabel.fontSize = 16;
+        sellLabel.color = Color.WHITE;
+
+        // 创建升级按钮
+        const upgradeBtn = new Node('UpgradeButton');
+        upgradeBtn.setParent(this.selectionPanel);
+        const upgradeBtnTransform = upgradeBtn.addComponent(UITransform);
+        upgradeBtnTransform.setContentSize(50, 30);
+        upgradeBtn.setPosition(35, 0);
+
+        const upgradeLabel = upgradeBtn.addComponent(Label);
+        upgradeLabel.string = '升级';
+        upgradeLabel.fontSize = 16;
+        upgradeLabel.color = Color.WHITE;
+
+        // 添加按钮点击事件
+        sellBtn.on(Node.EventType.TOUCH_END, this.onSellClick, this);
+        upgradeBtn.on(Node.EventType.TOUCH_END, this.onUpgradeClick, this);
+
+        // 点击其他地方关闭面板
+        this.scheduleOnce(() => {
+            if (canvas) {
+                // 创建全局触摸事件处理器
+                this.globalTouchHandler = (event: EventTouch) => {
+                    // 检查点击是否在选择面板或其子节点上
+                    if (this.selectionPanel && this.selectionPanel.isValid) {
+                        const targetNode = event.target as Node;
+                        if (targetNode) {
+                            // 检查目标节点是否是选择面板或其子节点
+                            let currentNode: Node | null = targetNode;
+                            while (currentNode) {
+                                if (currentNode === this.selectionPanel) {
+                                    // 点击在选择面板上，不关闭
+                                    return;
+                                }
+                                currentNode = currentNode.parent;
+                            }
+                        }
+                    }
+                    
+                    // 点击不在选择面板上，关闭面板
+                    this.hideSelectionPanel();
+                };
+                
+                canvas.on(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
+            }
+        }, 0.1);
+    }
+
+    /**
+     * 隐藏选择面板
+     */
+    hideSelectionPanel() {
+        // 移除全局触摸事件监听
+        if (this.globalTouchHandler) {
+            const canvas = find('Canvas');
+            if (canvas) {
+                canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
+            }
+            this.globalTouchHandler = null;
+        }
+        
+        if (this.selectionPanel && this.selectionPanel.isValid) {
+            this.selectionPanel.destroy();
+            this.selectionPanel = null!;
+        }
+    }
+
+    /**
+     * 拆除按钮点击事件
+     */
+    onSellClick(event: EventTouch) {
+        event.propagationStopped = true;
+        
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+
+        if (this.gameManager) {
+            // 回收80%金币
+            const refund = Math.floor(this.buildCost * 0.8);
+            this.gameManager.addGold(refund);
+            console.log(`WarAncientTree: Sold, refunded ${refund} gold`);
+        }
+
+        // 隐藏面板
+        this.hideSelectionPanel();
+        
+        // 销毁战争古树
+        this.destroyWarAncientTree();
+    }
+
+    /**
+     * 升级按钮点击事件
+     */
+    onUpgradeClick(event: EventTouch) {
+        event.propagationStopped = true;
+        
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+
+        if (!this.gameManager) {
+            return;
+        }
+
+        // 升级成本是建造成本的50%
+        const upgradeCost = Math.floor(this.buildCost * 0.5);
+        
+        if (!this.gameManager.canAfford(upgradeCost)) {
+            console.log(`WarAncientTree: Not enough gold for upgrade! Need ${upgradeCost}, have ${this.gameManager.getGold()}`);
+            return;
+        }
+
+        // 消耗金币
+        this.gameManager.spendGold(upgradeCost);
+
+        // 升级：生产Tower上限增加2个
+        this.maxTowerCount += 2;
+
+        console.log(`WarAncientTree: Upgraded, maxTowerCount increased to ${this.maxTowerCount}`);
+
+        // 隐藏面板
+        this.hideSelectionPanel();
+    }
+
+    /**
+     * 销毁战争古树（用于拆除）
+     */
+    destroyWarAncientTree() {
+        // 停止所有生产
+        this.isProducing = false;
+        this.productionTimer = 0;
+        this.productionProgress = 0;
+
+        // 隐藏面板
+        this.hideSelectionPanel();
+
+        // 移除点击事件监听
+        this.node.off(Node.EventType.TOUCH_END, this.onWarAncientTreeClick, this);
+
+        // 调用die方法进行销毁
+        this.die();
     }
 }
 
