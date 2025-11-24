@@ -1,11 +1,18 @@
-import { _decorator, Component, Node, Prefab, instantiate, Vec3, EventTouch, input, Input, Camera, find, view, UITransform } from 'cc';
+import { _decorator, Component, Node, Prefab, instantiate, Vec3, EventTouch, input, Input, Camera, find, view, UITransform, SpriteFrame, Graphics, Color } from 'cc';
 import { GameManager } from './GameManager';
+import { BuildingSelectionPanel, BuildingType } from './BuildingSelectionPanel';
 const { ccclass, property } = _decorator;
 
 @ccclass('TowerBuilder')
 export class TowerBuilder extends Component {
     @property(Prefab)
     warAncientTreePrefab: Prefab = null!; // 战争古树预制体
+
+    @property(SpriteFrame)
+    warAncientTreeIcon: SpriteFrame = null!; // 战争古树图标
+
+    @property(Node)
+    buildingSelectionPanel: Node = null!; // 建筑物选择面板节点
 
     @property
     buildRange: number = 800; // 建造范围（距离水晶），增大范围以便更容易建造
@@ -28,6 +35,8 @@ export class TowerBuilder extends Component {
     private isBuildingMode: boolean = false;
     private previewTower: Node = null!;
     private gameManager: GameManager = null!;
+    private buildingPanel: BuildingSelectionPanel = null!;
+    private currentSelectedBuilding: BuildingType | null = null;
 
     start() {
         // 查找游戏管理器
@@ -66,14 +75,19 @@ export class TowerBuilder extends Component {
             }
         }
 
+        // 初始化建筑物选择面板
+        this.initBuildingPanel();
+
         // 监听触摸事件 - 使用Canvas节点事件，不使用capture阶段，避免干扰SelectionManager
         const canvasNode = find('Canvas');
         if (canvasNode) {
             // 不使用capture阶段，让SelectionManager先处理，只在建造模式下才处理
             canvasNode.on(Node.EventType.TOUCH_END, this.onTouchEnd, this);
+            canvasNode.on(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
         } else {
             // 如果没有Canvas，使用全局输入事件作为后备
             input.on(Input.EventType.TOUCH_END, this.onTouchEnd, this);
+            input.on(Input.EventType.TOUCH_MOVE, this.onTouchMove, this);
         }
     }
 
@@ -82,9 +96,111 @@ export class TowerBuilder extends Component {
         const canvasNode = find('Canvas');
         if (canvasNode) {
             canvasNode.off(Node.EventType.TOUCH_END, this.onTouchEnd, this);
+            canvasNode.off(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
         }
         // 移除全局输入事件监听（如果使用了）
         input.off(Input.EventType.TOUCH_END, this.onTouchEnd, this);
+        input.off(Input.EventType.TOUCH_MOVE, this.onTouchMove, this);
+    }
+
+    /**
+     * 初始化建筑物选择面板
+     */
+    initBuildingPanel() {
+        // 如果没有指定面板节点，创建一个
+        if (!this.buildingSelectionPanel) {
+            this.buildingSelectionPanel = new Node('BuildingSelectionPanel');
+            const canvas = find('Canvas');
+            if (canvas) {
+                this.buildingSelectionPanel.setParent(canvas);
+            } else {
+                this.buildingSelectionPanel.setParent(this.node.scene);
+            }
+
+            // 设置面板位置（屏幕下方）
+            const uiTransform = this.buildingSelectionPanel.addComponent(UITransform);
+            const canvasTransform = canvas?.getComponent(UITransform);
+            const screenHeight = canvasTransform?.height || 1334;
+            uiTransform.setContentSize(750, screenHeight / 6); // 占屏幕1/6高度
+            this.buildingSelectionPanel.setPosition(0, -screenHeight / 2 + screenHeight / 12, 0);
+
+            // 添加背景
+            const bg = new Node('Background');
+            bg.setParent(this.buildingSelectionPanel);
+            bg.setPosition(0, 0, 0);
+            const bgTransform = bg.addComponent(UITransform);
+            bgTransform.setContentSize(750, screenHeight / 6);
+            const bgGraphics = bg.addComponent(Graphics);
+            bgGraphics.fillColor = new Color(0, 0, 0, 200);
+            bgGraphics.rect(-375, -screenHeight / 12, 750, screenHeight / 6);
+            bgGraphics.fill();
+
+            // 创建内容容器
+            const content = new Node('Content');
+            content.setParent(this.buildingSelectionPanel);
+            content.setPosition(0, 0, 0);
+            
+            // 获取或添加BuildingSelectionPanel组件
+            this.buildingPanel = this.buildingSelectionPanel.getComponent(BuildingSelectionPanel);
+            if (!this.buildingPanel) {
+                this.buildingPanel = this.buildingSelectionPanel.addComponent(BuildingSelectionPanel);
+            }
+            
+            // 设置panelContent引用
+            if (this.buildingPanel) {
+                this.buildingPanel.panelContent = content;
+            }
+        } else {
+            // 如果面板节点已存在，获取组件
+            this.buildingPanel = this.buildingSelectionPanel.getComponent(BuildingSelectionPanel);
+            if (!this.buildingPanel) {
+                this.buildingPanel = this.buildingSelectionPanel.addComponent(BuildingSelectionPanel);
+            }
+        }
+
+        // 设置建筑物类型
+        const buildingTypes: BuildingType[] = [];
+        if (this.warAncientTreePrefab) {
+            buildingTypes.push({
+                name: '战争古树',
+                prefab: this.warAncientTreePrefab,
+                cost: this.towerCost,
+                icon: this.warAncientTreeIcon || null!,
+                description: '可以生产Tower单位'
+            });
+        }
+        this.buildingPanel.setBuildingTypes(buildingTypes);
+
+        // 设置回调
+        this.buildingPanel.setOnBuildingSelected((building: BuildingType) => {
+            this.currentSelectedBuilding = building;
+        });
+
+        this.buildingPanel.setOnBuild((building: BuildingType, position: Vec3) => {
+            this.buildBuilding(building, position);
+        });
+    }
+
+    /**
+     * 触摸移动事件（用于拖拽预览）
+     */
+    onTouchMove(event: EventTouch) {
+        if (!this.isBuildingMode || !this.currentSelectedBuilding) {
+            return;
+        }
+
+        // 检查是否点击在UI元素上
+        const targetNode = event.target as Node;
+        if (targetNode) {
+            const nodeName = targetNode.name.toLowerCase();
+            if (nodeName.includes('button') || 
+                nodeName.includes('panel') || 
+                nodeName.includes('label') ||
+                nodeName.includes('selection') ||
+                nodeName.includes('buildingitem')) {
+                return;
+            }
+        }
     }
 
     findGameManager() {
@@ -115,10 +231,21 @@ export class TowerBuilder extends Component {
 
     enableBuildingMode() {
         this.isBuildingMode = true;
+        // 显示建筑物选择面板
+        if (this.buildingPanel) {
+            this.buildingPanel.show();
+        }
     }
 
     disableBuildingMode() {
         this.isBuildingMode = false;
+        this.currentSelectedBuilding = null;
+        
+        // 隐藏建筑物选择面板
+        if (this.buildingPanel) {
+            this.buildingPanel.hide();
+        }
+
         if (this.previewTower) {
             this.previewTower.destroy();
             this.previewTower = null!;
@@ -134,12 +261,12 @@ export class TowerBuilder extends Component {
 
     onTouchEnd(event: EventTouch) {
         // 只在建造模式下处理
-        if (!this.isBuildingMode) {
-            // 不在建造模式，不阻止事件传播，让SelectionManager处理
+        if (!this.isBuildingMode || !this.currentSelectedBuilding) {
+            // 不在建造模式或没有选中建筑物，不阻止事件传播
             return;
         }
         
-        // 检查是否点击在UI元素上（如按钮），如果是则不处理
+        // 检查是否点击在UI元素上（如按钮、面板），如果是则不处理
         const targetNode = event.target as Node;
         if (targetNode) {
             const nodeName = targetNode.name.toLowerCase();
@@ -147,7 +274,9 @@ export class TowerBuilder extends Component {
             if (nodeName.includes('button') || 
                 nodeName.includes('panel') || 
                 nodeName.includes('label') ||
-                nodeName.includes('selection')) {
+                nodeName.includes('selection') ||
+                nodeName.includes('buildingitem') ||
+                nodeName.includes('buildingselection')) {
                 return;
             }
             // 检查父节点
@@ -156,22 +285,26 @@ export class TowerBuilder extends Component {
                 const parentName = parent.name.toLowerCase();
                 if (parentName.includes('ui') || 
                     parentName.includes('panel') ||
+                    parentName.includes('buildingselection') ||
                     parentName === 'canvas') {
                     // 检查是否是Canvas的直接子节点（UI层）
                     if (parent.name === 'Canvas') {
                         // 检查是否是UI相关的子节点
-                        const uiChildren = ['UI', 'UIManager', 'HealthLabel', 'TimerLabel'];
+                        const uiChildren = ['UI', 'UIManager', 'HealthLabel', 'TimerLabel', 'BuildingSelectionPanel'];
                         if (uiChildren.some(name => targetNode.name.includes(name) || 
                             targetNode.getPathInHierarchy().includes(name))) {
                             return;
                         }
+                    } else {
+                        // 如果父节点是UI相关，不处理
+                        return;
                     }
                 }
                 parent = parent.parent;
             }
         }
         
-        if (!this.warAncientTreePrefab || !this.targetCrystal) {
+        if (!this.targetCrystal) {
             this.disableBuildingMode();
             return;
         }
@@ -200,15 +333,15 @@ export class TowerBuilder extends Component {
         worldPos.z = 0;
 
         // 检查是否可以建造
-        const canBuild = this.canBuildAt(worldPos);
+        const canBuild = this.canBuildAt(worldPos, this.currentSelectedBuilding);
         
         if (canBuild) {
-            this.buildTower(worldPos);
+            this.buildBuilding(this.currentSelectedBuilding, worldPos);
         }
     }
 
-    canBuildAt(position: Vec3): boolean {
-        if (!this.targetCrystal) {
+    canBuildAt(position: Vec3, building: BuildingType): boolean {
+        if (!this.targetCrystal || !building) {
             return false;
         }
 
@@ -245,132 +378,80 @@ export class TowerBuilder extends Component {
         return true;
     }
 
-    buildTower(worldPosition: Vec3) {
+    /**
+     * 建造建筑物（通用方法）
+     */
+    buildBuilding(building: BuildingType, worldPosition: Vec3) {
         // 检查金币是否足够
         if (!this.gameManager) {
             this.findGameManager();
         }
         
-        if (this.gameManager && !this.gameManager.canAfford(this.towerCost)) {
-            console.log('TowerBuilder.buildTower: Not enough gold! Need', this.towerCost, 'but have', this.gameManager.getGold());
+        if (this.gameManager && !this.gameManager.canAfford(building.cost)) {
+            console.log('TowerBuilder.buildBuilding: Not enough gold! Need', building.cost, 'but have', this.gameManager.getGold());
             this.disableBuildingMode();
             return;
         }
 
-        // 再次检查warAncientTreePrefab
+        // 检查是否可以在此位置建造
+        if (!this.canBuildAt(worldPosition, building)) {
+            console.log('TowerBuilder.buildBuilding: Cannot build at this position');
+            // 即使不能建造，也退出建造模式
+            this.disableBuildingMode();
+            return;
+        }
+
+        // 根据建筑物类型选择建造方法
+        if (building.name === '战争古树' || building.prefab === this.warAncientTreePrefab) {
+            this.buildWarAncientTree(worldPosition);
+        } else {
+            // 可以扩展其他建筑物类型
+            console.warn('TowerBuilder.buildBuilding: Unknown building type:', building.name);
+        }
+
+        // 退出建造模式
+        this.disableBuildingMode();
+    }
+
+    /**
+     * 建造战争古树
+     */
+    buildWarAncientTree(worldPosition: Vec3) {
         if (!this.warAncientTreePrefab) {
-            console.error('TowerBuilder.buildTower: warAncientTreePrefab is null! Cannot build.');
-            this.disableBuildingMode();
+            console.error('TowerBuilder.buildWarAncientTree: warAncientTreePrefab is null!');
             return;
-        }
-
-        // 检查warAncientTreeContainer
-        if (!this.warAncientTreeContainer) {
-            console.error('TowerBuilder.buildTower: warAncientTreeContainer is null! Creating new one.');
-            const existingTrees = find('WarAncientTrees');
-            if (existingTrees) {
-                this.warAncientTreeContainer = existingTrees;
-            } else {
-                this.warAncientTreeContainer = new Node('WarAncientTrees');
-                const canvas = find('Canvas');
-                if (canvas) {
-                    this.warAncientTreeContainer.setParent(canvas);
-                } else if (this.node.scene) {
-                    this.warAncientTreeContainer.setParent(this.node.scene);
-                }
-            }
-        }
-        
-        // 确保战争古树容器在Canvas下
-        const containerCanvasNode = find('Canvas');
-        if (containerCanvasNode && this.warAncientTreeContainer.parent !== containerCanvasNode) {
-            console.warn('TowerBuilder.buildTower: WarAncientTree container is not under Canvas, moving to Canvas');
-            const oldWorldPos = this.warAncientTreeContainer.worldPosition;
-            this.warAncientTreeContainer.setParent(containerCanvasNode);
-            this.warAncientTreeContainer.setWorldPosition(oldWorldPos);
-            console.log('TowerBuilder.buildTower: Moved container to Canvas');
         }
 
         // 消耗金币
-        if (!this.gameManager) {
-            this.findGameManager();
-        }
-        
         if (this.gameManager) {
-            const goldBefore = this.gameManager.getGold();
-            console.log('TowerBuilder.buildTower: Gold before spending:', goldBefore);
-            console.log('TowerBuilder.buildTower: WarAncientTree cost:', this.towerCost);
-            console.log('TowerBuilder.buildTower: Can afford:', this.gameManager.canAfford(this.towerCost));
-            
             this.gameManager.spendGold(this.towerCost);
-            const goldAfter = this.gameManager.getGold();
-            console.log('TowerBuilder.buildTower: Spent', this.towerCost, 'gold. Before:', goldBefore, 'After:', goldAfter);
-        } else {
-            console.error('TowerBuilder.buildTower: Cannot spend gold - gameManager is null!');
         }
 
-        
-        if (!this.warAncientTreePrefab) {
-            console.error('TowerBuilder.buildTower: warAncientTreePrefab is null! Cannot build war ancient tree.');
-            return;
-        }
-        
+        // 创建战争古树
         const tree = instantiate(this.warAncientTreePrefab);
         
         // 设置父节点
         const parent = this.warAncientTreeContainer || this.node;
-        
-        // 确保父节点是激活的
         if (parent && !parent.active) {
             parent.active = true;
         }
         
         tree.setParent(parent);
-        
-        // 立即激活战争古树节点
         tree.active = true;
-        
-        // 重置战争古树的本地位置和旋转
         tree.setPosition(0, 0, 0);
         tree.setRotationFromEuler(0, 0, 0);
         tree.setScale(1, 1, 1);
-        
-        // 直接使用世界坐标设置位置
         tree.setWorldPosition(worldPosition);
-        
-        // 确保战争古树脚本组件存在并设置建造成本
+
+        // 设置建造成本
         const treeScript = tree.getComponent('WarAncientTree') as any;
         if (treeScript) {
             treeScript.buildCost = this.towerCost;
-        } else {
-            console.error('TowerBuilder.buildTower: WarAncientTree script not found on prefab!');
         }
-        
-        // 确保所有组件和子节点都是激活的
-        const treeUITransform = tree.getComponent(UITransform);
-        const treeSprite = tree.getComponent('Sprite') as any;
-        
-        if (treeUITransform) {
-            treeUITransform.enabled = true;
-        }
-        if (treeSprite) {
-            treeSprite.enabled = true;
-        }
-        
-        const setNodeActive = (node: Node, active: boolean) => {
-            node.active = active;
-            for (const child of node.children) {
-                setNodeActive(child, active);
-            }
-        };
-        setNodeActive(tree, true);
-        
-        // 强制更新节点变换，确保立即渲染
-        tree.updateWorldTransform();
 
-        // 退出建造模式
-        this.disableBuildingMode();
+        console.log('TowerBuilder.buildWarAncientTree: Built at', worldPosition);
     }
+
 
     // 可以通过按钮调用
     onBuildButtonClick() {
