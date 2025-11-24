@@ -254,7 +254,7 @@ export class WarAncientTree extends Component {
 
         // 生产Tower逻辑
         const aliveTowerCount = this.producedTowers.length;
-        if (aliveTowerCount < this.maxTowerCount) {
+        if (aliveTowerCount < this.maxTowerCount && this.gameManager.canAddPopulation(1)) {
             if (!this.isProducing) {
                 // 开始生产
                 this.isProducing = true;
@@ -530,12 +530,30 @@ export class WarAncientTree extends Component {
             return;
         }
 
+        // 检查人口上限
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        
+        if (this.gameManager && !this.gameManager.canAddPopulation(1)) {
+            console.log('WarAncientTree: Cannot produce tower - population limit reached');
+            return;
+        }
+
         // 计算Tower出现位置（战争古树下方100像素）
         const treePos = this.node.worldPosition.clone();
         let spawnPos = new Vec3(treePos.x, treePos.y - this.spawnOffset, treePos.z);
 
         // 检查生成位置是否有单位，如果有则左右平移
         spawnPos = this.findAvailableSpawnPosition(spawnPos);
+
+        // 增加人口（在创建Tower之前）
+        if (this.gameManager) {
+            if (!this.gameManager.addPopulation(1)) {
+                console.warn('WarAncientTree: Failed to add population, cannot produce tower');
+                return;
+            }
+        }
 
         // 创建Tower
         const tower = instantiate(this.towerPrefab);
@@ -809,18 +827,35 @@ export class WarAncientTree extends Component {
 
     cleanupDeadTowers() {
         // 清理已死亡的Tower
+        const beforeCount = this.producedTowers.length;
         this.producedTowers = this.producedTowers.filter(tower => {
             if (!tower || !tower.isValid || !tower.active) {
+                // Tower已死亡，减少人口
+                if (this.gameManager) {
+                    this.gameManager.removePopulation(1);
+                }
                 return false;
             }
             
             const towerScript = tower.getComponent('Tower') as any;
             if (towerScript && towerScript.isAlive) {
-                return towerScript.isAlive();
+                const isAlive = towerScript.isAlive();
+                if (!isAlive) {
+                    // Tower已死亡，减少人口
+                    if (this.gameManager) {
+                        this.gameManager.removePopulation(1);
+                    }
+                }
+                return isAlive;
             }
             
             return true;
         });
+        
+        const afterCount = this.producedTowers.length;
+        if (beforeCount !== afterCount) {
+            console.log(`WarAncientTree.cleanupDeadTowers: Removed ${beforeCount - afterCount} dead towers, remaining: ${afterCount}`);
+        }
     }
 
     takeDamage(damage: number) {

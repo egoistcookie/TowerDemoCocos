@@ -23,7 +23,7 @@
     "_active": true,
     "_components": [],
     "_prefab": {
-      "__id__": 68
+      "__id__": 74
     },
     "_lpos": {
       "__type__": "cc.Vec3",
@@ -54,7 +54,7 @@
     },
     "autoReleaseAssets": false,
     "_globals": {
-      "__id__": 69
+      "__id__": 75
     },
     "_id": "02b78051-7506-4462-9a4c-56879a763433"
   },
@@ -80,19 +80,22 @@
         "__id__": 11
       },
       {
-        "__id__": 56
+        "__id__": 59
       },
       {
-        "__id__": 61
+        "__id__": 64
       },
       {
         "__id__": 46
       },
       {
-        "__id__": 63
+        "__id__": 66
       },
       {
-        "__id__": 59
+        "__id__": 69
+      },
+      {
+        "__id__": 62
       },
       {
         "__id__": 49
@@ -104,13 +107,13 @@
     "_active": true,
     "_components": [
       {
-        "__id__": 65
+        "__id__": 71
       },
       {
-        "__id__": 66
+        "__id__": 72
       },
       {
-        "__id__": 67
+        "__id__": 73
       }
     ],
     "_prefab": null,
@@ -441,6 +444,9 @@
     "goldLabel": {
       "__id__": 53
     },
+    "populationLabel": {
+      "__id__": 56
+    },
     "_id": "01lzigJtFLkJ3miATj+l9S"
   },
   {
@@ -643,7 +649,7 @@
     "_active": true,
     "_components": [
       {
-        "__id__": 55
+        "__id__": 58
       },
       {
         "__id__": 15
@@ -705,12 +711,15 @@
       },
       {
         "__id__": 51
+      },
+      {
+        "__id__": 54
       }
     ],
     "_active": true,
     "_components": [
       {
-        "__id__": 54
+        "__id__": 57
       }
     ],
     "_prefab": null,
@@ -1941,7 +1950,18 @@
       "__uuid__": "be50baf7-2a47-44a1-85e1-8116927ef58e",
       "__expectedType__": "cc.Prefab"
     },
-    "warAncientTreeIcon": null,
+    "warAncientTreeIcon": {
+      "__uuid__": "6b911866-269d-48fc-bd73-403e5e9de306@f9941",
+      "__expectedType__": "cc.SpriteFrame"
+    },
+    "moonWellPrefab": {
+      "__uuid__": "4e0a7549-50e8-4617-9b2c-012d49c17748",
+      "__expectedType__": "cc.Prefab"
+    },
+    "moonWellIcon": {
+      "__uuid__": "1c337c70-3b83-4f1b-b054-9422276a5511@f9941",
+      "__expectedType__": "cc.SpriteFrame"
+    },
     "buildingSelectionPanel": null,
     "buildRange": 800,
     "minBuildDistance": 80,
@@ -1952,7 +1972,9 @@
       "__id__": 49
     },
     "warAncientTreeContainer": null,
+    "moonWellContainer": null,
     "towerCost": 5,
+    "moonWellCost": 10,
     "_id": "60VeyjI+BOw7g1GwLzDe1+"
   },
   {
@@ -2155,6 +2177,138 @@
     "_id": "74D7voWcNFKabWSwJEtD0h"
   },
   {
+    "__type__": "cc.Node",
+    "_name": "PopulationLabel",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "_parent": {
+      "__id__": 17
+    },
+    "_children": [],
+    "_active": true,
+    "_components": [
+      {
+        "__id__": 55
+      },
+      {
+        "__id__": 56
+      }
+    ],
+    "_prefab": null,
+    "_lpos": {
+      "__type__": "cc.Vec3",
+      "x": -298.365,
+      "y": 701.709,
+      "z": 0
+    },
+    "_lrot": {
+      "__type__": "cc.Quat",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "w": 1
+    },
+    "_lscale": {
+      "__type__": "cc.Vec3",
+      "x": 1,
+      "y": 1,
+      "z": 1
+    },
+    "_mobility": 0,
+    "_layer": 33554432,
+    "_euler": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_id": "3eeYTGFlpPeJEbs97XUXqm"
+  },
+  {
+    "__type__": "cc.UITransform",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 54
+    },
+    "_enabled": true,
+    "__prefab": null,
+    "_contentSize": {
+      "__type__": "cc.Size",
+      "width": 108.046875,
+      "height": 50.4
+    },
+    "_anchorPoint": {
+      "__type__": "cc.Vec2",
+      "x": 0.5,
+      "y": 0.5
+    },
+    "_id": "4eXJrq7VtPaLL/JX5mfzkF"
+  },
+  {
+    "__type__": "cc.Label",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 54
+    },
+    "_enabled": true,
+    "__prefab": null,
+    "_customMaterial": null,
+    "_srcBlendFactor": 2,
+    "_dstBlendFactor": 4,
+    "_color": {
+      "__type__": "cc.Color",
+      "r": 168,
+      "g": 77,
+      "b": 77,
+      "a": 255
+    },
+    "_string": "人口: 0/10",
+    "_horizontalAlign": 1,
+    "_verticalAlign": 1,
+    "_actualFontSize": 24,
+    "_fontSize": 24,
+    "_fontFamily": "Arial",
+    "_lineHeight": 40,
+    "_overflow": 0,
+    "_enableWrapText": true,
+    "_font": null,
+    "_isSystemFontUsed": true,
+    "_spacingX": 0,
+    "_isItalic": false,
+    "_isBold": false,
+    "_isUnderline": false,
+    "_underlineHeight": 2,
+    "_cacheMode": 0,
+    "_enableOutline": false,
+    "_outlineColor": {
+      "__type__": "cc.Color",
+      "r": 0,
+      "g": 0,
+      "b": 0,
+      "a": 255
+    },
+    "_outlineWidth": 2,
+    "_enableShadow": false,
+    "_shadowColor": {
+      "__type__": "cc.Color",
+      "r": 0,
+      "g": 0,
+      "b": 0,
+      "a": 255
+    },
+    "_shadowOffset": {
+      "__type__": "cc.Vec2",
+      "x": 2,
+      "y": 2
+    },
+    "_shadowBlur": 2,
+    "_id": "90Rnt9uvNG/6nUiW3bqPab"
+  },
+  {
     "__type__": "cc.UITransform",
     "_name": "",
     "_objFlags": 0,
@@ -2210,10 +2364,10 @@
     "_active": true,
     "_components": [
       {
-        "__id__": 57
+        "__id__": 60
       },
       {
-        "__id__": 58
+        "__id__": 61
       }
     ],
     "_prefab": null,
@@ -2252,7 +2406,7 @@
     "_objFlags": 0,
     "__editorExtras__": {},
     "node": {
-      "__id__": 56
+      "__id__": 59
     },
     "_enabled": true,
     "__prefab": null,
@@ -2274,7 +2428,7 @@
     "_objFlags": 0,
     "__editorExtras__": {},
     "node": {
-      "__id__": 56
+      "__id__": 59
     },
     "_enabled": true,
     "__prefab": null,
@@ -2288,7 +2442,7 @@
       "__id__": 11
     },
     "enemyContainer": {
-      "__id__": 59
+      "__id__": 62
     },
     "_id": "886AuK8mdJm6mFbx/GUP0B"
   },
@@ -2304,7 +2458,7 @@
     "_active": true,
     "_components": [
       {
-        "__id__": 60
+        "__id__": 63
       }
     ],
     "_prefab": null,
@@ -2343,7 +2497,7 @@
     "_objFlags": 0,
     "__editorExtras__": {},
     "node": {
-      "__id__": 59
+      "__id__": 62
     },
     "_enabled": true,
     "__prefab": null,
@@ -2371,7 +2525,7 @@
     "_active": true,
     "_components": [
       {
-        "__id__": 62
+        "__id__": 65
       }
     ],
     "_prefab": null,
@@ -2410,7 +2564,7 @@
     "_objFlags": 0,
     "__editorExtras__": {},
     "node": {
-      "__id__": 61
+      "__id__": 64
     },
     "_enabled": true,
     "__prefab": null,
@@ -2424,6 +2578,99 @@
   },
   {
     "__type__": "cc.Node",
+    "_name": "MoonWell",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "_parent": {
+      "__id__": 2
+    },
+    "_children": [],
+    "_active": true,
+    "_components": [
+      {
+        "__id__": 67
+      },
+      {
+        "__id__": 68
+      }
+    ],
+    "_prefab": null,
+    "_lpos": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_lrot": {
+      "__type__": "cc.Quat",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "w": 1
+    },
+    "_lscale": {
+      "__type__": "cc.Vec3",
+      "x": 1,
+      "y": 1,
+      "z": 1
+    },
+    "_mobility": 0,
+    "_layer": 33554432,
+    "_euler": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_id": "f4v//M19xMdIx4WgK2BM7e"
+  },
+  {
+    "__type__": "cc.UITransform",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 66
+    },
+    "_enabled": true,
+    "__prefab": null,
+    "_contentSize": {
+      "__type__": "cc.Size",
+      "width": 100,
+      "height": 100
+    },
+    "_anchorPoint": {
+      "__type__": "cc.Vec2",
+      "x": 0.5,
+      "y": 0.5
+    },
+    "_id": "ebFX3CRatHgbXxMrioKOl/"
+  },
+  {
+    "__type__": "92dcap7L/ZO47Nu6gp7UY3p",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 66
+    },
+    "_enabled": true,
+    "__prefab": null,
+    "maxHealth": 80,
+    "explosionEffect": {
+      "__uuid__": "0bd1f0d3-935a-47a0-8974-bc03a8c54c7b",
+      "__expectedType__": "cc.Prefab"
+    },
+    "damageNumberPrefab": {
+      "__uuid__": "af17709f-82d8-43eb-bc51-d67f9a836193",
+      "__expectedType__": "cc.Prefab"
+    },
+    "buildCost": 10,
+    "populationIncrease": 10,
+    "_id": "8catRTPyhHD6E9PY2HdZW3"
+  },
+  {
+    "__type__": "cc.Node",
     "_name": "WarAncientTree",
     "_objFlags": 0,
     "__editorExtras__": {},
@@ -2434,7 +2681,7 @@
     "_active": true,
     "_components": [
       {
-        "__id__": 64
+        "__id__": 70
       }
     ],
     "_prefab": null,
@@ -2473,7 +2720,7 @@
     "_objFlags": 0,
     "__editorExtras__": {},
     "node": {
-      "__id__": 63
+      "__id__": 69
     },
     "_enabled": true,
     "__prefab": null,
@@ -2568,28 +2815,28 @@
   {
     "__type__": "cc.SceneGlobals",
     "ambient": {
-      "__id__": 70
-    },
-    "shadows": {
-      "__id__": 71
-    },
-    "_skybox": {
-      "__id__": 72
-    },
-    "fog": {
-      "__id__": 73
-    },
-    "octree": {
-      "__id__": 74
-    },
-    "skin": {
-      "__id__": 75
-    },
-    "lightProbeInfo": {
       "__id__": 76
     },
-    "postSettings": {
+    "shadows": {
       "__id__": 77
+    },
+    "_skybox": {
+      "__id__": 78
+    },
+    "fog": {
+      "__id__": 79
+    },
+    "octree": {
+      "__id__": 80
+    },
+    "skin": {
+      "__id__": 81
+    },
+    "lightProbeInfo": {
+      "__id__": 82
+    },
+    "postSettings": {
+      "__id__": 83
     },
     "bakedWithStationaryMainLight": false,
     "bakedWithHighpLightmap": false

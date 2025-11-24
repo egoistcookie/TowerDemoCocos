@@ -28,10 +28,15 @@ export class GameManager extends Component {
     @property(Label)
     goldLabel: Label = null!;
 
+    @property(Label)
+    populationLabel: Label = null!; // 人口标签
+
     private gameState: GameState = GameState.Playing;
     private gameTime: number = 180; // 3分钟 = 180秒
     private crystalScript: Crystal = null!;
     private gold: number = 10; // 初始金币
+    private population: number = 0; // 当前人口
+    private maxPopulation: number = 10; // 人口上限
 
     start() {
         if (this.crystal) {
@@ -86,6 +91,11 @@ export class GameManager extends Component {
         // 更新金币显示
         if (this.goldLabel) {
             this.goldLabel.string = `金币: ${this.gold}`;
+        }
+
+        // 更新人口显示
+        if (this.populationLabel) {
+            this.populationLabel.string = `人口: ${this.population}/${this.maxPopulation}`;
         }
     }
 
@@ -198,6 +208,38 @@ export class GameManager extends Component {
 
     canAfford(amount: number): boolean {
         return this.gold >= amount;
+    }
+
+    // 人口相关方法
+    getPopulation(): number {
+        return this.population;
+    }
+
+    getMaxPopulation(): number {
+        return this.maxPopulation;
+    }
+
+    addPopulation(amount: number = 1): boolean {
+        if (this.population + amount <= this.maxPopulation) {
+            this.population += amount;
+            this.updateUI();
+            return true;
+        }
+        return false;
+    }
+
+    removePopulation(amount: number = 1) {
+        this.population = Math.max(0, this.population - amount);
+        this.updateUI();
+    }
+
+    canAddPopulation(amount: number = 1): boolean {
+        return this.population + amount <= this.maxPopulation;
+    }
+
+    setMaxPopulation(max: number) {
+        this.maxPopulation = max;
+        this.updateUI();
     }
 
     restartGame() {

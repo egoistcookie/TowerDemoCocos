@@ -582,6 +582,12 @@ export class BuildingSelectionPanel extends Component {
                 warAncientTree.enabled = false;
             }
             
+            // 禁用MoonWell组件（防止触发人口上限增加）
+            const moonWell = node.getComponent('MoonWell');
+            if (moonWell) {
+                moonWell.enabled = false;
+            }
+            
             // 禁用其他可能执行逻辑的组件
             const tower = node.getComponent('Tower');
             if (tower) {

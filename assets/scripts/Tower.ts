@@ -1506,6 +1506,18 @@ export class Tower extends Component {
 
         this.isDestroyed = true;
 
+        // 减少人口
+        // 如果buildCost为0，说明是战争古树生产的，人口会在WarAncientTree.cleanupDeadTowers中处理
+        // 如果buildCost不为0，说明是手动建造的（如果有），需要在这里减少人口
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        if (this.gameManager && this.buildCost !== 0) {
+            // 这是手动建造的Tower（如果有），减少人口
+            this.gameManager.removePopulation(1);
+        }
+        // 如果buildCost为0，人口会在WarAncientTree.cleanupDeadTowers中处理，这里不需要处理
+
         // 移除点击事件监听
         this.node.off(Node.EventType.TOUCH_END, this.onTowerClick, this);
 

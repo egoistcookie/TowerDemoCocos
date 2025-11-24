@@ -197,6 +197,16 @@ export class Enemy extends Component {
         if (treesNode) {
             trees = treesNode.children;
         }
+
+        // 查找月亮井
+        let wells: Node[] = [];
+        let wellsNode = find('MoonWells');
+        if (!wellsNode && this.node.scene) {
+            wellsNode = findNodeRecursive(this.node.scene, 'MoonWells');
+        }
+        if (wellsNode) {
+            wells = wellsNode.children;
+        }
         
         let nearestTarget: Node = null!;
         let minDistance = Infinity;
@@ -233,7 +243,23 @@ export class Enemy extends Component {
             }
         }
 
-        // 如果找到防御塔或战争古树，优先攻击
+        // 查找攻击范围内的月亮井（如果防御塔和战争古树不在范围内，攻击月亮井）
+        for (const well of wells) {
+            if (well && well.active && well.isValid) {
+                const wellScript = well.getComponent('MoonWell') as any;
+                // 检查月亮井是否存活
+                if (wellScript && wellScript.isAlive && wellScript.isAlive()) {
+                    const distance = Vec3.distance(this.node.worldPosition, well.worldPosition);
+                    // 如果月亮井在攻击范围内，选择最近的
+                    if (distance <= this.attackRange && distance < minDistance) {
+                        minDistance = distance;
+                        nearestTarget = well;
+                    }
+                }
+            }
+        }
+
+        // 如果找到防御塔、战争古树或月亮井，优先攻击
         if (nearestTarget) {
             this.currentTarget = nearestTarget;
             return;
@@ -363,6 +389,29 @@ export class Enemy extends Component {
                 }
             }
         }
+
+        // 检查月亮井
+        let wellsNode = find('MoonWells');
+        if (!wellsNode && this.node.scene) {
+            wellsNode = findNodeRecursive(this.node.scene, 'MoonWells');
+        }
+        
+        if (wellsNode) {
+            const wells = wellsNode.children || [];
+            for (const well of wells) {
+                if (well && well.active && well.isValid) {
+                    const wellScript = well.getComponent('MoonWell') as any;
+                    if (wellScript && wellScript.isAlive && wellScript.isAlive()) {
+                        const distance = Vec3.distance(this.node.worldPosition, well.worldPosition);
+                        if (distance <= detectionRange) {
+                            // 找到路径上的月亮井，设置为目标
+                            this.currentTarget = well;
+                            return;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     stopMoving() {
@@ -382,8 +431,9 @@ export class Enemy extends Component {
 
         const towerScript = this.currentTarget.getComponent('Tower') as any;
         const treeScript = this.currentTarget.getComponent('WarAncientTree') as any;
+        const wellScript = this.currentTarget.getComponent('MoonWell') as any;
         const crystalScript = this.currentTarget.getComponent('Crystal') as any;
-        const targetScript = towerScript || treeScript || crystalScript;
+        const targetScript = towerScript || treeScript || wellScript || crystalScript;
         
         if (targetScript && targetScript.takeDamage) {
             targetScript.takeDamage(this.attackDamage);
@@ -392,6 +442,8 @@ export class Enemy extends Component {
                 console.debug(`Enemy: Attacked tower, dealt ${this.attackDamage} damage`);
             } else if (treeScript) {
                 console.debug(`Enemy: Attacked war ancient tree, dealt ${this.attackDamage} damage`);
+            } else if (wellScript) {
+                console.debug(`Enemy: Attacked moon well, dealt ${this.attackDamage} damage`);
             } else if (crystalScript) {
                 console.debug(`Enemy: Attacked crystal, dealt ${this.attackDamage} damage`);
             }

@@ -11,6 +11,12 @@ export class TowerBuilder extends Component {
     @property(SpriteFrame)
     warAncientTreeIcon: SpriteFrame = null!; // 战争古树图标
 
+    @property(Prefab)
+    moonWellPrefab: Prefab = null!; // 月亮井预制体
+
+    @property(SpriteFrame)
+    moonWellIcon: SpriteFrame = null!; // 月亮井图标
+
     @property(Node)
     buildingSelectionPanel: Node = null!; // 建筑物选择面板节点
 
@@ -29,8 +35,14 @@ export class TowerBuilder extends Component {
     @property(Node)
     warAncientTreeContainer: Node = null!; // 战争古树容器
 
+    @property(Node)
+    moonWellContainer: Node = null!; // 月亮井容器
+
     @property
     towerCost: number = 10; // 战争古树建造成本（10金币）
+
+    @property
+    moonWellCost: number = 10; // 月亮井建造成本（10金币）
 
     private isBuildingMode: boolean = false;
     private previewTower: Node = null!;
@@ -71,6 +83,22 @@ export class TowerBuilder extends Component {
                     this.warAncientTreeContainer.setParent(canvas);
                 } else if (this.node.scene) {
                     this.warAncientTreeContainer.setParent(this.node.scene);
+                }
+            }
+        }
+
+        // 创建月亮井容器
+        if (!this.moonWellContainer) {
+            const existingWells = find('MoonWells');
+            if (existingWells) {
+                this.moonWellContainer = existingWells;
+            } else {
+                this.moonWellContainer = new Node('MoonWells');
+                const canvas = find('Canvas');
+                if (canvas) {
+                    this.moonWellContainer.setParent(canvas);
+                } else if (this.node.scene) {
+                    this.moonWellContainer.setParent(this.node.scene);
                 }
             }
         }
@@ -167,6 +195,15 @@ export class TowerBuilder extends Component {
                 cost: this.towerCost,
                 icon: this.warAncientTreeIcon || null!,
                 description: '可以生产Tower单位'
+            });
+        }
+        if (this.moonWellPrefab) {
+            buildingTypes.push({
+                name: '月亮井',
+                prefab: this.moonWellPrefab,
+                cost: this.moonWellCost,
+                icon: this.moonWellIcon || null!,
+                description: '增加10个人口上限'
             });
         }
         this.buildingPanel.setBuildingTypes(buildingTypes);
@@ -375,6 +412,17 @@ export class TowerBuilder extends Component {
             }
         }
 
+        // 检查是否与现有月亮井重叠
+        const wells = this.moonWellContainer?.children || [];
+        for (const well of wells) {
+            if (well.active) {
+                const wellDistance = Vec3.distance(position, well.worldPosition);
+                if (wellDistance < 80) { // 月亮井之间的最小距离
+                    return false;
+                }
+            }
+        }
+
         return true;
     }
 
@@ -404,6 +452,8 @@ export class TowerBuilder extends Component {
         // 根据建筑物类型选择建造方法
         if (building.name === '战争古树' || building.prefab === this.warAncientTreePrefab) {
             this.buildWarAncientTree(worldPosition);
+        } else if (building.name === '月亮井' || building.prefab === this.moonWellPrefab) {
+            this.buildMoonWell(worldPosition);
         } else {
             // 可以扩展其他建筑物类型
             console.warn('TowerBuilder.buildBuilding: Unknown building type:', building.name);
@@ -452,6 +502,48 @@ export class TowerBuilder extends Component {
         console.log('TowerBuilder.buildWarAncientTree: Built at', worldPosition);
     }
 
+    /**
+     * 建造月亮井
+     */
+    buildMoonWell(worldPosition: Vec3) {
+        if (!this.moonWellPrefab) {
+            console.error('TowerBuilder.buildMoonWell: moonWellPrefab is null!');
+            return;
+        }
+
+        // 消耗金币
+        if (this.gameManager) {
+            this.gameManager.spendGold(this.moonWellCost);
+        }
+
+        // 创建月亮井
+        const well = instantiate(this.moonWellPrefab);
+        
+        // 设置父节点
+        const parent = this.moonWellContainer || this.node;
+        if (parent && !parent.active) {
+            parent.active = true;
+        }
+        
+        well.setParent(parent);
+        well.active = true;
+        well.setPosition(0, 0, 0);
+        well.setRotationFromEuler(0, 0, 0);
+        well.setScale(1, 1, 1);
+        well.setWorldPosition(worldPosition);
+
+        // 设置建造成本并增加人口上限
+        const wellScript = well.getComponent('MoonWell') as any;
+        if (wellScript) {
+            wellScript.buildCost = this.moonWellCost;
+            // 调用月亮井的方法来增加人口上限
+            if (wellScript.increasePopulationLimit) {
+                wellScript.increasePopulationLimit();
+            }
+        }
+
+        console.log('TowerBuilder.buildMoonWell: Built at', worldPosition);
+    }
 
     // 可以通过按钮调用
     onBuildButtonClick() {
