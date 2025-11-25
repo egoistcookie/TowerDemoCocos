@@ -7,8 +7,8 @@ import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
 const { ccclass, property } = _decorator;
 
-@ccclass('Tower')
-export class Tower extends Component {
+@ccclass('Arrower')
+export class Arrower extends Component {
     @property
     maxHealth: number = 50;
 
@@ -107,9 +107,9 @@ export class Tower extends Component {
             this.defaultSpriteFrame = this.sprite.spriteFrame;
             // 保存默认缩放
             this.defaultScale = this.node.scale.clone();
-            console.debug('Tower: Sprite component found, default spriteFrame and scale saved');
+            console.debug('Arrower: Sprite component found, default spriteFrame and scale saved');
         } else {
-            console.error('Tower: Sprite component not found! Attack animation will not work.');
+            console.error('Arrower: Sprite component not found! Attack animation will not work.');
         }
         
         // 初始化攻击动画帧
@@ -127,7 +127,7 @@ export class Tower extends Component {
         // 监听点击事件
         this.node.on(Node.EventType.TOUCH_END, this.onTowerClick, this);
         
-        console.debug('Tower: Started at position:', this.node.worldPosition);
+        console.debug('Arrower: Started at position:', this.node.worldPosition);
     }
 
     /**
@@ -163,19 +163,19 @@ export class Tower extends Component {
         // 如果已经在编辑器中设置了attackAnimationFrames，直接使用
         if (this.attackAnimationFrames && this.attackAnimationFrames.length > 0) {
             const validFrames = this.attackAnimationFrames.filter(frame => frame != null);
-            console.debug(`Tower: Using ${validFrames.length} valid frames from attackAnimationFrames array (total: ${this.attackAnimationFrames.length})`);
+            console.debug(`Arrower: Using ${validFrames.length} valid frames from attackAnimationFrames array (total: ${this.attackAnimationFrames.length})`);
             if (validFrames.length < this.attackAnimationFrames.length) {
-                console.warn(`Tower: Warning - ${this.attackAnimationFrames.length - validFrames.length} frames are null or invalid!`);
+                console.warn(`Arrower: Warning - ${this.attackAnimationFrames.length - validFrames.length} frames are null or invalid!`);
             }
             return;
         }
 
         // 如果没有设置帧数组，尝试从纹理中加载
         if (this.attackAnimationTexture) {
-            console.debug('Tower: Loading attack animation frames from texture...');
+            console.debug('Arrower: Loading attack animation frames from texture...');
             this.loadFramesFromTexture();
         } else {
-            console.warn('Tower: No attack animation frames or texture set. Attack animation will not play.');
+            console.warn('Arrower: No attack animation frames or texture set. Attack animation will not play.');
         }
     }
 
@@ -187,7 +187,7 @@ export class Tower extends Component {
         // 这里假设纹理是单行排列的12帧
         
         if (!this.sprite) {
-            console.error('Tower: Sprite component not found!');
+            console.error('Arrower: Sprite component not found!');
             return;
         }
 
@@ -195,7 +195,7 @@ export class Tower extends Component {
         // 推荐做法：在编辑器中手动设置attackAnimationFrames数组
         // 或者使用SpriteAtlas资源
         
-        console.warn('Tower: Auto-loading frames from texture is not fully supported. Please set attackAnimationFrames array in editor, or use SpriteAtlas.');
+        console.warn('Arrower: Auto-loading frames from texture is not fully supported. Please set attackAnimationFrames array in editor, or use SpriteAtlas.');
     }
 
     createHealthBar() {
@@ -272,7 +272,7 @@ export class Tower extends Component {
             
             if (distanceToManualTarget <= arrivalThreshold) {
                 // 到达手动移动目标，清除手动目标
-                console.debug(`Tower: Reached manual move target at (${this.manualMoveTarget.x.toFixed(1)}, ${this.manualMoveTarget.y.toFixed(1)})`);
+                console.debug(`Arrower: Reached manual move target at (${this.manualMoveTarget.x.toFixed(1)}, ${this.manualMoveTarget.y.toFixed(1)})`);
                 this.manualMoveTarget = null!;
                 this.isManuallyControlled = false;
                 this.stopMoving();
@@ -293,7 +293,7 @@ export class Tower extends Component {
         const hasCollisionNow = this.checkCollisionAtPosition(currentPos);
         if (hasCollisionNow) {
             // 即使不移动，如果有碰撞也要推开
-            console.debug(`Tower: Collision detected even when not moving! Position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)})`);
+            console.debug(`Arrower: Collision detected even when not moving! Position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)})`);
             const pushDirection = this.calculatePushAwayDirection(currentPos);
             if (pushDirection.length() > 0.1) {
                 const pushDistance = this.moveSpeed * deltaTime * 1.5;
@@ -301,7 +301,7 @@ export class Tower extends Component {
                 Vec3.scaleAndAdd(pushPos, currentPos, pushDirection, pushDistance);
                 const finalPushPos = this.checkCollisionAndAdjust(currentPos, pushPos);
                 this.node.setWorldPosition(finalPushPos);
-                console.debug(`Tower: Pushing away from collision (not moving) at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}) to (${finalPushPos.x.toFixed(1)}, ${finalPushPos.y.toFixed(1)})`);
+                console.debug(`Arrower: Pushing away from collision (not moving) at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}) to (${finalPushPos.x.toFixed(1)}, ${finalPushPos.y.toFixed(1)})`);
             }
         }
 
@@ -434,7 +434,7 @@ export class Tower extends Component {
         if (!enemiesNode) {
             // 调试：每60帧输出一次，避免刷屏
             if (Math.random() < 0.016) {
-                console.warn('Tower: Enemies container not found!');
+                console.warn('Arrower: Enemies container not found!');
             }
             this.currentTarget = null!;
             return;
@@ -463,9 +463,9 @@ export class Tower extends Component {
         // 如果找到目标，输出调试信息（每60帧一次）
         if (nearestEnemy && Math.random() < 0.016) {
             if (minDistance <= this.attackRange) {
-                console.debug(`Tower: Found target enemy at distance ${minDistance.toFixed(2)}, attacking!`);
+                console.debug(`Arrower: Found target enemy at distance ${minDistance.toFixed(2)}, attacking!`);
             } else {
-                console.debug(`Tower: Found target enemy at distance ${minDistance.toFixed(2)}, moving towards it!`);
+                console.debug(`Arrower: Found target enemy at distance ${minDistance.toFixed(2)}, moving towards it!`);
             }
         }
 
@@ -491,7 +491,7 @@ export class Tower extends Component {
         
         // 调试：每60帧输出一次位置信息
         if (Math.random() < 0.016) {
-            console.debug(`Tower: Moving towards target. Position: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}), Target: (${targetPos.x.toFixed(1)}, ${targetPos.y.toFixed(1)}), Distance: ${distance.toFixed(1)}`);
+            console.debug(`Arrower: Moving towards target. Position: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}), Target: (${targetPos.x.toFixed(1)}, ${targetPos.y.toFixed(1)}), Distance: ${distance.toFixed(1)}`);
         }
 
         // 如果已经在攻击范围内，停止移动
@@ -501,15 +501,15 @@ export class Tower extends Component {
         }
 
         // 首先检查当前位置是否有碰撞，如果有，先推开
-        console.debug(`Tower: Checking collision before moving at (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)})`);
+        console.debug(`Arrower: Checking collision before moving at (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)})`);
         const hasCollision = this.checkCollisionAtPosition(towerPos);
-        console.debug(`Tower: Collision check result: ${hasCollision}`);
+        console.debug(`Arrower: Collision check result: ${hasCollision}`);
         
         if (hasCollision) {
             // 当前位置有碰撞，先推开
-            console.debug(`Tower: Current position has collision! Position: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}), calculating push direction...`);
+            console.debug(`Arrower: Current position has collision! Position: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}), calculating push direction...`);
             const pushDirection = this.calculatePushAwayDirection(towerPos);
-            console.debug(`Tower: Push direction: (${pushDirection.x.toFixed(2)}, ${pushDirection.y.toFixed(2)}), length: ${pushDirection.length().toFixed(2)}`);
+            console.debug(`Arrower: Push direction: (${pushDirection.x.toFixed(2)}, ${pushDirection.y.toFixed(2)}), length: ${pushDirection.length().toFixed(2)}`);
             if (pushDirection.length() > 0.1) {
                 const pushDistance = this.moveSpeed * deltaTime * 1.5; // 推开速度更快
                 const pushPos = new Vec3();
@@ -519,15 +519,15 @@ export class Tower extends Component {
                 const finalPushPos = this.checkCollisionAndAdjust(towerPos, pushPos);
                 this.node.setWorldPosition(finalPushPos);
                 
-                console.debug(`Tower: Pushing away from collision at (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}) to (${finalPushPos.x.toFixed(1)}, ${finalPushPos.y.toFixed(1)})`);
+                console.debug(`Arrower: Pushing away from collision at (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}) to (${finalPushPos.x.toFixed(1)}, ${finalPushPos.y.toFixed(1)})`);
                 return; // 先推开，下一帧再移动
             } else {
-                console.warn(`Tower: Has collision but push direction is too weak! Position: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)})`);
+                console.warn(`Arrower: Has collision but push direction is too weak! Position: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)})`);
             }
         } else {
             // 调试：每60帧输出一次，确认碰撞检测在工作
             if (Math.random() < 0.016) {
-                console.debug(`Tower: No collision at position (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}), collisionRadius: ${this.collisionRadius}`);
+                console.debug(`Arrower: No collision at position (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}), collisionRadius: ${this.collisionRadius}`);
             }
         }
 
@@ -549,7 +549,7 @@ export class Tower extends Component {
         
         // 如果调整后的位置与原始位置不同，说明发生了避障
         if (Vec3.distance(adjustedPos, newPos) > 1.0) {
-            console.debug(`Tower: Adjusted position due to collision. Original: (${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)}), Adjusted: (${adjustedPos.x.toFixed(1)}, ${adjustedPos.y.toFixed(1)})`);
+            console.debug(`Arrower: Adjusted position due to collision. Original: (${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)}), Adjusted: (${adjustedPos.x.toFixed(1)}, ${adjustedPos.y.toFixed(1)})`);
         }
 
         // 更新位置
@@ -670,7 +670,7 @@ export class Tower extends Component {
         // 调试：总是输出，确认方法被调用（但限制频率避免刷屏）
         this.collisionCheckCount++;
         if (this.collisionCheckCount % 10 === 0) { // 每10次调用输出一次
-            console.debug(`Tower: checkCollisionAtPosition called #${this.collisionCheckCount} at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), collisionRadius: ${this.collisionRadius}`);
+            console.debug(`Arrower: checkCollisionAtPosition called #${this.collisionCheckCount} at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), collisionRadius: ${this.collisionRadius}`);
         }
         
         // 检查与水晶的碰撞
@@ -695,7 +695,7 @@ export class Tower extends Component {
                     const crystalRadius = 50;
                     const minDistance = this.collisionRadius + crystalRadius;
                     if (crystalDistance < minDistance) {
-                        console.debug(`Tower: Collision with crystal! Distance: ${crystalDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, Tower at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Crystal at (${foundCrystal.worldPosition.x.toFixed(1)}, ${foundCrystal.worldPosition.y.toFixed(1)})`);
+                        console.debug(`Arrower: Collision with crystal! Distance: ${crystalDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, Arrower at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Crystal at (${foundCrystal.worldPosition.x.toFixed(1)}, ${foundCrystal.worldPosition.y.toFixed(1)})`);
                         return true;
                     }
                 }
@@ -705,7 +705,7 @@ export class Tower extends Component {
             const crystalRadius = 50; // 增大水晶半径，确保不会太近
             const minDistance = this.collisionRadius + crystalRadius;
             if (crystalDistance < minDistance) {
-                console.debug(`Tower: Collision with crystal! Distance: ${crystalDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, Tower at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Crystal at (${crystal.worldPosition.x.toFixed(1)}, ${crystal.worldPosition.y.toFixed(1)})`);
+                console.debug(`Arrower: Collision with crystal! Distance: ${crystalDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, Arrower at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Crystal at (${crystal.worldPosition.x.toFixed(1)}, ${crystal.worldPosition.y.toFixed(1)})`);
                 return true;
             }
         }
@@ -738,17 +738,17 @@ export class Tower extends Component {
                     towerCount++;
                     const towerDistance = Vec3.distance(position, tower.worldPosition);
                     // 获取另一个防御塔的碰撞半径（如果有）
-                    const otherTowerScript = tower.getComponent('Tower') as any;
+                    const otherTowerScript = tower.getComponent('Arrower') as any;
                     const otherRadius = otherTowerScript && otherTowerScript.collisionRadius ? otherTowerScript.collisionRadius : this.collisionRadius;
                     const minDistance = (this.collisionRadius + otherRadius) * 1.2; // 增加20%的安全距离
                     
                     // 调试：当距离较近时总是输出日志（降低阈值，确保能检测到）
                     if (towerDistance < 200) { // 使用固定值200像素，确保能检测到
-                        // console.debug(`Tower: Checking distance to other tower #${towerCount}. Distance: ${towerDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, This: (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Other: (${tower.worldPosition.x.toFixed(1)}, ${tower.worldPosition.y.toFixed(1)}), This radius: ${this.collisionRadius}, Other radius: ${otherRadius}`);
+                        // console.debug(`Arrower: Checking distance to other tower #${towerCount}. Distance: ${towerDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, This: (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Other: (${tower.worldPosition.x.toFixed(1)}, ${tower.worldPosition.y.toFixed(1)}), This radius: ${this.collisionRadius}, Other radius: ${otherRadius}`);
                     }
                     
                     if (towerDistance < minDistance) {
-                        // console.debug(`Tower: *** COLLISION DETECTED with other tower! *** Distance: ${towerDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, This tower at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Other tower at (${tower.worldPosition.x.toFixed(1)}, ${tower.worldPosition.y.toFixed(1)}), This radius: ${this.collisionRadius}, Other radius: ${otherRadius}`);
+                        // console.debug(`Arrower: *** COLLISION DETECTED with other tower! *** Distance: ${towerDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, This tower at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Other tower at (${tower.worldPosition.x.toFixed(1)}, ${tower.worldPosition.y.toFixed(1)}), This radius: ${this.collisionRadius}, Other radius: ${otherRadius}`);
                         return true;
                     }
                 }
@@ -756,12 +756,12 @@ export class Tower extends Component {
             
             // 调试：如果没有找到其他防御塔
             if (towerCount === 0 && Math.random() < 0.016) {
-                // console.debug(`Tower: No other towers found in container (total: ${towers.length})`);
+                // console.debug(`Arrower: No other towers found in container (total: ${towers.length})`);
             }
         } else {
             // 调试：如果找不到Towers节点（降低警告频率，避免刷屏）
             if (this.collisionCheckCount % 100 === 0) {
-                // console.warn(`Tower: Towers node not found! Cannot check collision with other towers. (check #${this.collisionCheckCount})`);
+                // console.warn(`Arrower: Towers node not found! Cannot check collision with other towers. (check #${this.collisionCheckCount})`);
             }
         }
 
@@ -881,7 +881,7 @@ export class Tower extends Component {
                 Vec3.scaleAndAdd(pushForce, pushForce, pushDir, strength);
                 maxPushStrength = Math.max(maxPushStrength, strength);
                 obstacleCount++;
-                console.debug(`Tower: Pushing away from crystal, distance: ${distance.toFixed(1)}, strength: ${strength.toFixed(2)}`);
+                console.debug(`Arrower: Pushing away from crystal, distance: ${distance.toFixed(1)}, strength: ${strength.toFixed(2)}`);
             }
         }
 
@@ -894,7 +894,7 @@ export class Tower extends Component {
                     const towerPos = tower.worldPosition;
                     const distance = Vec3.distance(currentPos, towerPos);
                     // 获取另一个防御塔的碰撞半径
-                    const otherTowerScript = tower.getComponent('Tower') as any;
+                    const otherTowerScript = tower.getComponent('Arrower') as any;
                     const otherRadius = otherTowerScript && otherTowerScript.collisionRadius ? otherTowerScript.collisionRadius : this.collisionRadius;
                     const minDistance = (this.collisionRadius + otherRadius) * 1.2;
                     if (distance < minDistance && distance > 0.1) {
@@ -906,7 +906,7 @@ export class Tower extends Component {
                         Vec3.scaleAndAdd(pushForce, pushForce, pushDir, strength);
                         maxPushStrength = Math.max(maxPushStrength, strength);
                         obstacleCount++;
-                        console.debug(`Tower: Pushing away from other tower, distance: ${distance.toFixed(1)}, minDistance: ${minDistance.toFixed(1)}, strength: ${strength.toFixed(2)}`);
+                        console.debug(`Arrower: Pushing away from other tower, distance: ${distance.toFixed(1)}, minDistance: ${minDistance.toFixed(1)}, strength: ${strength.toFixed(2)}`);
                     }
                 }
             }
@@ -996,7 +996,7 @@ export class Tower extends Component {
                     const towerPos = tower.worldPosition;
                     const distance = Vec3.distance(currentPos, towerPos);
                     // 获取另一个防御塔的碰撞半径
-                    const otherTowerScript = tower.getComponent('Tower') as any;
+                    const otherTowerScript = tower.getComponent('Arrower') as any;
                     const otherRadius = otherTowerScript && otherTowerScript.collisionRadius ? otherTowerScript.collisionRadius : this.collisionRadius;
                     const minDistance = (this.collisionRadius + otherRadius) * 1.2;
                     if (distance < detectionRange && distance > 0.1) {
@@ -1056,7 +1056,7 @@ export class Tower extends Component {
             
             // 调试：如果避障权重很高，输出日志
             if (avoidanceWeight > 0.7) {
-                console.debug(`Tower: Strong avoidance! Weight: ${avoidanceWeight.toFixed(2)}, MaxStrength: ${maxStrength.toFixed(2)}, ObstacleCount: ${obstacleCount}`);
+                console.debug(`Arrower: Strong avoidance! Weight: ${avoidanceWeight.toFixed(2)}, MaxStrength: ${maxStrength.toFixed(2)}, ObstacleCount: ${obstacleCount}`);
             }
             
             return finalDir;
@@ -1083,7 +1083,7 @@ export class Tower extends Component {
         const enemyScript = this.currentTarget.getComponent('Enemy') as any;
         if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
             // 播放攻击动画，动画完成后才射出弓箭
-            console.debug('Tower: Attack triggered, playing attack animation...');
+            console.debug('Arrower: Attack triggered, playing attack animation...');
             this.playAttackAnimation(() => {
                 // 动画播放完成后的回调，在这里创建弓箭
                 this.executeAttack();
@@ -1116,7 +1116,7 @@ export class Tower extends Component {
             // 直接伤害（无特效）
             if (enemyScript.takeDamage) {
                 enemyScript.takeDamage(this.attackDamage);
-                console.debug(`Tower: Attacked enemy, dealt ${this.attackDamage} damage`);
+                console.debug(`Arrower: Attacked enemy, dealt ${this.attackDamage} damage`);
             }
         }
     }
@@ -1124,36 +1124,36 @@ export class Tower extends Component {
     playAttackAnimation(onComplete?: () => void) {
         // 如果正在播放动画，不重复播放
         if (this.isPlayingAttackAnimation) {
-            console.debug('Tower: Animation already playing, skipping...');
+            console.debug('Arrower: Animation already playing, skipping...');
             return;
         }
 
         // 如果没有Sprite组件或没有动画帧，直接返回
         if (!this.sprite) {
-            console.warn('Tower: Sprite component not found, cannot play attack animation');
+            console.warn('Arrower: Sprite component not found, cannot play attack animation');
             // 尝试重新获取Sprite组件
             this.sprite = this.node.getComponent(Sprite);
             if (!this.sprite) {
-                console.error('Tower: Failed to get Sprite component!');
+                console.error('Arrower: Failed to get Sprite component!');
                 return;
             }
         }
 
         // 如果没有设置动画帧，直接返回
         if (!this.attackAnimationFrames || this.attackAnimationFrames.length === 0) {
-            console.warn('Tower: Attack animation frames not set, skipping animation');
-            console.warn(`Tower: attackAnimationFrames is ${this.attackAnimationFrames ? 'defined but empty' : 'null/undefined'}`);
+            console.warn('Arrower: Attack animation frames not set, skipping animation');
+            console.warn(`Arrower: attackAnimationFrames is ${this.attackAnimationFrames ? 'defined but empty' : 'null/undefined'}`);
             return;
         }
 
         // 检查帧是否有效
         const validFrames = this.attackAnimationFrames.filter(frame => frame != null);
         if (validFrames.length === 0) {
-            console.error('Tower: All animation frames are null or invalid!');
+            console.error('Arrower: All animation frames are null or invalid!');
             return;
         }
 
-        console.debug(`Tower: Starting attack animation with ${validFrames.length} frames, duration: ${this.attackAnimationDuration}s`);
+        console.debug(`Arrower: Starting attack animation with ${validFrames.length} frames, duration: ${this.attackAnimationDuration}s`);
 
         // 根据敌人位置决定是否翻转
         let shouldFlip = false;
@@ -1171,7 +1171,7 @@ export class Tower extends Component {
                     const healthBarScale = this.healthBarNode.scale.clone();
                     this.healthBarNode.setScale(-Math.abs(healthBarScale.x), healthBarScale.y, healthBarScale.z);
                 }
-                console.debug('Tower: Enemy on left, flipping attack animation');
+                console.debug('Arrower: Enemy on left, flipping attack animation');
             } else {
                 // 保持原样：scale.x = 1
                 this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
@@ -1180,7 +1180,7 @@ export class Tower extends Component {
                     const healthBarScale = this.healthBarNode.scale.clone();
                     this.healthBarNode.setScale(Math.abs(healthBarScale.x), healthBarScale.y, healthBarScale.z);
                 }
-                console.debug('Tower: Enemy on right, keeping normal orientation');
+                console.debug('Arrower: Enemy on right, keeping normal orientation');
             }
         }
 
@@ -1192,7 +1192,7 @@ export class Tower extends Component {
         const frameDuration = this.attackAnimationDuration / frameCount; // 每帧的时长
         let currentFrameIndex = 0;
 
-        console.debug(`Tower: Frame duration: ${frameDuration.toFixed(3)}s per frame`);
+        console.debug(`Arrower: Frame duration: ${frameDuration.toFixed(3)}s per frame`);
 
         // 使用update方法播放动画（更可靠）
         let animationTimer = 0;
@@ -1207,7 +1207,7 @@ export class Tower extends Component {
         // 使用update方法逐帧播放
         const animationUpdate = (deltaTime: number) => {
             if (!this.sprite || !this.sprite.isValid || this.isDestroyed) {
-                console.warn('Tower: Animation stopped - sprite invalid or tower destroyed');
+                console.warn('Arrower: Animation stopped - sprite invalid or tower destroyed');
                 this.isPlayingAttackAnimation = false;
                 this.unschedule(animationUpdate);
                 return;
@@ -1225,7 +1225,7 @@ export class Tower extends Component {
                     this.sprite.spriteFrame = frames[frameCount - 1];
                 }
                 // 动画播放完成，恢复默认SpriteFrame
-                console.debug('Tower: Attack animation completed, restoring default sprite');
+                console.debug('Arrower: Attack animation completed, restoring default sprite');
                 this.restoreDefaultSprite();
                 this.unschedule(animationUpdate);
                 
@@ -1313,7 +1313,7 @@ export class Tower extends Component {
             graphics.stroke();
             
             // 每次攻击都输出日志，方便调试
-            console.debug(`Tower: Created laser effect from tower at (${this.node.worldPosition.x.toFixed(2)}, ${this.node.worldPosition.y.toFixed(2)}) to enemy at (${targetPos.x.toFixed(2)}, ${targetPos.y.toFixed(2)})`);
+            console.debug(`Arrower: Created laser effect from tower at (${this.node.worldPosition.x.toFixed(2)}, ${this.node.worldPosition.y.toFixed(2)}) to enemy at (${targetPos.x.toFixed(2)}, ${targetPos.y.toFixed(2)})`);
             
             // 添加渐隐效果
             const startAlpha = 255;
@@ -1352,28 +1352,28 @@ export class Tower extends Component {
                 }
             }, 0.3);
         } else {
-            console.error('Tower: Failed to add Graphics component to laser node!');
+            console.error('Arrower: Failed to add Graphics component to laser node!');
         }
     }
 
     createArrow() {
         if (!this.arrowPrefab) {
-            console.warn('Tower: arrowPrefab is not set!');
+            console.warn('Arrower: arrowPrefab is not set!');
             return;
         }
 
         if (!this.currentTarget) {
-            console.warn('Tower: currentTarget is null!');
+            console.warn('Arrower: currentTarget is null!');
             return;
         }
 
         // 检查目标是否有效
         if (!this.currentTarget.isValid || !this.currentTarget.active) {
-            console.warn('Tower: currentTarget is invalid or inactive!');
+            console.warn('Arrower: currentTarget is invalid or inactive!');
             return;
         }
 
-        console.debug(`Tower: Creating arrow, target: ${this.currentTarget.name}, position: ${this.currentTarget.worldPosition}`);
+        console.debug(`Arrower: Creating arrow, target: ${this.currentTarget.name}, position: ${this.currentTarget.worldPosition}`);
 
         // 创建弓箭节点
         const arrow = instantiate(this.arrowPrefab);
@@ -1384,16 +1384,16 @@ export class Tower extends Component {
         const parentNode = canvas || scene || this.node.parent;
         if (parentNode) {
             arrow.setParent(parentNode);
-            console.debug(`Tower: Arrow parent set to ${parentNode.name}`);
+            console.debug(`Arrower: Arrow parent set to ${parentNode.name}`);
         } else {
             arrow.setParent(this.node.parent);
-            console.debug(`Tower: Arrow parent set to tower parent`);
+            console.debug(`Arrower: Arrow parent set to tower parent`);
         }
 
         // 设置初始位置（防御塔位置）
         const startPos = this.node.worldPosition.clone();
         arrow.setWorldPosition(startPos);
-        console.debug(`Tower: Arrow initial position: (${startPos.x.toFixed(2)}, ${startPos.y.toFixed(2)})`);
+        console.debug(`Arrower: Arrow initial position: (${startPos.x.toFixed(2)}, ${startPos.y.toFixed(2)})`);
 
         // 确保节点激活
         arrow.active = true;
@@ -1401,26 +1401,26 @@ export class Tower extends Component {
         // 获取或添加Arrow组件
         let arrowScript = arrow.getComponent(Arrow);
         if (!arrowScript) {
-            console.debug('Tower: Arrow component not found, adding it...');
+            console.debug('Arrower: Arrow component not found, adding it...');
             arrowScript = arrow.addComponent(Arrow);
         } else {
-            console.debug('Tower: Arrow component found');
+            console.debug('Arrower: Arrow component found');
         }
 
         // 初始化弓箭，设置命中回调
-        console.debug(`Tower: Initializing arrow with damage: ${this.attackDamage}`);
+        console.debug(`Arrower: Initializing arrow with damage: ${this.attackDamage}`);
         arrowScript.init(
             startPos,
             this.currentTarget,
             this.attackDamage,
             (damage: number) => {
                 // 命中目标时造成伤害
-                console.debug(`Tower: Arrow hit callback called with damage: ${damage}`);
+                console.debug(`Arrower: Arrow hit callback called with damage: ${damage}`);
                 const enemyScript = this.currentTarget?.getComponent('Enemy') as any;
                 if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                     if (enemyScript.takeDamage) {
                         enemyScript.takeDamage(damage);
-                        console.debug(`Tower: Arrow hit enemy, dealt ${damage} damage`);
+                        console.debug(`Arrower: Arrow hit enemy, dealt ${damage} damage`);
                     }
                 }
             }
@@ -1669,11 +1669,11 @@ export class Tower extends Component {
         
         // 如果explosionEffect未设置，尝试从资源中加载
         if (!explosionPrefab) {
-            console.warn('Tower: explosionEffect prefab is not set, trying to load from resources...');
+            console.warn('Arrower: explosionEffect prefab is not set, trying to load from resources...');
             // 尝试从resources/prefabs加载Explosion预制体
             resources.load('prefabs/Explosion', Prefab, (err, prefab) => {
                 if (err) {
-                    console.error('Tower: Failed to load Explosion prefab from resources:', err);
+                    console.error('Arrower: Failed to load Explosion prefab from resources:', err);
                     return;
                 }
                 explosionPrefab = prefab;
@@ -1687,11 +1687,11 @@ export class Tower extends Component {
 
     private createExplosionEffect(explosionPrefab: Prefab) {
         if (!explosionPrefab) {
-            console.error('Tower: Cannot create explosion effect, prefab is null!');
+            console.error('Arrower: Cannot create explosion effect, prefab is null!');
             return;
         }
 
-        console.debug('Tower: Creating explosion effect at position:', this.node.worldPosition);
+        console.debug('Arrower: Creating explosion effect at position:', this.node.worldPosition);
         const explosion = instantiate(explosionPrefab);
         
         // 确保节点激活
@@ -1704,9 +1704,9 @@ export class Tower extends Component {
         if (parentNode) {
             explosion.setParent(parentNode);
             explosion.setWorldPosition(this.node.worldPosition);
-            console.debug('Tower: Explosion effect parent set, position:', explosion.worldPosition);
+            console.debug('Arrower: Explosion effect parent set, position:', explosion.worldPosition);
         } else {
-            console.error('Tower: Cannot find parent node for explosion effect!');
+            console.error('Arrower: Cannot find parent node for explosion effect!');
             explosion.destroy();
             return;
         }
@@ -1717,15 +1717,15 @@ export class Tower extends Component {
         // 检查ExplosionEffect组件是否存在
         const explosionScript = explosion.getComponent('ExplosionEffect');
         if (explosionScript) {
-            console.debug('Tower: ExplosionEffect component found, animation should start automatically');
+            console.debug('Arrower: ExplosionEffect component found, animation should start automatically');
         } else {
-            console.warn('Tower: ExplosionEffect component not found on explosion prefab!');
+            console.warn('Arrower: ExplosionEffect component not found on explosion prefab!');
         }
 
         // 延迟销毁爆炸效果节点（动画完成后，ExplosionEffect会自动销毁，这里作为备用）
         this.scheduleOnce(() => {
             if (explosion && explosion.isValid) {
-                console.debug('Tower: Cleaning up explosion effect');
+                console.debug('Arrower: Cleaning up explosion effect');
                 explosion.destroy();
             }
         }, 2.0); // 延长到2秒，确保动画完成
@@ -1882,7 +1882,7 @@ export class Tower extends Component {
         this.manualMoveTarget = adjustedPos.clone();
         this.isManuallyControlled = true;
         
-        console.debug(`Tower: Manual move target set to (${adjustedPos.x.toFixed(1)}, ${adjustedPos.y.toFixed(1)})`);
+        console.debug(`Arrower: Manual move target set to (${adjustedPos.x.toFixed(1)}, ${adjustedPos.y.toFixed(1)})`);
         
         // 清除当前自动寻敌目标，优先执行手动移动
         this.currentTarget = null!;
@@ -1902,13 +1902,13 @@ export class Tower extends Component {
         // 查找Camera节点
         const cameraNode = find('Canvas/Camera') || this.node.scene?.getChildByName('Camera');
         if (!cameraNode) {
-            console.error('Tower: Camera node not found!');
+            console.error('Arrower: Camera node not found!');
             return;
         }
         
         const camera = cameraNode.getComponent(Camera);
         if (!camera) {
-            console.error('Tower: Camera component not found!');
+            console.error('Arrower: Camera component not found!');
             return;
         }
         
@@ -1940,20 +1940,20 @@ export class Tower extends Component {
             // 先尝试右侧
             const rightPos = new Vec3(initialPos.x + offsetStep * attempt, initialPos.y, initialPos.z);
             if (!this.hasUnitAtMovePosition(rightPos, checkRadius)) {
-                console.debug(`Tower: Found available move position at right offset ${offsetStep * attempt}`);
+                console.debug(`Arrower: Found available move position at right offset ${offsetStep * attempt}`);
                 return rightPos;
             }
 
             // 再尝试左侧
             const leftPos = new Vec3(initialPos.x - offsetStep * attempt, initialPos.y, initialPos.z);
             if (!this.hasUnitAtMovePosition(leftPos, checkRadius)) {
-                console.debug(`Tower: Found available move position at left offset ${offsetStep * attempt}`);
+                console.debug(`Arrower: Found available move position at left offset ${offsetStep * attempt}`);
                 return leftPos;
             }
         }
 
         // 如果所有位置都被占用，返回初始位置（让Tower自己处理碰撞）
-        console.warn('Tower: Could not find available move position, using initial position');
+        console.warn('Arrower: Could not find available move position, using initial position');
         return initialPos;
     }
 
@@ -1999,7 +1999,7 @@ export class Tower extends Component {
             const towers = towersNode.children || [];
             for (const tower of towers) {
                 if (tower && tower.isValid && tower.active && tower !== this.node) {
-                    const towerScript = tower.getComponent('Tower') as any;
+                    const towerScript = tower.getComponent('Arrower') as any;
                     if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
                         const distance = Vec3.distance(position, tower.worldPosition);
                         const otherRadius = towerScript.collisionRadius || radius;
@@ -2096,7 +2096,7 @@ export class Tower extends Component {
             // 回收80%金币
             const refund = Math.floor(this.buildCost * 0.8);
             this.gameManager.addGold(refund);
-            console.debug(`Tower: Sold, refunded ${refund} gold`);
+            console.debug(`Arrower: Sold, refunded ${refund} gold`);
         }
 
         // 隐藏面板
@@ -2121,7 +2121,7 @@ export class Tower extends Component {
         const upgradeCost = this.buildCost * 2;
         
         if (!this.gameManager.canAfford(upgradeCost)) {
-            console.debug(`Tower: Not enough gold for upgrade! Need ${upgradeCost}, have ${this.gameManager.getGold()}`);
+            console.debug(`Arrower: Not enough gold for upgrade! Need ${upgradeCost}, have ${this.gameManager.getGold()}`);
             return;
         }
 
@@ -2133,7 +2133,7 @@ export class Tower extends Component {
         this.attackDamage = Math.floor(this.attackDamage * 1.5); // 攻击力增加50%
         this.attackInterval = this.attackInterval / 1.5; // 攻击速度增加50%（间隔减少）
 
-        console.debug(`Tower: Upgraded to level ${this.level}, damage: ${this.attackDamage}, interval: ${this.attackInterval.toFixed(2)}`);
+        console.debug(`Arrower: Upgraded to level ${this.level}, damage: ${this.attackDamage}, interval: ${this.attackInterval.toFixed(2)}`);
 
         // 更新单位信息面板
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {

@@ -214,7 +214,7 @@ export class Enemy extends Component {
         // 查找攻击范围内的防御塔（优先攻击防御塔）
         for (const tower of towers) {
             if (tower && tower.active && tower.isValid) {
-                const towerScript = tower.getComponent('Tower') as any;
+                const towerScript = tower.getComponent('Arrower') as any;
                 // 检查防御塔是否存活
                 if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
                     const distance = Vec3.distance(this.node.worldPosition, tower.worldPosition);
@@ -354,7 +354,7 @@ export class Enemy extends Component {
             const towers = towersNode.children || [];
             for (const tower of towers) {
                 if (tower && tower.active && tower.isValid) {
-                    const towerScript = tower.getComponent('Tower') as any;
+                    const towerScript = tower.getComponent('Arrower') as any;
                     if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
                         const distance = Vec3.distance(this.node.worldPosition, tower.worldPosition);
                         if (distance <= detectionRange) {
@@ -429,7 +429,7 @@ export class Enemy extends Component {
             return;
         }
 
-        const towerScript = this.currentTarget.getComponent('Tower') as any;
+        const towerScript = this.currentTarget.getComponent('Arrower') as any;
         const treeScript = this.currentTarget.getComponent('WarAncientTree') as any;
         const wellScript = this.currentTarget.getComponent('MoonWell') as any;
         const crystalScript = this.currentTarget.getComponent('Crystal') as any;
@@ -439,7 +439,7 @@ export class Enemy extends Component {
             targetScript.takeDamage(this.attackDamage);
             // 根据目标类型输出日志
             if (towerScript) {
-                console.debug(`Enemy: Attacked tower, dealt ${this.attackDamage} damage`);
+                console.debug(`Enemy: Attacked arrower, dealt ${this.attackDamage} damage`);
             } else if (treeScript) {
                 console.debug(`Enemy: Attacked war ancient tree, dealt ${this.attackDamage} damage`);
             } else if (wellScript) {

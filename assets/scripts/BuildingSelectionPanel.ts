@@ -576,7 +576,7 @@ export class BuildingSelectionPanel extends Component {
         
         // 只禁用功能性的组件（如WarAncientTree），保留视觉组件（如Sprite）
         const disableFunctionalComponents = (node: Node) => {
-            // 禁用WarAncientTree组件（防止开始生产Tower）
+            // 禁用WarAncientTree组件（防止开始生产Arrower）
             const warAncientTree = node.getComponent('WarAncientTree');
             if (warAncientTree) {
                 warAncientTree.enabled = false;
@@ -589,9 +589,9 @@ export class BuildingSelectionPanel extends Component {
             }
             
             // 禁用其他可能执行逻辑的组件
-            const tower = node.getComponent('Tower');
-            if (tower) {
-                tower.enabled = false;
+            const arrower = node.getComponent('Arrower');
+            if (arrower) {
+                arrower.enabled = false;
             }
             
             // 递归处理子节点

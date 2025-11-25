@@ -318,7 +318,7 @@ export class MoonWell extends Component {
             return null;
         };
 
-        // 查找所有Tower单位
+        // 查找所有Arrower单位
         let towersNode = find('Towers');
         
         // 如果直接查找失败，尝试递归查找
@@ -343,7 +343,7 @@ export class MoonWell extends Component {
                 continue;
             }
 
-            const towerScript = tower.getComponent('Tower') as any;
+            const towerScript = tower.getComponent('Arrower') as any;
             if (!towerScript || !towerScript.isAlive || !towerScript.isAlive()) {
                 continue;
             }
@@ -361,7 +361,7 @@ export class MoonWell extends Component {
 
         // 调试信息（降低频率）
         if (healedCount > 0 && Math.random() < 0.1) { // 约10%的概率输出
-            console.debug(`MoonWell: Healed ${healedCount} tower(s) within range ${this.healRange}`);
+            console.debug(`MoonWell: Healed ${healedCount} arrower(s) within range ${this.healRange}`);
         }
     }
 

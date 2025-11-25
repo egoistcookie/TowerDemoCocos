@@ -170,7 +170,7 @@ export class GameManager extends Component {
             const towers = towersNode.children; // 不需要复制数组，因为不销毁
             for (const tower of towers) {
                 if (tower && tower.isValid) {
-                    const towerScript = tower.getComponent('Tower') as any;
+                    const towerScript = tower.getComponent('Arrower') as any;
                     if (towerScript && towerScript.stopMoving) {
                         towerScript.stopMoving();
                         // 也要停止攻击动画和逻辑
@@ -315,7 +315,7 @@ export class GameManager extends Component {
             const towers = towersNode.children.slice(); // 复制数组
             for (const tower of towers) {
                 if (tower && tower.isValid) {
-                    const towerScript = tower.getComponent('Tower') as any;
+                    const towerScript = tower.getComponent('Arrower') as any;
                     if (towerScript) {
                         // 如果游戏结束，停止所有塔的移动
                         if (towerScript.stopMoving) {
@@ -326,8 +326,8 @@ export class GameManager extends Component {
                         // 我们需要区分是"游戏结束清理"还是"重启清理"
                         // 为了简单起见，这里保持原来的销毁逻辑用于重启
                         // 但我们需要一个新的方法来处理游戏结束时的状态冻结
-                        if (towerScript.destroyTower) {
-                            towerScript.destroyTower();
+                        if (towerScript.destroyArrower) {
+                            towerScript.destroyArrower();
                         } else {
                             tower.destroy();
                         }
@@ -336,7 +336,7 @@ export class GameManager extends Component {
             }
         }
 
-        console.log('GameManager: Cleaned up all enemies and towers');
+        console.log('GameManager: Cleaned up all enemies and arrowers');
     }
 }
 

@@ -59,7 +59,7 @@ export class TowerBuilder extends Component {
             this.targetCrystal = find('Crystal');
         }
 
-        // 创建防御塔容器
+        // 创建弓箭手容器
         if (!this.towerContainer) {
             // 先尝试查找现有的Towers节点
             const existingTowers = find('Towers');
@@ -390,12 +390,12 @@ export class TowerBuilder extends Component {
             return false;
         }
 
-        // 检查是否与现有防御塔重叠
+        // 检查是否与现有弓箭手重叠
         const towers = this.towerContainer?.children || [];
         for (const tower of towers) {
             if (tower.active) {
                 const towerDistance = Vec3.distance(position, tower.worldPosition);
-                if (towerDistance < 60) { // 防御塔之间的最小距离
+                if (towerDistance < 60) { // 弓箭手之间的最小距离
                     return false;
                 }
             }

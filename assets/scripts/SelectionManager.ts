@@ -1,5 +1,5 @@
 import { _decorator, Component, Node, Vec3, Graphics, UITransform, EventTouch, find, Camera, input, Input } from 'cc';
-import { Tower } from './Tower';
+import { Arrower } from './Arrower';
 const { ccclass, property } = _decorator;
 
 @ccclass('SelectionManager')
@@ -15,7 +15,7 @@ export class SelectionManager extends Component {
     private isSelecting: boolean = false; // 是否正在选择
     private startPos: Vec3 = new Vec3(); // 拖拽起始位置（世界坐标）
     private currentPos: Vec3 = new Vec3(); // 当前鼠标位置（世界坐标）
-    private selectedTowers: Tower[] = []; // 选中的防御单位数组
+    private selectedTowers: Arrower[] = []; // 选中的防御单位数组
     private camera: Camera = null!; // 相机引用
     private globalTouchHandler: ((event: EventTouch) => void) | null = null!; // 全局触摸事件处理器
 
@@ -402,7 +402,7 @@ export class SelectionManager extends Component {
         const towers = towersNode.children || [];
         console.log('SelectionManager.updateSelectedTowers: Found', towers.length, 'tower nodes');
 
-        const newSelectedTowers: Tower[] = [];
+        const newSelectedTowers: Arrower[] = [];
 
         for (const towerNode of towers) {
             if (!towerNode || !towerNode.isValid || !towerNode.active) {
@@ -410,14 +410,14 @@ export class SelectionManager extends Component {
                 continue;
             }
 
-            const towerScript = towerNode.getComponent(Tower) as Tower;
+            const towerScript = towerNode.getComponent(Arrower) as Arrower;
             if (!towerScript) {
-                console.log('SelectionManager.updateSelectedTowers: Tower script not found for:', towerNode.name);
+                console.log('SelectionManager.updateSelectedTowers: Arrower script not found for:', towerNode.name);
                 continue;
             }
             
             if (!towerScript.isAlive || !towerScript.isAlive()) {
-                console.log('SelectionManager.updateSelectedTowers: Tower is not alive:', towerNode.name);
+                console.log('SelectionManager.updateSelectedTowers: Arrower is not alive:', towerNode.name);
                 continue;
             }
 
@@ -427,7 +427,7 @@ export class SelectionManager extends Component {
             const inRangeY = towerPos.y >= minY && towerPos.y <= maxY;
             const inRange = inRangeX && inRangeY;
             
-            console.log('SelectionManager.updateSelectedTowers: Tower', towerNode.name, 'at', towerPos, 
+            console.log('SelectionManager.updateSelectedTowers: Arrower', towerNode.name, 'at', towerPos, 
                 'inRangeX:', inRangeX, 'inRangeY:', inRangeY, 'inRange:', inRange);
             
             if (inRange) {
@@ -445,7 +445,7 @@ export class SelectionManager extends Component {
     /**
      * 设置选中的防御单位
      */
-    setSelectedTowers(towers: Tower[]) {
+    setSelectedTowers(towers: Arrower[]) {
         console.log('SelectionManager.setSelectedTowers: Setting', towers.length, 'towers as selected');
         
         // 取消之前选中的高亮
@@ -498,7 +498,7 @@ export class SelectionManager extends Component {
      * @param towers 单位数组
      * @returns 每个单位的目标位置数组
      */
-    calculateFormationPositions(centerPos: Vec3, towers: Tower[]): Vec3[] {
+    calculateFormationPositions(centerPos: Vec3, towers: Arrower[]): Vec3[] {
         const positions: Vec3[] = [];
         
         if (towers.length === 0) {
@@ -716,7 +716,7 @@ export class SelectionManager extends Component {
         if (!node) return false;
 
         // 检查节点是否有Tower组件
-        const towerScript = node.getComponent(Tower);
+        const towerScript = node.getComponent(Arrower);
         if (towerScript) {
             return true;
         }
@@ -724,7 +724,7 @@ export class SelectionManager extends Component {
         // 检查父节点（防御单位可能是子节点）
         let parent = node.parent;
         while (parent) {
-            const towerScript = parent.getComponent(Tower);
+            const towerScript = parent.getComponent(Arrower);
             if (towerScript) {
                 return true;
             }

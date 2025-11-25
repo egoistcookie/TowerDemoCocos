@@ -25,7 +25,7 @@ export class WarAncientTree extends Component {
     arrowPrefab: Prefab = null!;
 
     @property(Prefab)
-    towerPrefab: Prefab = null!; // 生产的Tower预制体
+    towerPrefab: Prefab = null!; // 生产的Arrower预制体
 
     @property(Prefab)
     explosionEffect: Prefab = null!;
@@ -51,16 +51,16 @@ export class WarAncientTree extends Component {
 
     // 生产相关属性
     @property
-    maxTowerCount: number = 4; // 最多生产4个Tower
+    maxTowerCount: number = 4; // 最多生产4个Arrower
 
     @property
     productionInterval: number = 2.0; // 每2秒生产一个
 
     @property
-    spawnOffset: number = 100; // Tower出现在下方100像素
+    spawnOffset: number = 100; // Arrower出现在下方100像素
 
     @property
-    moveAwayDistance: number = 80; // Tower生成后往前跑开的距离
+    moveAwayDistance: number = 80; // Arrower生成后往前跑开的距离
 
     private currentHealth: number = 100;
     private healthBar: HealthBar = null!;
@@ -77,11 +77,11 @@ export class WarAncientTree extends Component {
     private isPlayingAttackAnimation: boolean = false;
 
     // 生产相关
-    private producedTowers: Node[] = []; // 已生产的Tower列表
+    private producedTowers: Node[] = []; // 已生产的Arrower列表
     private productionTimer: number = 0; // 生产计时器
     private productionProgress: number = 0; // 生产进度（0-1）
     private isProducing: boolean = false; // 是否正在生产
-    private towerContainer: Node = null!; // Tower容器
+    private towerContainer: Node = null!; // Arrower容器
 
     // 选择面板相关
     private selectionPanel: Node = null!; // 选择面板节点
@@ -563,7 +563,7 @@ export class WarAncientTree extends Component {
 
     produceTower() {
         if (!this.towerPrefab || !this.towerContainer) {
-            console.warn('WarAncientTree: Cannot produce tower - prefab or container missing');
+            console.warn('WarAncientTree: Cannot produce arrower - prefab or container missing');
             return;
         }
 
@@ -577,7 +577,7 @@ export class WarAncientTree extends Component {
         }
         
         if (this.gameManager && !this.gameManager.canAddPopulation(1)) {
-            console.log('WarAncientTree: Cannot produce tower - population limit reached');
+            console.log('WarAncientTree: Cannot produce arrower - population limit reached');
             return;
         }
 
@@ -603,9 +603,9 @@ export class WarAncientTree extends Component {
         tower.active = true;
 
         // 设置Tower的建造成本（如果需要）
-        const towerScript = tower.getComponent('Tower') as any;
+        const towerScript = tower.getComponent('Arrower') as any;
         if (towerScript) {
-            towerScript.buildCost = 0; // 由战争古树生产的Tower建造成本为0
+            towerScript.buildCost = 0; // 由战争古树生产的Arrower建造成本为0
         }
 
         // 添加到生产的Tower列表
@@ -660,7 +660,7 @@ export class WarAncientTree extends Component {
             }, 0.1);
         }
 
-        console.log(`WarAncientTree: Produced tower ${this.producedTowers.length}/${this.maxTowerCount} at position (${spawnPos.x.toFixed(2)}, ${spawnPos.y.toFixed(2)})`);
+        console.log(`WarAncientTree: Produced arrower ${this.producedTowers.length}/${this.maxTowerCount} at position (${spawnPos.x.toFixed(2)}, ${spawnPos.y.toFixed(2)})`);
     }
 
     findAvailableSpawnPosition(initialPos: Vec3): Vec3 {
@@ -752,7 +752,7 @@ export class WarAncientTree extends Component {
         }
 
         // 检查与其他Tower的碰撞
-        // 每次都重新查找Towers节点，确保获取到所有Tower（包括手动建造的）
+        // 每次都重新查找Towers节点，确保获取到所有Arrower（包括手动建造的）
         const findTowersNodeRecursive = (node: Node, name: string): Node | null => {
             if (node.name === name) {
                 return node;
@@ -775,7 +775,7 @@ export class WarAncientTree extends Component {
             
             for (const tower of towers) {
                 if (tower && tower.isValid && tower.active) {
-                    const towerScript = tower.getComponent('Tower') as any;
+                    const towerScript = tower.getComponent('Arrower') as any;
                     if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
                         // 获取Tower的实时位置（包括正在移动的Tower）
                         const towerPos = tower.worldPosition;
@@ -795,9 +795,9 @@ export class WarAncientTree extends Component {
                             }
                             
                             if (isProducedTower) {
-                                console.log(`WarAncientTree.hasUnitAtPosition: Collision detected with produced Tower at distance ${distance.toFixed(1)}, minDistance: ${minDistance.toFixed(1)}, towerPos: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)})`);
+                                console.log(`WarAncientTree.hasUnitAtPosition: Collision detected with produced Arrower at distance ${distance.toFixed(1)}, minDistance: ${minDistance.toFixed(1)}, towerPos: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)})`);
                             } else {
-                                console.log(`WarAncientTree.hasUnitAtPosition: Collision detected with other Tower at distance ${distance.toFixed(1)}, minDistance: ${minDistance.toFixed(1)}, towerPos: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)})`);
+                                console.log(`WarAncientTree.hasUnitAtPosition: Collision detected with other Arrower at distance ${distance.toFixed(1)}, minDistance: ${minDistance.toFixed(1)}, towerPos: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)})`);
                             }
                             return true;
                         }
@@ -878,7 +878,7 @@ export class WarAncientTree extends Component {
                 return false;
             }
             
-            const towerScript = tower.getComponent('Tower') as any;
+            const towerScript = tower.getComponent('Arrower') as any;
             if (towerScript && towerScript.isAlive) {
                 const isAlive = towerScript.isAlive();
                 if (!isAlive) {
@@ -895,7 +895,7 @@ export class WarAncientTree extends Component {
         
         const afterCount = this.producedTowers.length;
         if (beforeCount !== afterCount) {
-            console.log(`WarAncientTree.cleanupDeadTowers: Removed ${beforeCount - afterCount} dead towers, remaining: ${afterCount}`);
+            console.log(`WarAncientTree.cleanupDeadTowers: Removed ${beforeCount - afterCount} dead arrowers, remaining: ${afterCount}`);
         }
     }
 

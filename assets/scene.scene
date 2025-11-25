@@ -23,7 +23,7 @@
     "_active": true,
     "_components": [],
     "_prefab": {
-      "__id__": 77
+      "__id__": 74
     },
     "_lpos": {
       "__type__": "cc.Vec3",
@@ -54,7 +54,7 @@
     },
     "autoReleaseAssets": false,
     "_globals": {
-      "__id__": 78
+      "__id__": 75
     },
     "_id": "02b78051-7506-4462-9a4c-56879a763433"
   },
@@ -92,9 +92,6 @@
         "__id__": 66
       },
       {
-        "__id__": 69
-      },
-      {
         "__id__": 62
       },
       {
@@ -104,19 +101,19 @@
         "__id__": 17
       },
       {
-        "__id__": 71
+        "__id__": 68
       }
     ],
     "_active": true,
     "_components": [
       {
-        "__id__": 74
+        "__id__": 71
       },
       {
-        "__id__": 75
+        "__id__": 72
       },
       {
-        "__id__": 76
+        "__id__": 73
       }
     ],
     "_prefab": null,
@@ -2039,8 +2036,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 100,
-      "height": 100
+      "width": 25,
+      "height": 50
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -2202,8 +2199,8 @@
     "_prefab": null,
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": -298.365,
-      "y": 701.709,
+      "x": -295.365,
+      "y": 699.709,
       "z": 0
     },
     "_lrot": {
@@ -2272,8 +2269,8 @@
       "a": 255
     },
     "_string": "人口: 0/10",
-    "_horizontalAlign": 1,
-    "_verticalAlign": 1,
+    "_horizontalAlign": 0,
+    "_verticalAlign": 0,
     "_actualFontSize": 24,
     "_fontSize": 24,
     "_fontFamily": "Arial",
@@ -2583,104 +2580,6 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "MoonWell",
-    "_objFlags": 0,
-    "__editorExtras__": {},
-    "_parent": {
-      "__id__": 2
-    },
-    "_children": [],
-    "_active": true,
-    "_components": [
-      {
-        "__id__": 67
-      },
-      {
-        "__id__": 68
-      }
-    ],
-    "_prefab": null,
-    "_lpos": {
-      "__type__": "cc.Vec3",
-      "x": 0,
-      "y": 0,
-      "z": 0
-    },
-    "_lrot": {
-      "__type__": "cc.Quat",
-      "x": 0,
-      "y": 0,
-      "z": 0,
-      "w": 1
-    },
-    "_lscale": {
-      "__type__": "cc.Vec3",
-      "x": 1,
-      "y": 1,
-      "z": 1
-    },
-    "_mobility": 0,
-    "_layer": 33554432,
-    "_euler": {
-      "__type__": "cc.Vec3",
-      "x": 0,
-      "y": 0,
-      "z": 0
-    },
-    "_id": "f4v//M19xMdIx4WgK2BM7e"
-  },
-  {
-    "__type__": "cc.UITransform",
-    "_name": "",
-    "_objFlags": 0,
-    "__editorExtras__": {},
-    "node": {
-      "__id__": 66
-    },
-    "_enabled": true,
-    "__prefab": null,
-    "_contentSize": {
-      "__type__": "cc.Size",
-      "width": 100,
-      "height": 100
-    },
-    "_anchorPoint": {
-      "__type__": "cc.Vec2",
-      "x": 0.5,
-      "y": 0.5
-    },
-    "_id": "ebFX3CRatHgbXxMrioKOl/"
-  },
-  {
-    "__type__": "92dcap7L/ZO47Nu6gp7UY3p",
-    "_name": "",
-    "_objFlags": 0,
-    "__editorExtras__": {},
-    "node": {
-      "__id__": 66
-    },
-    "_enabled": true,
-    "__prefab": null,
-    "maxHealth": 80,
-    "explosionEffect": {
-      "__uuid__": "0bd1f0d3-935a-47a0-8974-bc03a8c54c7b",
-      "__expectedType__": "cc.Prefab"
-    },
-    "damageNumberPrefab": {
-      "__uuid__": "af17709f-82d8-43eb-bc51-d67f9a836193",
-      "__expectedType__": "cc.Prefab"
-    },
-    "buildCost": 10,
-    "populationIncrease": 10,
-    "healRange": 100,
-    "healAmount": 1,
-    "healInterval": 2,
-    "level": 1,
-    "collisionRadius": 40,
-    "_id": "8catRTPyhHD6E9PY2HdZW3"
-  },
-  {
-    "__type__": "cc.Node",
     "_name": "WarAncientTree",
     "_objFlags": 0,
     "__editorExtras__": {},
@@ -2691,7 +2590,7 @@
     "_active": true,
     "_components": [
       {
-        "__id__": 70
+        "__id__": 67
       }
     ],
     "_prefab": null,
@@ -2730,7 +2629,7 @@
     "_objFlags": 0,
     "__editorExtras__": {},
     "node": {
-      "__id__": 69
+      "__id__": 66
     },
     "_enabled": true,
     "__prefab": null,
@@ -2758,10 +2657,10 @@
     "_active": true,
     "_components": [
       {
-        "__id__": 72
+        "__id__": 69
       },
       {
-        "__id__": 73
+        "__id__": 70
       }
     ],
     "_prefab": null,
@@ -2800,7 +2699,7 @@
     "_objFlags": 0,
     "__editorExtras__": {},
     "node": {
-      "__id__": 71
+      "__id__": 68
     },
     "_enabled": true,
     "__prefab": null,
@@ -2822,7 +2721,7 @@
     "_objFlags": 0,
     "__editorExtras__": {},
     "node": {
-      "__id__": 71
+      "__id__": 68
     },
     "_enabled": true,
     "__prefab": null,
@@ -2908,28 +2807,28 @@
   {
     "__type__": "cc.SceneGlobals",
     "ambient": {
-      "__id__": 79
+      "__id__": 76
     },
     "shadows": {
-      "__id__": 80
+      "__id__": 77
     },
     "_skybox": {
-      "__id__": 81
+      "__id__": 78
     },
     "fog": {
-      "__id__": 82
+      "__id__": 79
     },
     "octree": {
-      "__id__": 83
+      "__id__": 80
     },
     "skin": {
-      "__id__": 84
+      "__id__": 81
     },
     "lightProbeInfo": {
-      "__id__": 85
+      "__id__": 82
     },
     "postSettings": {
-      "__id__": 86
+      "__id__": 83
     },
     "bakedWithStationaryMainLight": false,
     "bakedWithHighpLightmap": false
