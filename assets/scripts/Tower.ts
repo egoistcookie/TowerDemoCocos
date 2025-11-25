@@ -3,6 +3,8 @@ import { GameManager, GameState } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
 import { Arrow } from './Arrow';
+import { UnitSelectionManager } from './UnitSelectionManager';
+import { UnitInfo } from './UnitInfoPanel';
 const { ccclass, property } = _decorator;
 
 @ccclass('Tower')
@@ -89,6 +91,7 @@ export class Tower extends Component {
     private globalTouchHandler: ((event: EventTouch) => void) | null = null!; // 全局触摸事件处理器
     private isHighlighted: boolean = false; // 是否高亮显示
     private highlightNode: Node = null!; // 高亮效果节点
+    private unitSelectionManager: UnitSelectionManager = null!; // 单位选择管理器
 
     start() {
         this.currentHealth = this.maxHealth;
@@ -115,6 +118,9 @@ export class Tower extends Component {
         // 查找游戏管理器
         this.findGameManager();
         
+        // 查找单位选择管理器
+        this.findUnitSelectionManager();
+        
         // 创建血条
         this.createHealthBar();
         
@@ -122,6 +128,35 @@ export class Tower extends Component {
         this.node.on(Node.EventType.TOUCH_END, this.onTowerClick, this);
         
         console.debug('Tower: Started at position:', this.node.worldPosition);
+    }
+
+    /**
+     * 查找单位选择管理器
+     */
+    findUnitSelectionManager() {
+        // 方法1: 通过节点名称查找
+        let managerNode = find('UnitSelectionManager');
+        if (managerNode) {
+            this.unitSelectionManager = managerNode.getComponent(UnitSelectionManager);
+            if (this.unitSelectionManager) {
+                return;
+            }
+        }
+        
+        // 方法2: 从场景根节点递归查找UnitSelectionManager组件
+        const scene = this.node.scene;
+        if (scene) {
+            const findInScene = (node: Node, componentType: any): any => {
+                const comp = node.getComponent(componentType);
+                if (comp) return comp;
+                for (const child of node.children) {
+                    const found = findInScene(child, componentType);
+                    if (found) return found;
+                }
+                return null;
+            };
+            this.unitSelectionManager = findInScene(scene, UnitSelectionManager);
+        }
     }
 
     initAttackAnimation() {
@@ -1435,6 +1470,14 @@ export class Tower extends Component {
             this.healthBar.setHealth(this.currentHealth);
         }
 
+        // 更新单位信息面板
+        if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            this.unitSelectionManager.updateUnitInfo({
+                currentHealth: Math.max(0, this.currentHealth),
+                maxHealth: this.maxHealth
+            });
+        }
+
         if (this.currentHealth <= 0) {
             this.currentHealth = 0;
             this.destroyTower();
@@ -1462,6 +1505,14 @@ export class Tower extends Component {
         // 更新血条
         if (this.healthBar) {
             this.healthBar.setHealth(this.currentHealth);
+        }
+
+        // 更新单位信息面板
+        if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            this.unitSelectionManager.updateUnitInfo({
+                currentHealth: this.currentHealth,
+                maxHealth: this.maxHealth
+            });
         }
 
         // 显示治愈特效（+号）
@@ -1715,7 +1766,7 @@ export class Tower extends Component {
             return;
         }
 
-        // 显示选择面板
+        // 显示选择面板和信息面板
         this.showSelectionPanel();
     }
 
@@ -1769,6 +1820,25 @@ export class Tower extends Component {
         // 添加按钮点击事件
         sellBtn.on(Node.EventType.TOUCH_END, this.onSellClick, this);
         upgradeBtn.on(Node.EventType.TOUCH_END, this.onUpgradeClick, this);
+
+        // 显示单位信息面板和范围
+        if (!this.unitSelectionManager) {
+            this.findUnitSelectionManager();
+        }
+        if (this.unitSelectionManager) {
+            const unitInfo: UnitInfo = {
+                name: '弓箭手',
+                level: this.level,
+                currentHealth: this.currentHealth,
+                maxHealth: this.maxHealth,
+                attackDamage: this.attackDamage,
+                populationCost: 1, // Tower占用1个人口
+                icon: this.defaultSpriteFrame,
+                collisionRadius: this.collisionRadius,
+                attackRange: this.attackRange
+            };
+            this.unitSelectionManager.selectUnit(this.node, unitInfo);
+        }
 
         // 点击其他地方关闭面板或设置移动目标
         this.scheduleOnce(() => {
@@ -2002,6 +2072,14 @@ export class Tower extends Component {
             this.selectionPanel.destroy();
             this.selectionPanel = null!;
         }
+
+        // 清除单位信息面板和范围显示
+        if (this.unitSelectionManager) {
+            // 检查是否当前选中的是这个单位
+            if (this.unitSelectionManager.isUnitSelected(this.node)) {
+                this.unitSelectionManager.clearSelection();
+            }
+        }
         
         // 注意：不清除手动移动目标，让防御单位继续移动到目标位置
         // 只有在到达目标位置后才会清除
@@ -2056,6 +2134,16 @@ export class Tower extends Component {
         this.attackInterval = this.attackInterval / 1.5; // 攻击速度增加50%（间隔减少）
 
         console.debug(`Tower: Upgraded to level ${this.level}, damage: ${this.attackDamage}, interval: ${this.attackInterval.toFixed(2)}`);
+
+        // 更新单位信息面板
+        if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            this.unitSelectionManager.updateUnitInfo({
+                level: this.level,
+                attackDamage: this.attackDamage,
+                currentHealth: this.currentHealth,
+                maxHealth: this.maxHealth
+            });
+        }
 
         // 隐藏面板
         this.hideSelectionPanel();

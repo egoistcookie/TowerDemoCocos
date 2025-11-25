@@ -3,6 +3,8 @@ import { GameManager } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
 import { Arrow } from './Arrow';
+import { UnitSelectionManager } from './UnitSelectionManager';
+import { UnitInfo } from './UnitInfoPanel';
 const { ccclass, property } = _decorator;
 
 @ccclass('WarAncientTree')
@@ -33,6 +35,12 @@ export class WarAncientTree extends Component {
 
     @property
     buildCost: number = 10; // 建造成本
+
+    @property
+    level: number = 1; // 战争古树等级
+
+    @property
+    collisionRadius: number = 50; // 占地范围（像素）
 
     // 攻击动画相关属性
     @property(SpriteFrame)
@@ -78,6 +86,7 @@ export class WarAncientTree extends Component {
     // 选择面板相关
     private selectionPanel: Node = null!; // 选择面板节点
     private globalTouchHandler: ((event: EventTouch) => void) | null = null; // 全局触摸事件处理器
+    private unitSelectionManager: UnitSelectionManager = null!; // 单位选择管理器
 
     start() {
         this.currentHealth = this.maxHealth;
@@ -99,6 +108,9 @@ export class WarAncientTree extends Component {
 
         // 查找游戏管理器
         this.findGameManager();
+
+        // 查找单位选择管理器
+        this.findUnitSelectionManager();
 
         // 查找Tower容器
         this.findTowerContainer();
@@ -131,6 +143,35 @@ export class WarAncientTree extends Component {
         }
         if (gmNode) {
             this.gameManager = gmNode.getComponent(GameManager);
+        }
+    }
+
+    /**
+     * 查找单位选择管理器
+     */
+    findUnitSelectionManager() {
+        // 方法1: 通过节点名称查找
+        let managerNode = find('UnitSelectionManager');
+        if (managerNode) {
+            this.unitSelectionManager = managerNode.getComponent(UnitSelectionManager);
+            if (this.unitSelectionManager) {
+                return;
+            }
+        }
+        
+        // 方法2: 从场景根节点递归查找UnitSelectionManager组件
+        const scene = this.node.scene;
+        if (scene) {
+            const findInScene = (node: Node, componentType: any): any => {
+                const comp = node.getComponent(componentType);
+                if (comp) return comp;
+                for (const child of node.children) {
+                    const found = findInScene(child, componentType);
+                    if (found) return found;
+                }
+                return null;
+            };
+            this.unitSelectionManager = findInScene(scene, UnitSelectionManager);
         }
     }
 
@@ -990,6 +1031,25 @@ export class WarAncientTree extends Component {
         sellBtn.on(Node.EventType.TOUCH_END, this.onSellClick, this);
         upgradeBtn.on(Node.EventType.TOUCH_END, this.onUpgradeClick, this);
 
+        // 显示单位信息面板和范围
+        if (!this.unitSelectionManager) {
+            this.findUnitSelectionManager();
+        }
+        if (this.unitSelectionManager) {
+            const unitInfo: UnitInfo = {
+                name: '战争古树',
+                level: this.level,
+                currentHealth: this.currentHealth,
+                maxHealth: this.maxHealth,
+                attackDamage: this.attackDamage,
+                populationCost: 0, // 战争古树不占用人口
+                icon: this.defaultSpriteFrame,
+                collisionRadius: this.collisionRadius,
+                attackRange: this.attackRange
+            };
+            this.unitSelectionManager.selectUnit(this.node, unitInfo);
+        }
+
         // 点击其他地方关闭面板
         this.scheduleOnce(() => {
             if (canvas) {
@@ -1036,6 +1096,14 @@ export class WarAncientTree extends Component {
         if (this.selectionPanel && this.selectionPanel.isValid) {
             this.selectionPanel.destroy();
             this.selectionPanel = null!;
+        }
+
+        // 清除单位信息面板和范围显示
+        if (this.unitSelectionManager) {
+            // 检查是否当前选中的是这个单位
+            if (this.unitSelectionManager.isUnitSelected(this.node)) {
+                this.unitSelectionManager.clearSelection();
+            }
         }
     }
 
@@ -1089,9 +1157,19 @@ export class WarAncientTree extends Component {
         this.gameManager.spendGold(upgradeCost);
 
         // 升级：生产Tower上限增加2个
+        this.level++;
         this.maxTowerCount += 2;
 
-        console.log(`WarAncientTree: Upgraded, maxTowerCount increased to ${this.maxTowerCount}`);
+        console.log(`WarAncientTree: Upgraded to level ${this.level}, maxTowerCount increased to ${this.maxTowerCount}`);
+
+        // 更新单位信息面板
+        if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            this.unitSelectionManager.updateUnitInfo({
+                level: this.level,
+                currentHealth: this.currentHealth,
+                maxHealth: this.maxHealth
+            });
+        }
 
         // 隐藏面板
         this.hideSelectionPanel();

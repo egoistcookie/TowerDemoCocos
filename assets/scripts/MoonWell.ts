@@ -1,7 +1,9 @@
-import { _decorator, Component, Node, Vec3, find, Prefab, instantiate, Graphics, UITransform, Label, Color, EventTouch } from 'cc';
+import { _decorator, Component, Node, Vec3, find, Prefab, instantiate, Graphics, UITransform, Label, Color, EventTouch, Sprite, SpriteFrame } from 'cc';
 import { GameManager, GameState } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
+import { UnitSelectionManager } from './UnitSelectionManager';
+import { UnitInfo } from './UnitInfoPanel';
 const { ccclass, property } = _decorator;
 
 @ccclass('MoonWell')
@@ -46,6 +48,9 @@ export class MoonWell extends Component {
     private selectionPanel: Node = null!; // 选择面板
     private globalTouchHandler: ((event: EventTouch) => void) | null = null!; // 全局触摸事件处理器
     private rangeDisplayNode: Node = null!; // 范围显示节点
+    private unitSelectionManager: UnitSelectionManager = null!; // 单位选择管理器
+    private sprite: Sprite = null!; // Sprite组件引用
+    private defaultSpriteFrame: SpriteFrame = null!; // 默认SpriteFrame
 
     start() {
         this.currentHealth = this.maxHealth;
@@ -55,6 +60,15 @@ export class MoonWell extends Component {
 
         // 查找游戏管理器
         this.findGameManager();
+
+        // 查找单位选择管理器
+        this.findUnitSelectionManager();
+
+        // 获取Sprite组件
+        this.sprite = this.node.getComponent(Sprite);
+        if (this.sprite && this.sprite.spriteFrame) {
+            this.defaultSpriteFrame = this.sprite.spriteFrame;
+        }
 
         // 创建血条
         this.createHealthBar();
@@ -147,6 +161,35 @@ export class MoonWell extends Component {
         console.warn('MoonWell: GameManager not found!');
     }
 
+    /**
+     * 查找单位选择管理器
+     */
+    findUnitSelectionManager() {
+        // 方法1: 通过节点名称查找
+        let managerNode = find('UnitSelectionManager');
+        if (managerNode) {
+            this.unitSelectionManager = managerNode.getComponent(UnitSelectionManager);
+            if (this.unitSelectionManager) {
+                return;
+            }
+        }
+        
+        // 方法2: 从场景根节点递归查找UnitSelectionManager组件
+        const scene = this.node.scene;
+        if (scene) {
+            const findInScene = (node: Node, componentType: any): any => {
+                const comp = node.getComponent(componentType);
+                if (comp) return comp;
+                for (const child of node.children) {
+                    const found = findInScene(child, componentType);
+                    if (found) return found;
+                }
+                return null;
+            };
+            this.unitSelectionManager = findInScene(scene, UnitSelectionManager);
+        }
+    }
+
     createHealthBar() {
         this.healthBarNode = new Node('HealthBar');
         this.healthBarNode.setParent(this.node);
@@ -165,6 +208,14 @@ export class MoonWell extends Component {
         }
 
         this.currentHealth -= damage;
+
+        // 更新单位信息面板
+        if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            this.unitSelectionManager.updateUnitInfo({
+                currentHealth: Math.max(0, this.currentHealth),
+                maxHealth: this.maxHealth
+            });
+        }
 
         // 显示伤害数字
         if (this.damageNumberPrefab) {
@@ -344,8 +395,7 @@ export class MoonWell extends Component {
         const canvas = find('Canvas');
         if (!canvas) return;
 
-        // 显示范围
-        this.showRangeDisplay();
+        // 范围显示将通过UnitSelectionManager统一管理
 
         this.selectionPanel = new Node('MoonWellSelectionPanel');
         this.selectionPanel.setParent(canvas);
@@ -393,6 +443,25 @@ export class MoonWell extends Component {
         sellBtn.on(Node.EventType.TOUCH_END, this.onSellClick, this);
         upgradeBtn.on(Node.EventType.TOUCH_END, this.onUpgradeClick, this);
 
+        // 显示单位信息面板和范围
+        if (!this.unitSelectionManager) {
+            this.findUnitSelectionManager();
+        }
+        if (this.unitSelectionManager) {
+            const unitInfo: UnitInfo = {
+                name: '月亮井',
+                level: this.level,
+                currentHealth: this.currentHealth,
+                maxHealth: this.maxHealth,
+                attackDamage: 0, // 月亮井不攻击
+                populationCost: 0, // 月亮井不占用人口，反而增加人口上限
+                icon: this.defaultSpriteFrame,
+                collisionRadius: this.collisionRadius,
+                healRange: this.healRange
+            };
+            this.unitSelectionManager.selectUnit(this.node, unitInfo);
+        }
+
         // 点击其他地方关闭面板
         this.scheduleOnce(() => {
             if (canvas) {
@@ -436,8 +505,13 @@ export class MoonWell extends Component {
             this.globalTouchHandler = null;
         }
         
-        // 隐藏范围显示
-        this.hideRangeDisplay();
+        // 清除单位信息面板和范围显示（使用UnitSelectionManager统一管理）
+        if (this.unitSelectionManager) {
+            // 检查是否当前选中的是这个单位
+            if (this.unitSelectionManager.isUnitSelected(this.node)) {
+                this.unitSelectionManager.clearSelection();
+            }
+        }
         
         if (this.selectionPanel && this.selectionPanel.isValid) {
             this.selectionPanel.destroy();
@@ -564,9 +638,21 @@ export class MoonWell extends Component {
 
         console.log(`MoonWell: Upgraded to level ${this.level}, healRange: ${this.healRange}, healInterval: ${this.healInterval.toFixed(2)}`);
 
-        // 如果范围显示正在显示，更新范围显示
-        if (this.rangeDisplayNode && this.rangeDisplayNode.isValid) {
-            this.showRangeDisplay();
+        // 更新单位信息面板和范围显示
+        if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            // 重新选择单位以更新范围显示
+            const unitInfo: UnitInfo = {
+                name: '月亮井',
+                level: this.level,
+                currentHealth: this.currentHealth,
+                maxHealth: this.maxHealth,
+                attackDamage: 0,
+                populationCost: 0,
+                icon: this.defaultSpriteFrame,
+                collisionRadius: this.collisionRadius,
+                healRange: this.healRange
+            };
+            this.unitSelectionManager.selectUnit(this.node, unitInfo);
         }
 
         // 隐藏面板
