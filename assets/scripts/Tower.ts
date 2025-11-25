@@ -1441,6 +1441,88 @@ export class Tower extends Component {
         }
     }
 
+    /**
+     * 恢复血量（由月亮井调用）
+     * @param amount 恢复的血量
+     */
+    heal(amount: number) {
+        if (this.isDestroyed) {
+            return;
+        }
+
+        // 如果血量已满，不恢复
+        if (this.currentHealth >= this.maxHealth) {
+            return;
+        }
+
+        const oldHealth = this.currentHealth;
+        this.currentHealth = Math.min(this.currentHealth + amount, this.maxHealth);
+        const actualHeal = this.currentHealth - oldHealth;
+
+        // 更新血条
+        if (this.healthBar) {
+            this.healthBar.setHealth(this.currentHealth);
+        }
+
+        // 显示治愈特效（+号）
+        if (actualHeal > 0) {
+            this.showHealEffect(actualHeal);
+        }
+    }
+
+    /**
+     * 显示治愈特效（+号）
+     * @param amount 治愈量
+     */
+    showHealEffect(amount: number) {
+        // 创建+号特效节点
+        const healNode = new Node('HealEffect');
+        const canvas = find('Canvas');
+        if (canvas) {
+            healNode.setParent(canvas);
+        } else {
+            healNode.setParent(this.node.scene);
+        }
+
+        // 设置位置（在Tower上方）
+        healNode.setWorldPosition(this.node.worldPosition.clone().add3f(0, 30, 0));
+
+        // 添加Label组件显示+号
+        const label = healNode.addComponent(Label);
+        label.string = `+${Math.floor(amount)}`;
+        label.fontSize = 20;
+        label.color = Color.GREEN;
+
+        // 添加UITransform
+        const uiTransform = healNode.addComponent(UITransform);
+        uiTransform.setContentSize(40, 30);
+
+        // 动画：向上移动并淡出
+        const startPos = healNode.worldPosition.clone();
+        const endPos = startPos.clone();
+        endPos.y += 30; // 向上移动30像素
+
+        tween(healNode)
+            .to(0.5, { 
+                worldPosition: endPos,
+            }, {
+                onUpdate: (target: Node, ratio: number) => {
+                    // 淡出效果
+                    const label = target.getComponent(Label);
+                    if (label) {
+                        const alpha = Math.floor(255 * (1 - ratio));
+                        label.color = new Color(0, 255, 0, alpha);
+                    }
+                }
+            })
+            .call(() => {
+                if (healNode && healNode.isValid) {
+                    healNode.destroy();
+                }
+            })
+            .start();
+    }
+
     showDamageNumber(damage: number) {
         // 创建伤害数字节点
         let damageNode: Node;

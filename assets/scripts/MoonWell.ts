@@ -1,5 +1,5 @@
-import { _decorator, Component, Node, Vec3, find, Prefab, instantiate } from 'cc';
-import { GameManager } from './GameManager';
+import { _decorator, Component, Node, Vec3, find, Prefab, instantiate, Graphics, UITransform, Label, Color, EventTouch } from 'cc';
+import { GameManager, GameState } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
 const { ccclass, property } = _decorator;
@@ -21,17 +21,37 @@ export class MoonWell extends Component {
     @property
     populationIncrease: number = 10; // 增加的人口上限
 
+    @property
+    healRange: number = 100; // 治疗范围（像素）
+
+    @property
+    healAmount: number = 1; // 每次治疗恢复的血量
+
+    @property
+    healInterval: number = 2.0; // 治疗间隔（秒）
+
+    @property
+    level: number = 1; // 月亮井等级
+
+    @property
+    collisionRadius: number = 40; // 占地范围（像素）
+
     private currentHealth: number = 80;
     private healthBar: HealthBar = null!;
     private healthBarNode: Node = null!;
     private isDestroyed: boolean = false;
     private gameManager: GameManager = null!;
     private hasIncreasedPopulation: boolean = false; // 标记是否已经增加过人口上限
+    private healTimer: number = 0; // 治疗计时器
+    private selectionPanel: Node = null!; // 选择面板
+    private globalTouchHandler: ((event: EventTouch) => void) | null = null!; // 全局触摸事件处理器
+    private rangeDisplayNode: Node = null!; // 范围显示节点
 
     start() {
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
         this.hasIncreasedPopulation = false;
+        this.healTimer = 0;
 
         // 查找游戏管理器
         this.findGameManager();
@@ -39,9 +59,33 @@ export class MoonWell extends Component {
         // 创建血条
         this.createHealthBar();
 
+        // 监听点击事件
+        this.node.on(Node.EventType.TOUCH_END, this.onMoonWellClick, this);
+
         // 注意：不在start()中自动增加人口上限
         // 只有在通过TowerBuilder.buildMoonWell()建造时才会调用increasePopulationLimit()来增加人口上限
         // 这样可以避免场景中预先放置的月亮井导致人口上限异常增加
+    }
+
+    update(deltaTime: number) {
+        if (this.isDestroyed) {
+            return;
+        }
+
+        // 检查游戏状态
+        if (this.gameManager) {
+            const gameState = this.gameManager.getGameState();
+            if (gameState !== GameState.Playing) {
+                return;
+            }
+        }
+
+        // 治疗逻辑
+        this.healTimer += deltaTime;
+        if (this.healTimer >= this.healInterval) {
+            this.healTimer = 0;
+            this.healNearbyUnits();
+        }
     }
 
     /**
@@ -155,6 +199,13 @@ export class MoonWell extends Component {
 
         this.isDestroyed = true;
 
+        // 隐藏面板和范围显示
+        this.hideSelectionPanel();
+        this.hideRangeDisplay();
+
+        // 移除点击事件监听
+        this.node.off(Node.EventType.TOUCH_END, this.onMoonWellClick, this);
+
         // 被摧毁时减少人口上限（只有增加过人口上限的月亮井才减少）
         if (this.hasIncreasedPopulation && this.gameManager) {
             const currentMax = this.gameManager.getMaxPopulation();
@@ -194,6 +245,346 @@ export class MoonWell extends Component {
 
     getMaxHealth(): number {
         return this.maxHealth;
+    }
+
+    /**
+     * 治疗附近的友方单位
+     */
+    healNearbyUnits() {
+        if (this.isDestroyed) {
+            return;
+        }
+
+        // 递归查找Towers节点（更可靠）
+        const findNodeRecursive = (node: Node, name: string): Node | null => {
+            if (node.name === name) {
+                return node;
+            }
+            for (const child of node.children) {
+                const found = findNodeRecursive(child, name);
+                if (found) return found;
+            }
+            return null;
+        };
+
+        // 查找所有Tower单位
+        let towersNode = find('Towers');
+        
+        // 如果直接查找失败，尝试递归查找
+        if (!towersNode && this.node.scene) {
+            towersNode = findNodeRecursive(this.node.scene, 'Towers');
+        }
+
+        if (!towersNode) {
+            // 如果还是找不到，输出调试信息（降低频率避免刷屏）
+            if (Math.random() < 0.01) { // 约1%的概率输出
+                console.warn('MoonWell: Towers node not found! Cannot heal nearby units.');
+            }
+            return;
+        }
+
+        const towers = towersNode.children || [];
+        const moonWellPos = this.node.worldPosition;
+        let healedCount = 0;
+
+        for (const tower of towers) {
+            if (!tower || !tower.isValid || !tower.active) {
+                continue;
+            }
+
+            const towerScript = tower.getComponent('Tower') as any;
+            if (!towerScript || !towerScript.isAlive || !towerScript.isAlive()) {
+                continue;
+            }
+
+            // 计算距离
+            const distance = Vec3.distance(moonWellPos, tower.worldPosition);
+            if (distance <= this.healRange) {
+                // 在治疗范围内，恢复血量
+                if (towerScript.heal) {
+                    towerScript.heal(this.healAmount);
+                    healedCount++;
+                }
+            }
+        }
+
+        // 调试信息（降低频率）
+        if (healedCount > 0 && Math.random() < 0.1) { // 约10%的概率输出
+            console.debug(`MoonWell: Healed ${healedCount} tower(s) within range ${this.healRange}`);
+        }
+    }
+
+    /**
+     * 点击月亮井事件
+     */
+    onMoonWellClick(event: EventTouch) {
+        // 如果游戏已结束，不显示选择面板
+        if (this.gameManager && this.gameManager.getGameState() !== GameState.Playing) {
+            return;
+        }
+
+        // 阻止事件冒泡
+        event.propagationStopped = true;
+
+        // 如果已有选择面板，先关闭
+        if (this.selectionPanel) {
+            this.hideSelectionPanel();
+            return;
+        }
+
+        // 显示选择面板
+        this.showSelectionPanel();
+    }
+
+    /**
+     * 显示选择面板
+     */
+    showSelectionPanel() {
+        // 创建选择面板
+        const canvas = find('Canvas');
+        if (!canvas) return;
+
+        // 显示范围
+        this.showRangeDisplay();
+
+        this.selectionPanel = new Node('MoonWellSelectionPanel');
+        this.selectionPanel.setParent(canvas);
+
+        // 添加UITransform
+        const uiTransform = this.selectionPanel.addComponent(UITransform);
+        uiTransform.setContentSize(120, 40);
+
+        // 设置位置（在月亮井上方）
+        const worldPos = this.node.worldPosition.clone();
+        worldPos.y += 50;
+        this.selectionPanel.setWorldPosition(worldPos);
+
+        // 添加半透明背景
+        const graphics = this.selectionPanel.addComponent(Graphics);
+        graphics.fillColor = new Color(0, 0, 0, 180); // 半透明黑色
+        graphics.rect(-60, -20, 120, 40);
+        graphics.fill();
+
+        // 创建拆除按钮
+        const sellBtn = new Node('SellButton');
+        sellBtn.setParent(this.selectionPanel);
+        const sellBtnTransform = sellBtn.addComponent(UITransform);
+        sellBtnTransform.setContentSize(50, 30);
+        sellBtn.setPosition(-35, 0);
+
+        const sellLabel = sellBtn.addComponent(Label);
+        sellLabel.string = '拆除';
+        sellLabel.fontSize = 16;
+        sellLabel.color = Color.WHITE;
+
+        // 创建升级按钮
+        const upgradeBtn = new Node('UpgradeButton');
+        upgradeBtn.setParent(this.selectionPanel);
+        const upgradeBtnTransform = upgradeBtn.addComponent(UITransform);
+        upgradeBtnTransform.setContentSize(50, 30);
+        upgradeBtn.setPosition(35, 0);
+
+        const upgradeLabel = upgradeBtn.addComponent(Label);
+        upgradeLabel.string = '升级';
+        upgradeLabel.fontSize = 16;
+        upgradeLabel.color = Color.WHITE;
+
+        // 添加按钮点击事件
+        sellBtn.on(Node.EventType.TOUCH_END, this.onSellClick, this);
+        upgradeBtn.on(Node.EventType.TOUCH_END, this.onUpgradeClick, this);
+
+        // 点击其他地方关闭面板
+        this.scheduleOnce(() => {
+            if (canvas) {
+                // 创建全局触摸事件处理器
+                this.globalTouchHandler = (event: EventTouch) => {
+                    // 检查点击是否在选择面板或其子节点上
+                    if (this.selectionPanel && this.selectionPanel.isValid) {
+                        const targetNode = event.target as Node;
+                        if (targetNode) {
+                            // 检查目标节点是否是选择面板或其子节点
+                            let currentNode: Node | null = targetNode;
+                            while (currentNode) {
+                                if (currentNode === this.selectionPanel) {
+                                    // 点击在选择面板上，不关闭
+                                    return;
+                                }
+                                currentNode = currentNode.parent;
+                            }
+                        }
+                    }
+                    
+                    // 点击不在选择面板上，关闭面板
+                    this.hideSelectionPanel();
+                };
+                
+                canvas.on(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
+            }
+        }, 0.1);
+    }
+
+    /**
+     * 隐藏选择面板
+     */
+    hideSelectionPanel() {
+        // 移除全局触摸事件监听
+        if (this.globalTouchHandler) {
+            const canvas = find('Canvas');
+            if (canvas) {
+                canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
+            }
+            this.globalTouchHandler = null;
+        }
+        
+        // 隐藏范围显示
+        this.hideRangeDisplay();
+        
+        if (this.selectionPanel && this.selectionPanel.isValid) {
+            this.selectionPanel.destroy();
+            this.selectionPanel = null!;
+        }
+    }
+
+    /**
+     * 显示范围（占地范围和治愈范围）
+     */
+    showRangeDisplay() {
+        if (this.rangeDisplayNode) {
+            this.hideRangeDisplay();
+        }
+
+        const canvas = find('Canvas');
+        if (!canvas) return;
+
+        // 创建范围显示节点
+        this.rangeDisplayNode = new Node('MoonWellRangeDisplay');
+        this.rangeDisplayNode.setParent(canvas);
+        
+        // 设置位置与月亮井相同
+        this.rangeDisplayNode.setWorldPosition(this.node.worldPosition);
+
+        // 添加UITransform（用于定位）
+        const uiTransform = this.rangeDisplayNode.addComponent(UITransform);
+        uiTransform.setContentSize(this.healRange * 2, this.healRange * 2);
+
+        // 绘制治愈范围（绿色半透明圆圈）
+        const healRangeGraphics = new Node('HealRange');
+        healRangeGraphics.setParent(this.rangeDisplayNode);
+        healRangeGraphics.setPosition(0, 0, 0);
+        const healGraphics = healRangeGraphics.addComponent(Graphics);
+        healGraphics.fillColor = new Color(0, 255, 0, 100); // 绿色半透明
+        healGraphics.circle(0, 0, this.healRange);
+        healGraphics.fill();
+        
+        // 绘制治愈范围边框（绿色实线）
+        healGraphics.strokeColor = new Color(0, 255, 0, 200); // 绿色边框
+        healGraphics.lineWidth = 2;
+        healGraphics.circle(0, 0, this.healRange);
+        healGraphics.stroke();
+
+        // 绘制占地范围（蓝色半透明圆圈）
+        const collisionRangeGraphics = new Node('CollisionRange');
+        collisionRangeGraphics.setParent(this.rangeDisplayNode);
+        collisionRangeGraphics.setPosition(0, 0, 0);
+        const collisionGraphics = collisionRangeGraphics.addComponent(Graphics);
+        collisionGraphics.fillColor = new Color(0, 100, 255, 80); // 蓝色半透明
+        collisionGraphics.circle(0, 0, this.collisionRadius);
+        collisionGraphics.fill();
+        
+        // 绘制占地范围边框（蓝色实线）
+        collisionGraphics.strokeColor = new Color(0, 100, 255, 200); // 蓝色边框
+        collisionGraphics.lineWidth = 2;
+        collisionGraphics.circle(0, 0, this.collisionRadius);
+        collisionGraphics.stroke();
+    }
+
+    /**
+     * 隐藏范围显示
+     */
+    hideRangeDisplay() {
+        if (this.rangeDisplayNode && this.rangeDisplayNode.isValid) {
+            this.rangeDisplayNode.destroy();
+            this.rangeDisplayNode = null!;
+        }
+    }
+
+    /**
+     * 拆除按钮点击事件
+     */
+    onSellClick(event: EventTouch) {
+        event.propagationStopped = true;
+        
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+
+        if (this.gameManager) {
+            // 回收80%金币
+            const refund = Math.floor(this.buildCost * 0.8);
+            this.gameManager.addGold(refund);
+            console.log(`MoonWell: Sold, refunded ${refund} gold`);
+        }
+
+        // 隐藏面板
+        this.hideSelectionPanel();
+        
+        // 销毁月亮井
+        this.destroyMoonWell();
+    }
+
+    /**
+     * 升级按钮点击事件
+     */
+    onUpgradeClick(event: EventTouch) {
+        event.propagationStopped = true;
+        
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+
+        if (!this.gameManager) {
+            return;
+        }
+
+        // 升级成本是建造成本的50%
+        const upgradeCost = Math.floor(this.buildCost * 0.5);
+        
+        if (!this.gameManager.canAfford(upgradeCost)) {
+            console.log(`MoonWell: Not enough gold for upgrade! Need ${upgradeCost}, have ${this.gameManager.getGold()}`);
+            return;
+        }
+
+        // 消耗金币
+        this.gameManager.spendGold(upgradeCost);
+
+        // 升级：扩大治疗范围和治疗速度
+        this.level += 1;
+        this.healRange = Math.floor(this.healRange * 1.5); // 扩大50%治疗范围
+        this.healInterval = Math.max(0.5, this.healInterval * 0.7); // 加快30%治疗速度（最小0.5秒）
+
+        console.log(`MoonWell: Upgraded to level ${this.level}, healRange: ${this.healRange}, healInterval: ${this.healInterval.toFixed(2)}`);
+
+        // 如果范围显示正在显示，更新范围显示
+        if (this.rangeDisplayNode && this.rangeDisplayNode.isValid) {
+            this.showRangeDisplay();
+        }
+
+        // 隐藏面板
+        this.hideSelectionPanel();
+    }
+
+    /**
+     * 销毁月亮井（用于拆除）
+     */
+    destroyMoonWell() {
+        // 隐藏面板
+        this.hideSelectionPanel();
+
+        // 移除点击事件监听
+        this.node.off(Node.EventType.TOUCH_END, this.onMoonWellClick, this);
+
+        // 调用die方法进行销毁
+        this.die();
     }
 }
 
