@@ -328,7 +328,7 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "d61f3aa4-e7b8-4848-80bd-e05b3d1771ef@f9941",
+      "__uuid__": "75c2d5f6-0f0f-4035-8772-2c1f132e1585@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 0,
@@ -543,7 +543,7 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "9612b686-7850-4bff-9211-e6125fab460c@f9941",
+      "__uuid__": "c6661bb1-773e-4bd4-8250-67afd17dab9f@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 0,
@@ -575,6 +575,12 @@
     "explosionEffect": null,
     "level": 1,
     "collisionRadius": 40,
+    "wispPrefab": {
+      "__uuid__": "b3d6d60e-5e41-4cb3-b233-704501403faf",
+      "__expectedType__": "cc.Prefab"
+    },
+    "productionInterval": 2,
+    "spawnOffset": 200,
     "_id": "2bdm63dglHnas+X8kMj208"
   },
   {
@@ -1949,19 +1955,19 @@
     "_enabled": true,
     "__prefab": null,
     "warAncientTreePrefab": {
-      "__uuid__": "d07009f1-b9c5-488e-b536-8153bcdbb019",
+      "__uuid__": "be50baf7-2a47-44a1-85e1-8116927ef58e",
       "__expectedType__": "cc.Prefab"
     },
     "warAncientTreeIcon": {
-      "__uuid__": "0bdffacc-6cf4-4bca-b28b-38d00663b7f4@f9941",
+      "__uuid__": "6b911866-269d-48fc-bd73-403e5e9de306@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "moonWellPrefab": {
-      "__uuid__": "b8f23925-5ee1-49f0-800c-6ea2f852f9b1",
+      "__uuid__": "4e0a7549-50e8-4617-9b2c-012d49c17748",
       "__expectedType__": "cc.Prefab"
     },
     "moonWellIcon": {
-      "__uuid__": "e10ca06d-de0f-4550-9eb9-326455945541@f9941",
+      "__uuid__": "1c337c70-3b83-4f1b-b054-9422276a5511@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "buildingSelectionPanel": null,
@@ -2561,7 +2567,7 @@
     "_id": "2bg1GllAlNDrs1nC7DLlEA"
   },
   {
-    "__type__": "ce267HyRjdAS7i7OtDpe5c7",
+    "__type__": "86e32Tecw5HybmBmfSTYSNR",
     "_name": "",
     "_objFlags": 0,
     "__editorExtras__": {},
@@ -2576,7 +2582,7 @@
     "towerBuilderNode": {
       "__id__": 46
     },
-    "_id": "99DhINHBpNgJALWe+saMj0"
+    "_id": "e4D3HNd9lJq6nFeSkeYoXc"
   },
   {
     "__type__": "cc.Node",
@@ -2716,7 +2722,7 @@
     "_id": "35WBpo7R1CUpj9G3sm0hSF"
   },
   {
-    "__type__": "05d6bfx95lKJ7HR1kyG3uVx",
+    "__type__": "46c4cEm/NVPtpcKWw3TyzEv",
     "_name": "",
     "_objFlags": 0,
     "__editorExtras__": {},
@@ -2726,7 +2732,7 @@
     "_enabled": true,
     "__prefab": null,
     "unitInfoPanelNode": null,
-    "_id": "51B6K7mwlNOabKpz5IfwWZ"
+    "_id": "7ck3J8C61IE4LdUFXfIx11"
   },
   {
     "__type__": "cc.UITransform",

@@ -7,6 +7,10 @@ temp/
 local/
 profiles/
 native
+assets/scene.scene
+assets/prefabs/Arrower.prefab
+assets/prefabs/MoonWell.prefab
+assets/prefabs/WarAncientTree.prefab
 #//////////////////////////
 # NPM
 #//////////////////////////

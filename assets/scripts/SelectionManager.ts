@@ -1,5 +1,6 @@
 import { _decorator, Component, Node, Vec3, Graphics, UITransform, EventTouch, find, Camera, input, Input } from 'cc';
 import { Arrower } from './Arrower';
+import { Wisp } from './Wisp';
 const { ccclass, property } = _decorator;
 
 @ccclass('SelectionManager')
@@ -16,6 +17,7 @@ export class SelectionManager extends Component {
     private startPos: Vec3 = new Vec3(); // 拖拽起始位置（世界坐标）
     private currentPos: Vec3 = new Vec3(); // 当前鼠标位置（世界坐标）
     private selectedTowers: Arrower[] = []; // 选中的防御单位数组
+    private selectedWisps: Wisp[] = []; // 选中的小精灵数组
     private camera: Camera = null!; // 相机引用
     private globalTouchHandler: ((event: EventTouch) => void) | null = null!; // 全局触摸事件处理器
 
@@ -160,9 +162,9 @@ export class SelectionManager extends Component {
             return; // 点击在UI上，不处理选择
         }
 
-        // 检查是否点击在防御单位上（如果是，不触发多选，让防御单位的点击事件处理）
-        if (this.isTowerNode(targetNode)) {
-            return; // 点击在防御单位上，不处理多选
+        // 检查是否点击在防御单位或小精灵上（如果是，不触发多选，让单位的点击事件处理）
+        if (this.isTowerNode(targetNode) || this.isWispNode(targetNode)) {
+            return; // 点击在防御单位或小精灵上，不处理多选
         }
 
         // 获取触摸位置（世界坐标）
@@ -183,7 +185,7 @@ export class SelectionManager extends Component {
 
         // 如果之前没有选中的单位，清除之前的选择
         // 如果有选中的单位，保留选择（等待拖拽或点击来决定是重新选择还是移动）
-        if (this.selectedTowers.length === 0) {
+        if (this.selectedTowers.length === 0 && this.selectedWisps.length === 0) {
             this.clearSelection();
         }
     }
@@ -251,10 +253,10 @@ export class SelectionManager extends Component {
 
         if (!this.isSelecting) return;
 
-        // 检查是否点击在防御单位上（如果是，不处理多选）
+        // 检查是否点击在防御单位或小精灵上（如果是，不处理多选）
         const targetNode = event.target as Node;
-        if (this.isTowerNode(targetNode)) {
-            // 点击在防御单位上，清除选择状态但不注册移动命令
+        if (this.isTowerNode(targetNode) || this.isWispNode(targetNode)) {
+            // 点击在防御单位或小精灵上，清除选择状态但不注册移动命令
             this.isSelecting = false;
             if (this.selectionBox && this.selectionBox.isValid) {
                 this.selectionBox.active = false;
@@ -275,8 +277,8 @@ export class SelectionManager extends Component {
         const dragDistance = Vec3.distance(this.startPos, this.currentPos);
         console.log('SelectionManager.onTouchEnd: Drag distance:', dragDistance.toFixed(2), 'Start:', this.startPos, 'End:', this.currentPos);
         
-        // 记录拖拽开始前是否有选中的单位
-        const hadPreviousSelection = this.selectedTowers.length > 0;
+        // 记录拖拽开始前是否有选中的单位（包括防御单位和小精灵）
+        const hadPreviousSelection = this.selectedTowers.length > 0 || this.selectedWisps.length > 0;
         
         if (dragDistance > 10) { // 至少拖动10像素才认为是有效的选择
             console.log('SelectionManager.onTouchEnd: Updating selected towers...');
@@ -294,8 +296,9 @@ export class SelectionManager extends Component {
                 const touchLocation = event.getLocation();
                 const worldPos = this.screenToWorld(touchLocation);
                 
-                // 计算分散位置
-                const formationPositions = this.calculateFormationPositions(worldPos, this.selectedTowers);
+                // 计算分散位置（包括防御单位和小精灵）
+                const allUnits: any[] = [...this.selectedTowers, ...this.selectedWisps];
+                const formationPositions = this.calculateFormationPositions(worldPos, allUnits);
                 
                 // 让所有选中的防御单位移动到各自的分散位置
                 for (let i = 0; i < this.selectedTowers.length; i++) {
@@ -305,18 +308,26 @@ export class SelectionManager extends Component {
                     }
                 }
                 
+                // 让所有选中的小精灵移动到各自的分散位置
+                for (let i = 0; i < this.selectedWisps.length; i++) {
+                    const wisp = this.selectedWisps[i];
+                    if (wisp && wisp.node && wisp.node.isValid && this.selectedTowers.length + i < formationPositions.length) {
+                        wisp.setManualMoveTargetPosition(formationPositions[this.selectedTowers.length + i]);
+                    }
+                }
+                
                 // 不清除选择，保留高亮状态
                 return; // 处理完移动命令后返回
             }
         }
 
-        // 如果有选中的防御单位，注册点击移动监听
-        if (this.selectedTowers.length > 0) {
-            console.log('SelectionManager.onTouchEnd: Registering move command for', this.selectedTowers.length, 'towers');
+        // 如果有选中的防御单位或小精灵，注册点击移动监听
+        if (this.selectedTowers.length > 0 || this.selectedWisps.length > 0) {
+            console.log('SelectionManager.onTouchEnd: Registering move command for', this.selectedTowers.length, 'towers and', this.selectedWisps.length, 'wisps');
             this.registerMoveCommand();
         } else {
-            // 如果没有选中任何防御单位，清除选择状态
-            console.log('SelectionManager.onTouchEnd: No towers selected, clearing selection');
+            // 如果没有选中任何单位，清除选择状态
+            console.log('SelectionManager.onTouchEnd: No units selected, clearing selection');
             this.clearSelection();
         }
     }
@@ -436,10 +447,78 @@ export class SelectionManager extends Component {
             }
         }
 
-        console.log('SelectionManager.updateSelectedTowers: Found', newSelectedTowers.length, 'towers in selection box');
+        // 查找小精灵
+        let wispsNode = find('Wisps');
+        if (!wispsNode && this.node.scene) {
+            const findNodeRecursive = (node: Node, name: string): Node | null => {
+                if (node.name === name) {
+                    return node;
+                }
+                for (const child of node.children) {
+                    const found = findNodeRecursive(child, name);
+                    if (found) return found;
+                }
+                return null;
+            };
+            wispsNode = findNodeRecursive(this.node.scene, 'Wisps');
+        }
+        
+        const newSelectedWisps: Wisp[] = [];
+        if (wispsNode) {
+            const wisps = wispsNode.children || [];
+            for (const wispNode of wisps) {
+                if (!wispNode || !wispNode.isValid || !wispNode.active) {
+                    continue;
+                }
+
+                const wispScript = wispNode.getComponent(Wisp) as Wisp;
+                if (!wispScript) {
+                    continue;
+                }
+                
+                if (!wispScript.isAlive || !wispScript.isAlive()) {
+                    continue;
+                }
+
+                // 检查小精灵是否在选择框范围内
+                const wispPos = wispNode.worldPosition;
+                const inRangeX = wispPos.x >= minX && wispPos.x <= maxX;
+                const inRangeY = wispPos.y >= minY && wispPos.y <= maxY;
+                const inRange = inRangeX && inRangeY;
+                
+                if (inRange) {
+                    newSelectedWisps.push(wispScript);
+                }
+            }
+        }
+
+        console.log('SelectionManager.updateSelectedTowers: Found', newSelectedTowers.length, 'towers and', newSelectedWisps.length, 'wisps in selection box');
 
         // 更新选中状态
         this.setSelectedTowers(newSelectedTowers);
+        this.setSelectedWisps(newSelectedWisps);
+    }
+
+    /**
+     * 设置选中的小精灵
+     */
+    setSelectedWisps(wisps: Wisp[]) {
+        // 取消之前选中的高亮
+        for (const wisp of this.selectedWisps) {
+            if (wisp && wisp.node && wisp.node.isValid) {
+                wisp.setHighlight(false);
+            }
+        }
+
+        // 设置新的选中
+        this.selectedWisps = wisps;
+
+        // 高亮显示选中的小精灵
+        for (const wisp of this.selectedWisps) {
+            if (wisp && wisp.node && wisp.node.isValid) {
+                wisp.setHighlight(true);
+            }
+        }
     }
 
     /**
@@ -480,13 +559,20 @@ export class SelectionManager extends Component {
         // 只在非建造模式下输出日志，避免建造模式下的日志干扰
         if (!this.isBuildingMode()) {
             this.setSelectedTowers([]);
+            this.setSelectedWisps([]);
         } else {
             // 建造模式下静默清除，不输出日志
             this.selectedTowers = [];
+            this.selectedWisps = [];
             // 取消之前选中的高亮
             for (const tower of this.selectedTowers) {
                 if (tower && tower.node && tower.node.isValid) {
                     tower.setHighlight(false);
+                }
+            }
+            for (const wisp of this.selectedWisps) {
+                if (wisp && wisp.node && wisp.node.isValid) {
+                    wisp.setHighlight(false);
                 }
             }
         }
@@ -498,31 +584,31 @@ export class SelectionManager extends Component {
      * @param towers 单位数组
      * @returns 每个单位的目标位置数组
      */
-    calculateFormationPositions(centerPos: Vec3, towers: Arrower[]): Vec3[] {
+    calculateFormationPositions(centerPos: Vec3, units: any[]): Vec3[] {
         const positions: Vec3[] = [];
         
-        if (towers.length === 0) {
+        if (units.length === 0) {
             return positions;
         }
         
         // 如果只有一个单位，直接返回中心位置
-        if (towers.length === 1) {
+        if (units.length === 1) {
             positions.push(centerPos.clone());
             return positions;
         }
         
         // 获取最大碰撞半径（用于计算间距，使用最大值确保所有单位都有足够空间）
         let maxRadius = 10; // 默认10像素
-        let validTowers = 0;
-        for (const tower of towers) {
-            if (tower && tower.node && tower.node.isValid) {
-                const radius = tower.collisionRadius || 10;
+        let validUnits = 0;
+        for (const unit of units) {
+            if (unit && unit.node && unit.node.isValid) {
+                const radius = unit.collisionRadius || 10;
                 maxRadius = Math.max(maxRadius, radius);
-                validTowers++;
+                validUnits++;
             }
         }
         
-        if (validTowers === 0) {
+        if (validUnits === 0) {
             return positions;
         }
         
@@ -533,10 +619,10 @@ export class SelectionManager extends Component {
         // 计算圆形排列的半径
         // 根据单位数量计算需要的半径
         let formationRadius = 0;
-        if (towers.length === 2) {
+        if (units.length === 2) {
             // 两个单位对称排列
             formationRadius = minSpacing / 2;
-        } else if (towers.length === 3) {
+        } else if (units.length === 3) {
             // 三个单位排列成等边三角形（都围绕中心，不放在中心）
             // 等边三角形的边长 = minSpacing
             // 外接圆半径 = 边长 / sqrt(3)
@@ -544,20 +630,20 @@ export class SelectionManager extends Component {
         } else {
             // 多个单位排列成圆形
             // 使用公式：半径 = 间距 / (2 * sin(π/数量))
-            formationRadius = minSpacing / (2 * Math.sin(Math.PI / towers.length));
+            formationRadius = minSpacing / (2 * Math.sin(Math.PI / units.length));
         }
         
         // 为每个单位计算位置
-        for (let i = 0; i < towers.length; i++) {
-            if (!towers[i] || !towers[i].node || !towers[i].node.isValid) {
+        for (let i = 0; i < units.length; i++) {
+            if (!units[i] || !units[i].node || !units[i].node.isValid) {
                 positions.push(centerPos.clone());
                 continue;
             }
             
-            if (towers.length === 1) {
+            if (units.length === 1) {
                 // 只有一个单位，在中心
                 positions.push(centerPos.clone());
-            } else if (towers.length === 2) {
+            } else if (units.length === 2) {
                 // 两个单位对称排列
                 if (i === 0) {
                     // 第一个单位在左侧
@@ -576,7 +662,7 @@ export class SelectionManager extends Component {
                     );
                     positions.push(pos);
                 }
-            } else if (towers.length === 3) {
+            } else if (units.length === 3) {
                 // 三个单位排列成等边三角形（都围绕中心，不放在中心）
                 // 角度从上方开始，每个单位间隔120度
                 // 单位0: -90度（上方），单位1: 30度（右下），单位2: 150度（左下）
@@ -600,7 +686,7 @@ export class SelectionManager extends Component {
                     // 其他单位围绕中心排列
                     // 计算角度（从上方开始，顺时针排列）
                     // 注意：由于第一个在中心，所以其他单位的角度需要调整
-                    const angle = (2 * Math.PI * (i - 1)) / (towers.length - 1);
+                    const angle = (2 * Math.PI * (i - 1)) / (units.length - 1);
                     const offsetX = Math.sin(angle) * formationRadius;
                     const offsetY = Math.cos(angle) * formationRadius;
                     
@@ -636,46 +722,78 @@ export class SelectionManager extends Component {
                 return; // 点击在UI上，不处理移动
             }
 
+            // 检查是否点击在防御单位或小精灵上（如果是，不处理移动，让单位的点击事件处理）
+            if (this.isTowerNode(targetNode) || this.isWispNode(targetNode)) {
+                return; // 点击在单位上，不处理移动
+            }
+
             // 获取点击位置（世界坐标）
             const touchLocation = event.getLocation();
             const worldPos = this.screenToWorld(touchLocation);
+            
+            console.log('SelectionManager.registerMoveCommand: Click at screen (', touchLocation.x.toFixed(1), ',', touchLocation.y.toFixed(1), ') -> world (', worldPos.x.toFixed(1), ',', worldPos.y.toFixed(1), ')');
 
-            // 计算分散位置
-            const formationPositions = this.calculateFormationPositions(worldPos, this.selectedTowers);
+            // 计算分散位置（包括防御单位和小精灵）
+            const allUnits: any[] = [...this.selectedTowers, ...this.selectedWisps];
+            const formationPositions = this.calculateFormationPositions(worldPos, allUnits);
+            
+            console.log('SelectionManager.registerMoveCommand: Moving', this.selectedTowers.length, 'towers and', this.selectedWisps.length, 'wisps to formation positions');
 
             // 让所有选中的防御单位移动到各自的分散位置
             for (let i = 0; i < this.selectedTowers.length; i++) {
                 const tower = this.selectedTowers[i];
                 if (tower && tower.node && tower.node.isValid && i < formationPositions.length) {
+                    console.log('SelectionManager.registerMoveCommand: Moving tower', i, 'to (', formationPositions[i].x.toFixed(1), ',', formationPositions[i].y.toFixed(1), ')');
                     tower.setManualMoveTargetPosition(formationPositions[i]);
                 }
             }
 
-            // 清除选择和高亮
-            this.clearSelection();
-
-            // 移除监听（只有一次机会）
-            if (this.globalTouchHandler) {
-                this.canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
-                this.globalTouchHandler = null!;
+            // 让所有选中的小精灵移动到各自的分散位置
+            for (let i = 0; i < this.selectedWisps.length; i++) {
+                const wisp = this.selectedWisps[i];
+                if (wisp && wisp.node && wisp.node.isValid && this.selectedTowers.length + i < formationPositions.length) {
+                    console.log('SelectionManager.registerMoveCommand: Moving wisp', i, 'to (', formationPositions[this.selectedTowers.length + i].x.toFixed(1), ',', formationPositions[this.selectedTowers.length + i].y.toFixed(1), ')');
+                    wisp.setManualMoveTargetPosition(formationPositions[this.selectedTowers.length + i]);
+                }
             }
+
+            // 不清除选择，保留高亮状态，允许继续移动
+            // 重新注册移动命令，以便下次点击可以继续移动
+            this.registerMoveCommand();
         };
 
-        this.canvas.once(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
+        this.canvas.on(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
     }
 
     /**
      * 屏幕坐标转换为世界坐标
      */
     screenToWorld(screenPos: { x: number, y: number }): Vec3 {
+        // 如果相机不存在，尝试重新查找
+        if (!this.camera || !this.camera.node || !this.camera.node.isValid) {
+            const cameraNode = find('Canvas/Camera') || this.node.scene?.getChildByName('Camera');
+            if (cameraNode) {
+                this.camera = cameraNode.getComponent(Camera);
+            }
+        }
+        
         if (!this.camera) {
-            return new Vec3(screenPos.x, screenPos.y, 0);
+            console.error('SelectionManager.screenToWorld: Camera not found! Cannot convert screen to world coordinates.');
+            // 返回一个无效位置，而不是屏幕坐标（避免移动到错误位置）
+            return new Vec3(0, 0, 0);
         }
 
         const screenVec = new Vec3(screenPos.x, screenPos.y, 0);
         const worldVec = new Vec3();
         this.camera.screenToWorld(screenVec, worldVec);
         worldVec.z = 0;
+        
+        // 调试：检查转换结果
+        if (Math.abs(worldVec.x) < 0.1 && Math.abs(worldVec.y) < 0.1) {
+            console.warn('SelectionManager.screenToWorld: Warning - converted world position is near origin!', 
+                'Screen:', screenPos, 'World:', worldVec, 'Camera:', this.camera.node.name);
+        }
+        
         return worldVec;
     }
 
@@ -730,6 +848,35 @@ export class SelectionManager extends Component {
             }
             // 如果到达Towers容器，停止查找
             if (parent.name === 'Towers') {
+                break;
+            }
+            parent = parent.parent;
+        }
+
+        return false;
+    }
+
+    /**
+     * 检查节点是否是小精灵节点
+     */
+    isWispNode(node: Node | null): boolean {
+        if (!node) return false;
+
+        // 检查节点是否有Wisp组件
+        const wispScript = node.getComponent(Wisp);
+        if (wispScript) {
+            return true;
+        }
+
+        // 检查父节点（小精灵可能是子节点）
+        let parent = node.parent;
+        while (parent) {
+            const wispScript = parent.getComponent(Wisp);
+            if (wispScript) {
+                return true;
+            }
+            // 如果到达Wisps容器，停止查找
+            if (parent.name === 'Wisps') {
                 break;
             }
             parent = parent.parent;

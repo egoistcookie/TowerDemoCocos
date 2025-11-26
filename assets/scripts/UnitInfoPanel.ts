@@ -27,6 +27,8 @@ export interface UnitInfo {
     // 按钮回调
     onUpgradeClick?: () => void; // 升级按钮点击回调
     onSellClick?: () => void; // 回收按钮点击回调
+    onTrainWispClick?: () => void; // 训练小精灵按钮点击回调
+    onDetachWispClick?: () => void; // 卸下小精灵按钮点击回调
 }
 
 @ccclass('UnitInfoPanel')
@@ -461,7 +463,41 @@ export class UnitInfoPanel extends Component {
             });
         }
 
-        // 其余7个按钮暂时置空（已默认清空）
+        // 设置训练小精灵按钮（位置：左上，索引0）
+        if (unitInfo.onTrainWispClick && this.buttonNodes[0]) {
+            const trainWispButton = this.buttonNodes[0];
+            const labelNode = trainWispButton.getChildByName('Label');
+            if (labelNode) {
+                const label = labelNode.getComponent(Label);
+                if (label) {
+                    label.string = '训练小精灵';
+                }
+            }
+            trainWispButton.on(Node.EventType.TOUCH_END, () => {
+                if (unitInfo.onTrainWispClick) {
+                    unitInfo.onTrainWispClick();
+                }
+            });
+        }
+
+        // 设置卸下小精灵按钮（位置：右上，索引2）
+        if (unitInfo.onDetachWispClick && this.buttonNodes[2]) {
+            const detachWispButton = this.buttonNodes[2];
+            const labelNode = detachWispButton.getChildByName('Label');
+            if (labelNode) {
+                const label = labelNode.getComponent(Label);
+                if (label) {
+                    label.string = '卸下小精灵';
+                }
+            }
+            detachWispButton.on(Node.EventType.TOUCH_END, () => {
+                if (unitInfo.onDetachWispClick) {
+                    unitInfo.onDetachWispClick();
+                }
+            });
+        }
+
+        // 其余按钮暂时置空（已默认清空）
     }
 
     /**

@@ -1,6 +1,7 @@
-import { _decorator, Component, Node, EventTarget, instantiate, EventTouch, Sprite, SpriteFrame, find } from 'cc';
+import { _decorator, Component, Node, EventTarget, instantiate, EventTouch, Sprite, SpriteFrame, find, Prefab, Vec3, Graphics, UITransform, Color } from 'cc';
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
+import { GameManager, GameState } from './GameManager';
 const { ccclass, property } = _decorator;
 
 const eventTarget = new EventTarget();
@@ -19,24 +20,56 @@ export class Crystal extends Component {
     @property
     collisionRadius: number = 40; // 占地范围（像素）
 
+    @property(Prefab)
+    wispPrefab: Prefab = null!; // 小精灵预制体
+
+    @property
+    productionInterval: number = 2.0; // 每2秒生产一个小精灵
+
+    @property
+    spawnOffset: number = 100; // 小精灵出现在下方100像素
+
     private currentHealth: number = 100;
     private isDestroyed: boolean = false;
     private unitSelectionManager: UnitSelectionManager = null!; // 单位选择管理器
     private sprite: Sprite = null!; // Sprite组件引用
     private defaultSpriteFrame: SpriteFrame = null!; // 默认SpriteFrame
+    private gameManager: GameManager = null!; // 游戏管理器
+    
+    // 生产相关
+    private producedWisps: Node[] = []; // 已生产的小精灵列表
+    private productionTimer: number = 0; // 生产计时器
+    private productionProgress: number = 0; // 生产进度（0-1）
+    private isProducing: boolean = false; // 是否正在生产
+    private wispContainer: Node = null!; // 小精灵容器
+    private productionProgressBar: Node = null!; // 生产进度条节点
+    private productionProgressGraphics: Graphics = null!; // 生产进度条Graphics组件
 
     start() {
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
+        this.producedWisps = [];
+        this.productionTimer = 0;
+        this.productionProgress = 0;
+        this.isProducing = false;
 
         // 查找单位选择管理器
         this.findUnitSelectionManager();
+
+        // 查找游戏管理器
+        this.findGameManager();
+
+        // 查找小精灵容器
+        this.findWispContainer();
 
         // 获取Sprite组件
         this.sprite = this.node.getComponent(Sprite);
         if (this.sprite && this.sprite.spriteFrame) {
             this.defaultSpriteFrame = this.sprite.spriteFrame;
         }
+
+        // 创建生产进度条
+        this.createProductionProgressBar();
 
         // 监听点击事件
         this.node.on(Node.EventType.TOUCH_END, this.onCrystalClick, this);
@@ -170,6 +203,216 @@ export class Crystal extends Component {
     }
 
     /**
+     * 查找游戏管理器
+     */
+    findGameManager() {
+        let gmNode = find('GameManager');
+        if (gmNode) {
+            this.gameManager = gmNode.getComponent(GameManager);
+            if (this.gameManager) {
+                return;
+            }
+        }
+        
+        const scene = this.node.scene;
+        if (scene) {
+            const findInScene = (node: Node, componentType: any): any => {
+                const comp = node.getComponent(componentType);
+                if (comp) return comp;
+                for (const child of node.children) {
+                    const found = findInScene(child, componentType);
+                    if (found) return found;
+                }
+                return null;
+            };
+            this.gameManager = findInScene(scene, GameManager);
+        }
+    }
+
+    /**
+     * 查找小精灵容器
+     */
+    findWispContainer() {
+        // 查找Wisps容器
+        let wispsNode = find('Wisps');
+        if (!wispsNode && this.node.scene) {
+            // 如果不存在，创建一个
+            wispsNode = new Node('Wisps');
+            const canvas = find('Canvas');
+            if (canvas) {
+                wispsNode.setParent(canvas);
+            } else if (this.node.scene) {
+                wispsNode.setParent(this.node.scene);
+            }
+        }
+        this.wispContainer = wispsNode;
+    }
+
+    /**
+     * 创建生产进度条
+     */
+    createProductionProgressBar() {
+        if (this.productionProgressBar) {
+            return;
+        }
+
+        this.productionProgressBar = new Node('ProductionProgressBar');
+        this.productionProgressBar.setParent(this.node);
+        this.productionProgressBar.setPosition(0, -60, 0); // 位于血量条下方
+
+        const uiTransform = this.productionProgressBar.addComponent(UITransform);
+        uiTransform.setContentSize(60, 6);
+
+        this.productionProgressGraphics = this.productionProgressBar.addComponent(Graphics);
+        this.updateProductionProgressBar();
+    }
+
+    /**
+     * 更新生产进度条
+     */
+    updateProductionProgressBar() {
+        if (!this.productionProgressGraphics) {
+            return;
+        }
+
+        this.productionProgressGraphics.clear();
+        
+        if (this.isProducing) {
+            // 绘制进度条背景
+            this.productionProgressGraphics.fillColor = new Color(50, 50, 50, 200);
+            this.productionProgressGraphics.rect(-30, -3, 60, 6);
+            this.productionProgressGraphics.fill();
+
+            // 绘制进度条
+            const progressWidth = 60 * this.productionProgress;
+            this.productionProgressGraphics.fillColor = new Color(0, 255, 0, 255);
+            this.productionProgressGraphics.rect(-30, -3, progressWidth, 6);
+            this.productionProgressGraphics.fill();
+
+            // 绘制边框
+            this.productionProgressGraphics.strokeColor = new Color(255, 255, 255, 255);
+            this.productionProgressGraphics.lineWidth = 1;
+            this.productionProgressGraphics.rect(-30, -3, 60, 6);
+            this.productionProgressGraphics.stroke();
+        }
+    }
+
+    /**
+     * 更新方法
+     */
+    update(deltaTime: number) {
+        if (this.isDestroyed) {
+            return;
+        }
+
+        // 检查游戏状态
+        if (this.gameManager) {
+            const gameState = this.gameManager.getGameState();
+            if (gameState !== GameState.Playing) {
+                return;
+            }
+        }
+
+        // 生产小精灵逻辑
+        if (this.isProducing) {
+            this.productionTimer += deltaTime;
+            this.productionProgress = Math.min(1.0, this.productionTimer / this.productionInterval);
+            this.updateProductionProgressBar();
+
+            if (this.productionProgress >= 1.0) {
+                // 生产完成
+                this.productionTimer = 0;
+                this.productionProgress = 0;
+                this.isProducing = false;
+                this.produceWisp();
+                this.updateProductionProgressBar();
+            }
+        }
+    }
+
+    /**
+     * 开始生产小精灵
+     */
+    startProducingWisp() {
+        if (this.isProducing) {
+            return; // 正在生产中
+        }
+
+        // 检查人口上限
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        
+        if (this.gameManager && !this.gameManager.canAddPopulation(1)) {
+            console.log('Crystal: Cannot produce wisp - population limit reached');
+            return;
+        }
+
+        this.isProducing = true;
+        this.productionTimer = 0;
+        this.productionProgress = 0;
+        this.updateProductionProgressBar();
+    }
+
+    /**
+     * 生产小精灵
+     */
+    produceWisp() {
+        if (!this.wispPrefab || !this.wispContainer) {
+            console.warn('Crystal: Cannot produce wisp - prefab or container missing');
+            return;
+        }
+
+        // 检查人口上限
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        
+        if (this.gameManager && !this.gameManager.canAddPopulation(1)) {
+            console.log('Crystal: Cannot produce wisp - population limit reached');
+            return;
+        }
+
+        // 计算小精灵出现位置（水晶下方100像素）
+        const crystalPos = this.node.worldPosition.clone();
+        const spawnPos = new Vec3(crystalPos.x, crystalPos.y - this.spawnOffset, crystalPos.z);
+
+        // 增加人口（在创建小精灵之前）
+        if (this.gameManager) {
+            if (!this.gameManager.addPopulation(1)) {
+                console.warn('Crystal: Failed to add population, cannot produce wisp');
+                return;
+            }
+        }
+
+        // 创建小精灵
+        const wisp = instantiate(this.wispPrefab);
+        wisp.setParent(this.wispContainer);
+        wisp.setWorldPosition(spawnPos);
+        wisp.active = true;
+
+        // 添加到生产的小精灵列表
+        this.producedWisps.push(wisp);
+
+        // 监听小精灵销毁事件，从列表中移除
+        wisp.once(Node.EventType.NODE_DESTROYED, () => {
+            const index = this.producedWisps.indexOf(wisp);
+            if (index >= 0) {
+                this.producedWisps.splice(index, 1);
+            }
+        });
+
+        console.log(`Crystal: Produced wisp at position (${spawnPos.x.toFixed(2)}, ${spawnPos.y.toFixed(2)})`);
+        
+        // 更新单位信息面板（如果被选中）
+        if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            this.unitSelectionManager.updateUnitInfo({
+                currentUnitCount: this.producedWisps.length
+            });
+        }
+    }
+
+    /**
      * 水晶点击事件
      */
     onCrystalClick(event: EventTouch) {
@@ -201,7 +444,12 @@ export class Crystal extends Component {
                 attackDamage: 0, // 水晶不攻击
                 populationCost: 0, // 水晶不占用人口
                 icon: this.defaultSpriteFrame,
-                collisionRadius: this.collisionRadius
+                collisionRadius: this.collisionRadius,
+                currentUnitCount: this.producedWisps.length,
+                maxUnitCount: 999, // 无上限
+                onTrainWispClick: () => {
+                    this.startProducingWisp();
+                }
             };
             this.unitSelectionManager.selectUnit(this.node, unitInfo);
         }

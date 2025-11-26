@@ -51,12 +51,16 @@ export class MoonWell extends Component {
     private unitSelectionManager: UnitSelectionManager = null!; // 单位选择管理器
     private sprite: Sprite = null!; // Sprite组件引用
     private defaultSpriteFrame: SpriteFrame = null!; // 默认SpriteFrame
+    
+    // 小精灵相关
+    private attachedWisps: Node[] = []; // 依附的小精灵列表
 
     start() {
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
         this.hasIncreasedPopulation = false;
         this.healTimer = 0;
+        this.attachedWisps = [];
 
         // 查找游戏管理器
         this.findGameManager();
@@ -199,6 +203,37 @@ export class MoonWell extends Component {
         if (this.healthBar) {
             this.healthBar.setMaxHealth(this.maxHealth);
             this.healthBar.setHealth(this.currentHealth);
+        }
+    }
+
+    /**
+     * 恢复血量（由小精灵调用）
+     */
+    heal(amount: number) {
+        if (this.isDestroyed) {
+            return;
+        }
+
+        // 如果血量已满，不恢复
+        if (this.currentHealth >= this.maxHealth) {
+            return;
+        }
+
+        const oldHealth = this.currentHealth;
+        this.currentHealth = Math.min(this.currentHealth + amount, this.maxHealth);
+        const actualHeal = this.currentHealth - oldHealth;
+
+        // 更新血条
+        if (this.healthBar) {
+            this.healthBar.setHealth(this.currentHealth);
+        }
+
+        // 更新单位信息面板
+        if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            this.unitSelectionManager.updateUnitInfo({
+                currentHealth: this.currentHealth,
+                maxHealth: this.maxHealth
+            });
         }
     }
 
@@ -465,6 +500,9 @@ export class MoonWell extends Component {
                 },
                 onSellClick: () => {
                     this.onSellClick();
+                },
+                onDetachWispClick: () => {
+                    this.detachWisp();
                 }
             };
             this.unitSelectionManager.selectUnit(this.node, unitInfo);
@@ -677,6 +715,52 @@ export class MoonWell extends Component {
 
         // 隐藏面板
         this.hideSelectionPanel();
+    }
+
+    /**
+     * 让小精灵依附
+     */
+    attachWisp(wisp: Node) {
+        const wispScript = wisp.getComponent('Wisp') as any;
+        if (!wispScript) {
+            console.warn('MoonWell: Cannot attach - wisp script not found');
+            return;
+        }
+
+        // 检查小精灵是否已经依附在其他建筑物上
+        if (wispScript.getIsAttached && wispScript.getIsAttached()) {
+            console.warn('MoonWell: Wisp already attached to another building');
+            return;
+        }
+
+        // 让小精灵依附
+        if (wispScript.attachToBuilding) {
+            wispScript.attachToBuilding(this.node);
+            this.attachedWisps.push(wisp);
+            console.log(`MoonWell: Wisp attached, total: ${this.attachedWisps.length}`);
+        }
+    }
+
+    /**
+     * 卸下小精灵
+     */
+    detachWisp() {
+        if (this.attachedWisps.length === 0) {
+            console.log('MoonWell: No wisp to detach');
+            return;
+        }
+
+        // 卸下第一个小精灵
+        const wisp = this.attachedWisps[0];
+        const wispScript = wisp.getComponent('Wisp') as any;
+        if (wispScript && wispScript.detachFromBuilding) {
+            wispScript.detachFromBuilding();
+            const index = this.attachedWisps.indexOf(wisp);
+            if (index >= 0) {
+                this.attachedWisps.splice(index, 1);
+            }
+            console.log(`MoonWell: Wisp detached, remaining: ${this.attachedWisps.length}`);
+        }
     }
 
     /**

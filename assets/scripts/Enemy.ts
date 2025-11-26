@@ -207,6 +207,16 @@ export class Enemy extends Component {
         if (wellsNode) {
             wells = wellsNode.children;
         }
+
+        // 查找小精灵
+        let wisps: Node[] = [];
+        let wispsNode = find('Wisps');
+        if (!wispsNode && this.node.scene) {
+            wispsNode = findNodeRecursive(this.node.scene, 'Wisps');
+        }
+        if (wispsNode) {
+            wisps = wispsNode.children;
+        }
         
         let nearestTarget: Node = null!;
         let minDistance = Infinity;
@@ -259,7 +269,23 @@ export class Enemy extends Component {
             }
         }
 
-        // 如果找到防御塔、战争古树或月亮井，优先攻击
+        // 查找攻击范围内的小精灵（如果防御塔、战争古树和月亮井不在范围内，攻击小精灵）
+        for (const wisp of wisps) {
+            if (wisp && wisp.active && wisp.isValid) {
+                const wispScript = wisp.getComponent('Wisp') as any;
+                // 检查小精灵是否存活
+                if (wispScript && wispScript.isAlive && wispScript.isAlive()) {
+                    const distance = Vec3.distance(this.node.worldPosition, wisp.worldPosition);
+                    // 如果小精灵在攻击范围内，选择最近的
+                    if (distance <= this.attackRange && distance < minDistance) {
+                        minDistance = distance;
+                        nearestTarget = wisp;
+                    }
+                }
+            }
+        }
+
+        // 如果找到防御塔、战争古树、月亮井或小精灵，优先攻击
         if (nearestTarget) {
             this.currentTarget = nearestTarget;
             return;
@@ -412,6 +438,29 @@ export class Enemy extends Component {
                 }
             }
         }
+
+        // 检查小精灵
+        let wispsNode = find('Wisps');
+        if (!wispsNode && this.node.scene) {
+            wispsNode = findNodeRecursive(this.node.scene, 'Wisps');
+        }
+        
+        if (wispsNode) {
+            const wisps = wispsNode.children || [];
+            for (const wisp of wisps) {
+                if (wisp && wisp.active && wisp.isValid) {
+                    const wispScript = wisp.getComponent('Wisp') as any;
+                    if (wispScript && wispScript.isAlive && wispScript.isAlive()) {
+                        const distance = Vec3.distance(this.node.worldPosition, wisp.worldPosition);
+                        if (distance <= detectionRange) {
+                            // 找到路径上的小精灵，设置为目标
+                            this.currentTarget = wisp;
+                            return;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     stopMoving() {
@@ -433,7 +482,8 @@ export class Enemy extends Component {
         const treeScript = this.currentTarget.getComponent('WarAncientTree') as any;
         const wellScript = this.currentTarget.getComponent('MoonWell') as any;
         const crystalScript = this.currentTarget.getComponent('Crystal') as any;
-        const targetScript = towerScript || treeScript || wellScript || crystalScript;
+        const wispScript = this.currentTarget.getComponent('Wisp') as any;
+        const targetScript = towerScript || treeScript || wellScript || crystalScript || wispScript;
         
         if (targetScript && targetScript.takeDamage) {
             targetScript.takeDamage(this.attackDamage);
@@ -446,6 +496,8 @@ export class Enemy extends Component {
                 console.debug(`Enemy: Attacked moon well, dealt ${this.attackDamage} damage`);
             } else if (crystalScript) {
                 console.debug(`Enemy: Attacked crystal, dealt ${this.attackDamage} damage`);
+            } else if (wispScript) {
+                console.debug(`Enemy: Attacked wisp, dealt ${this.attackDamage} damage`);
             }
         } else {
             // 目标无效，清除目标
