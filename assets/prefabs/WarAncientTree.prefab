@@ -113,12 +113,12 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "2a308051-27be-4af7-966d-d936ab0d03b9@f9941",
+      "__uuid__": "0bdffacc-6cf4-4bca-b28b-38d00663b7f4@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 0,
     "_fillType": 0,
-    "_sizeMode": 1,
+    "_sizeMode": 0,
     "_fillCenter": {
       "__type__": "cc.Vec2",
       "x": 0,
@@ -136,7 +136,7 @@
     "fileId": "04hCGbpSlKG49CAyFRFRlb"
   },
   {
-    "__type__": "cfa3aZFDzRGrbPQ6RecnNi3",
+    "__type__": "749aa46MitCKI4cZ6Nkdq4M",
     "_name": "",
     "_objFlags": 0,
     "__editorExtras__": {},
@@ -156,7 +156,7 @@
       "__expectedType__": "cc.Prefab"
     },
     "towerPrefab": {
-      "__uuid__": "bcbcc8da-eb3d-4ad2-a55a-b0a0cb5da998",
+      "__uuid__": "8bdda83a-523b-4c37-b133-ca536dea6db7",
       "__expectedType__": "cc.Prefab"
     },
     "explosionEffect": {
@@ -175,12 +175,12 @@
     "maxTowerCount": 4,
     "productionInterval": 2,
     "spawnOffset": 100,
-    "moveAwayDistance": 50,
+    "moveAwayDistance": 80,
     "_id": ""
   },
   {
     "__type__": "cc.CompPrefabInfo",
-    "fileId": "acB5o9ULRD8L1PaCDrYjy1"
+    "fileId": "07AqQj1rBPpbg/81SWD9Gf"
   },
   {
     "__type__": "cc.PrefabInfo",

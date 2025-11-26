@@ -661,6 +661,13 @@ export class WarAncientTree extends Component {
         }
 
         console.log(`WarAncientTree: Produced arrower ${this.producedTowers.length}/${this.maxTowerCount} at position (${spawnPos.x.toFixed(2)}, ${spawnPos.y.toFixed(2)})`);
+        
+        // 更新单位信息面板（如果被选中）
+        if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            this.unitSelectionManager.updateUnitInfo({
+                currentUnitCount: this.producedTowers.length
+            });
+        }
     }
 
     findAvailableSpawnPosition(initialPos: Vec3): Vec3 {
@@ -896,6 +903,13 @@ export class WarAncientTree extends Component {
         const afterCount = this.producedTowers.length;
         if (beforeCount !== afterCount) {
             console.log(`WarAncientTree.cleanupDeadTowers: Removed ${beforeCount - afterCount} dead arrowers, remaining: ${afterCount}`);
+            
+            // 更新单位信息面板（如果被选中）
+            if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+                this.unitSelectionManager.updateUnitInfo({
+                    currentUnitCount: this.producedTowers.length
+                });
+            }
         }
     }
 
@@ -1045,7 +1059,15 @@ export class WarAncientTree extends Component {
                 populationCost: 0, // 战争古树不占用人口
                 icon: this.defaultSpriteFrame,
                 collisionRadius: this.collisionRadius,
-                attackRange: this.attackRange
+                attackRange: this.attackRange,
+                currentUnitCount: this.producedTowers.length,
+                maxUnitCount: this.maxTowerCount,
+                onUpgradeClick: () => {
+                    this.onUpgradeClick();
+                },
+                onSellClick: () => {
+                    this.onSellClick();
+                }
             };
             this.unitSelectionManager.selectUnit(this.node, unitInfo);
         }
@@ -1110,8 +1132,10 @@ export class WarAncientTree extends Component {
     /**
      * 拆除按钮点击事件
      */
-    onSellClick(event: EventTouch) {
-        event.propagationStopped = true;
+    onSellClick(event?: EventTouch) {
+        if (event) {
+            event.propagationStopped = true;
+        }
         
         if (!this.gameManager) {
             this.findGameManager();
@@ -1134,8 +1158,10 @@ export class WarAncientTree extends Component {
     /**
      * 升级按钮点击事件
      */
-    onUpgradeClick(event: EventTouch) {
-        event.propagationStopped = true;
+    onUpgradeClick(event?: EventTouch) {
+        if (event) {
+            event.propagationStopped = true;
+        }
         
         if (!this.gameManager) {
             this.findGameManager();
@@ -1167,7 +1193,9 @@ export class WarAncientTree extends Component {
             this.unitSelectionManager.updateUnitInfo({
                 level: this.level,
                 currentHealth: this.currentHealth,
-                maxHealth: this.maxHealth
+                maxHealth: this.maxHealth,
+                maxUnitCount: this.maxTowerCount,
+                currentUnitCount: this.producedTowers.length
             });
         }
 

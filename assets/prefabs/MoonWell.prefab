@@ -113,7 +113,7 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "1c337c70-3b83-4f1b-b054-9422276a5511@f9941",
+      "__uuid__": "e10ca06d-de0f-4550-9eb9-326455945541@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 0,
@@ -136,7 +136,7 @@
     "fileId": "88BsDjK2BDgpGP6fQb9pZN"
   },
   {
-    "__type__": "92dcap7L/ZO47Nu6gp7UY3p",
+    "__type__": "15959jH0clDHICFDysTjC05",
     "_name": "",
     "_objFlags": 0,
     "__editorExtras__": {},
@@ -158,11 +158,16 @@
     },
     "buildCost": 10,
     "populationIncrease": 10,
+    "healRange": 100,
+    "healAmount": 1,
+    "healInterval": 2,
+    "level": 1,
+    "collisionRadius": 40,
     "_id": ""
   },
   {
     "__type__": "cc.CompPrefabInfo",
-    "fileId": "01gNWGglpErJeQqz2Zc3EB"
+    "fileId": "f3HBnTK5hKUKms7IohpDOC"
   },
   {
     "__type__": "cc.PrefabInfo",
@@ -173,7 +178,6 @@
       "__id__": 0
     },
     "fileId": "89aCySrFJKXblH/K3bEw+z",
-    "instance": null,
-    "targetOverrides": null
+    "instance": null
   }
 ]

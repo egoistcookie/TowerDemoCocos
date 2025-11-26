@@ -457,7 +457,15 @@ export class MoonWell extends Component {
                 populationCost: 0, // 月亮井不占用人口，反而增加人口上限
                 icon: this.defaultSpriteFrame,
                 collisionRadius: this.collisionRadius,
-                healRange: this.healRange
+                healRange: this.healRange,
+                healAmount: this.healAmount,
+                healSpeed: 1.0 / this.healInterval, // 治疗速度（次/秒）
+                onUpgradeClick: () => {
+                    this.onUpgradeClick();
+                },
+                onSellClick: () => {
+                    this.onSellClick();
+                }
             };
             this.unitSelectionManager.selectUnit(this.node, unitInfo);
         }
@@ -585,8 +593,10 @@ export class MoonWell extends Component {
     /**
      * 拆除按钮点击事件
      */
-    onSellClick(event: EventTouch) {
-        event.propagationStopped = true;
+    onSellClick(event?: EventTouch) {
+        if (event) {
+            event.propagationStopped = true;
+        }
         
         if (!this.gameManager) {
             this.findGameManager();
@@ -609,8 +619,10 @@ export class MoonWell extends Component {
     /**
      * 升级按钮点击事件
      */
-    onUpgradeClick(event: EventTouch) {
-        event.propagationStopped = true;
+    onUpgradeClick(event?: EventTouch) {
+        if (event) {
+            event.propagationStopped = true;
+        }
         
         if (!this.gameManager) {
             this.findGameManager();
@@ -650,7 +662,15 @@ export class MoonWell extends Component {
                 populationCost: 0,
                 icon: this.defaultSpriteFrame,
                 collisionRadius: this.collisionRadius,
-                healRange: this.healRange
+                healRange: this.healRange,
+                healAmount: this.healAmount,
+                healSpeed: 1.0 / this.healInterval,
+                onUpgradeClick: () => {
+                    this.onUpgradeClick();
+                },
+                onSellClick: () => {
+                    this.onSellClick();
+                }
             };
             this.unitSelectionManager.selectUnit(this.node, unitInfo);
         }

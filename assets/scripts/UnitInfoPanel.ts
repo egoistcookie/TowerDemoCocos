@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, UITransform, Graphics, Color, Label, Sprite, SpriteFrame, find } from 'cc';
+import { _decorator, Component, Node, UITransform, Graphics, Color, Label, Sprite, SpriteFrame, find, EventTouch, Button } from 'cc';
 const { ccclass, property } = _decorator;
 
 /**
@@ -16,6 +16,17 @@ export interface UnitInfo {
     collisionRadius?: number; // 占地范围
     attackRange?: number; // 攻击范围（如果有）
     healRange?: number; // 治疗范围（如果有，如月亮井）
+    // 建筑物属性
+    currentUnitCount?: number; // 当前训练单位数量（建筑物）
+    maxUnitCount?: number; // 最大训练单位数量（建筑物）
+    healAmount?: number; // 治疗量（建筑物，如月亮井）
+    healSpeed?: number; // 治疗速度（建筑物，如月亮井，单位：次/秒）
+    // 防御单位属性
+    attackFrequency?: number; // 攻击频率（防御单位，单位：次/秒）
+    moveSpeed?: number; // 移动速度（防御单位，单位：像素/秒）
+    // 按钮回调
+    onUpgradeClick?: () => void; // 升级按钮点击回调
+    onSellClick?: () => void; // 回收按钮点击回调
 }
 
 @ccclass('UnitInfoPanel')
@@ -30,6 +41,14 @@ export class UnitInfoPanel extends Component {
     private healthLabel: Label = null!; // 生命值标签
     private attackLabel: Label = null!; // 攻击力标签
     private populationLabel: Label = null!; // 人口标签
+    private unitCountLabel: Label = null!; // 训练单位数量标签（建筑物）
+    private healAmountLabel: Label = null!; // 治疗量标签（建筑物）
+    private healSpeedLabel: Label = null!; // 治疗速度标签（建筑物）
+    private attackFrequencyLabel: Label = null!; // 攻击频率标签（防御单位）
+    private moveSpeedLabel: Label = null!; // 移动速度标签（防御单位）
+    private buttonGridNode: Node = null!; // 九宫格按钮区域节点
+    private buttonNodes: Node[] = []; // 按钮节点数组（9个）
+    private currentUnitInfo: UnitInfo | null = null!; // 当前单位信息
 
     start() {
         this.initPanel();
@@ -64,7 +83,7 @@ export class UnitInfoPanel extends Component {
         // 创建背景
         this.createBackground(screenWidth, screenHeight / 6);
 
-        // 创建内容
+        // 创建内容（左侧信息 + 右侧按钮）
         this.createContent(screenWidth, screenHeight / 6);
 
         // 初始隐藏
@@ -100,50 +119,156 @@ export class UnitInfoPanel extends Component {
         contentNode.setParent(this.panelNode);
         contentNode.setPosition(0, 0, 0);
 
-        // 左侧：单位图标
+        // 计算三个区域的宽度（各占33%）
+        const areaWidth = width / 3; // 每个区域占1/3宽度
+        
+        // 左侧：单位图标区域（33%宽度）
+        // 左侧区域范围：从 -width/2 到 -width/2 + areaWidth，中心在 -width/2 + areaWidth/2
         this.iconNode = new Node('Icon');
         this.iconNode.setParent(contentNode);
         const iconTransform = this.iconNode.addComponent(UITransform);
-        iconTransform.setContentSize(height * 0.8, height * 0.8);
-        this.iconNode.setPosition(-width / 2 + height * 0.5, 0, 0);
+        iconTransform.setContentSize(areaWidth, height * 0.8);
+        // 图标位置：左侧区域中心
+        this.iconNode.setPosition(-width / 2 + areaWidth / 2, 0, 0);
         const iconSprite = this.iconNode.addComponent(Sprite);
         iconSprite.sizeMode = Sprite.SizeMode.CUSTOM;
 
-        // 右侧：属性信息
+        // 中间：属性信息区域（33%宽度）
+        // 中间区域范围：从 -width/6 到 width/6，中心在 0
         const infoNode = new Node('Info');
         infoNode.setParent(contentNode);
         const infoTransform = infoNode.addComponent(UITransform);
-        infoTransform.setContentSize(width - height, height);
-        infoNode.setPosition(height * 0.5, 0, 0);
+        infoTransform.setContentSize(areaWidth, height);
+        // 信息区域位置：中间区域中心（面板中心）
+        infoNode.setPosition(0, 0, 0);
+
+        // infoNode的左边缘位置（相对于infoNode中心）
+        const infoLeftEdge = 0;//-areaWidth / 2;
+        const labelLeftPadding = 10; // 左对齐时的内边距
+        const labelX = infoLeftEdge + labelLeftPadding; // 标签的x坐标（左对齐）
 
         // 名称
         this.nameLabel = this.createLabel('Name', '单位名称', 24, new Color(255, 255, 255, 255));
         this.nameLabel.node.setParent(infoNode);
-        this.nameLabel.node.setPosition(0, height / 2 - 20, 0);
+        this.nameLabel.node.setPosition(labelX, height / 2 - 20, 0);
 
         // 等级
         this.levelLabel = this.createLabel('Level', '等级: 1', 18, new Color(200, 200, 200, 255));
         this.levelLabel.node.setParent(infoNode);
-        this.levelLabel.node.setPosition(0, height / 2 - 50, 0);
+        this.levelLabel.node.setPosition(labelX, height / 2 - 50, 0);
 
         // 生命值
         this.healthLabel = this.createLabel('Health', '生命值: 100/100', 18, new Color(200, 200, 200, 255));
         this.healthLabel.node.setParent(infoNode);
-        this.healthLabel.node.setPosition(0, height / 2 - 80, 0);
+        this.healthLabel.node.setPosition(labelX, height / 2 - 80, 0);
 
         // 攻击力
         this.attackLabel = this.createLabel('Attack', '攻击力: 10', 18, new Color(200, 200, 200, 255));
         this.attackLabel.node.setParent(infoNode);
-        this.attackLabel.node.setPosition(0, height / 2 - 110, 0);
+        this.attackLabel.node.setPosition(labelX, height / 2 - 110, 0);
 
         // 人口
         this.populationLabel = this.createLabel('Population', '占用人口: 1', 18, new Color(200, 200, 200, 255));
         this.populationLabel.node.setParent(infoNode);
-        this.populationLabel.node.setPosition(0, height / 2 - 140, 0);
+        this.populationLabel.node.setPosition(labelX, height / 2 - 140, 0);
+
+        // 训练单位数量（建筑物）
+        this.unitCountLabel = this.createLabel('UnitCount', '训练单位: 0/0', 18, new Color(200, 200, 200, 255));
+        this.unitCountLabel.node.setParent(infoNode);
+        this.unitCountLabel.node.setPosition(labelX, height / 2 - 170, 0);
+        this.unitCountLabel.node.active = false;
+
+        // 治疗量（建筑物）
+        this.healAmountLabel = this.createLabel('HealAmount', '治疗量: 0', 18, new Color(200, 200, 200, 255));
+        this.healAmountLabel.node.setParent(infoNode);
+        this.healAmountLabel.node.setPosition(labelX, height / 2 - 200, 0);
+        this.healAmountLabel.node.active = false;
+
+        // 治疗速度（建筑物）
+        this.healSpeedLabel = this.createLabel('HealSpeed', '治疗速度: 0/秒', 18, new Color(200, 200, 200, 255));
+        this.healSpeedLabel.node.setParent(infoNode);
+        this.healSpeedLabel.node.setPosition(labelX, height / 2 - 230, 0);
+        this.healSpeedLabel.node.active = false;
+
+        // 攻击频率（防御单位）
+        this.attackFrequencyLabel = this.createLabel('AttackFrequency', '攻击频率: 0/秒', 18, new Color(200, 200, 200, 255));
+        this.attackFrequencyLabel.node.setParent(infoNode);
+        this.attackFrequencyLabel.node.setPosition(labelX, height / 2 - 170, 0);
+        this.attackFrequencyLabel.node.active = false;
+
+        // 移动速度（防御单位）
+        this.moveSpeedLabel = this.createLabel('MoveSpeed', '移动速度: 0', 18, new Color(200, 200, 200, 255));
+        this.moveSpeedLabel.node.setParent(infoNode);
+        this.moveSpeedLabel.node.setPosition(labelX, height / 2 - 200, 0);
+        this.moveSpeedLabel.node.active = false;
+
+        // 右侧：九宫格按钮区域（33%宽度）
+        // 右侧区域范围：从 width/6 到 width/2，中心在 width/2 - areaWidth/2 = width/3
+        this.createButtonGrid(contentNode, width, height, areaWidth);
     }
 
     /**
-     * 创建标签
+     * 创建九宫格按钮区域
+     */
+    createButtonGrid(parentNode: Node, panelWidth: number, panelHeight: number, buttonAreaWidth: number) {
+        // 创建按钮区域节点
+        this.buttonGridNode = new Node('ButtonGrid');
+        this.buttonGridNode.setParent(parentNode);
+        const gridTransform = this.buttonGridNode.addComponent(UITransform);
+        gridTransform.setContentSize(buttonAreaWidth, panelHeight);
+        // 按钮区域位置：右侧区域中心（相对于父节点）
+        this.buttonGridNode.setPosition(panelWidth / 2 - buttonAreaWidth / 2, 0, 0);
+
+        // 按钮大小和间距
+        const buttonSize = Math.min(buttonAreaWidth / 3.5, panelHeight / 3.5); // 按钮大小
+        const spacing = buttonSize * 0.2; // 按钮间距
+        const startX = -buttonAreaWidth / 2 + buttonSize / 2 + spacing;
+        const startY = panelHeight / 2 - buttonSize / 2 - spacing;
+
+        // 创建9个按钮（3x3网格）
+        this.buttonNodes = [];
+        for (let row = 0; row < 3; row++) {
+            for (let col = 0; col < 3; col++) {
+                const buttonIndex = row * 3 + col;
+                const buttonNode = new Node(`Button${buttonIndex}`);
+                buttonNode.setParent(this.buttonGridNode);
+                
+                const buttonTransform = buttonNode.addComponent(UITransform);
+                buttonTransform.setContentSize(buttonSize, buttonSize);
+                
+                const x = startX + col * (buttonSize + spacing);
+                const y = startY - row * (buttonSize + spacing);
+                buttonNode.setPosition(x, y, 0);
+
+                // 添加按钮背景
+                const buttonGraphics = buttonNode.addComponent(Graphics);
+                buttonGraphics.fillColor = new Color(60, 60, 60, 200); // 半透明深灰色
+                buttonGraphics.rect(-buttonSize / 2, -buttonSize / 2, buttonSize, buttonSize);
+                buttonGraphics.fill();
+                buttonGraphics.strokeColor = new Color(150, 150, 150, 255); // 边框
+                buttonGraphics.lineWidth = 2;
+                buttonGraphics.rect(-buttonSize / 2, -buttonSize / 2, buttonSize, buttonSize);
+                buttonGraphics.stroke();
+
+                // 添加按钮组件（用于点击检测）
+                const button = buttonNode.addComponent(Button);
+                button.transition = Button.Transition.NONE; // 不使用默认过渡
+
+                // 添加标签（暂时为空，后续可以设置图标）
+                const labelNode = new Node('Label');
+                labelNode.setParent(buttonNode);
+                const label = labelNode.addComponent(Label);
+                label.string = '';
+                label.fontSize = 14;
+                label.color = Color.WHITE;
+
+                this.buttonNodes.push(buttonNode);
+            }
+        }
+    }
+
+    /**
+     * 创建标签（左对齐）
      */
     createLabel(name: string, text: string, fontSize: number, color: Color): Label {
         const labelNode = new Node(name);
@@ -151,6 +276,8 @@ export class UnitInfoPanel extends Component {
         label.string = text;
         label.fontSize = fontSize;
         label.color = color;
+        // 设置左对齐
+        label.horizontalAlign = Label.HorizontalAlign.LEFT;
         return label;
     }
 
@@ -161,6 +288,9 @@ export class UnitInfoPanel extends Component {
         if (!this.panelNode) {
             this.initPanel();
         }
+
+        // 保存当前单位信息
+        this.currentUnitInfo = unitInfo;
 
         // 更新图标
         if (this.iconNode) {
@@ -205,8 +335,133 @@ export class UnitInfoPanel extends Component {
             }
         }
 
+        // 更新建筑物属性
+        if (this.unitCountLabel) {
+            if (unitInfo.currentUnitCount !== undefined && unitInfo.maxUnitCount !== undefined) {
+                this.unitCountLabel.string = `训练单位: ${unitInfo.currentUnitCount}/${unitInfo.maxUnitCount}`;
+                this.unitCountLabel.node.active = true;
+            } else {
+                this.unitCountLabel.node.active = false;
+            }
+        }
+
+        if (this.healAmountLabel) {
+            if (unitInfo.healAmount !== undefined && unitInfo.healAmount > 0) {
+                this.healAmountLabel.string = `治疗量: ${unitInfo.healAmount}`;
+                this.healAmountLabel.node.active = true;
+            } else {
+                this.healAmountLabel.node.active = false;
+            }
+        }
+
+        if (this.healSpeedLabel) {
+            if (unitInfo.healSpeed !== undefined && unitInfo.healSpeed > 0) {
+                this.healSpeedLabel.string = `治疗速度: ${unitInfo.healSpeed.toFixed(2)}/秒`;
+                this.healSpeedLabel.node.active = true;
+            } else {
+                this.healSpeedLabel.node.active = false;
+            }
+        }
+
+        // 更新防御单位属性
+        if (this.attackFrequencyLabel) {
+            if (unitInfo.attackFrequency !== undefined && unitInfo.attackFrequency > 0) {
+                this.attackFrequencyLabel.string = `攻击频率: ${unitInfo.attackFrequency.toFixed(2)}/秒`;
+                this.attackFrequencyLabel.node.active = true;
+            } else {
+                this.attackFrequencyLabel.node.active = false;
+            }
+        }
+
+        if (this.moveSpeedLabel) {
+            if (unitInfo.moveSpeed !== undefined && unitInfo.moveSpeed > 0) {
+                this.moveSpeedLabel.string = `移动速度: ${unitInfo.moveSpeed}`;
+                this.moveSpeedLabel.node.active = true;
+            } else {
+                this.moveSpeedLabel.node.active = false;
+            }
+        }
+
+        // 更新按钮
+        this.updateButtons(unitInfo);
+
         // 显示面板
         this.show();
+    }
+
+    /**
+     * 更新按钮显示和功能
+     */
+    updateButtons(unitInfo: UnitInfo) {
+        if (!this.buttonNodes || this.buttonNodes.length < 9) {
+            return;
+        }
+
+        // 清除所有按钮的点击事件
+        for (const buttonNode of this.buttonNodes) {
+            buttonNode.off(Node.EventType.TOUCH_END);
+            const labelNode = buttonNode.getChildByName('Label');
+            if (labelNode) {
+                const label = labelNode.getComponent(Label);
+                if (label) {
+                    label.string = '';
+                }
+            }
+            // 重置按钮背景
+            const graphics = buttonNode.getComponent(Graphics);
+            if (graphics) {
+                graphics.clear();
+                graphics.fillColor = new Color(60, 60, 60, 200);
+                graphics.rect(-buttonNode.getComponent(UITransform)!.width / 2, 
+                             -buttonNode.getComponent(UITransform)!.height / 2,
+                             buttonNode.getComponent(UITransform)!.width,
+                             buttonNode.getComponent(UITransform)!.height);
+                graphics.fill();
+                graphics.strokeColor = new Color(150, 150, 150, 255);
+                graphics.lineWidth = 2;
+                graphics.rect(-buttonNode.getComponent(UITransform)!.width / 2,
+                             -buttonNode.getComponent(UITransform)!.height / 2,
+                             buttonNode.getComponent(UITransform)!.width,
+                             buttonNode.getComponent(UITransform)!.height);
+                graphics.stroke();
+            }
+        }
+
+        // 设置升级按钮（位置：中间，索引4）
+        if (unitInfo.onUpgradeClick && this.buttonNodes[4]) {
+            const upgradeButton = this.buttonNodes[4];
+            const labelNode = upgradeButton.getChildByName('Label');
+            if (labelNode) {
+                const label = labelNode.getComponent(Label);
+                if (label) {
+                    label.string = '升级';
+                }
+            }
+            upgradeButton.on(Node.EventType.TOUCH_END, () => {
+                if (unitInfo.onUpgradeClick) {
+                    unitInfo.onUpgradeClick();
+                }
+            });
+        }
+
+        // 设置回收按钮（位置：右下，索引8）
+        if (unitInfo.onSellClick && this.buttonNodes[8]) {
+            const sellButton = this.buttonNodes[8];
+            const labelNode = sellButton.getChildByName('Label');
+            if (labelNode) {
+                const label = labelNode.getComponent(Label);
+                if (label) {
+                    label.string = '回收';
+                }
+            }
+            sellButton.on(Node.EventType.TOUCH_END, () => {
+                if (unitInfo.onSellClick) {
+                    unitInfo.onSellClick();
+                }
+            });
+        }
+
+        // 其余7个按钮暂时置空（已默认清空）
     }
 
     /**
@@ -243,6 +498,28 @@ export class UnitInfoPanel extends Component {
         // 更新等级
         if (unitInfo.level !== undefined && this.levelLabel) {
             this.levelLabel.string = `等级: ${unitInfo.level}`;
+        }
+
+        // 更新攻击力
+        if (unitInfo.attackDamage !== undefined && this.attackLabel) {
+            if (unitInfo.attackDamage > 0) {
+                this.attackLabel.string = `攻击力: ${unitInfo.attackDamage}`;
+                this.attackLabel.node.active = true;
+            } else {
+                this.attackLabel.node.active = false;
+            }
+        }
+
+        // 更新训练单位数量
+        if (unitInfo.currentUnitCount !== undefined && unitInfo.maxUnitCount !== undefined && this.unitCountLabel) {
+            this.unitCountLabel.string = `训练单位: ${unitInfo.currentUnitCount}/${unitInfo.maxUnitCount}`;
+        }
+
+        // 更新当前单位信息（合并更新）
+        if (this.currentUnitInfo) {
+            Object.assign(this.currentUnitInfo, unitInfo);
+            // 重新更新按钮（以防回调函数变化）
+            this.updateButtons(this.currentUnitInfo);
         }
     }
 }

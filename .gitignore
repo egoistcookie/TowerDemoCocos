@@ -23,3 +23,5 @@ node_modules/
 .idea/
 
 *meta
+scene.scene
+*.prefab

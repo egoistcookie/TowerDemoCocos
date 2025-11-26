@@ -1835,7 +1835,15 @@ export class Arrower extends Component {
                 populationCost: 1, // Tower占用1个人口
                 icon: this.defaultSpriteFrame,
                 collisionRadius: this.collisionRadius,
-                attackRange: this.attackRange
+                attackRange: this.attackRange,
+                attackFrequency: 1.0 / this.attackInterval, // 攻击频率（次/秒）
+                moveSpeed: this.moveSpeed,
+                onUpgradeClick: () => {
+                    this.onUpgradeClick();
+                },
+                onSellClick: () => {
+                    this.onSellClick();
+                }
             };
             this.unitSelectionManager.selectUnit(this.node, unitInfo);
         }
@@ -2085,8 +2093,10 @@ export class Arrower extends Component {
         // 只有在到达目标位置后才会清除
     }
 
-    onSellClick(event: EventTouch) {
-        event.propagationStopped = true;
+    onSellClick(event?: EventTouch) {
+        if (event) {
+            event.propagationStopped = true;
+        }
         
         if (!this.gameManager) {
             this.findGameManager();
@@ -2106,8 +2116,10 @@ export class Arrower extends Component {
         this.destroyTower();
     }
 
-    onUpgradeClick(event: EventTouch) {
-        event.propagationStopped = true;
+    onUpgradeClick(event?: EventTouch) {
+        if (event) {
+            event.propagationStopped = true;
+        }
         
         if (!this.gameManager) {
             this.findGameManager();
@@ -2141,7 +2153,9 @@ export class Arrower extends Component {
                 level: this.level,
                 attackDamage: this.attackDamage,
                 currentHealth: this.currentHealth,
-                maxHealth: this.maxHealth
+                maxHealth: this.maxHealth,
+                attackFrequency: 1.0 / this.attackInterval,
+                moveSpeed: this.moveSpeed
             });
         }
 
