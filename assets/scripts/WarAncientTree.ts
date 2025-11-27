@@ -5,6 +5,7 @@ import { DamageNumber } from './DamageNumber';
 import { Arrow } from './Arrow';
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
+import { SelectionManager } from './SelectionManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('WarAncientTree')
@@ -1013,17 +1014,69 @@ export class WarAncientTree extends Component {
      * 战争古树点击事件
      */
     onWarAncientTreeClick(event: EventTouch) {
+        console.log('WarAncientTree.onWarAncientTreeClick: Entering method');
+        // 检查是否有选中的小精灵，如果有则不处理点击事件（让小精灵移动到建筑物）
+        const selectionManager = this.findSelectionManager();
+        console.log('WarAncientTree.onWarAncientTreeClick: Found selectionManager:', selectionManager ? 'yes' : 'no');
+        
+        let hasSelectedWisps = false;
+        if (selectionManager && selectionManager.hasSelectedWisps && typeof selectionManager.hasSelectedWisps === 'function') {
+            hasSelectedWisps = selectionManager.hasSelectedWisps();
+            console.log('WarAncientTree.onWarAncientTreeClick: Has selected wisps:', hasSelectedWisps);
+        } else {
+            console.log('WarAncientTree.onWarAncientTreeClick: selectionManager.hasSelectedWisps is not a function');
+        }
+        
+        if (hasSelectedWisps) {
+            // 有选中的小精灵，不处理建筑物的点击事件，让SelectionManager处理移动
+            // 不设置propagationStopped，让事件继续传播，这样SelectionManager的移动命令可以执行
+            console.log('WarAncientTree.onWarAncientTreeClick: Has selected wisps, returning to let SelectionManager handle movement');
+            return;
+        }
+
         // 阻止事件传播
         event.propagationStopped = true;
+        console.log('WarAncientTree.onWarAncientTreeClick: Event propagation stopped');
 
         // 如果已经显示选择面板，先隐藏
         if (this.selectionPanel && this.selectionPanel.isValid) {
+            console.log('WarAncientTree.onWarAncientTreeClick: Selection panel already shown, hiding it');
             this.hideSelectionPanel();
             return;
         }
 
         // 显示选择面板
+        console.log('WarAncientTree.onWarAncientTreeClick: Showing selection panel');
         this.showSelectionPanel();
+        console.log('WarAncientTree.onWarAncientTreeClick: Method completed');
+    }
+
+    /**
+     * 查找SelectionManager
+     */
+    private findSelectionManager(): any {
+        let managerNode = find('SelectionManager');
+        if (managerNode) {
+            const selectionManager = managerNode.getComponent('SelectionManager');
+            if (selectionManager) {
+                return selectionManager;
+            }
+        }
+        
+        const scene = this.node.scene;
+        if (scene) {
+            const findInScene = (node: Node, componentType: any): any => {
+                const comp = node.getComponent(componentType);
+                if (comp) return comp;
+                for (const child of node.children) {
+                    const found = findInScene(child, componentType);
+                    if (found) return found;
+                }
+                return null;
+            };
+            return findInScene(scene, 'SelectionManager');
+        }
+        return null;
     }
 
     /**

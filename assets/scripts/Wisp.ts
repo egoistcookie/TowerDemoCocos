@@ -360,6 +360,8 @@ export class Wisp extends Component {
      * @returns 是否找到并依附到建筑物
      */
     private checkBuildingNearbyAndAttach(targetPos: Vec3): boolean {
+        const attachRange = 10; // 依附范围（像素），当距离建筑物10像素以内时依附
+        
         // 查找战争古树
         let treesNode = find('WarAncientTrees');
         if (!treesNode && this.node.scene) {
@@ -383,8 +385,8 @@ export class Wisp extends Component {
                     const treeScript = tree.getComponent('WarAncientTree') as any;
                     if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
                         const distance = Vec3.distance(targetPos, tree.worldPosition);
-                        const collisionRadius = treeScript.collisionRadius || 50;
-                        if (distance <= collisionRadius * 1.5) { // 1.5倍碰撞半径内视为附近
+                        // 如果距离建筑物很近（10像素以内），立即依附
+                        if (distance <= attachRange) {
                             // 依附到建筑物
                             this.attachToBuilding(tree);
                             return true;
@@ -417,8 +419,8 @@ export class Wisp extends Component {
                     const wellScript = well.getComponent('MoonWell') as any;
                     if (wellScript && wellScript.isAlive && wellScript.isAlive()) {
                         const distance = Vec3.distance(targetPos, well.worldPosition);
-                        const collisionRadius = wellScript.collisionRadius || 40;
-                        if (distance <= collisionRadius * 1.5) { // 1.5倍碰撞半径内视为附近
+                        // 如果距离建筑物很近（10像素以内），立即依附
+                        if (distance <= attachRange) {
                             // 依附到建筑物
                             this.attachToBuilding(well);
                             return true;
@@ -767,16 +769,20 @@ export class Wisp extends Component {
      * 点击事件
      */
     onWispClick(event: EventTouch) {
+        console.log('Wisp.onWispClick: Wisp clicked, event:', event);
         // 阻止事件冒泡
         event.propagationStopped = true;
 
         // 显示单位信息面板
         if (!this.unitSelectionManager) {
+            console.log('Wisp.onWispClick: Finding UnitSelectionManager');
             this.findUnitSelectionManager();
         }
         if (this.unitSelectionManager) {
+            console.log('Wisp.onWispClick: UnitSelectionManager found');
             // 检查是否已经选中了小精灵
             if (this.unitSelectionManager.isUnitSelected(this.node)) {
+                console.log('Wisp.onWispClick: Wisp already selected, clearing selection');
                 // 如果已经选中，清除选择
                 this.unitSelectionManager.clearSelection();
                 // 同时清除SelectionManager中的选中状态
@@ -794,10 +800,14 @@ export class Wisp extends Component {
                 icon: this.defaultSpriteFrame,
                 collisionRadius: this.collisionRadius
             };
+            console.log('Wisp.onWispClick: Selecting wisp in UnitSelectionManager');
             this.unitSelectionManager.selectUnit(this.node, unitInfo);
             
             // 将小精灵添加到SelectionManager的选中列表中，以便后续可以移动
+            console.log('Wisp.onWispClick: Adding wisp to SelectionManager');
             this.addToSelectionManager();
+        } else {
+            console.log('Wisp.onWispClick: UnitSelectionManager not found');
         }
     }
     
@@ -805,15 +815,22 @@ export class Wisp extends Component {
      * 将小精灵添加到SelectionManager的选中列表中
      */
     private addToSelectionManager() {
+        console.log('Wisp.addToSelectionManager: Adding wisp to SelectionManager');
         // 查找SelectionManager
         const selectionManager = this.findSelectionManager();
         if (selectionManager) {
+            console.log('Wisp.addToSelectionManager: SelectionManager found, clearing previous selection');
             // 清除之前的选择
             selectionManager.clearSelection();
             // 将当前小精灵添加到选中列表
+            console.log('Wisp.addToSelectionManager: Setting selected wisps to current wisp');
             selectionManager.setSelectedWisps([this]);
             // 注册移动命令
+            console.log('Wisp.addToSelectionManager: Registering move command');
             selectionManager.registerMoveCommand();
+            console.log('Wisp.addToSelectionManager: Move command registered successfully');
+        } else {
+            console.log('Wisp.addToSelectionManager: SelectionManager not found');
         }
     }
     
@@ -821,9 +838,13 @@ export class Wisp extends Component {
      * 清除SelectionManager中的选中状态
      */
     private clearSelectionInSelectionManager() {
+        console.log('Wisp.clearSelectionInSelectionManager: Clearing selection in SelectionManager');
         const selectionManager = this.findSelectionManager();
         if (selectionManager) {
+            console.log('Wisp.clearSelectionInSelectionManager: SelectionManager found, clearing selection');
             selectionManager.clearSelection();
+        } else {
+            console.log('Wisp.clearSelectionInSelectionManager: SelectionManager not found');
         }
     }
     
@@ -831,12 +852,19 @@ export class Wisp extends Component {
      * 查找SelectionManager
      */
     private findSelectionManager(): any {
+        console.log('Wisp.findSelectionManager: Finding SelectionManager');
         let managerNode = find('SelectionManager');
         if (managerNode) {
+            console.log('Wisp.findSelectionManager: SelectionManager node found');
             const selectionManager = managerNode.getComponent('SelectionManager');
             if (selectionManager) {
+                console.log('Wisp.findSelectionManager: SelectionManager component found');
                 return selectionManager;
+            } else {
+                console.log('Wisp.findSelectionManager: SelectionManager component not found');
             }
+        } else {
+            console.log('Wisp.findSelectionManager: SelectionManager node not found, searching in scene');
         }
         
         const scene = this.node.scene;
@@ -850,8 +878,15 @@ export class Wisp extends Component {
                 }
                 return null;
             };
-            return findInScene(scene, 'SelectionManager');
+            const selectionManager = findInScene(scene, 'SelectionManager');
+            if (selectionManager) {
+                console.log('Wisp.findSelectionManager: SelectionManager found in scene');
+            } else {
+                console.log('Wisp.findSelectionManager: SelectionManager not found in scene');
+            }
+            return selectionManager;
         }
+        console.log('Wisp.findSelectionManager: Scene not found');
         return null;
     }
 }

@@ -4,6 +4,7 @@ import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
+import { SelectionManager } from './SelectionManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('MoonWell')
@@ -404,22 +405,75 @@ export class MoonWell extends Component {
      * 点击月亮井事件
      */
     onMoonWellClick(event: EventTouch) {
+        console.log('MoonWell.onMoonWellClick: Entering method');
         // 如果游戏已结束，不显示选择面板
         if (this.gameManager && this.gameManager.getGameState() !== GameState.Playing) {
+            console.log('MoonWell.onMoonWellClick: Game not in playing state, returning');
+            return;
+        }
+
+        // 检查是否有选中的小精灵，如果有则不处理点击事件（让小精灵移动到建筑物）
+        const selectionManager = this.findSelectionManager();
+        console.log('MoonWell.onMoonWellClick: Found selectionManager:', selectionManager ? 'yes' : 'no');
+        
+        let hasSelectedWisps = false;
+        if (selectionManager && selectionManager.hasSelectedWisps && typeof selectionManager.hasSelectedWisps === 'function') {
+            hasSelectedWisps = selectionManager.hasSelectedWisps();
+            console.log('MoonWell.onMoonWellClick: Has selected wisps:', hasSelectedWisps);
+        } else {
+            console.log('MoonWell.onMoonWellClick: selectionManager.hasSelectedWisps is not a function');
+        }
+        
+        if (hasSelectedWisps) {
+            // 有选中的小精灵，不处理建筑物的点击事件，让SelectionManager处理移动
+            // 不设置propagationStopped，让事件继续传播，这样SelectionManager的移动命令可以执行
+            console.log('MoonWell.onMoonWellClick: Has selected wisps, returning to let SelectionManager handle movement');
             return;
         }
 
         // 阻止事件冒泡
         event.propagationStopped = true;
+        console.log('MoonWell.onMoonWellClick: Event propagation stopped');
 
         // 如果已有选择面板，先关闭
         if (this.selectionPanel) {
+            console.log('MoonWell.onMoonWellClick: Selection panel already shown, hiding it');
             this.hideSelectionPanel();
             return;
         }
 
         // 显示选择面板
+        console.log('MoonWell.onMoonWellClick: Showing selection panel');
         this.showSelectionPanel();
+        console.log('MoonWell.onMoonWellClick: Method completed');
+    }
+
+    /**
+     * 查找SelectionManager
+     */
+    private findSelectionManager(): any {
+        let managerNode = find('SelectionManager');
+        if (managerNode) {
+            const selectionManager = managerNode.getComponent('SelectionManager');
+            if (selectionManager) {
+                return selectionManager;
+            }
+        }
+        
+        const scene = this.node.scene;
+        if (scene) {
+            const findInScene = (node: Node, componentType: any): any => {
+                const comp = node.getComponent(componentType);
+                if (comp) return comp;
+                for (const child of node.children) {
+                    const found = findInScene(child, componentType);
+                    if (found) return found;
+                }
+                return null;
+            };
+            return findInScene(scene, 'SelectionManager');
+        }
+        return null;
     }
 
     /**
