@@ -628,6 +628,11 @@ export class Wisp extends Component {
         if (this.highlightNode) {
             this.highlightNode.active = highlight;
         }
+        
+        // 如果取消高亮，同时清除UnitSelectionManager中的选中状态
+        if (!highlight && this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            this.unitSelectionManager.clearSelection();
+        }
     }
 
     /**
@@ -646,6 +651,8 @@ export class Wisp extends Component {
             if (this.unitSelectionManager.isUnitSelected(this.node)) {
                 // 如果已经选中，清除选择
                 this.unitSelectionManager.clearSelection();
+                // 同时清除SelectionManager中的选中状态
+                this.clearSelectionInSelectionManager();
                 return;
             }
 
@@ -660,7 +667,64 @@ export class Wisp extends Component {
                 collisionRadius: this.collisionRadius
             };
             this.unitSelectionManager.selectUnit(this.node, unitInfo);
+            
+            // 将小精灵添加到SelectionManager的选中列表中，以便后续可以移动
+            this.addToSelectionManager();
         }
+    }
+    
+    /**
+     * 将小精灵添加到SelectionManager的选中列表中
+     */
+    private addToSelectionManager() {
+        // 查找SelectionManager
+        const selectionManager = this.findSelectionManager();
+        if (selectionManager) {
+            // 清除之前的选择
+            selectionManager.clearSelection();
+            // 将当前小精灵添加到选中列表
+            selectionManager.setSelectedWisps([this]);
+            // 注册移动命令
+            selectionManager.registerMoveCommand();
+        }
+    }
+    
+    /**
+     * 清除SelectionManager中的选中状态
+     */
+    private clearSelectionInSelectionManager() {
+        const selectionManager = this.findSelectionManager();
+        if (selectionManager) {
+            selectionManager.clearSelection();
+        }
+    }
+    
+    /**
+     * 查找SelectionManager
+     */
+    private findSelectionManager(): any {
+        let managerNode = find('SelectionManager');
+        if (managerNode) {
+            const selectionManager = managerNode.getComponent('SelectionManager');
+            if (selectionManager) {
+                return selectionManager;
+            }
+        }
+        
+        const scene = this.node.scene;
+        if (scene) {
+            const findInScene = (node: Node, componentType: any): any => {
+                const comp = node.getComponent(componentType);
+                if (comp) return comp;
+                for (const child of node.children) {
+                    const found = findInScene(child, componentType);
+                    if (found) return found;
+                }
+                return null;
+            };
+            return findInScene(scene, 'SelectionManager');
+        }
+        return null;
     }
 }
 

@@ -757,9 +757,12 @@ export class SelectionManager extends Component {
                 }
             }
 
-            // 不清除选择，保留高亮状态，允许继续移动
-            // 重新注册移动命令，以便下次点击可以继续移动
-            this.registerMoveCommand();
+            // 移除移动命令监听
+            this.canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
+            this.globalTouchHandler = null!;
+            
+            // 清除选择，取消高亮状态，确保每次只能移动一次
+            this.clearSelection();
         };
 
         this.canvas.on(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
