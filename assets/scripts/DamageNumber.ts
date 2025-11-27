@@ -58,9 +58,26 @@ export class DamageNumber extends Component {
         }
         
         if (this.label) {
-            this.label.string = `-${Math.floor(damage)}`;
+            const absDamage = Math.floor(Math.abs(damage));
+            if (damage < 0) {
+                // 负数表示治疗，显示"+"前缀
+                this.label.string = `+${absDamage}`;
+                this.label.color = Color.GREEN;
+            } else {
+                // 正数表示伤害，显示"-"前缀
+                this.label.string = `-${absDamage}`;
+                this.label.color = Color.RED;
+            }
             this.label.fontSize = 20;
-            this.label.color = Color.WHITE;
+        }
+    }
+    
+    /**
+     * 设置颜色
+     */
+    setColor(color: Color) {
+        if (this.label) {
+            this.label.color = color;
         }
     }
 }

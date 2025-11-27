@@ -143,8 +143,13 @@ export class Wisp extends Component {
                     this.isManuallyControlled = false;
                     this.manualMoveTarget = null!;
                     
-                    // 到达目标位置后，检查是否与建筑物重叠
-                    this.checkBuildingOverlap();
+                    // 到达目标位置后，检查附近是否有建筑物，如果有则依附
+                    const attached = this.checkBuildingNearbyAndAttach(targetPos);
+                    
+                    // 如果没有依附到建筑物，再检查是否与建筑物重叠
+                    if (!attached) {
+                        this.checkBuildingOverlap();
+                    }
                 } else {
                     // 继续移动
                     const moveDistance = this.moveSpeed * deltaTime;
@@ -284,8 +289,11 @@ export class Wisp extends Component {
         const buildingPos = building.worldPosition.clone();
         const attachPos = buildingPos.add(this.attachOffset);
         this.node.setWorldPosition(attachPos);
+        
+        // 小精灵消失，进入建筑物内
+        this.node.active = false;
 
-        console.log('Wisp: Attached to building');
+        console.log('Wisp: Attached to building and disappeared into it');
     }
 
     /**
@@ -303,6 +311,9 @@ export class Wisp extends Component {
         // 通知建筑物小精灵已卸下（建筑物会从列表中移除）
         // 注意：建筑物会在detachWisp方法中处理列表移除，这里不需要手动移除
 
+        // 小精灵重新显示
+        this.node.active = true;
+        
         // 移动到建筑物前方
         if (building && building.isValid) {
             const buildingPos = building.worldPosition.clone();
@@ -311,7 +322,7 @@ export class Wisp extends Component {
             this.moveToPosition(frontPos);
         }
 
-        console.log('Wisp: Detached from building');
+        console.log('Wisp: Detached from building and reappeared');
     }
 
     /**
@@ -341,6 +352,83 @@ export class Wisp extends Component {
         this.moveTarget = null!;
         
         console.debug(`Wisp: Manual move target set to (${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
+    }
+    
+    /**
+     * 检查目标位置附近是否有建筑物，如果有则依附
+     * @param targetPos 目标位置
+     * @returns 是否找到并依附到建筑物
+     */
+    private checkBuildingNearbyAndAttach(targetPos: Vec3): boolean {
+        // 查找战争古树
+        let treesNode = find('WarAncientTrees');
+        if (!treesNode && this.node.scene) {
+            const findNodeRecursive = (node: Node, name: string): Node | null => {
+                if (node.name === name) {
+                    return node;
+                }
+                for (const child of node.children) {
+                    const found = findNodeRecursive(child, name);
+                    if (found) return found;
+                }
+                return null;
+            };
+            treesNode = findNodeRecursive(this.node.scene, 'WarAncientTrees');
+        }
+        
+        if (treesNode) {
+            const trees = treesNode.children || [];
+            for (const tree of trees) {
+                if (tree && tree.isValid && tree.active) {
+                    const treeScript = tree.getComponent('WarAncientTree') as any;
+                    if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
+                        const distance = Vec3.distance(targetPos, tree.worldPosition);
+                        const collisionRadius = treeScript.collisionRadius || 50;
+                        if (distance <= collisionRadius * 1.5) { // 1.5倍碰撞半径内视为附近
+                            // 依附到建筑物
+                            this.attachToBuilding(tree);
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 查找月亮井
+        let wellsNode = find('MoonWells');
+        if (!wellsNode && this.node.scene) {
+            const findNodeRecursive = (node: Node, name: string): Node | null => {
+                if (node.name === name) {
+                    return node;
+                }
+                for (const child of node.children) {
+                    const found = findNodeRecursive(child, name);
+                    if (found) return found;
+                }
+                return null;
+            };
+            wellsNode = findNodeRecursive(this.node.scene, 'MoonWells');
+        }
+        
+        if (wellsNode) {
+            const wells = wellsNode.children || [];
+            for (const well of wells) {
+                if (well && well.isValid && well.active) {
+                    const wellScript = well.getComponent('MoonWell') as any;
+                    if (wellScript && wellScript.isAlive && wellScript.isAlive()) {
+                        const distance = Vec3.distance(targetPos, well.worldPosition);
+                        const collisionRadius = wellScript.collisionRadius || 40;
+                        if (distance <= collisionRadius * 1.5) { // 1.5倍碰撞半径内视为附近
+                            // 依附到建筑物
+                            this.attachToBuilding(well);
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        
+        return false;
     }
 
     /**
@@ -427,8 +515,10 @@ export class Wisp extends Component {
         // 根据建筑物类型调用相应的治疗/恢复方法
         const buildingScript = this.attachedBuilding.getComponent('WarAncientTree') as any;
         if (buildingScript && buildingScript.isAlive && buildingScript.isAlive()) {
+            let healed = false;
             if (buildingScript.heal) {
                 buildingScript.heal(this.healAmount);
+                healed = true;
             } else if (buildingScript.getHealth && buildingScript.getMaxHealth) {
                 const currentHealth = buildingScript.getHealth();
                 const maxHealth = buildingScript.getMaxHealth();
@@ -439,17 +529,23 @@ export class Wisp extends Component {
                         if (buildingScript.healthBar) {
                             buildingScript.healthBar.setHealth(buildingScript.currentHealth);
                         }
+                        healed = true;
                     }
                 }
             }
-            this.showHealEffect();
+            if (healed) {
+                this.showHealEffect();
+                this.showHealNumber();
+            }
             return;
         }
 
         const moonWellScript = this.attachedBuilding.getComponent('MoonWell') as any;
         if (moonWellScript && moonWellScript.isAlive && moonWellScript.isAlive()) {
+            let healed = false;
             if (moonWellScript.heal) {
                 moonWellScript.heal(this.healAmount);
+                healed = true;
             } else if (moonWellScript.getHealth && moonWellScript.getMaxHealth) {
                 const currentHealth = moonWellScript.getHealth();
                 const maxHealth = moonWellScript.getMaxHealth();
@@ -459,11 +555,43 @@ export class Wisp extends Component {
                         if (moonWellScript.healthBar) {
                             moonWellScript.healthBar.setHealth(moonWellScript.currentHealth);
                         }
+                        healed = true;
                     }
                 }
             }
-            this.showHealEffect();
+            if (healed) {
+                this.showHealEffect();
+                this.showHealNumber();
+            }
             return;
+        }
+    }
+    
+    /**
+     * 显示治疗数字
+     */
+    private showHealNumber() {
+        if (this.damageNumberPrefab && this.attachedBuilding && this.attachedBuilding.isValid) {
+            const healNode = instantiate(this.damageNumberPrefab);
+            const canvas = find('Canvas');
+            if (canvas) {
+                healNode.setParent(canvas);
+            } else if (this.node.scene) {
+                healNode.setParent(this.node.scene);
+            }
+            
+            // 设置治疗数字位置（在建筑物上方）
+            const buildingPos = this.attachedBuilding.worldPosition.clone();
+            healNode.setWorldPosition(buildingPos.add3f(0, 50, 0));
+            
+            // 获取DamageNumber组件并设置治疗数值和颜色
+            const healScript = healNode.getComponent('DamageNumber') as any;
+            if (healScript) {
+                // 设置治疗量，使用正数表示治疗
+                healScript.setDamage(-this.healAmount);
+                // 设置为绿色
+                healScript.setColor(new Color(0, 255, 0, 255));
+            }
         }
     }
 

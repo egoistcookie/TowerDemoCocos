@@ -112,12 +112,12 @@ export class SelectionManager extends Component {
     setupTouchEvents() {
         if (!this.canvas) return;
 
-        // 监听触摸开始（不使用 capture 阶段，避免干扰其他系统）
-        this.canvas.on(Node.EventType.TOUCH_START, this.onTouchStart, this);
+        // 监听触摸开始
+        this.canvas.on(Node.EventType.TOUCH_START, this.onTouchStart, this, true); // 使用capture阶段，确保优先处理
         // 监听触摸移动
-        this.canvas.on(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
-        // 监听触摸结束（不使用 capture 阶段，避免干扰建造系统）
-        this.canvas.on(Node.EventType.TOUCH_END, this.onTouchEnd, this);
+        this.canvas.on(Node.EventType.TOUCH_MOVE, this.onTouchMove, this, true); // 使用capture阶段
+        // 监听触摸结束
+        this.canvas.on(Node.EventType.TOUCH_END, this.onTouchEnd, this, true); // 使用capture阶段，确保优先处理
     }
 
     /**
@@ -160,11 +160,6 @@ export class SelectionManager extends Component {
         const targetNode = event.target as Node;
         if (this.isUIElement(targetNode)) {
             return; // 点击在UI上，不处理选择
-        }
-
-        // 检查是否点击在防御单位或小精灵上（如果是，不触发多选，让单位的点击事件处理）
-        if (this.isTowerNode(targetNode) || this.isWispNode(targetNode)) {
-            return; // 点击在防御单位或小精灵上，不处理多选
         }
 
         // 获取触摸位置（世界坐标）
@@ -253,18 +248,6 @@ export class SelectionManager extends Component {
 
         if (!this.isSelecting) return;
 
-        // 检查是否点击在防御单位或小精灵上（如果是，不处理多选）
-        const targetNode = event.target as Node;
-        if (this.isTowerNode(targetNode) || this.isWispNode(targetNode)) {
-            // 点击在防御单位或小精灵上，清除选择状态但不注册移动命令
-            this.isSelecting = false;
-            if (this.selectionBox && this.selectionBox.isValid) {
-                this.selectionBox.active = false;
-            }
-            this.clearSelection();
-            return;
-        }
-
         this.isSelecting = false;
 
         // 隐藏选择框
@@ -284,6 +267,10 @@ export class SelectionManager extends Component {
             console.log('SelectionManager.onTouchEnd: Updating selected towers...');
             this.updateSelectedTowers();
             console.log('SelectionManager.onTouchEnd: After update, selected towers count:', this.selectedTowers.length);
+            
+            // 框选完成后，不立即注册移动命令，等待下一次点击
+            // 保留选中状态，不清除选择
+            return;
         } else {
             // 拖动距离太小，可能是误触或点击
             if (!hadPreviousSelection) {
@@ -291,42 +278,18 @@ export class SelectionManager extends Component {
                 console.log('SelectionManager.onTouchEnd: Drag distance too small, clearing selection');
                 this.clearSelection();
             } else {
-                // 如果之前有选中的单位，且是点击（不是拖拽），执行移动命令
-                console.log('SelectionManager.onTouchEnd: Click detected with previous selection, moving units');
-                const touchLocation = event.getLocation();
-                const worldPos = this.screenToWorld(touchLocation);
-                
-                // 计算分散位置（包括防御单位和小精灵）
-                const allUnits: any[] = [...this.selectedTowers, ...this.selectedWisps];
-                const formationPositions = this.calculateFormationPositions(worldPos, allUnits);
-                
-                // 让所有选中的防御单位移动到各自的分散位置
-                for (let i = 0; i < this.selectedTowers.length; i++) {
-                    const tower = this.selectedTowers[i];
-                    if (tower && tower.node && tower.node.isValid && i < formationPositions.length) {
-                        tower.setManualMoveTargetPosition(formationPositions[i]);
-                    }
-                }
-                
-                // 让所有选中的小精灵移动到各自的分散位置
-                for (let i = 0; i < this.selectedWisps.length; i++) {
-                    const wisp = this.selectedWisps[i];
-                    if (wisp && wisp.node && wisp.node.isValid && this.selectedTowers.length + i < formationPositions.length) {
-                        wisp.setManualMoveTargetPosition(formationPositions[this.selectedTowers.length + i]);
-                    }
-                }
+                // 如果之前有选中的单位，且是点击（不是拖拽），注册移动命令
+                // 让下一次点击才会移动
+                console.log('SelectionManager.onTouchEnd: Click detected with previous selection, registering move command');
+                this.registerMoveCommand();
                 
                 // 不清除选择，保留高亮状态
-                return; // 处理完移动命令后返回
+                return; // 处理完注册后返回
             }
         }
 
-        // 如果有选中的防御单位或小精灵，注册点击移动监听
-        if (this.selectedTowers.length > 0 || this.selectedWisps.length > 0) {
-            console.log('SelectionManager.onTouchEnd: Registering move command for', this.selectedTowers.length, 'towers and', this.selectedWisps.length, 'wisps');
-            this.registerMoveCommand();
-        } else {
-            // 如果没有选中任何单位，清除选择状态
+        // 如果没有选中任何单位，清除选择状态
+        if (this.selectedTowers.length === 0 && this.selectedWisps.length === 0) {
             console.log('SelectionManager.onTouchEnd: No units selected, clearing selection');
             this.clearSelection();
         }
@@ -497,6 +460,12 @@ export class SelectionManager extends Component {
         // 更新选中状态
         this.setSelectedTowers(newSelectedTowers);
         this.setSelectedWisps(newSelectedWisps);
+        
+        // 移除之前注册的移动命令，确保不会自动触发移动
+        if (this.globalTouchHandler) {
+            this.canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
+            this.globalTouchHandler = null!;
+        }
     }
 
     /**
@@ -716,15 +685,22 @@ export class SelectionManager extends Component {
 
         // 创建新的监听（只监听一次）
         this.globalTouchHandler = (event: EventTouch) => {
+            // 优先检查是否在建造模式下（如果是，完全不处理，让建造系统处理）
+            const buildingMode = this.isBuildingMode();
+            if (buildingMode) {
+                // 移除移动命令监听
+                this.canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
+                this.globalTouchHandler = null!;
+                return; // 建造模式下，不处理移动
+            }
+            
+            // 阻止事件传播，确保不会触发建筑物的点击事件
+            event.propagationStopped = true;
+            
             // 检查是否点击在UI元素上
             const targetNode = event.target as Node;
             if (this.isUIElement(targetNode)) {
                 return; // 点击在UI上，不处理移动
-            }
-
-            // 检查是否点击在防御单位或小精灵上（如果是，不处理移动，让单位的点击事件处理）
-            if (this.isTowerNode(targetNode) || this.isWispNode(targetNode)) {
-                return; // 点击在单位上，不处理移动
             }
 
             // 获取点击位置（世界坐标）
@@ -733,6 +709,9 @@ export class SelectionManager extends Component {
             
             console.log('SelectionManager.registerMoveCommand: Click at screen (', touchLocation.x.toFixed(1), ',', touchLocation.y.toFixed(1), ') -> world (', worldPos.x.toFixed(1), ',', worldPos.y.toFixed(1), ')');
 
+            // 检查点击位置是否在建筑物占地区域内
+            const clickedBuilding = this.findBuildingAtPosition(worldPos);
+            
             // 计算分散位置（包括防御单位和小精灵）
             const allUnits: any[] = [...this.selectedTowers, ...this.selectedWisps];
             const formationPositions = this.calculateFormationPositions(worldPos, allUnits);
@@ -748,12 +727,33 @@ export class SelectionManager extends Component {
                 }
             }
 
-            // 让所有选中的小精灵移动到各自的分散位置
+            // 让所有选中的小精灵移动到各自的分散位置或建筑物身边
             for (let i = 0; i < this.selectedWisps.length; i++) {
                 const wisp = this.selectedWisps[i];
-                if (wisp && wisp.node && wisp.node.isValid && this.selectedTowers.length + i < formationPositions.length) {
-                    console.log('SelectionManager.registerMoveCommand: Moving wisp', i, 'to (', formationPositions[this.selectedTowers.length + i].x.toFixed(1), ',', formationPositions[this.selectedTowers.length + i].y.toFixed(1), ')');
-                    wisp.setManualMoveTargetPosition(formationPositions[this.selectedTowers.length + i]);
+                if (wisp && wisp.node && wisp.node.isValid) {
+                    if (clickedBuilding) {
+                        // 如果点击在建筑物上，让小精灵移动到建筑物附近1的位置
+                        console.log('SelectionManager.registerMoveCommand: Wisp moving to building at (', clickedBuilding.worldPosition.x.toFixed(1), ',', clickedBuilding.worldPosition.y.toFixed(1), ')');
+                        // 设置移动目标为建筑物附近1的位置，小精灵会在到达后自动依附
+                        const buildingPos = clickedBuilding.worldPosition.clone();
+                        // 计算到建筑物的方向向量，然后移动到距离建筑物1的位置
+                        const direction = new Vec3();
+                        Vec3.subtract(direction, worldPos, buildingPos);
+                        if (direction.length() > 0) {
+                            direction.normalize();
+                            // 移动到距离建筑物1的位置
+                            const targetPos = new Vec3();
+                            Vec3.scaleAndAdd(targetPos, buildingPos, direction, 1);
+                            wisp.setManualMoveTargetPosition(targetPos);
+                        } else {
+                            // 如果点击位置就是建筑物位置，直接使用建筑物位置
+                            wisp.setManualMoveTargetPosition(buildingPos);
+                        }
+                    } else if (this.selectedTowers.length + i < formationPositions.length) {
+                        // 否则，移动到目标位置
+                        console.log('SelectionManager.registerMoveCommand: Moving wisp', i, 'to (', formationPositions[this.selectedTowers.length + i].x.toFixed(1), ',', formationPositions[this.selectedTowers.length + i].y.toFixed(1), ')');
+                        wisp.setManualMoveTargetPosition(formationPositions[this.selectedTowers.length + i]);
+                    }
                 }
             }
 
@@ -765,7 +765,53 @@ export class SelectionManager extends Component {
             this.clearSelection();
         };
 
+        // 不使用capture阶段监听，避免与onTouchEnd方法冲突
         this.canvas.on(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
+    }
+    
+    /**
+     * 查找指定位置的建筑物
+     * @param worldPos 世界坐标位置
+     * @returns 找到的建筑物节点，找不到返回null
+     */
+    private findBuildingAtPosition(worldPos: Vec3): Node | null {
+        // 查找战争古树
+        let treesNode = find('WarAncientTrees');
+        if (treesNode) {
+            const trees = treesNode.children || [];
+            for (const tree of trees) {
+                if (tree && tree.isValid && tree.active) {
+                    const treeScript = tree.getComponent('WarAncientTree') as any;
+                    if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
+                        const distance = Vec3.distance(worldPos, tree.worldPosition);
+                        const collisionRadius = treeScript.collisionRadius || 50;
+                        if (distance <= collisionRadius) {
+                            return tree;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 查找月亮井
+        let wellsNode = find('MoonWells');
+        if (wellsNode) {
+            const wells = wellsNode.children || [];
+            for (const well of wells) {
+                if (well && well.isValid && well.active) {
+                    const wellScript = well.getComponent('MoonWell') as any;
+                    if (wellScript && wellScript.isAlive && wellScript.isAlive()) {
+                        const distance = Vec3.distance(worldPos, well.worldPosition);
+                        const collisionRadius = wellScript.collisionRadius || 40;
+                        if (distance <= collisionRadius) {
+                            return well;
+                        }
+                    }
+                }
+            }
+        }
+        
+        return null;
     }
 
     /**
