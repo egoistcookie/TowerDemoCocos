@@ -2,6 +2,7 @@ import { _decorator, Component, Node, EventTarget, instantiate, EventTouch, Spri
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
 import { GameManager, GameState } from './GameManager';
+import { GamePopup } from './GamePopup';
 const { ccclass, property } = _decorator;
 
 const eventTarget = new EventTarget();
@@ -345,6 +346,8 @@ export class Crystal extends Component {
         
         if (this.gameManager && !this.gameManager.canAddPopulation(1)) {
             console.log('Crystal: Cannot produce wisp - population limit reached');
+            // 显示人口不足弹窗
+            GamePopup.showMessage('人口不足');
             return;
         }
 
@@ -352,6 +355,11 @@ export class Crystal extends Component {
         this.productionTimer = 0;
         this.productionProgress = 0;
         this.updateProductionProgressBar();
+        
+        // 水晶点击训练小精灵后会取消被选中的状态
+        if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            this.unitSelectionManager.clearSelection();
+        }
     }
 
     /**
@@ -396,9 +404,12 @@ export class Crystal extends Component {
 
         // 监听小精灵销毁事件，从列表中移除
         wisp.once(Node.EventType.NODE_DESTROYED, () => {
-            const index = this.producedWisps.indexOf(wisp);
-            if (index >= 0) {
-                this.producedWisps.splice(index, 1);
+            // 安全地从列表中移除小精灵，避免findIndex出错
+            if (this.producedWisps && Array.isArray(this.producedWisps)) {
+                const index = this.producedWisps.findIndex(w => w === wisp);
+                if (index >= 0) {
+                    this.producedWisps.splice(index, 1);
+                }
             }
         });
 

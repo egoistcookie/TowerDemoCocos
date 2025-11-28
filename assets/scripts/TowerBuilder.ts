@@ -1,6 +1,8 @@
 import { _decorator, Component, Node, Prefab, instantiate, Vec3, EventTouch, input, Input, Camera, find, view, UITransform, SpriteFrame, Graphics, Color } from 'cc';
 import { GameManager } from './GameManager';
 import { BuildingSelectionPanel, BuildingType } from './BuildingSelectionPanel';
+import { GamePopup } from './GamePopup';
+import { UnitSelectionManager } from './UnitSelectionManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('TowerBuilder')
@@ -437,6 +439,8 @@ export class TowerBuilder extends Component {
         
         if (this.gameManager && !this.gameManager.canAfford(building.cost)) {
             console.log('TowerBuilder.buildBuilding: Not enough gold! Need', building.cost, 'but have', this.gameManager.getGold());
+            // 显示金币不足弹窗
+            GamePopup.showMessage('金币不足');
             this.disableBuildingMode();
             return;
         }
@@ -547,15 +551,6 @@ export class TowerBuilder extends Component {
 
     // 可以通过按钮调用
     onBuildButtonClick() {
-        // 检查金币是否足够
-        if (!this.gameManager) {
-            this.findGameManager();
-        }
-        
-        if (this.gameManager && !this.gameManager.canAfford(this.towerCost)) {
-            return;
-        }
-        
         // 检查warAncientTreePrefab是否设置
         if (!this.warAncientTreePrefab) {
             console.error('TowerBuilder: Cannot enable building mode - warAncientTreePrefab is not set!');
@@ -571,7 +566,35 @@ export class TowerBuilder extends Component {
             }
         }
         
+        // 取消当前的单位选择
+        this.clearCurrentSelection();
+        
         this.enableBuildingMode();
+    }
+    
+    /**
+     * 取消当前的单位选择
+     */
+    clearCurrentSelection() {
+        // 查找UnitSelectionManager实例
+        const unitSelectionManagerNode = find('UnitSelectionManager');
+        if (unitSelectionManagerNode) {
+            const unitSelectionManager = unitSelectionManagerNode.getComponent(UnitSelectionManager);
+            if (unitSelectionManager) {
+                unitSelectionManager.clearSelection();
+                console.log('TowerBuilder.clearCurrentSelection: Selection cleared');
+            }
+        } else {
+            // 如果找不到UnitSelectionManager节点，尝试在场景中查找组件
+            const scene = this.node.scene;
+            if (scene) {
+                const unitSelectionManager = scene.getComponentInChildren(UnitSelectionManager);
+                if (unitSelectionManager) {
+                    unitSelectionManager.clearSelection();
+                    console.log('TowerBuilder.clearCurrentSelection: Selection cleared');
+                }
+            }
+        }
     }
 }
 

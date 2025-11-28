@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, find, Graphics, UITransform, Color } from 'cc';
+import { _decorator, Component, Node, find, Graphics, UITransform, Color, EventTouch, Camera, Vec3 } from 'cc';
 import { UnitInfoPanel, UnitInfo } from './UnitInfoPanel';
 const { ccclass, property } = _decorator;
 
@@ -17,6 +17,94 @@ export class UnitSelectionManager extends Component {
 
     start() {
         this.initUnitInfoPanel();
+        this.setupGlobalClickHandler();
+    }
+    
+    /**
+     * 设置全局点击处理器，用于取消选择
+     */
+    setupGlobalClickHandler() {
+        const canvas = find('Canvas');
+        if (canvas) {
+            // 监听Canvas的触摸结束事件，用于取消选择
+            canvas.on(Node.EventType.TOUCH_END, this.onGlobalTouchEnd, this);
+        }
+    }
+    
+    /**
+     * 全局触摸结束事件处理
+     */
+    onGlobalTouchEnd(event: EventTouch) {
+        // 如果没有选中任何单位，直接返回
+        if (!this.currentSelectedUnit) {
+            return;
+        }
+        
+        // 检查点击位置是否在当前选中的单位上
+        const touchLocation = event.getLocation();
+        const cameraNode = find('Canvas/Camera');
+        if (!cameraNode) {
+            return;
+        }
+        
+        const camera = cameraNode.getComponent(Camera);
+        if (!camera) {
+            return;
+        }
+        
+        // 检查点击位置是否在当前选中的单位上
+        const unitWorldPos = this.currentSelectedUnit.worldPosition;
+        const unitScreenPos = new Vec3();
+        camera.worldToScreen(unitWorldPos, unitScreenPos);
+        
+        // 计算点击位置与单位屏幕位置的距离
+        const distanceToUnit = Math.sqrt(
+            Math.pow(touchLocation.x - unitScreenPos.x, 2) +
+            Math.pow(touchLocation.y - unitScreenPos.y, 2)
+        );
+        
+        // 检查点击位置是否在单位的碰撞范围内
+        const unitInfoPanel = this.unitInfoPanel;
+        if (unitInfoPanel) {
+            // 检查点击位置是否在信息面板上
+            const panelNode = unitInfoPanel.panelNode;
+            if (panelNode && panelNode.active) {
+                const panelTransform = panelNode.getComponent(UITransform);
+                if (panelTransform) {
+                    const panelWorldPos = panelNode.worldPosition;
+                    const panelScreenPos = new Vec3();
+                    camera.worldToScreen(panelWorldPos, panelScreenPos);
+                    
+                    // 计算面板在屏幕上的边界
+                    const panelWidth = panelTransform.width;
+                    const panelHeight = panelTransform.height;
+                    const panelLeft = panelScreenPos.x - panelWidth / 2;
+                    const panelRight = panelScreenPos.x + panelWidth / 2;
+                    const panelBottom = panelScreenPos.y - panelHeight / 2;
+                    const panelTop = panelScreenPos.y + panelHeight / 2;
+                    
+                    // 检查点击位置是否在面板内
+                    if (touchLocation.x >= panelLeft && 
+                        touchLocation.x <= panelRight && 
+                        touchLocation.y >= panelBottom && 
+                        touchLocation.y <= panelTop) {
+                        // 点击在信息面板上，不取消选择
+                        return;
+                    }
+                }
+            }
+        }
+        
+        // 检查点击位置是否在当前选中的单位上
+        // 假设单位的碰撞半径为50像素（可以根据实际情况调整）
+        const collisionRadius = 50;
+        if (distanceToUnit <= collisionRadius) {
+            // 点击在单位上，不取消选择
+            return;
+        }
+        
+        // 点击不在单位和信息面板上，取消选择
+        this.clearSelection();
     }
 
     /**

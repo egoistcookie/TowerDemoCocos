@@ -666,6 +666,12 @@ export class Wisp extends Component {
         if (this.isDestroyed) {
             return;
         }
+        
+        // 依附在建筑物上时不会被攻击
+        if (this.isAttached) {
+            console.log('Wisp.takeDamage: Wisp is attached to building, ignoring damage');
+            return;
+        }
 
         this.currentHealth -= damage;
 

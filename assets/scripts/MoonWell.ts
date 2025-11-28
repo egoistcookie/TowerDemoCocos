@@ -286,6 +286,18 @@ export class MoonWell extends Component {
 
         this.isDestroyed = true;
 
+        // 卸下所有依附的小精灵，让它们出现在建筑物下方
+        while (this.attachedWisps.length > 0) {
+            // 先从列表中移除小精灵，再处理，避免null引用
+            const wisp = this.attachedWisps.shift();
+            if (wisp && wisp.isValid) {
+                const wispScript = wisp.getComponent('Wisp') as any;
+                if (wispScript && wispScript.detachFromBuilding) {
+                    wispScript.detachFromBuilding();
+                }
+            }
+        }
+
         // 隐藏面板和范围显示
         this.hideSelectionPanel();
         this.hideRangeDisplay();
@@ -834,15 +846,17 @@ export class MoonWell extends Component {
 
         // 卸下第一个小精灵
         const wisp = this.attachedWisps[0];
+        // 先从列表中移除，再调用detachFromBuilding，避免indexOf出错
+        this.attachedWisps.shift();
+        
         const wispScript = wisp.getComponent('Wisp') as any;
         if (wispScript && wispScript.detachFromBuilding) {
             wispScript.detachFromBuilding();
-            const index = this.attachedWisps.indexOf(wisp);
-            if (index >= 0) {
-                this.attachedWisps.splice(index, 1);
-            }
             console.log(`MoonWell: Wisp detached, remaining: ${this.attachedWisps.length}`);
         }
+        
+        // 卸下小精灵后取消选中状态，类似点击升级按钮
+        this.hideSelectionPanel();
     }
 
     /**

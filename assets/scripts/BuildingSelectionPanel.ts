@@ -1,5 +1,6 @@
 import { _decorator, Component, Node, Prefab, Sprite, SpriteFrame, Label, Color, UITransform, Graphics, EventTouch, Vec3, Vec2, tween, UIOpacity, find, instantiate, Camera } from 'cc';
 import { GameManager } from './GameManager';
+import { GamePopup } from './GamePopup';
 const { ccclass, property } = _decorator;
 
 // 建筑物类型定义
@@ -34,10 +35,11 @@ export class BuildingSelectionPanel extends Component {
         this.findGameManager();
         this.node.active = false; // 初始隐藏
         
-        // 监听Canvas的触摸移动事件，用于拖拽预览
+        // 监听Canvas的触摸事件，用于拖拽预览和面板外点击
         this.canvasNode = find('Canvas');
         if (this.canvasNode) {
             console.log('BuildingSelectionPanel.start: Canvas found, setting up touch listeners');
+            this.canvasNode.on(Node.EventType.TOUCH_START, this.onCanvasTouchStart, this);
             this.canvasNode.on(Node.EventType.TOUCH_MOVE, this.onCanvasTouchMove, this);
             this.canvasNode.on(Node.EventType.TOUCH_END, this.onCanvasTouchEnd, this);
         } else {
@@ -47,12 +49,67 @@ export class BuildingSelectionPanel extends Component {
 
     onDestroy() {
         if (this.canvasNode) {
+            this.canvasNode.off(Node.EventType.TOUCH_START, this.onCanvasTouchStart, this);
             this.canvasNode.off(Node.EventType.TOUCH_MOVE, this.onCanvasTouchMove, this);
             this.canvasNode.off(Node.EventType.TOUCH_END, this.onCanvasTouchEnd, this);
         }
         this.clearDragPreview();
     }
 
+    /**
+     * Canvas触摸开始事件（用于检测面板外点击）
+     */
+    onCanvasTouchStart(event: EventTouch) {
+        // 只有当面板显示且没有正在拖拽时，才检查面板外点击
+        if (this.node.active && !this.isDragging && !this.selectedBuilding) {
+            console.log('BuildingSelectionPanel.onCanvasTouchStart: Checking if touch is outside panel');
+            
+            const location = event.getLocation();
+            let isInPanelArea = false;
+            
+            // 检查触摸位置是否在面板区域内
+            const panelTransform = this.node.getComponent(UITransform);
+            if (panelTransform) {
+                // 获取面板的世界坐标和尺寸
+                const panelWorldPos = this.node.worldPosition;
+                const panelSize = panelTransform.contentSize;
+                
+                // 将面板的世界坐标转换为屏幕坐标
+                const cameraNode = find('Canvas/Camera');
+                if (cameraNode) {
+                    const camera = cameraNode.getComponent(Camera);
+                    if (camera) {
+                        // 将面板的世界坐标转换为屏幕坐标
+                        const panelScreenPos = new Vec3();
+                        camera.worldToScreen(panelWorldPos, panelScreenPos);
+                        
+                        // 计算面板在屏幕上的边界
+                        const panelScreenRect = {
+                            x: panelScreenPos.x - panelSize.width / 2,
+                            y: panelScreenPos.y - panelSize.height / 2,
+                            width: panelSize.width,
+                            height: panelSize.height
+                        };
+                        
+                        // 检查触摸位置是否在面板的屏幕坐标范围内
+                        if (location.x >= panelScreenRect.x && 
+                            location.x <= panelScreenRect.x + panelScreenRect.width &&
+                            location.y >= panelScreenRect.y && 
+                            location.y <= panelScreenRect.y + panelScreenRect.height) {
+                            isInPanelArea = true;
+                        }
+                    }
+                }
+            }
+            
+            // 如果点击在面板外，隐藏面板
+            if (!isInPanelArea) {
+                console.log('BuildingSelectionPanel.onCanvasTouchStart: Touch is outside panel, hiding panel');
+                this.hide();
+            }
+        }
+    }
+    
     /**
      * Canvas触摸移动事件（用于拖拽预览）
      */
@@ -325,6 +382,8 @@ export class BuildingSelectionPanel extends Component {
         // 检查金币是否足够
         if (this.gameManager && !this.gameManager.canAfford(building.cost)) {
             console.log('BuildingSelectionPanel.onBuildingItemTouchStart: Not enough gold!');
+            // 显示金币不足弹窗
+            GamePopup.showMessage('金币不足');
             return;
         }
 
