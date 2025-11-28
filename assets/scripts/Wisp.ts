@@ -262,36 +262,44 @@ export class Wisp extends Component {
 
     /**
      * 依附到建筑物
+     * @param building 要依附的建筑物
+     * @param fromBuilding 是否由建筑物主动调用（用于避免循环调用）
      */
-    attachToBuilding(building: Node) {
+    attachToBuilding(building: Node, fromBuilding: boolean = false) {
         if (this.isAttached) {
             console.warn('Wisp: Already attached to a building!');
             return;
         }
 
+        // 保存建筑物引用，但不立即设置依附状态
         this.attachedBuilding = building;
-        this.isAttached = true;
         this.isMoving = false;
         this.moveTarget = null!;
-
-        // 通知建筑物有小精灵依附
-        const buildingScript = building.getComponent('WarAncientTree') as any;
-        if (buildingScript && buildingScript.attachWisp) {
-            buildingScript.attachWisp(this.node);
-        } else {
-            const moonWellScript = building.getComponent('MoonWell') as any;
-            if (moonWellScript && moonWellScript.attachWisp) {
-                moonWellScript.attachWisp(this.node);
-            }
-        }
 
         // 立即更新位置
         const buildingPos = building.worldPosition.clone();
         const attachPos = buildingPos.add(this.attachOffset);
         this.node.setWorldPosition(attachPos);
         
-        // 小精灵消失，进入建筑物内
-        this.node.active = false;
+        // 不要隐藏小精灵节点，否则update方法不会被调用，无法执行治疗逻辑
+        // 保持节点active为true，让update方法继续执行治疗逻辑
+        // this.node.active = false;
+
+        // 如果是小精灵主动依附（不是由建筑物调用），需要通知建筑物添加到依附列表
+        if (!fromBuilding) {
+            const buildingScript = building.getComponent('WarAncientTree') as any;
+            if (buildingScript && buildingScript.attachWisp) {
+                buildingScript.attachWisp(this.node);
+            } else {
+                const moonWellScript = building.getComponent('MoonWell') as any;
+                if (moonWellScript && moonWellScript.attachWisp) {
+                    moonWellScript.attachWisp(this.node);
+                }
+            }
+        }
+
+        // 最后设置依附状态
+        this.isAttached = true;
 
         console.log('Wisp: Attached to building and disappeared into it');
     }
@@ -307,20 +315,24 @@ export class Wisp extends Component {
         const building = this.attachedBuilding;
         this.attachedBuilding = null!;
         this.isAttached = false;
-
-        // 通知建筑物小精灵已卸下（建筑物会从列表中移除）
-        // 注意：建筑物会在detachWisp方法中处理列表移除，这里不需要手动移除
+        this.isMoving = true; // 设置为移动状态，避免立即重新依附
+        this.moveTarget = null!;
 
         // 小精灵重新显示
         this.node.active = true;
         
-        // 移动到建筑物前方
+        // 设置位置到建筑物下方更远的位置，超出依附范围
         if (building && building.isValid) {
             const buildingPos = building.worldPosition.clone();
-            // 建筑物前方位置（下方）
-            const frontPos = new Vec3(buildingPos.x, buildingPos.y - 50, buildingPos.z);
-            this.moveToPosition(frontPos);
+            // 建筑物前方位置（下方100像素，超出50像素的依附范围）
+            const frontPos = new Vec3(buildingPos.x, buildingPos.y - 100, buildingPos.z);
+            this.node.setWorldPosition(frontPos);
         }
+        
+        // 延迟重置移动状态，确保不会立即重新依附
+        this.scheduleOnce(() => {
+            this.isMoving = false;
+        }, 1.0);
 
         console.log('Wisp: Detached from building and reappeared');
     }
@@ -517,10 +529,23 @@ export class Wisp extends Component {
         // 根据建筑物类型调用相应的治疗/恢复方法
         const buildingScript = this.attachedBuilding.getComponent('WarAncientTree') as any;
         if (buildingScript && buildingScript.isAlive && buildingScript.isAlive()) {
+            // 检查建筑物是否满血，避免不必要的治疗
+            if (buildingScript.getHealth && buildingScript.getMaxHealth) {
+                const currentHealth = buildingScript.getHealth();
+                const maxHealth = buildingScript.getMaxHealth();
+                if (currentHealth >= maxHealth) {
+                    return; // 满血，不治疗
+                }
+            }
+
             let healed = false;
             if (buildingScript.heal) {
+                // 保存治疗前的血量
+                const beforeHealth = buildingScript.getHealth ? buildingScript.getHealth() : buildingScript.currentHealth;
                 buildingScript.heal(this.healAmount);
-                healed = true;
+                // 检查治疗后是否真的恢复了血量
+                const afterHealth = buildingScript.getHealth ? buildingScript.getHealth() : buildingScript.currentHealth;
+                healed = afterHealth > beforeHealth;
             } else if (buildingScript.getHealth && buildingScript.getMaxHealth) {
                 const currentHealth = buildingScript.getHealth();
                 const maxHealth = buildingScript.getMaxHealth();
@@ -544,10 +569,23 @@ export class Wisp extends Component {
 
         const moonWellScript = this.attachedBuilding.getComponent('MoonWell') as any;
         if (moonWellScript && moonWellScript.isAlive && moonWellScript.isAlive()) {
+            // 检查建筑物是否满血，避免不必要的治疗
+            if (moonWellScript.getHealth && moonWellScript.getMaxHealth) {
+                const currentHealth = moonWellScript.getHealth();
+                const maxHealth = moonWellScript.getMaxHealth();
+                if (currentHealth >= maxHealth) {
+                    return; // 满血，不治疗
+                }
+            }
+
             let healed = false;
             if (moonWellScript.heal) {
+                // 保存治疗前的血量
+                const beforeHealth = moonWellScript.getHealth ? moonWellScript.getHealth() : moonWellScript.currentHealth;
                 moonWellScript.heal(this.healAmount);
-                healed = true;
+                // 检查治疗后是否真的恢复了血量
+                const afterHealth = moonWellScript.getHealth ? moonWellScript.getHealth() : moonWellScript.currentHealth;
+                healed = afterHealth > beforeHealth;
             } else if (moonWellScript.getHealth && moonWellScript.getMaxHealth) {
                 const currentHealth = moonWellScript.getHealth();
                 const maxHealth = moonWellScript.getMaxHealth();
@@ -662,6 +700,58 @@ export class Wisp extends Component {
 
         if (this.currentHealth <= 0) {
             this.die();
+        }
+    }
+    
+    /**
+     * 恢复血量
+     * @param amount 恢复的血量
+     */
+    heal(amount: number) {
+        if (this.isDestroyed) {
+            return;
+        }
+        
+        // 如果满血，不恢复
+        if (this.currentHealth >= this.maxHealth) {
+            return;
+        }
+        
+        // 保存治疗前的血量
+        const oldHealth = this.currentHealth;
+        // 恢复血量，不超过最大值
+        this.currentHealth = Math.min(this.currentHealth + amount, this.maxHealth);
+        
+        // 更新血条
+        if (this.healthBar) {
+            this.healthBar.setHealth(this.currentHealth);
+        }
+        
+        // 更新单位信息面板
+        if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            this.unitSelectionManager.updateUnitInfo({
+                currentHealth: this.currentHealth,
+                maxHealth: this.maxHealth
+            });
+        }
+        
+        // 显示治疗数字
+        if (this.damageNumberPrefab) {
+            const healNode = instantiate(this.damageNumberPrefab);
+            const canvas = find('Canvas');
+            if (canvas) {
+                healNode.setParent(canvas);
+            } else if (this.node.scene) {
+                healNode.setParent(this.node.scene);
+            }
+            healNode.setWorldPosition(this.node.worldPosition.clone().add3f(0, 30, 0));
+            const healScript = healNode.getComponent(DamageNumber);
+            if (healScript) {
+                // 使用负数表示治疗
+                healScript.setDamage(-amount);
+                // 设置为绿色
+                healScript.setColor(new Color(0, 255, 0, 255));
+            }
         }
     }
 

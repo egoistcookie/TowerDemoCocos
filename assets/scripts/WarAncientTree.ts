@@ -1310,10 +1310,12 @@ export class WarAncientTree extends Component {
             return;
         }
 
-        // 让小精灵依附
+        // 先将小精灵添加到依附列表，再调用attachToBuilding
+        this.attachedWisps.push(wisp);
+        
+        // 让小精灵依附，传递fromBuilding参数为true避免循环调用
         if (wispScript.attachToBuilding) {
-            wispScript.attachToBuilding(this.node);
-            this.attachedWisps.push(wisp);
+            wispScript.attachToBuilding(this.node, true);
             console.log(`WarAncientTree: Wisp attached, total: ${this.attachedWisps.length}`);
         }
     }

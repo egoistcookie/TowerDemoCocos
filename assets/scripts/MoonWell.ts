@@ -342,7 +342,7 @@ export class MoonWell extends Component {
             return;
         }
 
-        // 递归查找Towers节点（更可靠）
+        // 递归查找节点（更可靠）
         const findNodeRecursive = (node: Node, name: string): Node | null => {
             if (node.name === name) {
                 return node;
@@ -354,7 +354,10 @@ export class MoonWell extends Component {
             return null;
         };
 
-        // 查找所有Arrower单位
+        const moonWellPos = this.node.worldPosition;
+        let healedCount = 0;
+
+        // 1. 治疗附近的弓箭手
         let towersNode = find('Towers');
         
         // 如果直接查找失败，尝试递归查找
@@ -362,42 +365,65 @@ export class MoonWell extends Component {
             towersNode = findNodeRecursive(this.node.scene, 'Towers');
         }
 
-        if (!towersNode) {
-            // 如果还是找不到，输出调试信息（降低频率避免刷屏）
-            if (Math.random() < 0.01) { // 约1%的概率输出
-                console.warn('MoonWell: Towers node not found! Cannot heal nearby units.');
+        if (towersNode) {
+            const towers = towersNode.children || [];
+            for (const tower of towers) {
+                if (!tower || !tower.isValid || !tower.active) {
+                    continue;
+                }
+
+                const towerScript = tower.getComponent('Arrower') as any;
+                if (!towerScript || !towerScript.isAlive || !towerScript.isAlive()) {
+                    continue;
+                }
+
+                // 计算距离
+                const distance = Vec3.distance(moonWellPos, tower.worldPosition);
+                if (distance <= this.healRange) {
+                    // 在治疗范围内，恢复血量
+                    if (towerScript.heal) {
+                        towerScript.heal(this.healAmount);
+                        healedCount++;
+                    }
+                }
             }
-            return;
         }
 
-        const towers = towersNode.children || [];
-        const moonWellPos = this.node.worldPosition;
-        let healedCount = 0;
+        // 2. 治疗附近的小精灵
+        let wispsNode = find('Wisps');
+        
+        // 如果直接查找失败，尝试递归查找
+        if (!wispsNode && this.node.scene) {
+            wispsNode = findNodeRecursive(this.node.scene, 'Wisps');
+        }
 
-        for (const tower of towers) {
-            if (!tower || !tower.isValid || !tower.active) {
-                continue;
-            }
+        if (wispsNode) {
+            const wisps = wispsNode.children || [];
+            for (const wisp of wisps) {
+                if (!wisp || !wisp.isValid || !wisp.active) {
+                    continue;
+                }
 
-            const towerScript = tower.getComponent('Arrower') as any;
-            if (!towerScript || !towerScript.isAlive || !towerScript.isAlive()) {
-                continue;
-            }
+                const wispScript = wisp.getComponent('Wisp') as any;
+                if (!wispScript || !wispScript.isAlive || !wispScript.isAlive()) {
+                    continue;
+                }
 
-            // 计算距离
-            const distance = Vec3.distance(moonWellPos, tower.worldPosition);
-            if (distance <= this.healRange) {
-                // 在治疗范围内，恢复血量
-                if (towerScript.heal) {
-                    towerScript.heal(this.healAmount);
-                    healedCount++;
+                // 计算距离
+                const distance = Vec3.distance(moonWellPos, wisp.worldPosition);
+                if (distance <= this.healRange) {
+                    // 在治疗范围内，恢复血量
+                    if (wispScript.heal) {
+                        wispScript.heal(this.healAmount);
+                        healedCount++;
+                    }
                 }
             }
         }
 
         // 调试信息（降低频率）
         if (healedCount > 0 && Math.random() < 0.1) { // 约10%的概率输出
-            console.debug(`MoonWell: Healed ${healedCount} arrower(s) within range ${this.healRange}`);
+            console.debug(`MoonWell: Healed ${healedCount} unit(s) within range ${this.healRange}`);
         }
     }
 
@@ -787,10 +813,12 @@ export class MoonWell extends Component {
             return;
         }
 
-        // 让小精灵依附
+        // 先将小精灵添加到依附列表，再调用attachToBuilding
+        this.attachedWisps.push(wisp);
+        
+        // 让小精灵依附，传递fromBuilding参数为true避免循环调用
         if (wispScript.attachToBuilding) {
-            wispScript.attachToBuilding(this.node);
-            this.attachedWisps.push(wisp);
+            wispScript.attachToBuilding(this.node, true);
             console.log(`MoonWell: Wisp attached, total: ${this.attachedWisps.length}`);
         }
     }
