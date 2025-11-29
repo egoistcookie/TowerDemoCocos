@@ -43,6 +43,9 @@ export class WarAncientTree extends Component {
     @property
     collisionRadius: number = 50; // 占地范围（像素）
 
+    @property(SpriteFrame)
+    cardIcon: SpriteFrame = null!; // 单位名片图片
+
     // 攻击动画相关属性
     @property(SpriteFrame)
     attackAnimationFrames: SpriteFrame[] = [];
@@ -1157,7 +1160,7 @@ export class WarAncientTree extends Component {
                 maxHealth: this.maxHealth,
                 attackDamage: this.attackDamage,
                 populationCost: 0, // 战争古树不占用人口
-                icon: this.defaultSpriteFrame,
+                icon: this.cardIcon || this.defaultSpriteFrame,
                 collisionRadius: this.collisionRadius,
                 attackRange: this.attackRange,
                 currentUnitCount: this.producedTowers.length,

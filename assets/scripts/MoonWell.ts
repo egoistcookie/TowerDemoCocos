@@ -39,6 +39,9 @@ export class MoonWell extends Component {
     @property
     collisionRadius: number = 40; // 占地范围（像素）
 
+    @property(SpriteFrame)
+    cardIcon: SpriteFrame = null!; // 单位名片图片
+
     private currentHealth: number = 80;
     private healthBar: HealthBar = null!;
     private healthBarNode: Node = null!;
@@ -582,7 +585,7 @@ export class MoonWell extends Component {
                 maxHealth: this.maxHealth,
                 attackDamage: 0, // 月亮井不攻击
                 populationCost: 0, // 月亮井不占用人口，反而增加人口上限
-                icon: this.defaultSpriteFrame,
+                icon: this.cardIcon || this.defaultSpriteFrame,
                 collisionRadius: this.collisionRadius,
                 healRange: this.healRange,
                 healAmount: this.healAmount,

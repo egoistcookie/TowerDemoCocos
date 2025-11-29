@@ -36,6 +36,9 @@ export class Wisp extends Component {
     @property
     attachOffset: Vec3 = new Vec3(0, 30, 0); // 依附在建筑物上的偏移位置
 
+    @property(SpriteFrame)
+    cardIcon: SpriteFrame = null!; // 单位名片图片
+
     private currentHealth: number = 30;
     private healthBar: HealthBar = null!;
     private healthBarNode: Node = null!;
@@ -928,7 +931,7 @@ export class Wisp extends Component {
                 maxHealth: this.maxHealth,
                 attackDamage: 0, // 小精灵没有攻击能力
                 populationCost: 1, // 占用1个人口
-                icon: this.defaultSpriteFrame,
+                icon: this.cardIcon || this.defaultSpriteFrame,
                 collisionRadius: this.collisionRadius
             };
             console.log('Wisp.onWispClick: Selecting wisp in UnitSelectionManager');

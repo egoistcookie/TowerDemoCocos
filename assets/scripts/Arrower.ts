@@ -76,6 +76,9 @@ export class Arrower extends Component {
     @property
     collisionRadius: number = 30; // 碰撞半径（像素）
 
+    @property(SpriteFrame)
+    cardIcon: SpriteFrame = null!; // 单位名片图片
+
     private currentHealth: number = 50;
     private healthBar: HealthBar = null!;
     private healthBarNode: Node = null!;
@@ -1860,7 +1863,7 @@ export class Arrower extends Component {
                 maxHealth: this.maxHealth,
                 attackDamage: this.attackDamage,
                 populationCost: 1, // Tower占用1个人口
-                icon: this.defaultSpriteFrame,
+                icon: this.cardIcon || this.defaultSpriteFrame,
                 collisionRadius: this.collisionRadius,
                 attackRange: this.attackRange,
                 attackFrequency: 1.0 / this.attackInterval, // 攻击频率（次/秒）

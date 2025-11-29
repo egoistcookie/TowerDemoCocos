@@ -21,6 +21,9 @@ export class Crystal extends Component {
     @property
     collisionRadius: number = 40; // 占地范围（像素）
 
+    @property(SpriteFrame)
+    cardIcon: SpriteFrame = null!; // 单位名片图片
+
     @property(Prefab)
     wispPrefab: Prefab = null!; // 小精灵预制体
 
@@ -454,7 +457,7 @@ export class Crystal extends Component {
                 maxHealth: this.maxHealth,
                 attackDamage: 0, // 水晶不攻击
                 populationCost: 0, // 水晶不占用人口
-                icon: this.defaultSpriteFrame,
+                icon: this.cardIcon || this.defaultSpriteFrame,
                 collisionRadius: this.collisionRadius,
                 currentUnitCount: this.producedWisps.length,
                 maxUnitCount: 999, // 无上限
