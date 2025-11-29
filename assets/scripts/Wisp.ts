@@ -4,6 +4,7 @@ import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
+import { GamePopup } from './GamePopup';
 const { ccclass, property } = _decorator;
 
 @ccclass('Wisp')
@@ -856,8 +857,14 @@ export class Wisp extends Component {
         }
         
         // 如果取消高亮，同时清除UnitSelectionManager中的选中状态
-        if (!highlight && this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
-            this.unitSelectionManager.clearSelection();
+        // 避免递归调用：检查当前选中的单位是否是自己，如果是，就不调用clearSelection
+        if (!highlight && this.unitSelectionManager) {
+            const currentSelectedUnit = (this.unitSelectionManager as any).currentSelectedUnit;
+            if (currentSelectedUnit !== this.node) {
+                if (this.unitSelectionManager.isUnitSelected(this.node)) {
+                    this.unitSelectionManager.clearSelection();
+                }
+            }
         }
     }
 
@@ -868,6 +875,34 @@ export class Wisp extends Component {
         console.log('Wisp.onWispClick: Wisp clicked, event:', event);
         // 阻止事件冒泡
         event.propagationStopped = true;
+
+        // 检查是否处于建造模式，如果是，先退出建造模式
+        console.log('Wisp.onWispClick: Checking building mode...');
+        const towerBuilderNode = find('TowerBuilder');
+        if (towerBuilderNode) {
+            console.log('Wisp.onWispClick: TowerBuilder node found');
+            const towerBuilder = towerBuilderNode.getComponent('TowerBuilder') as any;
+            if (towerBuilder) {
+                console.log('Wisp.onWispClick: TowerBuilder component found');
+                // 直接调用disableBuildingMode，不管当前是否处于建造模式
+                console.log('Wisp.onWispClick: Calling disableBuildingMode() to exit building mode');
+                if (towerBuilder.disableBuildingMode) {
+                    towerBuilder.disableBuildingMode();
+                    console.log('Wisp.onWispClick: disableBuildingMode() called successfully');
+                } else {
+                    console.log('Wisp.onWispClick: disableBuildingMode() method not found');
+                }
+                
+                // 直接设置isBuildingMode为false，确保建造模式被退出
+                console.log('Wisp.onWispClick: Setting isBuildingMode to false directly');
+                towerBuilder.isBuildingMode = false;
+                console.log('Wisp.onWispClick: After setting, isBuildingMode is now:', towerBuilder.isBuildingMode);
+            } else {
+                console.log('Wisp.onWispClick: TowerBuilder component not found');
+            }
+        } else {
+            console.log('Wisp.onWispClick: TowerBuilder node not found');
+        }
 
         // 显示单位信息面板
         if (!this.unitSelectionManager) {
@@ -925,6 +960,10 @@ export class Wisp extends Component {
             console.log('Wisp.addToSelectionManager: Registering move command');
             selectionManager.registerMoveCommand();
             console.log('Wisp.addToSelectionManager: Move command registered successfully');
+            
+            // 检查SelectionManager的状态
+            console.log('Wisp.addToSelectionManager: After registration - selectedWisps length:', selectionManager.selectedWisps?.length || 0);
+            console.log('Wisp.addToSelectionManager: After registration - globalTouchHandler:', !!selectionManager.globalTouchHandler);
         } else {
             console.log('Wisp.addToSelectionManager: SelectionManager not found');
         }

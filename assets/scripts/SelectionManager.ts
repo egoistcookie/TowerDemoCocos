@@ -231,11 +231,15 @@ export class SelectionManager extends Component {
      */
     onTouchEnd(event: EventTouch) {
         console.log('SelectionManager.onTouchEnd: Touch end event received, isSelecting:', this.isSelecting, 'selectedTowers:', this.selectedTowers.length, 'selectedWisps:', this.selectedWisps.length);
-        // 优先检查是否在建造模式下（如果是，完全不处理，让建造系统处理）
+        
+        // 检查是否有选中的单位（小精灵或防御塔）
+        const hasSelectedUnits = this.selectedTowers.length > 0 || this.selectedWisps.length > 0;
+        
+        // 优先检查是否在建造模式下（如果是，且没有选中单位，完全不处理，让建造系统处理）
         const buildingMode = this.isBuildingMode();
         console.log('SelectionManager.onTouchEnd: Building mode:', buildingMode);
         
-        if (buildingMode) {
+        if (buildingMode && !hasSelectedUnits) {
             // 如果正在选择，清除选择状态
             if (this.isSelecting) {
                 this.isSelecting = false;
@@ -245,11 +249,20 @@ export class SelectionManager extends Component {
                 this.clearSelection();
             }
             // 不阻止事件传播，让TowerBuilder可以处理
+            console.log('SelectionManager.onTouchEnd: In building mode and no selected units, returning without handling move');
             return;
         }
-
-        if (!this.isSelecting) {
-            console.log('SelectionManager.onTouchEnd: Not selecting, returning');
+        
+        // 如果有选中单位，即使处于建造模式，也处理移动命令
+        if (buildingMode && hasSelectedUnits) {
+            console.log('SelectionManager.onTouchEnd: In building mode but has selected units, continuing to handle move');
+        }
+        
+        console.log('SelectionManager.onTouchEnd: Continuing to handle touch, hasSelectedUnits:', hasSelectedUnits);
+        console.log('SelectionManager.onTouchEnd: hasSelectedUnits:', hasSelectedUnits, 'selectedTowers:', this.selectedTowers.length, 'selectedWisps:', this.selectedWisps.length);
+        
+        if (!this.isSelecting && !hasSelectedUnits) {
+            console.log('SelectionManager.onTouchEnd: Not selecting and no selected units, returning');
             return;
         }
 
@@ -269,10 +282,9 @@ export class SelectionManager extends Component {
         const hadPreviousSelection = this.selectedTowers.length > 0 || this.selectedWisps.length > 0;
         console.log('SelectionManager.onTouchEnd: Had previous selection:', hadPreviousSelection);
         
-        // 检查是否有选中的单位（小精灵或防御塔）
-        const hasSelectedUnits = this.selectedTowers.length > 0 || this.selectedWisps.length > 0;
         console.log('SelectionManager.onTouchEnd: Has selected units:', hasSelectedUnits, 'selectedTowers:', this.selectedTowers.length, 'selectedWisps:', this.selectedWisps.length);
         
+        // 如果是拖拽选择，更新选中的单位
         if (dragDistance > 10) { // 至少拖动10像素才认为是有效的选择
             console.log('SelectionManager.onTouchEnd: Drag distance > 10, updating selected towers...');
             this.updateSelectedTowers();
@@ -281,8 +293,9 @@ export class SelectionManager extends Component {
             // 框选完成后，不立即注册移动命令，等待下一次点击
             // 保留选中状态，不清除选择
             return;
-        } else if (hasSelectedUnits) {
-            // 如果有选中的单位，且是点击（不是拖拽），直接处理移动逻辑
+        } 
+        // 如果有选中的单位，且是点击（不是拖拽），直接处理移动逻辑
+        else if (hasSelectedUnits) {
             console.log('SelectionManager.onTouchEnd: Click detected with selected units, processing move command immediately');
             
             // 获取点击位置（世界坐标）
@@ -350,7 +363,9 @@ export class SelectionManager extends Component {
             console.log('SelectionManager.onTouchEnd: Clearing selection after move');
             this.clearSelection();
             return;
-        } else {
+        } 
+        // 如果没有选中的单位，且是点击（不是拖拽），清除选择状态
+        else {
             // 如果之前没有选中的单位，清除选择状态
             console.log('SelectionManager.onTouchEnd: Drag distance too small and no selected units, clearing selection');
             this.clearSelection();
@@ -588,6 +603,12 @@ export class SelectionManager extends Component {
      * 清除选择
      */
     clearSelection() {
+        // 移除之前注册的移动命令监听器
+        if (this.globalTouchHandler) {
+            this.canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
+            this.globalTouchHandler = null!;
+        }
+        
         // 只在非建造模式下输出日志，避免建造模式下的日志干扰
         if (!this.isBuildingMode()) {
             this.setSelectedTowers([]);
@@ -860,6 +881,7 @@ export class SelectionManager extends Component {
         console.log('SelectionManager.registerMoveCommand: Adding global touch handler to canvas');
         this.canvas.on(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
         console.log('SelectionManager.registerMoveCommand: Method completed');
+        console.log('SelectionManager.registerMoveCommand: globalTouchHandler is now set:', !!this.globalTouchHandler);
     }
     
     /**
@@ -1095,35 +1117,33 @@ export class SelectionManager extends Component {
      */
     isBuildingMode(): boolean {
         try {
-            // 使用缓存的节点或重新查找
-            let towerBuilderNode = this.towerBuilderNode;
-            if (!towerBuilderNode || !towerBuilderNode.isValid) {
-                // 尝试重新查找
-                towerBuilderNode = find('TowerBuilder');
-                if (!towerBuilderNode && this.node.scene) {
-                    const findNodeRecursive = (node: Node, name: string): Node | null => {
-                        if (node.name === name) {
-                            return node;
-                        }
-                        for (const child of node.children) {
-                            const found = findNodeRecursive(child, name);
-                            if (found) return found;
-                        }
-                        return null;
-                    };
-                    towerBuilderNode = findNodeRecursive(this.node.scene, 'TowerBuilder');
-                }
-                
-                if (!towerBuilderNode || !towerBuilderNode.isValid) {
-                    // 只在第一次失败时输出警告，避免刷屏
-                    if (Math.random() < 0.01) {
-                        console.warn('SelectionManager: TowerBuilder node not found or invalid');
+            // 每次都重新查找TowerBuilder节点，不使用缓存，确保获取到的是正确的实例
+            console.log('SelectionManager.isBuildingMode: Finding TowerBuilder node...');
+            let towerBuilderNode = find('TowerBuilder');
+            if (!towerBuilderNode && this.node.scene) {
+                const findNodeRecursive = (node: Node, name: string): Node | null => {
+                    if (node.name === name) {
+                        return node;
                     }
-                    return false;
-                }
-                // 缓存找到的节点
-                this.towerBuilderNode = towerBuilderNode;
+                    for (const child of node.children) {
+                        const found = findNodeRecursive(child, name);
+                        if (found) return found;
+                    }
+                    return null;
+                };
+                towerBuilderNode = findNodeRecursive(this.node.scene, 'TowerBuilder');
             }
+            
+            if (!towerBuilderNode || !towerBuilderNode.isValid) {
+                // 只在第一次失败时输出警告，避免刷屏
+                if (Math.random() < 0.01) {
+                    console.warn('SelectionManager: TowerBuilder node not found or invalid');
+                }
+                console.log('SelectionManager.isBuildingMode: TowerBuilder node not found or invalid, returning false');
+                return false;
+            }
+            
+            console.log('SelectionManager.isBuildingMode: TowerBuilder node found:', towerBuilderNode.name);
 
             // 获取TowerBuilder组件
             const towerBuilder = towerBuilderNode.getComponent('TowerBuilder') as any;
@@ -1131,19 +1151,27 @@ export class SelectionManager extends Component {
                 if (Math.random() < 0.01) {
                     console.warn('SelectionManager: TowerBuilder component not found');
                 }
+                console.log('SelectionManager.isBuildingMode: TowerBuilder component not found, returning false');
                 return false;
             }
+            
+            console.log('SelectionManager.isBuildingMode: TowerBuilder component found');
 
-            // 使用公共方法检查是否在建造模式
-            if (towerBuilder.getIsBuildingMode && typeof towerBuilder.getIsBuildingMode === 'function') {
-                return towerBuilder.getIsBuildingMode() === true;
-            }
-            
-            // 如果没有公共方法，尝试直接访问属性（向后兼容）
+            // 优先直接访问属性，而不是调用方法，确保获取到最新值
             if (towerBuilder.isBuildingMode !== undefined) {
-                return towerBuilder.isBuildingMode === true;
+                const result = towerBuilder.isBuildingMode === true;
+                console.log('SelectionManager.isBuildingMode: Using isBuildingMode property, result:', result);
+                return result;
             }
             
+            // 如果没有属性，再尝试使用公共方法检查是否在建造模式
+            if (towerBuilder.getIsBuildingMode && typeof towerBuilder.getIsBuildingMode === 'function') {
+                const result = towerBuilder.getIsBuildingMode() === true;
+                console.log('SelectionManager.isBuildingMode: Using getIsBuildingMode(), result:', result);
+                return result;
+            }
+            
+            console.log('SelectionManager.isBuildingMode: No valid method or property found, returning false');
             return false;
         } catch (error) {
             console.error('SelectionManager: Error checking building mode:', error);

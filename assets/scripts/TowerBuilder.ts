@@ -576,13 +576,13 @@ export class TowerBuilder extends Component {
      * 取消当前的单位选择
      */
     clearCurrentSelection() {
-        // 查找UnitSelectionManager实例
+        // 清除UnitSelectionManager的选择
         const unitSelectionManagerNode = find('UnitSelectionManager');
         if (unitSelectionManagerNode) {
             const unitSelectionManager = unitSelectionManagerNode.getComponent(UnitSelectionManager);
             if (unitSelectionManager) {
                 unitSelectionManager.clearSelection();
-                console.log('TowerBuilder.clearCurrentSelection: Selection cleared');
+                console.log('TowerBuilder.clearCurrentSelection: UnitSelectionManager selection cleared');
             }
         } else {
             // 如果找不到UnitSelectionManager节点，尝试在场景中查找组件
@@ -591,7 +591,29 @@ export class TowerBuilder extends Component {
                 const unitSelectionManager = scene.getComponentInChildren(UnitSelectionManager);
                 if (unitSelectionManager) {
                     unitSelectionManager.clearSelection();
-                    console.log('TowerBuilder.clearCurrentSelection: Selection cleared');
+                    console.log('TowerBuilder.clearCurrentSelection: UnitSelectionManager selection cleared');
+                }
+            }
+        }
+        
+        // 清除SelectionManager的选择（管理小精灵和防御塔的选择）
+        const selectionManagerNode = find('SelectionManager');
+        if (selectionManagerNode) {
+            const selectionManager = selectionManagerNode.getComponent('SelectionManager') as any;
+            if (selectionManager) {
+                if (selectionManager.clearSelection) {
+                    selectionManager.clearSelection();
+                    console.log('TowerBuilder.clearCurrentSelection: SelectionManager selection cleared');
+                }
+            }
+        } else {
+            // 如果找不到SelectionManager节点，尝试在场景中查找组件
+            const scene = this.node.scene;
+            if (scene) {
+                const selectionManager = scene.getComponentInChildren('SelectionManager') as any;
+                if (selectionManager && selectionManager.clearSelection) {
+                    selectionManager.clearSelection();
+                    console.log('TowerBuilder.clearCurrentSelection: SelectionManager selection cleared');
                 }
             }
         }

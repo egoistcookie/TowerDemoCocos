@@ -168,8 +168,25 @@ export class UnitSelectionManager extends Component {
         // 隐藏范围显示
         this.hideRangeDisplay();
 
+        // 先保存当前选中的单位，然后清除选中状态
+        const selectedUnit = this.currentSelectedUnit;
         // 清除当前选中单位
         this.currentSelectedUnit = null!;
+        
+        // 如果有选中的单位，调用setHighlight(false)清除高亮
+        if (selectedUnit && selectedUnit.isValid) {
+            // 调用单位的setHighlight方法清除高亮
+            const unitScript = selectedUnit.getComponent('Wisp') as any;
+            if (unitScript && unitScript.setHighlight) {
+                unitScript.setHighlight(false);
+            }
+            
+            // 也检查是否是其他单位类型
+            const arrowerScript = selectedUnit.getComponent('Arrower') as any;
+            if (arrowerScript && arrowerScript.setHighlight) {
+                arrowerScript.setHighlight(false);
+            }
+        }
     }
 
     /**
@@ -273,6 +290,16 @@ export class UnitSelectionManager extends Component {
      */
     isUnitSelected(unitNode: Node): boolean {
         return this.currentSelectedUnit === unitNode;
+    }
+    
+    /**
+     * 更新范围显示位置，使其跟随选中的单位移动
+     */
+    update(deltaTime: number) {
+        // 如果有选中的单位和范围显示节点，更新范围显示节点的位置
+        if (this.currentSelectedUnit && this.currentSelectedUnit.isValid && this.currentRangeDisplayNode && this.currentRangeDisplayNode.isValid) {
+            this.currentRangeDisplayNode.setWorldPosition(this.currentSelectedUnit.worldPosition);
+        }
     }
 }
 
