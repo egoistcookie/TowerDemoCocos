@@ -1,4 +1,5 @@
-import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, tween, EventTouch, input, Input, resources, Sprite, SpriteFrame, Texture2D, Camera } from 'cc';
+import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, tween, EventTouch, input, Input, resources, Sprite, SpriteFrame, Texture2D, Camera, AudioClip } from 'cc';
+import { AudioManager } from './AudioManager';
 import { GameManager, GameState } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
@@ -42,6 +43,13 @@ export class Arrower extends Component {
     // 攻击动画相关属性
     @property(SpriteFrame)
     attackAnimationFrames: SpriteFrame[] = []; // 攻击动画帧数组（推荐：在编辑器中手动设置）
+    
+    // 音效相关属性
+    @property(AudioClip)
+    shootSound: AudioClip = null!; // 箭矢射出时的音效
+    
+    @property(AudioClip)
+    hitSound: AudioClip = null!; // 箭矢击中敌人时的音效
 
     @property(Texture2D)
     attackAnimationTexture: Texture2D = null!; // 攻击动画纹理（12帧图片）
@@ -1407,6 +1415,20 @@ export class Arrower extends Component {
             console.debug('Arrower: Arrow component found');
         }
 
+        // 播放箭矢射出音效
+        console.log('Arrower: Attempting to play shoot sound');
+        if (this.shootSound) {
+            console.log('Arrower: Shoot sound clip exists');
+            if (AudioManager.Instance) {
+                console.log('Arrower: AudioManager.Instance exists, calling playSFX');
+                AudioManager.Instance.playSFX(this.shootSound);
+            } else {
+                console.log('Arrower: AudioManager.Instance is null');
+            }
+        } else {
+            console.log('Arrower: Shoot sound clip is null');
+        }
+
         // 初始化弓箭，设置命中回调
         console.debug(`Arrower: Initializing arrow with damage: ${this.attackDamage}`);
         arrowScript.init(
@@ -1416,6 +1438,11 @@ export class Arrower extends Component {
             (damage: number) => {
                 // 命中目标时造成伤害
                 console.debug(`Arrower: Arrow hit callback called with damage: ${damage}`);
+                
+                // 播放箭矢击中音效
+                if (this.hitSound) {
+                    AudioManager.Instance?.playSFX(this.hitSound);
+                }
                 const enemyScript = this.currentTarget?.getComponent('Enemy') as any;
                 if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                     if (enemyScript.takeDamage) {

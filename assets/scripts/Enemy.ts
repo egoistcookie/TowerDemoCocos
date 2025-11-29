@@ -1,7 +1,8 @@
-import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color } from 'cc';
+import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip } from 'cc';
 import { GameManager } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
+import { AudioManager } from './AudioManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('Enemy')
@@ -27,6 +28,38 @@ export class Enemy extends Component {
     @property(Prefab)
     damageNumberPrefab: Prefab = null!;
 
+    // 动画帧属性
+    @property(SpriteFrame)
+    idleAnimationFrames: SpriteFrame[] = []; // 待机动画帧
+    
+    @property(SpriteFrame)
+    walkAnimationFrames: SpriteFrame[] = []; // 行走动画帧
+    
+    @property(SpriteFrame)
+    attackAnimationFrames: SpriteFrame[] = []; // 攻击动画帧
+    
+    @property(SpriteFrame)
+    hitAnimationFrames: SpriteFrame[] = []; // 被攻击动画帧
+    
+    @property(SpriteFrame)
+    deathAnimationFrames: SpriteFrame[] = []; // 死亡动画帧
+    
+    // 动画时长属性
+    @property
+    idleAnimationDuration: number = 1.0; // 待机动画总时长
+    
+    @property
+    walkAnimationDuration: number = 1.0; // 行走动画总时长
+    
+    @property
+    attackAnimationDuration: number = 0.5; // 攻击动画总时长
+    
+    @property
+    hitAnimationDuration: number = 0.3; // 被攻击动画总时长
+    
+    @property
+    deathAnimationDuration: number = 1.0; // 死亡动画总时长
+
     private currentHealth: number = 30;
     private healthBar: HealthBar = null!;
     private healthBarNode: Node = null!;
@@ -37,11 +70,45 @@ export class Enemy extends Component {
     
     @property
     goldReward: number = 2; // 消灭敌人获得的金币
+    
+    @property(AudioClip)
+    deathSound: AudioClip = null!; // 敌人死亡音效
+    
+    @property(AudioClip)
+    attackSound: AudioClip = null!; // 敌人攻击音效
+    
+    // 动画相关私有属性
+    private sprite: Sprite = null!;
+    private uiTransform: UITransform = null!;
+    private currentAnimationFrameIndex: number = 0;
+    private animationTimer: number = 0;
+    private isPlayingIdleAnimation: boolean = false;
+    private isPlayingWalkAnimation: boolean = false;
+    private isPlayingAttackAnimation: boolean = false;
+    private isPlayingHitAnimation: boolean = false;
+    private isPlayingDeathAnimation: boolean = false;
+    private defaultSpriteFrame: SpriteFrame = null!;
+    private defaultScale: Vec3 = new Vec3(1, 1, 1); // 默认缩放比例，用于方向翻转
+    private isHit: boolean = false; // 表示敌人是否正在被攻击
+    private attackCallback: (() => void) | null = null; // 攻击动画完成后的回调函数
 
     start() {
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
         this.attackTimer = 0;
+        
+        // 保存默认缩放比例
+        this.defaultScale = this.node.scale.clone();
+        
+        // 初始化动画相关属性
+        this.sprite = this.node.getComponent(Sprite);
+        this.uiTransform = this.node.getComponent(UITransform);
+        
+        if (this.sprite) {
+            this.defaultSpriteFrame = this.sprite.spriteFrame;
+            // 设置Sprite的sizeMode为CUSTOM，以便适配UITransform大小
+            this.sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        }
         
         // 查找游戏管理器
         this.findGameManager();
@@ -78,6 +145,9 @@ export class Enemy extends Component {
         
         // 创建血条
         this.createHealthBar();
+        
+        // 初始播放待机动画
+        this.playIdleAnimation();
         
         // console.debug('Enemy: Start at position:', this.node.worldPosition);
     }
@@ -123,7 +193,9 @@ export class Enemy extends Component {
     }
 
     update(deltaTime: number) {
+        // 如果被销毁，只更新动画，不执行其他逻辑
         if (this.isDestroyed) {
+            this.updateAnimation(deltaTime);
             return;
         }
 
@@ -139,17 +211,19 @@ export class Enemy extends Component {
             if (distance <= this.attackRange) {
                 // 在攻击范围内，停止移动并攻击
                 this.stopMoving();
-                if (this.attackTimer >= this.attackInterval) {
+                if (this.attackTimer >= this.attackInterval && !this.isHit) {
                     this.attack();
                     this.attackTimer = 0;
                 }
             } else {
-                // 不在攻击范围内，继续移动
-                this.moveTowardsTarget(deltaTime);
+                // 不在攻击范围内，只有在没有被攻击时才继续移动
+                if (!this.isHit) {
+                    this.moveTowardsTarget(deltaTime);
+                }
             }
         } else {
-            // 没有目标，向水晶移动
-            if (this.targetCrystal && this.targetCrystal.isValid) {
+            // 没有目标，只有在没有被攻击时才向水晶移动
+            if (this.targetCrystal && this.targetCrystal.isValid && !this.isHit) {
                 this.moveTowardsCrystal(deltaTime);
             } else {
                 // 调试：如果没有目标水晶
@@ -160,6 +234,9 @@ export class Enemy extends Component {
                 }
             }
         }
+        
+        // 更新动画
+        this.updateAnimation(deltaTime);
     }
 
     findTarget() {
@@ -318,6 +395,12 @@ export class Enemy extends Component {
             const newPos = new Vec3();
             Vec3.scaleAndAdd(newPos, this.node.worldPosition, direction, this.moveSpeed * deltaTime);
             this.node.setWorldPosition(newPos);
+            
+            // 根据移动方向翻转
+            this.flipDirection(direction);
+            
+            // 播放行走动画
+            this.playWalkAnimation();
         }
     }
 
@@ -343,6 +426,12 @@ export class Enemy extends Component {
             Vec3.scaleAndAdd(newPos, enemyWorldPos, direction, moveDistance);
             this.node.setWorldPosition(newPos);
             
+            // 根据移动方向翻转
+            this.flipDirection(direction);
+            
+            // 播放行走动画
+            this.playWalkAnimation();
+            
             // 调试日志（每60帧输出一次，避免刷屏）
             if (Math.random() < 0.016) { // 约每60帧一次
                 // console.debug('Enemy moving:', {
@@ -351,6 +440,25 @@ export class Enemy extends Component {
                 //     distance: distance.toFixed(2),
                 //     moveDistance: moveDistance.toFixed(2)
                 // });
+            }
+        }
+    }
+
+    // 根据移动方向翻转敌人
+    flipDirection(direction: Vec3) {
+        if (direction.x < 0) {
+            // 向左移动，翻转
+            this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+            // 血条反向翻转，保持正常朝向
+            if (this.healthBarNode && this.healthBarNode.isValid) {
+                this.healthBarNode.setScale(-1, 1, 1);
+            }
+        } else {
+            // 向右移动，正常朝向
+            this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+            // 血条正常朝向
+            if (this.healthBarNode && this.healthBarNode.isValid) {
+                this.healthBarNode.setScale(1, 1, 1);
             }
         }
     }
@@ -464,7 +572,211 @@ export class Enemy extends Component {
     }
 
     stopMoving() {
-        // 停止移动逻辑（如果需要）
+        // 停止移动，只有在没有播放其他动画时才切换到待机动画
+        if (!this.isPlayingAttackAnimation && !this.isPlayingHitAnimation && !this.isPlayingDeathAnimation) {
+            this.playIdleAnimation();
+        }
+    }
+
+    // 动画更新方法
+    updateAnimation(deltaTime: number) {
+        if (!this.sprite) {
+            return;
+        }
+
+        this.animationTimer += deltaTime;
+
+        // 根据当前播放的动画类型更新帧
+        if (this.isPlayingIdleAnimation) {
+            this.updateIdleAnimation();
+        } else if (this.isPlayingWalkAnimation) {
+            this.updateWalkAnimation();
+        } else if (this.isPlayingAttackAnimation) {
+            this.updateAttackAnimation();
+        } else if (this.isPlayingHitAnimation) {
+            this.updateHitAnimation();
+        } else if (this.isPlayingDeathAnimation) {
+            this.updateDeathAnimation();
+        }
+    }
+
+    // 更新待机动画
+    updateIdleAnimation() {
+        if (this.idleAnimationFrames.length === 0) {
+            this.isPlayingIdleAnimation = false;
+            return;
+        }
+
+        const frameDuration = this.idleAnimationDuration / this.idleAnimationFrames.length;
+        const frameIndex = Math.floor(this.animationTimer / frameDuration) % this.idleAnimationFrames.length;
+
+        if (frameIndex !== this.currentAnimationFrameIndex) {
+            this.currentAnimationFrameIndex = frameIndex;
+            this.sprite.spriteFrame = this.idleAnimationFrames[frameIndex];
+        }
+    }
+
+    // 更新行走动画
+    updateWalkAnimation() {
+        if (this.walkAnimationFrames.length === 0) {
+            this.isPlayingWalkAnimation = false;
+            return;
+        }
+
+        const frameDuration = this.walkAnimationDuration / this.walkAnimationFrames.length;
+        const frameIndex = Math.floor(this.animationTimer / frameDuration) % this.walkAnimationFrames.length;
+
+        if (frameIndex !== this.currentAnimationFrameIndex) {
+            this.currentAnimationFrameIndex = frameIndex;
+            this.sprite.spriteFrame = this.walkAnimationFrames[frameIndex];
+        }
+    }
+
+    // 更新攻击动画
+    updateAttackAnimation() {
+        if (this.attackAnimationFrames.length === 0) {
+            this.isPlayingAttackAnimation = false;
+            return;
+        }
+
+        const frameDuration = this.attackAnimationDuration / this.attackAnimationFrames.length;
+        const frameIndex = Math.floor(this.animationTimer / frameDuration);
+        const totalFrames = this.attackAnimationFrames.length;
+        const halfFrameIndex = Math.floor(totalFrames / 2);
+
+        if (frameIndex < totalFrames) {
+            if (frameIndex !== this.currentAnimationFrameIndex) {
+                this.currentAnimationFrameIndex = frameIndex;
+                this.sprite.spriteFrame = this.attackAnimationFrames[frameIndex];
+            }
+            
+            // 攻击动画播放到一半时调用攻击回调函数
+            if (frameIndex >= halfFrameIndex && this.attackCallback) {
+                this.attackCallback();
+                this.attackCallback = null;
+            }
+        } else {
+            // 攻击动画结束，切换回待机动画
+            this.isPlayingAttackAnimation = false;
+            this.playIdleAnimation();
+        }
+    }
+
+    // 更新被攻击动画
+    updateHitAnimation() {
+        if (this.hitAnimationFrames.length === 0) {
+            this.isPlayingHitAnimation = false;
+            this.resumeMovement();
+            return;
+        }
+
+        const frameDuration = this.hitAnimationDuration / this.hitAnimationFrames.length;
+        const frameIndex = Math.floor(this.animationTimer / frameDuration);
+
+        if (frameIndex < this.hitAnimationFrames.length) {
+            if (frameIndex !== this.currentAnimationFrameIndex) {
+                this.currentAnimationFrameIndex = frameIndex;
+                this.sprite.spriteFrame = this.hitAnimationFrames[frameIndex];
+            }
+        } else {
+            // 被攻击动画播放完成，恢复移动或待机
+            this.isPlayingHitAnimation = false;
+            this.resumeMovement();
+        }
+    }
+
+    // 更新死亡动画
+    updateDeathAnimation() {
+        if (this.deathAnimationFrames.length === 0) {
+            this.isPlayingDeathAnimation = false;
+            return;
+        }
+
+        const frameDuration = this.deathAnimationDuration / this.deathAnimationFrames.length;
+        const frameIndex = Math.floor(this.animationTimer / frameDuration) % this.deathAnimationFrames.length;
+
+        if (frameIndex !== this.currentAnimationFrameIndex) {
+            this.currentAnimationFrameIndex = frameIndex;
+            this.sprite.spriteFrame = this.deathAnimationFrames[frameIndex];
+        }
+    }
+
+    // 播放待机动画
+    playIdleAnimation() {
+        if (this.isPlayingIdleAnimation || this.isDestroyed) {
+            return;
+        }
+
+        this.stopAllAnimations();
+        this.isPlayingIdleAnimation = true;
+        this.animationTimer = 0;
+        this.currentAnimationFrameIndex = -1;
+    }
+
+    // 播放行走动画
+    playWalkAnimation() {
+        if (this.isPlayingWalkAnimation || this.isDestroyed) {
+            return;
+        }
+
+        this.stopAllAnimations();
+        this.isPlayingWalkAnimation = true;
+        this.animationTimer = 0;
+        this.currentAnimationFrameIndex = -1;
+    }
+
+    // 播放攻击动画
+    playAttackAnimation() {
+        if (this.isPlayingDeathAnimation || this.isDestroyed) {
+            return;
+        }
+
+        this.stopAllAnimations();
+        this.isPlayingAttackAnimation = true;
+        this.animationTimer = 0;
+        this.currentAnimationFrameIndex = -1;
+    }
+
+    // 播放被攻击动画
+    playHitAnimation() {
+        if (this.isPlayingDeathAnimation || this.isDestroyed) {
+            return;
+        }
+
+        this.stopAllAnimations();
+        this.isPlayingHitAnimation = true;
+        this.isHit = true; // 设置被攻击标志
+        this.animationTimer = 0;
+        this.currentAnimationFrameIndex = -1;
+    }
+
+    // 播放死亡动画
+    playDeathAnimation() {
+        if (this.isPlayingDeathAnimation) {
+            return;
+        }
+
+        this.stopAllAnimations();
+        this.isPlayingDeathAnimation = true;
+        this.animationTimer = 0;
+        this.currentAnimationFrameIndex = -1;
+    }
+
+    // 停止所有动画
+    stopAllAnimations() {
+        this.isPlayingIdleAnimation = false;
+        this.isPlayingWalkAnimation = false;
+        this.isPlayingAttackAnimation = false;
+        this.isPlayingHitAnimation = false;
+        // 不停止死亡动画
+        this.isHit = false; // 清除被攻击标志
+    }
+
+    // 恢复默认精灵帧
+    restoreDefaultSprite() {
+        if (this.sprite && this.defaultSpriteFrame) {
+            this.sprite.spriteFrame = this.defaultSpriteFrame;
+        }
     }
 
     attack() {
@@ -478,30 +790,51 @@ export class Enemy extends Component {
             return;
         }
 
-        const towerScript = this.currentTarget.getComponent('Arrower') as any;
-        const treeScript = this.currentTarget.getComponent('WarAncientTree') as any;
-        const wellScript = this.currentTarget.getComponent('MoonWell') as any;
-        const crystalScript = this.currentTarget.getComponent('Crystal') as any;
-        const wispScript = this.currentTarget.getComponent('Wisp') as any;
-        const targetScript = towerScript || treeScript || wellScript || crystalScript || wispScript;
+        // 攻击时朝向目标方向
+        const direction = new Vec3();
+        Vec3.subtract(direction, this.currentTarget.worldPosition, this.node.worldPosition);
+        this.flipDirection(direction);
+
+        // 保存当前目标，用于攻击动画完成后造成伤害
+        const currentTarget = this.currentTarget;
         
-        if (targetScript && targetScript.takeDamage) {
-            targetScript.takeDamage(this.attackDamage);
-            // 根据目标类型输出日志
-            if (towerScript) {
-                console.debug(`Enemy: Attacked arrower, dealt ${this.attackDamage} damage`);
-            } else if (treeScript) {
-                console.debug(`Enemy: Attacked war ancient tree, dealt ${this.attackDamage} damage`);
-            } else if (wellScript) {
-                console.debug(`Enemy: Attacked moon well, dealt ${this.attackDamage} damage`);
-            } else if (crystalScript) {
-                console.debug(`Enemy: Attacked crystal, dealt ${this.attackDamage} damage`);
-            } else if (wispScript) {
-                console.debug(`Enemy: Attacked wisp, dealt ${this.attackDamage} damage`);
+        // 设置攻击回调函数
+        this.attackCallback = () => {
+            if (currentTarget && currentTarget.isValid && currentTarget.active) {
+                const towerScript = currentTarget.getComponent('Arrower') as any;
+                const treeScript = currentTarget.getComponent('WarAncientTree') as any;
+                const wellScript = currentTarget.getComponent('MoonWell') as any;
+                const crystalScript = currentTarget.getComponent('Crystal') as any;
+                const wispScript = currentTarget.getComponent('Wisp') as any;
+                const targetScript = towerScript || treeScript || wellScript || crystalScript || wispScript;
+                
+                if (targetScript && targetScript.takeDamage) {
+                    targetScript.takeDamage(this.attackDamage);
+                    // 根据目标类型输出日志
+                    if (towerScript) {
+                        console.debug(`Enemy: Attacked arrower, dealt ${this.attackDamage} damage`);
+                    } else if (treeScript) {
+                        console.debug(`Enemy: Attacked war ancient tree, dealt ${this.attackDamage} damage`);
+                    } else if (wellScript) {
+                        console.debug(`Enemy: Attacked moon well, dealt ${this.attackDamage} damage`);
+                    } else if (crystalScript) {
+                        console.debug(`Enemy: Attacked crystal, dealt ${this.attackDamage} damage`);
+                    } else if (wispScript) {
+                        console.debug(`Enemy: Attacked wisp, dealt ${this.attackDamage} damage`);
+                    }
+                } else {
+                    // 目标无效，清除目标
+                    this.currentTarget = null!;
+                }
             }
-        } else {
-            // 目标无效，清除目标
-            this.currentTarget = null!;
+        };
+
+        // 播放攻击动画
+        this.playAttackAnimation();
+
+        // 播放攻击音效
+        if (this.attackSound) {
+            AudioManager.Instance.playSFX(this.attackSound);
         }
     }
 
@@ -512,6 +845,12 @@ export class Enemy extends Component {
 
         // 显示伤害数字
         this.showDamageNumber(damage);
+        
+        // 被攻击时停止移动
+        this.stopMoving();
+        
+        // 播放受击动画
+        this.playHitAnimation();
 
         this.currentHealth -= damage;
 
@@ -523,6 +862,35 @@ export class Enemy extends Component {
         if (this.currentHealth <= 0) {
             this.currentHealth = 0;
             this.die();
+        }
+    }
+
+    // 恢复移动
+    resumeMovement() {
+        // 清除被攻击标志
+        this.isHit = false;
+        
+        // 如果敌人还活着，并且没有其他动画在播放，恢复移动
+        if (!this.isDestroyed && !this.isPlayingAttackAnimation && !this.isPlayingDeathAnimation) {
+            // 如果有当前目标，向目标移动
+            if (this.currentTarget) {
+                const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
+                if (distance > this.attackRange) {
+                    this.playWalkAnimation();
+                } else {
+                    this.playIdleAnimation();
+                }
+            } else if (this.targetCrystal && this.targetCrystal.isValid) {
+                // 没有当前目标，向水晶移动
+                const distance = Vec3.distance(this.node.worldPosition, this.targetCrystal.worldPosition);
+                if (distance > this.attackRange) {
+                    this.playWalkAnimation();
+                } else {
+                    this.playIdleAnimation();
+                }
+            } else {
+                this.playIdleAnimation();
+            }
         }
     }
 
@@ -590,8 +958,10 @@ export class Enemy extends Component {
         }
 
         this.isDestroyed = true;
-        this.stopMoving();
-
+        
+        // 立即停止所有移动和动画
+        this.stopAllAnimations();
+        
         // 奖励金币
         if (!this.gameManager) {
             this.findGameManager();
@@ -606,38 +976,56 @@ export class Enemy extends Component {
             this.healthBarNode.destroy();
         }
 
-        // 倒下动画（旋转）
-        tween(this.node)
-            .to(0.3, { angle: 90 })
-            .call(() => {
-                // 渐隐消失
-                const sprite = this.node.getComponent(Sprite);
-                const startOpacity = sprite ? sprite.color.a : 255;
-                
-                tween(this.node)
-                    .to(1.0, { 
-                        position: this.node.position.clone().add3f(0, -20, 0)
-                    })
-                    .parallel(
-                        tween().to(1.0, {}, {
-                            onUpdate: (target, ratio) => {
-                                if (sprite && this.node && this.node.isValid) {
-                                    const color = sprite.color.clone();
-                                    color.a = startOpacity * (1 - ratio);
-                                    sprite.color = color;
+        // 播放死亡音效
+        if (this.deathSound) {
+            AudioManager.Instance.playSFX(this.deathSound);
+        }
+
+        // 优先播放死亡动画
+        this.playDeathAnimation();
+
+        // 如果有死亡动画帧，等待动画播放完成后销毁
+        if (this.deathAnimationFrames.length > 0) {
+            // 延迟销毁，等待死亡动画播放完成
+            setTimeout(() => {
+                if (this.node && this.node.isValid) {
+                    this.node.destroy();
+                }
+            }, this.deathAnimationDuration * 1000);
+        } else {
+            // 如果没有死亡动画帧，使用原来的倒下和渐隐效果
+            tween(this.node)
+                .to(0.3, { angle: 90 })
+                .call(() => {
+                    // 渐隐消失
+                    const sprite = this.node.getComponent(Sprite);
+                    const startOpacity = sprite ? sprite.color.a : 255;
+                    
+                    tween(this.node)
+                        .to(1.0, { 
+                            position: this.node.position.clone().add3f(0, -20, 0)
+                        })
+                        .parallel(
+                            tween().to(1.0, {}, {
+                                onUpdate: (target, ratio) => {
+                                    if (sprite && this.node && this.node.isValid) {
+                                        const color = sprite.color.clone();
+                                        color.a = startOpacity * (1 - ratio);
+                                        sprite.color = color;
+                                    }
                                 }
+                            })
+                        )
+                        .call(() => {
+                            // 确保节点被真正销毁
+                            if (this.node && this.node.isValid) {
+                                this.node.destroy();
                             }
                         })
-                    )
-                    .call(() => {
-                        // 确保节点被真正销毁
-                        if (this.node && this.node.isValid) {
-                            this.node.destroy();
-                        }
-                    })
-                    .start();
-            })
-            .start();
+                        .start();
+                })
+                .start();
+        }
     }
 
     getHealth(): number {
