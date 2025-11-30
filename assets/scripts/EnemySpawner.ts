@@ -121,7 +121,7 @@ export class EnemySpawner extends Component {
         // 当难度等级提升时
         if (difficultyLevel > this.lastDifficultyLevel) {
             this.lastDifficultyLevel = difficultyLevel;
-            console.log(`EnemySpawner: Difficulty increased to level ${difficultyLevel}, spawn interval: ${currentInterval.toFixed(3)}s`);
+            console.debug(`EnemySpawner: Difficulty increased to level ${difficultyLevel}, spawn interval: ${currentInterval.toFixed(3)}s`);
             
             // 触发UI提示
             if (this.uiManager) {

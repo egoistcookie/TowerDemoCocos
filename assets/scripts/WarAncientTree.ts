@@ -585,7 +585,7 @@ export class WarAncientTree extends Component {
         }
         
         if (this.gameManager && !this.gameManager.canAddPopulation(1)) {
-            console.log('WarAncientTree: Cannot produce arrower - population limit reached');
+            console.debug('WarAncientTree: Cannot produce arrower - population limit reached');
             return;
         }
 
@@ -668,7 +668,7 @@ export class WarAncientTree extends Component {
             }, 0.1);
         }
 
-        console.log(`WarAncientTree: Produced arrower ${this.producedTowers.length}/${this.maxTowerCount} at position (${spawnPos.x.toFixed(2)}, ${spawnPos.y.toFixed(2)})`);
+        console.debug(`WarAncientTree: Produced arrower ${this.producedTowers.length}/${this.maxTowerCount} at position (${spawnPos.x.toFixed(2)}, ${spawnPos.y.toFixed(2)})`);
         
         // 更新单位信息面板（如果被选中）
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
@@ -685,49 +685,49 @@ export class WarAncientTree extends Component {
 
         // 检查初始位置是否可用
         if (!this.hasUnitAtPosition(initialPos, checkRadius)) {
-            console.log(`WarAncientTree.findAvailableSpawnPosition: Initial position is available at (${initialPos.x.toFixed(1)}, ${initialPos.y.toFixed(1)})`);
+            console.debug(`WarAncientTree.findAvailableSpawnPosition: Initial position is available at (${initialPos.x.toFixed(1)}, ${initialPos.y.toFixed(1)})`);
             return initialPos;
         }
 
-        console.log(`WarAncientTree.findAvailableSpawnPosition: Initial position (${initialPos.x.toFixed(1)}, ${initialPos.y.toFixed(1)}) is occupied, searching for available position...`);
+        console.debug(`WarAncientTree.findAvailableSpawnPosition: Initial position (${initialPos.x.toFixed(1)}, ${initialPos.y.toFixed(1)}) is occupied, searching for available position...`);
 
         // 尝试左右平移，交替检查左右两侧
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             // 先尝试右侧
             const rightPos = new Vec3(initialPos.x + offsetStep * attempt, initialPos.y, initialPos.z);
             if (!this.hasUnitAtPosition(rightPos, checkRadius)) {
-                console.log(`WarAncientTree.findAvailableSpawnPosition: Found available position at right offset ${offsetStep * attempt}, position: (${rightPos.x.toFixed(1)}, ${rightPos.y.toFixed(1)})`);
+                console.debug(`WarAncientTree.findAvailableSpawnPosition: Found available position at right offset ${offsetStep * attempt}, position: (${rightPos.x.toFixed(1)}, ${rightPos.y.toFixed(1)})`);
                 return rightPos;
             }
 
             // 再尝试左侧
             const leftPos = new Vec3(initialPos.x - offsetStep * attempt, initialPos.y, initialPos.z);
             if (!this.hasUnitAtPosition(leftPos, checkRadius)) {
-                console.log(`WarAncientTree.findAvailableSpawnPosition: Found available position at left offset ${offsetStep * attempt}, position: (${leftPos.x.toFixed(1)}, ${leftPos.y.toFixed(1)})`);
+                console.debug(`WarAncientTree.findAvailableSpawnPosition: Found available position at left offset ${offsetStep * attempt}, position: (${leftPos.x.toFixed(1)}, ${leftPos.y.toFixed(1)})`);
                 return leftPos;
             }
         }
 
         // 如果左右平移都找不到，尝试上下方向
-        console.log(`WarAncientTree.findAvailableSpawnPosition: Horizontal search failed, trying vertical directions...`);
+        console.debug(`WarAncientTree.findAvailableSpawnPosition: Horizontal search failed, trying vertical directions...`);
         for (let attempt = 1; attempt <= maxAttempts / 2; attempt++) {
             // 尝试上方
             const upPos = new Vec3(initialPos.x, initialPos.y + offsetStep * attempt, initialPos.z);
             if (!this.hasUnitAtPosition(upPos, checkRadius)) {
-                console.log(`WarAncientTree.findAvailableSpawnPosition: Found available position at up offset ${offsetStep * attempt}, position: (${upPos.x.toFixed(1)}, ${upPos.y.toFixed(1)})`);
+                console.debug(`WarAncientTree.findAvailableSpawnPosition: Found available position at up offset ${offsetStep * attempt}, position: (${upPos.x.toFixed(1)}, ${upPos.y.toFixed(1)})`);
                 return upPos;
             }
 
             // 尝试下方
             const downPos = new Vec3(initialPos.x, initialPos.y - offsetStep * attempt, initialPos.z);
             if (!this.hasUnitAtPosition(downPos, checkRadius)) {
-                console.log(`WarAncientTree.findAvailableSpawnPosition: Found available position at down offset ${offsetStep * attempt}, position: (${downPos.x.toFixed(1)}, ${downPos.y.toFixed(1)})`);
+                console.debug(`WarAncientTree.findAvailableSpawnPosition: Found available position at down offset ${offsetStep * attempt}, position: (${downPos.x.toFixed(1)}, ${downPos.y.toFixed(1)})`);
                 return downPos;
             }
         }
 
         // 如果所有位置都被占用，尝试对角线方向
-        console.log(`WarAncientTree.findAvailableSpawnPosition: Vertical search failed, trying diagonal directions...`);
+        console.debug(`WarAncientTree.findAvailableSpawnPosition: Vertical search failed, trying diagonal directions...`);
         for (let attempt = 1; attempt <= maxAttempts / 2; attempt++) {
             const diagonalOffset = offsetStep * attempt;
             // 尝试四个对角线方向
@@ -740,7 +740,7 @@ export class WarAncientTree extends Component {
 
             for (const pos of positions) {
                 if (!this.hasUnitAtPosition(pos, checkRadius)) {
-                    console.log(`WarAncientTree.findAvailableSpawnPosition: Found available position at diagonal offset, position: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})`);
+                    console.debug(`WarAncientTree.findAvailableSpawnPosition: Found available position at diagonal offset, position: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})`);
                     return pos;
                 }
             }
@@ -786,7 +786,7 @@ export class WarAncientTree extends Component {
         
         if (towersNode) {
             const towers = towersNode.children || [];
-            console.log(`WarAncientTree.hasUnitAtPosition: Checking ${towers.length} towers at position (${position.x.toFixed(1)}, ${position.y.toFixed(1)})`);
+            console.debug(`WarAncientTree.hasUnitAtPosition: Checking ${towers.length} towers at position (${position.x.toFixed(1)}, ${position.y.toFixed(1)})`);
             
             for (const tower of towers) {
                 if (tower && tower.isValid && tower.active) {
@@ -810,9 +810,9 @@ export class WarAncientTree extends Component {
                             }
                             
                             if (isProducedTower) {
-                                console.log(`WarAncientTree.hasUnitAtPosition: Collision detected with produced Arrower at distance ${distance.toFixed(1)}, minDistance: ${minDistance.toFixed(1)}, towerPos: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)})`);
+                                console.debug(`WarAncientTree.hasUnitAtPosition: Collision detected with produced Arrower at distance ${distance.toFixed(1)}, minDistance: ${minDistance.toFixed(1)}, towerPos: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)})`);
                             } else {
-                                console.log(`WarAncientTree.hasUnitAtPosition: Collision detected with other Arrower at distance ${distance.toFixed(1)}, minDistance: ${minDistance.toFixed(1)}, towerPos: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)})`);
+                                console.debug(`WarAncientTree.hasUnitAtPosition: Collision detected with other Arrower at distance ${distance.toFixed(1)}, minDistance: ${minDistance.toFixed(1)}, towerPos: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)})`);
                             }
                             return true;
                         }
@@ -910,7 +910,7 @@ export class WarAncientTree extends Component {
         
         const afterCount = this.producedTowers.length;
         if (beforeCount !== afterCount) {
-            console.log(`WarAncientTree.cleanupDeadTowers: Removed ${beforeCount - afterCount} dead arrowers, remaining: ${afterCount}`);
+            console.debug(`WarAncientTree.cleanupDeadTowers: Removed ${beforeCount - afterCount} dead arrowers, remaining: ${afterCount}`);
             
             // 更新单位信息面板（如果被选中）
             if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
@@ -1029,41 +1029,41 @@ export class WarAncientTree extends Component {
      * 战争古树点击事件
      */
     onWarAncientTreeClick(event: EventTouch) {
-        console.log('WarAncientTree.onWarAncientTreeClick: Entering method');
+        console.debug('WarAncientTree.onWarAncientTreeClick: Entering method');
         // 检查是否有选中的小精灵，如果有则不处理点击事件（让小精灵移动到建筑物）
         const selectionManager = this.findSelectionManager();
-        console.log('WarAncientTree.onWarAncientTreeClick: Found selectionManager:', selectionManager ? 'yes' : 'no');
+        console.debug('WarAncientTree.onWarAncientTreeClick: Found selectionManager:', selectionManager ? 'yes' : 'no');
         
         let hasSelectedWisps = false;
         if (selectionManager && selectionManager.hasSelectedWisps && typeof selectionManager.hasSelectedWisps === 'function') {
             hasSelectedWisps = selectionManager.hasSelectedWisps();
-            console.log('WarAncientTree.onWarAncientTreeClick: Has selected wisps:', hasSelectedWisps);
+            console.debug('WarAncientTree.onWarAncientTreeClick: Has selected wisps:', hasSelectedWisps);
         } else {
-            console.log('WarAncientTree.onWarAncientTreeClick: selectionManager.hasSelectedWisps is not a function');
+            console.debug('WarAncientTree.onWarAncientTreeClick: selectionManager.hasSelectedWisps is not a function');
         }
         
         if (hasSelectedWisps) {
             // 有选中的小精灵，不处理建筑物的点击事件，让SelectionManager处理移动
             // 不设置propagationStopped，让事件继续传播，这样SelectionManager的移动命令可以执行
-            console.log('WarAncientTree.onWarAncientTreeClick: Has selected wisps, returning to let SelectionManager handle movement');
+            console.debug('WarAncientTree.onWarAncientTreeClick: Has selected wisps, returning to let SelectionManager handle movement');
             return;
         }
 
         // 阻止事件传播
         event.propagationStopped = true;
-        console.log('WarAncientTree.onWarAncientTreeClick: Event propagation stopped');
+        console.debug('WarAncientTree.onWarAncientTreeClick: Event propagation stopped');
 
         // 如果已经显示选择面板，先隐藏
         if (this.selectionPanel && this.selectionPanel.isValid) {
-            console.log('WarAncientTree.onWarAncientTreeClick: Selection panel already shown, hiding it');
+            console.debug('WarAncientTree.onWarAncientTreeClick: Selection panel already shown, hiding it');
             this.hideSelectionPanel();
             return;
         }
 
         // 显示选择面板
-        console.log('WarAncientTree.onWarAncientTreeClick: Showing selection panel');
+        console.debug('WarAncientTree.onWarAncientTreeClick: Showing selection panel');
         this.showSelectionPanel();
-        console.log('WarAncientTree.onWarAncientTreeClick: Method completed');
+        console.debug('WarAncientTree.onWarAncientTreeClick: Method completed');
     }
 
     /**
@@ -1251,7 +1251,7 @@ export class WarAncientTree extends Component {
             // 回收80%金币
             const refund = Math.floor(this.buildCost * 0.8);
             this.gameManager.addGold(refund);
-            console.log(`WarAncientTree: Sold, refunded ${refund} gold`);
+            console.debug(`WarAncientTree: Sold, refunded ${refund} gold`);
         }
 
         // 隐藏面板
@@ -1281,7 +1281,7 @@ export class WarAncientTree extends Component {
         const upgradeCost = Math.floor(this.buildCost * 0.5);
         
         if (!this.gameManager.canAfford(upgradeCost)) {
-            console.log(`WarAncientTree: Not enough gold for upgrade! Need ${upgradeCost}, have ${this.gameManager.getGold()}`);
+            console.debug(`WarAncientTree: Not enough gold for upgrade! Need ${upgradeCost}, have ${this.gameManager.getGold()}`);
             return;
         }
 
@@ -1292,7 +1292,7 @@ export class WarAncientTree extends Component {
         this.level++;
         this.maxTowerCount += 2;
 
-        console.log(`WarAncientTree: Upgraded to level ${this.level}, maxTowerCount increased to ${this.maxTowerCount}`);
+        console.debug(`WarAncientTree: Upgraded to level ${this.level}, maxTowerCount increased to ${this.maxTowerCount}`);
 
         // 更新单位信息面板
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
@@ -1331,7 +1331,7 @@ export class WarAncientTree extends Component {
         // 让小精灵依附，传递fromBuilding参数为true避免循环调用
         if (wispScript.attachToBuilding) {
             wispScript.attachToBuilding(this.node, true);
-            console.log(`WarAncientTree: Wisp attached, total: ${this.attachedWisps.length}`);
+            console.debug(`WarAncientTree: Wisp attached, total: ${this.attachedWisps.length}`);
         }
     }
 
@@ -1340,7 +1340,7 @@ export class WarAncientTree extends Component {
      */
     detachWisp() {
         if (this.attachedWisps.length === 0) {
-            console.log('WarAncientTree: No wisp to detach');
+            console.debug('WarAncientTree: No wisp to detach');
             return;
         }
 
@@ -1352,7 +1352,7 @@ export class WarAncientTree extends Component {
         const wispScript = wisp.getComponent('Wisp') as any;
         if (wispScript && wispScript.detachFromBuilding) {
             wispScript.detachFromBuilding();
-            console.log(`WarAncientTree: Wisp detached, remaining: ${this.attachedWisps.length}`);
+            console.debug(`WarAncientTree: Wisp detached, remaining: ${this.attachedWisps.length}`);
         }
         
         // 卸下小精灵后取消选中状态，类似点击升级按钮

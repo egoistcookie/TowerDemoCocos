@@ -66,7 +66,7 @@
 start() {
     // ... 现有代码 ...
     if (this.targetCrystal) {
-        console.log('Enemy: targetCrystal found:', this.targetCrystal.name);
+        console.debug('Enemy: targetCrystal found:', this.targetCrystal.name);
     } else {
         console.error('Enemy: targetCrystal not found!');
     }

@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, EventTouch, Sprite, SpriteFrame } from 'cc';
+import { _decorator, Component, Node, Vec2, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, EventTouch, Sprite, SpriteFrame } from 'cc';
 import { GameManager, GameState } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
@@ -39,6 +39,13 @@ export class Wisp extends Component {
     @property(SpriteFrame)
     cardIcon: SpriteFrame = null!; // 单位名片图片
 
+    // 移动动画相关属性
+    @property(SpriteFrame)
+    moveAnimationFrames: SpriteFrame[] = []; // 移动动画帧数组（可选）
+    
+    @property
+    moveAnimationDuration: number = 0.3; // 移动动画时长（秒）
+
     private currentHealth: number = 30;
     private healthBar: HealthBar = null!;
     private healthBarNode: Node = null!;
@@ -46,6 +53,7 @@ export class Wisp extends Component {
     private gameManager: GameManager = null!;
     private spriteComponent: Sprite = null!; // Sprite组件引用
     private defaultSpriteFrame: SpriteFrame = null!; // 默认SpriteFrame
+    private defaultScale: Vec3 = new Vec3(1, 1, 1); // 默认缩放，用于方向翻转
     private unitSelectionManager: UnitSelectionManager = null!; // 单位选择管理器
     private isHighlighted: boolean = false; // 是否高亮显示
     private highlightNode: Node = null!; // 高亮效果节点
@@ -58,6 +66,7 @@ export class Wisp extends Component {
     // 移动相关
     private moveTarget: Vec3 | null = null!; // 移动目标位置
     private isMoving: boolean = false; // 是否正在移动
+    private isPlayingMoveAnimation: boolean = false; // 是否正在播放移动动画
     private manualMoveTarget: Vec3 | null = null!; // 手动移动目标位置
     private isManuallyControlled: boolean = false; // 是否正在手动控制
 
@@ -74,9 +83,18 @@ export class Wisp extends Component {
 
         // 获取Sprite组件
         this.spriteComponent = this.node.getComponent(Sprite);
-        if (this.spriteComponent && this.spriteComponent.spriteFrame) {
-            this.defaultSpriteFrame = this.spriteComponent.spriteFrame;
+        if (this.spriteComponent) {
+            // 设置Sprite的sizeMode为CUSTOM，确保所有动画帧使用相同的尺寸
+            this.spriteComponent.sizeMode = Sprite.SizeMode.CUSTOM;
+            // 启用trim并设置offset，确保人物始终位于中心
+            this.spriteComponent.trim = true;
+            if (this.spriteComponent.spriteFrame) {
+                this.defaultSpriteFrame = this.spriteComponent.spriteFrame;
+            }
         }
+        
+        // 保存默认缩放
+        this.defaultScale = this.node.scale.clone();
 
         // 查找游戏管理器
         this.findGameManager();
@@ -161,6 +179,28 @@ export class Wisp extends Component {
                     const newPos = currentPos.add(moveStep);
                     this.node.setWorldPosition(newPos);
                     
+                    // 根据移动方向翻转小精灵
+                    if (direction.x < 0) {
+                        // 向左移动，翻转
+                        this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+                        // 血条反向翻转，保持正常朝向
+                        if (this.healthBarNode && this.healthBarNode.isValid) {
+                            this.healthBarNode.setScale(-1, 1, 1);
+                        }
+                    } else {
+                        // 向右移动，正常朝向
+                        this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+                        // 血条保持正常朝向
+                        if (this.healthBarNode && this.healthBarNode.isValid) {
+                            this.healthBarNode.setScale(1, 1, 1);
+                        }
+                    }
+                    
+                    // 播放移动动画
+                    if (!this.isPlayingMoveAnimation) {
+                        this.playMoveAnimation();
+                    }
+                    
                     // 移动过程中不检查重叠，避免在移动时被依附
                 }
             } else if (this.isMoving && this.moveTarget) {
@@ -186,9 +226,33 @@ export class Wisp extends Component {
                     const newPos = currentPos.add(moveStep);
                     this.node.setWorldPosition(newPos);
                     
+                    // 根据移动方向翻转小精灵
+                    if (direction.x < 0) {
+                        // 向左移动，翻转
+                        this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+                        // 血条反向翻转，保持正常朝向
+                        if (this.healthBarNode && this.healthBarNode.isValid) {
+                            this.healthBarNode.setScale(-1, 1, 1);
+                        }
+                    } else {
+                        // 向右移动，正常朝向
+                        this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+                        // 血条保持正常朝向
+                        if (this.healthBarNode && this.healthBarNode.isValid) {
+                            this.healthBarNode.setScale(1, 1, 1);
+                        }
+                    }
+                    
+                    // 播放移动动画
+                    if (!this.isPlayingMoveAnimation) {
+                        this.playMoveAnimation();
+                    }
+                    
                     // 移动过程中不检查重叠，避免在移动时被依附
                 }
             } else {
+                // 停止移动动画
+                this.stopMoveAnimation();
                 // 静止状态下检查是否与建筑物重叠
                 this.checkBuildingOverlap();
             }
@@ -305,7 +369,7 @@ export class Wisp extends Component {
         // 最后设置依附状态
         this.isAttached = true;
 
-        console.log('Wisp: Attached to building and disappeared into it');
+        console.debug('Wisp: Attached to building and disappeared into it');
     }
 
     /**
@@ -338,7 +402,7 @@ export class Wisp extends Component {
             this.isMoving = false;
         }, 1.0);
 
-        console.log('Wisp: Detached from building and reappeared');
+        console.debug('Wisp: Detached from building and reappeared');
     }
 
     /**
@@ -349,6 +413,84 @@ export class Wisp extends Component {
         this.isMoving = true;
         this.isManuallyControlled = false;
         this.manualMoveTarget = null!;
+        this.playMoveAnimation();
+    }
+
+    /**
+     * 播放移动动画
+     */
+    private playMoveAnimation() {
+        // 如果正在播放移动动画，不重复播放
+        if (this.isPlayingMoveAnimation) {
+            return;
+        }
+
+        // 如果没有移动动画帧，使用默认SpriteFrame
+        if (!this.moveAnimationFrames || this.moveAnimationFrames.length === 0) {
+            return;
+        }
+
+        if (!this.spriteComponent) {
+            return;
+        }
+
+        // 检查帧是否有效
+        const validFrames = this.moveAnimationFrames.filter(frame => frame != null);
+        if (validFrames.length === 0) {
+            return;
+        }
+
+        this.isPlayingMoveAnimation = true;
+
+        const frames = validFrames;
+        const frameCount = frames.length;
+        const frameDuration = this.moveAnimationDuration / frameCount;
+        let animationTimer = 0;
+        let lastFrameIndex = -1;
+
+        // 立即播放第一帧
+        if (frames[0]) {
+            this.spriteComponent.spriteFrame = frames[0];
+            lastFrameIndex = 0;
+        }
+
+        // 使用update方法逐帧播放
+        const animationUpdate = (deltaTime: number) => {
+            // 停止条件：如果不在移动状态且不在手动控制状态，或者组件无效，或者被销毁，或者已依附
+            if ((!this.isMoving && !this.isManuallyControlled) || !this.spriteComponent || !this.spriteComponent.isValid || this.isDestroyed || this.isAttached) {
+                this.isPlayingMoveAnimation = false;
+                this.unschedule(animationUpdate);
+                // 恢复默认SpriteFrame
+                if (this.spriteComponent && this.spriteComponent.isValid && this.defaultSpriteFrame) {
+                    this.spriteComponent.spriteFrame = this.defaultSpriteFrame;
+                }
+                return;
+            }
+
+            animationTimer += deltaTime;
+
+            // 循环播放动画
+            const targetFrameIndex = Math.floor(animationTimer / frameDuration) % frameCount;
+
+            if (targetFrameIndex !== lastFrameIndex && frames[targetFrameIndex]) {
+                this.spriteComponent.spriteFrame = frames[targetFrameIndex];
+                lastFrameIndex = targetFrameIndex;
+            }
+        };
+
+        // 开始动画更新
+        this.schedule(animationUpdate, 0);
+    }
+
+    /**
+     * 停止移动动画
+     */
+    private stopMoveAnimation() {
+        this.isPlayingMoveAnimation = false;
+        // 恢复默认SpriteFrame
+        if (this.spriteComponent && this.spriteComponent.isValid && this.defaultSpriteFrame) {
+            this.spriteComponent.spriteFrame = this.defaultSpriteFrame;
+        }
     }
 
     /**
@@ -673,7 +815,7 @@ export class Wisp extends Component {
         
         // 依附在建筑物上时不会被攻击
         if (this.isAttached) {
-            console.log('Wisp.takeDamage: Wisp is attached to building, ignoring damage');
+            console.debug('Wisp.takeDamage: Wisp is attached to building, ignoring damage');
             return;
         }
 
@@ -875,48 +1017,48 @@ export class Wisp extends Component {
      * 点击事件
      */
     onWispClick(event: EventTouch) {
-        console.log('Wisp.onWispClick: Wisp clicked, event:', event);
+        console.debug('Wisp.onWispClick: Wisp clicked, event:', event);
         // 阻止事件冒泡
         event.propagationStopped = true;
 
         // 检查是否处于建造模式，如果是，先退出建造模式
-        console.log('Wisp.onWispClick: Checking building mode...');
+        console.debug('Wisp.onWispClick: Checking building mode...');
         const towerBuilderNode = find('TowerBuilder');
         if (towerBuilderNode) {
-            console.log('Wisp.onWispClick: TowerBuilder node found');
+            console.debug('Wisp.onWispClick: TowerBuilder node found');
             const towerBuilder = towerBuilderNode.getComponent('TowerBuilder') as any;
             if (towerBuilder) {
-                console.log('Wisp.onWispClick: TowerBuilder component found');
+                console.debug('Wisp.onWispClick: TowerBuilder component found');
                 // 直接调用disableBuildingMode，不管当前是否处于建造模式
-                console.log('Wisp.onWispClick: Calling disableBuildingMode() to exit building mode');
+                console.debug('Wisp.onWispClick: Calling disableBuildingMode() to exit building mode');
                 if (towerBuilder.disableBuildingMode) {
                     towerBuilder.disableBuildingMode();
-                    console.log('Wisp.onWispClick: disableBuildingMode() called successfully');
+                    console.debug('Wisp.onWispClick: disableBuildingMode() called successfully');
                 } else {
-                    console.log('Wisp.onWispClick: disableBuildingMode() method not found');
+                    console.debug('Wisp.onWispClick: disableBuildingMode() method not found');
                 }
                 
                 // 直接设置isBuildingMode为false，确保建造模式被退出
-                console.log('Wisp.onWispClick: Setting isBuildingMode to false directly');
+                console.debug('Wisp.onWispClick: Setting isBuildingMode to false directly');
                 towerBuilder.isBuildingMode = false;
-                console.log('Wisp.onWispClick: After setting, isBuildingMode is now:', towerBuilder.isBuildingMode);
+                console.debug('Wisp.onWispClick: After setting, isBuildingMode is now:', towerBuilder.isBuildingMode);
             } else {
-                console.log('Wisp.onWispClick: TowerBuilder component not found');
+                console.debug('Wisp.onWispClick: TowerBuilder component not found');
             }
         } else {
-            console.log('Wisp.onWispClick: TowerBuilder node not found');
+            console.debug('Wisp.onWispClick: TowerBuilder node not found');
         }
 
         // 显示单位信息面板
         if (!this.unitSelectionManager) {
-            console.log('Wisp.onWispClick: Finding UnitSelectionManager');
+            console.debug('Wisp.onWispClick: Finding UnitSelectionManager');
             this.findUnitSelectionManager();
         }
         if (this.unitSelectionManager) {
-            console.log('Wisp.onWispClick: UnitSelectionManager found');
+            console.debug('Wisp.onWispClick: UnitSelectionManager found');
             // 检查是否已经选中了小精灵
             if (this.unitSelectionManager.isUnitSelected(this.node)) {
-                console.log('Wisp.onWispClick: Wisp already selected, clearing selection');
+                console.debug('Wisp.onWispClick: Wisp already selected, clearing selection');
                 // 如果已经选中，清除选择
                 this.unitSelectionManager.clearSelection();
                 // 同时清除SelectionManager中的选中状态
@@ -934,14 +1076,14 @@ export class Wisp extends Component {
                 icon: this.cardIcon || this.defaultSpriteFrame,
                 collisionRadius: this.collisionRadius
             };
-            console.log('Wisp.onWispClick: Selecting wisp in UnitSelectionManager');
+            console.debug('Wisp.onWispClick: Selecting wisp in UnitSelectionManager');
             this.unitSelectionManager.selectUnit(this.node, unitInfo);
             
             // 将小精灵添加到SelectionManager的选中列表中，以便后续可以移动
-            console.log('Wisp.onWispClick: Adding wisp to SelectionManager');
+            console.debug('Wisp.onWispClick: Adding wisp to SelectionManager');
             this.addToSelectionManager();
         } else {
-            console.log('Wisp.onWispClick: UnitSelectionManager not found');
+            console.debug('Wisp.onWispClick: UnitSelectionManager not found');
         }
     }
     
@@ -949,26 +1091,26 @@ export class Wisp extends Component {
      * 将小精灵添加到SelectionManager的选中列表中
      */
     private addToSelectionManager() {
-        console.log('Wisp.addToSelectionManager: Adding wisp to SelectionManager');
+        console.debug('Wisp.addToSelectionManager: Adding wisp to SelectionManager');
         // 查找SelectionManager
         const selectionManager = this.findSelectionManager();
         if (selectionManager) {
-            console.log('Wisp.addToSelectionManager: SelectionManager found, clearing previous selection');
+            console.debug('Wisp.addToSelectionManager: SelectionManager found, clearing previous selection');
             // 清除之前的选择
             selectionManager.clearSelection();
             // 将当前小精灵添加到选中列表
-            console.log('Wisp.addToSelectionManager: Setting selected wisps to current wisp');
+            console.debug('Wisp.addToSelectionManager: Setting selected wisps to current wisp');
             selectionManager.setSelectedWisps([this]);
             // 注册移动命令
-            console.log('Wisp.addToSelectionManager: Registering move command');
+            console.debug('Wisp.addToSelectionManager: Registering move command');
             selectionManager.registerMoveCommand();
-            console.log('Wisp.addToSelectionManager: Move command registered successfully');
+            console.debug('Wisp.addToSelectionManager: Move command registered successfully');
             
             // 检查SelectionManager的状态
-            console.log('Wisp.addToSelectionManager: After registration - selectedWisps length:', selectionManager.selectedWisps?.length || 0);
-            console.log('Wisp.addToSelectionManager: After registration - globalTouchHandler:', !!selectionManager.globalTouchHandler);
+            console.debug('Wisp.addToSelectionManager: After registration - selectedWisps length:', selectionManager.selectedWisps?.length || 0);
+            console.debug('Wisp.addToSelectionManager: After registration - globalTouchHandler:', !!selectionManager.globalTouchHandler);
         } else {
-            console.log('Wisp.addToSelectionManager: SelectionManager not found');
+            console.debug('Wisp.addToSelectionManager: SelectionManager not found');
         }
     }
     
@@ -976,13 +1118,13 @@ export class Wisp extends Component {
      * 清除SelectionManager中的选中状态
      */
     private clearSelectionInSelectionManager() {
-        console.log('Wisp.clearSelectionInSelectionManager: Clearing selection in SelectionManager');
+        console.debug('Wisp.clearSelectionInSelectionManager: Clearing selection in SelectionManager');
         const selectionManager = this.findSelectionManager();
         if (selectionManager) {
-            console.log('Wisp.clearSelectionInSelectionManager: SelectionManager found, clearing selection');
+            console.debug('Wisp.clearSelectionInSelectionManager: SelectionManager found, clearing selection');
             selectionManager.clearSelection();
         } else {
-            console.log('Wisp.clearSelectionInSelectionManager: SelectionManager not found');
+            console.debug('Wisp.clearSelectionInSelectionManager: SelectionManager not found');
         }
     }
     
@@ -990,19 +1132,19 @@ export class Wisp extends Component {
      * 查找SelectionManager
      */
     private findSelectionManager(): any {
-        console.log('Wisp.findSelectionManager: Finding SelectionManager');
+        console.debug('Wisp.findSelectionManager: Finding SelectionManager');
         let managerNode = find('SelectionManager');
         if (managerNode) {
-            console.log('Wisp.findSelectionManager: SelectionManager node found');
+            console.debug('Wisp.findSelectionManager: SelectionManager node found');
             const selectionManager = managerNode.getComponent('SelectionManager');
             if (selectionManager) {
-                console.log('Wisp.findSelectionManager: SelectionManager component found');
+                console.debug('Wisp.findSelectionManager: SelectionManager component found');
                 return selectionManager;
             } else {
-                console.log('Wisp.findSelectionManager: SelectionManager component not found');
+                console.debug('Wisp.findSelectionManager: SelectionManager component not found');
             }
         } else {
-            console.log('Wisp.findSelectionManager: SelectionManager node not found, searching in scene');
+            console.debug('Wisp.findSelectionManager: SelectionManager node not found, searching in scene');
         }
         
         const scene = this.node.scene;
@@ -1018,13 +1160,13 @@ export class Wisp extends Component {
             };
             const selectionManager = findInScene(scene, 'SelectionManager');
             if (selectionManager) {
-                console.log('Wisp.findSelectionManager: SelectionManager found in scene');
+                console.debug('Wisp.findSelectionManager: SelectionManager found in scene');
             } else {
-                console.log('Wisp.findSelectionManager: SelectionManager not found in scene');
+                console.debug('Wisp.findSelectionManager: SelectionManager not found in scene');
             }
             return selectionManager;
         }
-        console.log('Wisp.findSelectionManager: Scene not found');
+        console.debug('Wisp.findSelectionManager: Scene not found');
         return null;
     }
 }

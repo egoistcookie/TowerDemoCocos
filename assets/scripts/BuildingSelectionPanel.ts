@@ -31,14 +31,14 @@ export class BuildingSelectionPanel extends Component {
     private touchEndHandled: boolean = false; // 标记触摸结束事件是否已处理
 
     start() {
-        console.log('BuildingSelectionPanel.start: Initializing');
+        console.debug('BuildingSelectionPanel.start: Initializing');
         this.findGameManager();
         this.node.active = false; // 初始隐藏
         
         // 监听Canvas的触摸事件，用于拖拽预览和面板外点击
         this.canvasNode = find('Canvas');
         if (this.canvasNode) {
-            console.log('BuildingSelectionPanel.start: Canvas found, setting up touch listeners');
+            console.debug('BuildingSelectionPanel.start: Canvas found, setting up touch listeners');
             this.canvasNode.on(Node.EventType.TOUCH_START, this.onCanvasTouchStart, this);
             this.canvasNode.on(Node.EventType.TOUCH_MOVE, this.onCanvasTouchMove, this);
             this.canvasNode.on(Node.EventType.TOUCH_END, this.onCanvasTouchEnd, this);
@@ -62,7 +62,7 @@ export class BuildingSelectionPanel extends Component {
     onCanvasTouchStart(event: EventTouch) {
         // 只有当面板显示且没有正在拖拽时，才检查面板外点击
         if (this.node.active && !this.isDragging && !this.selectedBuilding) {
-            console.log('BuildingSelectionPanel.onCanvasTouchStart: Checking if touch is outside panel');
+            console.debug('BuildingSelectionPanel.onCanvasTouchStart: Checking if touch is outside panel');
             
             const location = event.getLocation();
             let isInPanelArea = false;
@@ -104,7 +104,7 @@ export class BuildingSelectionPanel extends Component {
             
             // 如果点击在面板外，隐藏面板
             if (!isInPanelArea) {
-                console.log('BuildingSelectionPanel.onCanvasTouchStart: Touch is outside panel, hiding panel');
+                console.debug('BuildingSelectionPanel.onCanvasTouchStart: Touch is outside panel, hiding panel');
                 this.hide();
             }
         }
@@ -124,18 +124,18 @@ export class BuildingSelectionPanel extends Component {
      * Canvas触摸结束事件（处理拖拽到游戏界面中松开的情况）
      */
     onCanvasTouchEnd(event: EventTouch) {
-        console.log('BuildingSelectionPanel.onCanvasTouchEnd: touchEndHandled=', this.touchEndHandled, 'isDragging=', this.isDragging, 'selectedBuilding=', !!this.selectedBuilding, 'dragPreview=', !!this.dragPreview);
+        console.debug('BuildingSelectionPanel.onCanvasTouchEnd: touchEndHandled=', this.touchEndHandled, 'isDragging=', this.isDragging, 'selectedBuilding=', !!this.selectedBuilding, 'dragPreview=', !!this.dragPreview);
         
         // 如果触摸结束事件已经被处理（在BuildingItem上），则不处理
         if (this.touchEndHandled) {
-            console.log('BuildingSelectionPanel.onCanvasTouchEnd: Already handled, skipping');
+            console.debug('BuildingSelectionPanel.onCanvasTouchEnd: Already handled, skipping');
             this.touchEndHandled = false; // 重置标志
             return;
         }
 
         // 如果正在拖拽且有选中的建筑物，处理建造逻辑
         if (this.isDragging && this.selectedBuilding && this.dragPreview) {
-            console.log('BuildingSelectionPanel.onCanvasTouchEnd: Processing drag end');
+            console.debug('BuildingSelectionPanel.onCanvasTouchEnd: Processing drag end');
             const location = event.getLocation();
             const startLocation = event.getStartLocation();
             const dragDistance = Math.sqrt(
@@ -182,7 +182,7 @@ export class BuildingSelectionPanel extends Component {
                 if (!isInPanelArea) {
                     const worldPos = this.getWorldPositionFromScreen(new Vec3(location.x, location.y, 0));
                     if (worldPos && this.onBuildCallback) {
-                        console.log('BuildingSelectionPanel.onCanvasTouchEnd: Calling onBuildCallback');
+                        console.debug('BuildingSelectionPanel.onCanvasTouchEnd: Calling onBuildCallback');
                         this.onBuildCallback(this.selectedBuilding, worldPos);
                         
                         // 清除拖拽预览和状态
@@ -232,7 +232,7 @@ export class BuildingSelectionPanel extends Component {
      * 显示面板
      */
     show() {
-        console.log('BuildingSelectionPanel.show: Showing panel, buildingTypes count=', this.buildingTypes.length);
+        console.debug('BuildingSelectionPanel.show: Showing panel, buildingTypes count=', this.buildingTypes.length);
         this.node.active = true;
         // 动画显示
         this.node.setScale(0, 1, 1);
@@ -259,7 +259,7 @@ export class BuildingSelectionPanel extends Component {
      * 更新面板内容
      */
     updatePanel() {
-        console.log('BuildingSelectionPanel.updatePanel: Updating panel with', this.buildingTypes.length, 'buildings');
+        console.debug('BuildingSelectionPanel.updatePanel: Updating panel with', this.buildingTypes.length, 'buildings');
         
         // 如果没有指定内容容器，尝试查找或创建
         if (!this.panelContent) {
@@ -282,10 +282,10 @@ export class BuildingSelectionPanel extends Component {
         this.buildingTypes.forEach((building, index) => {
             const item = this.createBuildingItem(building, index);
             this.panelContent.addChild(item);
-            console.log('BuildingSelectionPanel.updatePanel: Added item', building.name, 'to panel');
+            console.debug('BuildingSelectionPanel.updatePanel: Added item', building.name, 'to panel');
         });
         
-        console.log('BuildingSelectionPanel.updatePanel: Panel updated, children count=', this.panelContent.children.length);
+        console.debug('BuildingSelectionPanel.updatePanel: Panel updated, children count=', this.panelContent.children.length);
     }
 
     /**
@@ -348,28 +348,28 @@ export class BuildingSelectionPanel extends Component {
         // 我们已经添加了 UITransform，所以应该可以工作
         
         // 添加触摸事件
-        console.log('BuildingSelectionPanel.createBuildingItem: Creating item for', building.name);
+        console.debug('BuildingSelectionPanel.createBuildingItem: Creating item for', building.name);
         item.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
-            console.log('BuildingSelectionPanel: TOUCH_START event received on', building.name);
+            console.debug('BuildingSelectionPanel: TOUCH_START event received on', building.name);
             this.onBuildingItemTouchStart(building, event);
         }, this);
 
         item.on(Node.EventType.TOUCH_MOVE, (event: EventTouch) => {
-            console.log('BuildingSelectionPanel: TOUCH_MOVE event received on', building.name);
+            console.debug('BuildingSelectionPanel: TOUCH_MOVE event received on', building.name);
             this.onBuildingItemTouchMove(building, event);
         }, this);
 
         item.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
-            console.log('BuildingSelectionPanel: TOUCH_END event received on', building.name);
+            console.debug('BuildingSelectionPanel: TOUCH_END event received on', building.name);
             this.onBuildingItemTouchEnd(building, event);
         }, this);
 
         item.on(Node.EventType.TOUCH_CANCEL, (event: EventTouch) => {
-            console.log('BuildingSelectionPanel: TOUCH_CANCEL event received on', building.name);
+            console.debug('BuildingSelectionPanel: TOUCH_CANCEL event received on', building.name);
             this.onBuildingItemTouchCancel(building, event);
         }, this);
 
-        console.log('BuildingSelectionPanel.createBuildingItem: Item created, UITransform size=', transform.contentSize);
+        console.debug('BuildingSelectionPanel.createBuildingItem: Item created, UITransform size=', transform.contentSize);
         return item;
     }
 
@@ -377,11 +377,11 @@ export class BuildingSelectionPanel extends Component {
      * 建筑物选项触摸开始
      */
     onBuildingItemTouchStart(building: BuildingType, event: EventTouch) {
-        console.log('BuildingSelectionPanel.onBuildingItemTouchStart: Building=', building.name);
+        console.debug('BuildingSelectionPanel.onBuildingItemTouchStart: Building=', building.name);
         
         // 检查金币是否足够
         if (this.gameManager && !this.gameManager.canAfford(building.cost)) {
-            console.log('BuildingSelectionPanel.onBuildingItemTouchStart: Not enough gold!');
+            console.debug('BuildingSelectionPanel.onBuildingItemTouchStart: Not enough gold!');
             // 显示金币不足弹窗
             GamePopup.showMessage('金币不足');
             return;
@@ -393,7 +393,7 @@ export class BuildingSelectionPanel extends Component {
 
         // 创建拖拽预览（初始位置在触摸点）
         const location = event.getLocation();
-        console.log('BuildingSelectionPanel.onBuildingItemTouchStart: Location=', location);
+        console.debug('BuildingSelectionPanel.onBuildingItemTouchStart: Location=', location);
         this.createDragPreview(building, new Vec3(location.x, location.y, 0));
 
         if (this.onBuildingSelectedCallback) {
@@ -423,7 +423,7 @@ export class BuildingSelectionPanel extends Component {
         // 如果移动距离超过10像素，认为是拖拽
         if (dragDistance > 10) {
             if (!this.isDragging) {
-                console.log('BuildingSelectionPanel.onBuildingItemTouchMove: Start dragging');
+                console.debug('BuildingSelectionPanel.onBuildingItemTouchMove: Start dragging');
                 this.isDragging = true;
             }
             
@@ -439,10 +439,10 @@ export class BuildingSelectionPanel extends Component {
      * 建筑物选项触摸结束
      */
     onBuildingItemTouchEnd(building: BuildingType, event: EventTouch) {
-        console.log('BuildingSelectionPanel.onBuildingItemTouchEnd: Building=', building.name, 'selectedBuilding=', this.selectedBuilding?.name);
+        console.debug('BuildingSelectionPanel.onBuildingItemTouchEnd: Building=', building.name, 'selectedBuilding=', this.selectedBuilding?.name);
         
         if (this.selectedBuilding !== building) {
-            console.log('BuildingSelectionPanel.onBuildingItemTouchEnd: Selected building mismatch');
+            console.debug('BuildingSelectionPanel.onBuildingItemTouchEnd: Selected building mismatch');
             return;
         }
 
@@ -539,7 +539,7 @@ export class BuildingSelectionPanel extends Component {
      * 建筑物选项触摸取消
      */
     onBuildingItemTouchCancel(building: BuildingType, event: EventTouch) {
-        console.log('BuildingSelectionPanel.onBuildingItemTouchCancel: Building=', building.name, 'selectedBuilding=', this.selectedBuilding?.name, 'isDragging=', this.isDragging);
+        console.debug('BuildingSelectionPanel.onBuildingItemTouchCancel: Building=', building.name, 'selectedBuilding=', this.selectedBuilding?.name, 'isDragging=', this.isDragging);
         
         if (this.selectedBuilding !== building) {
             this.clearDragPreview();
@@ -598,7 +598,7 @@ export class BuildingSelectionPanel extends Component {
                 if (!isInPanelArea) {
                     const worldPos = this.getWorldPositionFromScreen(new Vec3(location.x, location.y, 0));
                     if (worldPos && this.onBuildCallback) {
-                        console.log('BuildingSelectionPanel.onBuildingItemTouchCancel: Calling onBuildCallback');
+                        console.debug('BuildingSelectionPanel.onBuildingItemTouchCancel: Calling onBuildCallback');
                         // 标记触摸结束事件已处理（成功建造）
                         this.touchEndHandled = true;
                         this.onBuildCallback(building, worldPos);

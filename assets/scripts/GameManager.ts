@@ -106,7 +106,7 @@ export class GameManager extends Component {
     }
 
     endGame(state: GameState) {
-        console.log(`GameManager: endGame called with state: ${state} (${state === GameState.Victory ? 'Victory' : state === GameState.Defeat ? 'Defeat' : 'Unknown'})`);
+        console.debug(`GameManager: endGame called with state: ${state} (${state === GameState.Victory ? 'Victory' : state === GameState.Defeat ? 'Defeat' : 'Unknown'})`);
         this.gameState = state;
         
         // 游戏结束时，清理所有单位（敌人直接消失，塔停止移动）
@@ -114,7 +114,7 @@ export class GameManager extends Component {
         
         if (this.gameOverPanel) {
             this.gameOverPanel.active = true;
-            console.log('GameManager: GameOverPanel activated');
+            console.debug('GameManager: GameOverPanel activated');
         }
 
         if (this.gameOverLabel) {
@@ -123,11 +123,11 @@ export class GameManager extends Component {
             } else {
                 this.gameOverLabel.string = '失败！';
             }
-            console.log(`GameManager: GameOverLabel set to: ${this.gameOverLabel.string}`);
+            console.debug(`GameManager: GameOverLabel set to: ${this.gameOverLabel.string}`);
         }
         
         // 确保游戏状态已更新
-        console.log(`GameManager: Current game state: ${this.gameState}`);
+        console.debug(`GameManager: Current game state: ${this.gameState}`);
     }
 
     cleanupAllUnitsForEndGame() {
@@ -243,7 +243,7 @@ export class GameManager extends Component {
     }
 
     restartGame() {
-        console.log('GameManager: restartGame called');
+        console.debug('GameManager: restartGame called');
         
         // 清理所有敌人和防御塔（如果场景重载失败时的备用方案）
         this.cleanupAllUnits();
@@ -254,16 +254,16 @@ export class GameManager extends Component {
         // 如果场景名称为空，尝试使用默认名称
         if (!sceneName || sceneName === '') {
             sceneName = 'scene';
-            console.log('GameManager: Scene name is empty, using default name "scene"');
+            console.debug('GameManager: Scene name is empty, using default name "scene"');
         }
         
         if (sceneName) {
-            console.log('GameManager: Reloading scene:', sceneName);
+            console.debug('GameManager: Reloading scene:', sceneName);
             director.loadScene(sceneName, (error: Error | null) => {
                 if (error) {
                     console.error('GameManager: Failed to reload scene:', error);
                 } else {
-                    console.log('GameManager: Scene reloaded successfully');
+                    console.debug('GameManager: Scene reloaded successfully');
                 }
             });
         } else {
@@ -336,7 +336,7 @@ export class GameManager extends Component {
             }
         }
 
-        console.log('GameManager: Cleaned up all enemies and arrowers');
+        console.debug('GameManager: Cleaned up all enemies and arrowers');
     }
 }
 

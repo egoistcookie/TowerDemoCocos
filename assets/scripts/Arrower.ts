@@ -1419,17 +1419,17 @@ export class Arrower extends Component {
         }
 
         // 播放箭矢射出音效
-        console.log('Arrower: Attempting to play shoot sound');
+        console.debug('Arrower: Attempting to play shoot sound');
         if (this.shootSound) {
-            console.log('Arrower: Shoot sound clip exists');
+            console.debug('Arrower: Shoot sound clip exists');
             if (AudioManager.Instance) {
-                console.log('Arrower: AudioManager.Instance exists, calling playSFX');
+                console.debug('Arrower: AudioManager.Instance exists, calling playSFX');
                 AudioManager.Instance.playSFX(this.shootSound);
             } else {
-                console.log('Arrower: AudioManager.Instance is null');
+                console.debug('Arrower: AudioManager.Instance is null');
             }
         } else {
-            console.log('Arrower: Shoot sound clip is null');
+            console.debug('Arrower: Shoot sound clip is null');
         }
 
         // 初始化弓箭，设置命中回调

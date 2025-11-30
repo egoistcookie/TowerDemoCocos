@@ -24,21 +24,21 @@ export class UIManager extends Component {
         // 绑定按钮事件
         if (this.buildButton) {
             this.buildButton.node.on(Button.EventType.CLICK, this.onBuildButtonClick, this);
-            console.log('UIManager: BuildButton event bound');
+            console.debug('UIManager: BuildButton event bound');
         } else {
             console.error('UIManager: BuildButton is null!');
         }
 
         if (this.restartButton) {
             this.restartButton.node.on(Button.EventType.CLICK, this.onRestartButtonClick, this);
-            console.log('UIManager: RestartButton event bound');
+            console.debug('UIManager: RestartButton event bound');
         } else {
             console.error('UIManager: RestartButton is null!');
         }
 
         // 检查TowerBuilder
         if (this.towerBuilder) {
-            console.log('UIManager: TowerBuilder node set:', this.towerBuilder.name);
+            console.debug('UIManager: TowerBuilder node set:', this.towerBuilder.name);
         } else {
             console.warn('UIManager: TowerBuilder node not set!');
         }
@@ -162,7 +162,7 @@ export class UIManager extends Component {
         if (gmNode) {
             this.gameManager = gmNode.getComponent(GameManager);
             if (this.gameManager) {
-                console.log('UIManager: Found GameManager by name');
+                console.debug('UIManager: Found GameManager by name');
                 return;
             }
         }
@@ -181,7 +181,7 @@ export class UIManager extends Component {
             };
             this.gameManager = findInScene(scene, GameManager);
             if (this.gameManager) {
-                console.log('UIManager: Found GameManager by recursive search');
+                console.debug('UIManager: Found GameManager by recursive search');
                 return;
             }
         }
@@ -190,12 +190,12 @@ export class UIManager extends Component {
     }
 
     onBuildButtonClick() {
-        console.log('UIManager: BuildButton clicked!');
+        console.debug('UIManager: BuildButton clicked!');
         if (this.towerBuilder) {
             const builderScript = this.towerBuilder.getComponent('TowerBuilder') as any;
             if (builderScript) {
                 if (builderScript.onBuildButtonClick) {
-                    console.log('UIManager: Calling TowerBuilder.onBuildButtonClick');
+                    console.debug('UIManager: Calling TowerBuilder.onBuildButtonClick');
                     builderScript.onBuildButtonClick();
                 } else {
                     console.error('UIManager: TowerBuilder script has no onBuildButtonClick method!');
@@ -209,24 +209,24 @@ export class UIManager extends Component {
     }
 
     onRestartButtonClick() {
-        console.log('UIManager: RestartButton clicked!');
+        console.debug('UIManager: RestartButton clicked!');
         
         // 重新查找GameManager
         this.findGameManager();
         
         if (this.gameManager) {
-            console.log('UIManager: Calling GameManager.restartGame');
+            console.debug('UIManager: Calling GameManager.restartGame');
             this.gameManager.restartGame();
         } else {
             console.warn('UIManager: GameManager is null! Trying to reload scene directly.');
             // 如果还是找不到，尝试直接重新加载场景
             const scene = director.getScene();
             if (scene && scene.name) {
-                console.log('UIManager: Reloading scene:', scene.name);
+                console.debug('UIManager: Reloading scene:', scene.name);
                 director.loadScene(scene.name);
             } else {
                 // 如果场景名称为空，尝试使用默认场景名称
-                console.log('UIManager: Scene name is empty, trying default name "scene"');
+                console.debug('UIManager: Scene name is empty, trying default name "scene"');
                 director.loadScene('scene');
             }
         }

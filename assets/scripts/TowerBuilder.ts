@@ -438,7 +438,7 @@ export class TowerBuilder extends Component {
         }
         
         if (this.gameManager && !this.gameManager.canAfford(building.cost)) {
-            console.log('TowerBuilder.buildBuilding: Not enough gold! Need', building.cost, 'but have', this.gameManager.getGold());
+            console.debug('TowerBuilder.buildBuilding: Not enough gold! Need', building.cost, 'but have', this.gameManager.getGold());
             // 显示金币不足弹窗
             GamePopup.showMessage('金币不足');
             this.disableBuildingMode();
@@ -447,7 +447,7 @@ export class TowerBuilder extends Component {
 
         // 检查是否可以在此位置建造
         if (!this.canBuildAt(worldPosition, building)) {
-            console.log('TowerBuilder.buildBuilding: Cannot build at this position');
+            console.debug('TowerBuilder.buildBuilding: Cannot build at this position');
             // 即使不能建造，也退出建造模式
             this.disableBuildingMode();
             return;
@@ -503,7 +503,7 @@ export class TowerBuilder extends Component {
             treeScript.buildCost = this.towerCost;
         }
 
-        console.log('TowerBuilder.buildWarAncientTree: Built at', worldPosition);
+        console.debug('TowerBuilder.buildWarAncientTree: Built at', worldPosition);
     }
 
     /**
@@ -546,7 +546,7 @@ export class TowerBuilder extends Component {
             }
         }
 
-        console.log('TowerBuilder.buildMoonWell: Built at', worldPosition);
+        console.debug('TowerBuilder.buildMoonWell: Built at', worldPosition);
     }
 
     // 可以通过按钮调用
@@ -582,7 +582,7 @@ export class TowerBuilder extends Component {
             const unitSelectionManager = unitSelectionManagerNode.getComponent(UnitSelectionManager);
             if (unitSelectionManager) {
                 unitSelectionManager.clearSelection();
-                console.log('TowerBuilder.clearCurrentSelection: UnitSelectionManager selection cleared');
+                console.debug('TowerBuilder.clearCurrentSelection: UnitSelectionManager selection cleared');
             }
         } else {
             // 如果找不到UnitSelectionManager节点，尝试在场景中查找组件
@@ -591,7 +591,7 @@ export class TowerBuilder extends Component {
                 const unitSelectionManager = scene.getComponentInChildren(UnitSelectionManager);
                 if (unitSelectionManager) {
                     unitSelectionManager.clearSelection();
-                    console.log('TowerBuilder.clearCurrentSelection: UnitSelectionManager selection cleared');
+                    console.debug('TowerBuilder.clearCurrentSelection: UnitSelectionManager selection cleared');
                 }
             }
         }
@@ -603,7 +603,7 @@ export class TowerBuilder extends Component {
             if (selectionManager) {
                 if (selectionManager.clearSelection) {
                     selectionManager.clearSelection();
-                    console.log('TowerBuilder.clearCurrentSelection: SelectionManager selection cleared');
+                    console.debug('TowerBuilder.clearCurrentSelection: SelectionManager selection cleared');
                 }
             }
         } else {
@@ -613,7 +613,7 @@ export class TowerBuilder extends Component {
                 const selectionManager = scene.getComponentInChildren('SelectionManager') as any;
                 if (selectionManager && selectionManager.clearSelection) {
                     selectionManager.clearSelection();
-                    console.log('TowerBuilder.clearCurrentSelection: SelectionManager selection cleared');
+                    console.debug('TowerBuilder.clearCurrentSelection: SelectionManager selection cleared');
                 }
             }
         }

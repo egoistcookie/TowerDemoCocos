@@ -33,7 +33,7 @@ export class AudioManager extends Component {
      */
     public static get Instance(): AudioManager {
         if (!this.instance) {
-            console.log('AudioManager: Instance is null, creating new instance');
+            console.debug('AudioManager: Instance is null, creating new instance');
             // 创建AudioManager节点和组件
             const audioManagerNode = new Node('AudioManager');
             this.instance = audioManagerNode.addComponent(AudioManager);
@@ -44,7 +44,7 @@ export class AudioManager extends Component {
                 sceneRoot.addChild(audioManagerNode);
                 // 激活节点，否则AudioSource组件无法正常工作
                 audioManagerNode.active = true;
-                console.log('AudioManager: Added to scene root and activated');
+                console.debug('AudioManager: Added to scene root and activated');
             } else {
                 console.error('AudioManager: Failed to find scene root');
             }
@@ -66,7 +66,7 @@ export class AudioManager extends Component {
         // 初始化音频管理器
         this.initAudioManager();
         
-        console.log('AudioManager initialized successfully');
+        console.debug('AudioManager initialized successfully');
     }
     
     /**
@@ -91,7 +91,7 @@ export class AudioManager extends Component {
      * 初始化音效节点池
      */
     private initSFXNodes(): void {
-        console.log(`AudioManager: Initializing ${this.MAX_SFX_NODES} SFX nodes`);
+        console.debug(`AudioManager: Initializing ${this.MAX_SFX_NODES} SFX nodes`);
         for (let i = 0; i < this.MAX_SFX_NODES; i++) {
             const sfxNode = new Node(`SFX_${i}`);
             sfxNode.setParent(this.node);
@@ -100,7 +100,7 @@ export class AudioManager extends Component {
             const audioSource = sfxNode.addComponent(AudioSource);
             audioSource.loop = false;
             audioSource.volume = this.sfxVolume;
-            console.log(`AudioManager: Created SFX node ${i}, volume: ${audioSource.volume}, active: ${sfxNode.active}`);
+            console.debug(`AudioManager: Created SFX node ${i}, volume: ${audioSource.volume}, active: ${sfxNode.active}`);
             this.sfxNodes.push(sfxNode);
         }
     }
@@ -112,7 +112,7 @@ export class AudioManager extends Component {
     private getAvailableSFXNode(): Node | null {
         // 检查音效节点池是否已初始化
         if (this.sfxNodes.length === 0) {
-            console.log('AudioManager: SFX nodes pool is empty, initializing...');
+            console.debug('AudioManager: SFX nodes pool is empty, initializing...');
             this.initSFXNodes();
         }
         
@@ -126,7 +126,7 @@ export class AudioManager extends Component {
         
         // 如果没有可用节点，返回第一个节点（覆盖最早的音效）
         const result = this.sfxNodes[0];
-        console.log(`AudioManager: Returning SFX node: ${result ? result.name : 'null'}`);
+        console.debug(`AudioManager: Returning SFX node: ${result ? result.name : 'null'}`);
         return result;
     }
     
@@ -171,28 +171,28 @@ export class AudioManager extends Component {
      */
     public playSFX(clip: AudioClip): void {
         if (!clip) {
-            console.log('AudioManager: No audio clip provided for playSFX');
+            console.debug('AudioManager: No audio clip provided for playSFX');
             return;
         }
         
-        console.log(`AudioManager: Playing sound effect, clip: ${clip.name}`);
+        console.debug(`AudioManager: Playing sound effect, clip: ${clip.name}`);
         
         // 获取可用的音效节点
         const sfxNode = this.getAvailableSFXNode();
         if (!sfxNode) {
-            console.log('AudioManager: No available SFX node');
+            console.debug('AudioManager: No available SFX node');
             return;
         }
         
         // 播放音效
         const audioSource = sfxNode.getComponent(AudioSource);
         if (audioSource) {
-            console.log(`AudioManager: SFX node: ${sfxNode.name}, volume: ${this.sfxVolume}`);
+            console.debug(`AudioManager: SFX node: ${sfxNode.name}, volume: ${this.sfxVolume}`);
             // 使用playOneShot方法播放一次性音效，这是更可靠的方法
             audioSource.playOneShot(clip, this.sfxVolume);
-            console.log(`AudioManager: Sound effect played successfully with playOneShot`);
+            console.debug(`AudioManager: Sound effect played successfully with playOneShot`);
         } else {
-            console.log('AudioManager: No AudioSource component found on SFX node');
+            console.debug('AudioManager: No AudioSource component found on SFX node');
         }
     }
     
