@@ -641,6 +641,10 @@ export class SelectionManager extends Component {
 
         // 查找女猎手
         console.info('SelectionManager.updateSelectedTowers: Looking for hunters');
+        
+        const newSelectedHunters: Hunter[] = [];
+        
+        // 先尝试直接查找Hunters容器
         let huntersNode = find('Hunters');
         if (!huntersNode && this.node.scene) {
             const findNodeRecursive = (node: Node, name: string): Node | null => {
@@ -658,42 +662,99 @@ export class SelectionManager extends Component {
         
         console.info('SelectionManager.updateSelectedTowers: Found huntersNode:', huntersNode ? huntersNode.name : 'null');
         
-        const newSelectedHunters: Hunter[] = [];
+        // 如果找到Hunters容器，先处理其中的女猎手
         if (huntersNode) {
             const hunters = huntersNode.children || [];
             console.info('SelectionManager.updateSelectedTowers: Found', hunters.length, 'hunter nodes in Hunters container');
+            
             for (const hunterNode of hunters) {
-                console.info('SelectionManager.updateSelectedTowers: Processing hunter node:', hunterNode.name, 'active:', hunterNode.active, 'valid:', hunterNode.isValid);
+                console.info('SelectionManager.updateSelectedTowers: Processing hunter node from Hunters container:', hunterNode.name, 'active:', hunterNode.active, 'valid:', hunterNode.isValid);
+                
                 if (!hunterNode || !hunterNode.isValid || !hunterNode.active) {
-                    console.info('SelectionManager.updateSelectedTowers: Skipping invalid/inactive hunter node:', hunterNode.name);
+                    console.info('SelectionManager.updateSelectedTowers: Skipping invalid/inactive hunter node:', hunterNode?.name);
                     continue;
                 }
-
+                
                 const hunterScript = hunterNode.getComponent(Hunter) as Hunter;
                 if (!hunterScript) {
                     console.info('SelectionManager.updateSelectedTowers: No Hunter script found for node:', hunterNode.name);
                     continue;
                 }
                 
-                if (!hunterScript.isAlive || !hunterScript.isAlive()) {
+                if (hunterScript.isAlive && hunterScript.isAlive()) {
+                    // 检查女猎手是否在选择框范围内
+                    const hunterPos = hunterNode.worldPosition;
+                    const inRangeX = hunterPos.x >= minX && hunterPos.x <= maxX;
+                    const inRangeY = hunterPos.y >= minY && hunterPos.y <= maxY;
+                    const inRange = inRangeX && inRangeY;
+                    
+                    console.info('SelectionManager.updateSelectedTowers: Hunter', hunterNode.name, 'at (', hunterPos.x.toFixed(1), ',', hunterPos.y.toFixed(1), ') in range:', inRange, 'inRangeX:', inRangeX, 'inRangeY:', inRangeY);
+                    
+                    if (inRange) {
+                        newSelectedHunters.push(hunterScript);
+                        console.info('SelectionManager.updateSelectedTowers: Added hunter to selection:', hunterNode.name);
+                    }
+                } else {
                     console.info('SelectionManager.updateSelectedTowers: Hunter is not alive:', hunterNode.name);
-                    continue;
-                }
-
-                // 检查女猎手是否在选择框范围内
-                const hunterPos = hunterNode.worldPosition;
-                const inRangeX = hunterPos.x >= minX && hunterPos.x <= maxX;
-                const inRangeY = hunterPos.y >= minY && hunterPos.y <= maxY;
-                const inRange = inRangeX && inRangeY;
-                
-                console.info('SelectionManager.updateSelectedTowers: Hunter', hunterNode.name, 'at (', hunterPos.x.toFixed(1), ',', hunterPos.y.toFixed(1), ') in range:', inRange, 'inRangeX:', inRangeX, 'inRangeY:', inRangeY);
-                
-                if (inRange) {
-                    newSelectedHunters.push(hunterScript);
-                    console.info('SelectionManager.updateSelectedTowers: Added hunter to selection:', hunterNode.name);
                 }
             }
         }
+        
+        // 同时，从场景根节点开始递归查找所有女猎手，确保没有遗漏
+        console.info('SelectionManager.updateSelectedTowers: Recursively searching all nodes for hunters');
+        
+        // 查找所有女猎手节点，无论它们在哪个容器中
+        const findAllHunters = (node: Node) => {
+            // 检查当前节点是否是女猎手
+            const hunterScript = node.getComponent(Hunter) as Hunter;
+            if (hunterScript) {
+                // 检查是否已经添加过这个女猎手
+                const isAlreadyAdded = newSelectedHunters.some(hunter => hunter.node === node);
+                if (!isAlreadyAdded) {
+                    console.info('SelectionManager.updateSelectedTowers: Found hunter node:', node.name, 'active:', node.active, 'valid:', node.isValid);
+                    
+                    if (node.isValid && node.active) {
+                        if (hunterScript.isAlive && hunterScript.isAlive()) {
+                            // 检查女猎手是否在选择框范围内
+                            const hunterPos = node.worldPosition;
+                            const inRangeX = hunterPos.x >= minX && hunterPos.x <= maxX;
+                            const inRangeY = hunterPos.y >= minY && hunterPos.y <= maxY;
+                            const inRange = inRangeX && inRangeY;
+                            
+                            console.info('SelectionManager.updateSelectedTowers: Hunter', node.name, 'at (', hunterPos.x.toFixed(1), ',', hunterPos.y.toFixed(1), ') in range:', inRange, 'inRangeX:', inRangeX, 'inRangeY:', inRangeY);
+                            
+                            if (inRange) {
+                                newSelectedHunters.push(hunterScript);
+                                console.info('SelectionManager.updateSelectedTowers: Added hunter to selection:', node.name);
+                            }
+                        } else {
+                            console.info('SelectionManager.updateSelectedTowers: Hunter is not alive:', node.name);
+                        }
+                    } else {
+                        console.info('SelectionManager.updateSelectedTowers: Skipping invalid/inactive hunter node:', node.name);
+                    }
+                }
+            }
+            
+            // 递归检查子节点
+            for (const child of node.children) {
+                findAllHunters(child);
+            }
+        };
+        
+        // 从场景根节点开始查找所有女猎手
+        if (this.node.scene) {
+            findAllHunters(this.node.scene);
+        }
+        
+        console.info('SelectionManager.updateSelectedTowers: Found', newSelectedHunters.length, 'hunters in selection box');
+        console.info('SelectionManager.updateSelectedTowers: Selection box range:', {
+            minX: minX.toFixed(2),
+            maxX: maxX.toFixed(2),
+            minY: minY.toFixed(2),
+            maxY: maxY.toFixed(2)
+        });
+        
 
         // 查找小精灵
         let wispsNode = find('Wisps');
