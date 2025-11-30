@@ -177,9 +177,12 @@ export class Arrow extends Component {
             }
         }
         
-        // 如果飞行完成，检查是否命中
+        // 如果飞行完成但未命中目标，销毁弓箭
         if (currentRatio >= 1) {
-            this.hitTarget();
+            console.debug('Arrow: Flight completed but not hit target, destroying arrow');
+            if (this.node && this.node.isValid) {
+                this.node.destroy();
+            }
             return;
         }
         

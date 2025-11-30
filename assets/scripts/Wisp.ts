@@ -39,6 +39,16 @@ export class Wisp extends Component {
     @property(SpriteFrame)
     cardIcon: SpriteFrame = null!; // 单位名片图片
 
+    // 粒子特效相关属性
+    @property(Prefab)
+    spriteFlashEffect: Prefab = null!; // SpriteFlash粒子特效预制体
+    
+    @property
+    enableParticleEffect: boolean = true; // 是否启用粒子特效
+    
+    @property
+    particleEffectOffset: Vec3 = new Vec3(0, 0, 0); // 粒子特效偏移量
+
     // 移动动画相关属性
     @property(SpriteFrame)
     moveAnimationFrames: SpriteFrame[] = []; // 移动动画帧数组（可选）
@@ -57,6 +67,9 @@ export class Wisp extends Component {
     private unitSelectionManager: UnitSelectionManager = null!; // 单位选择管理器
     private isHighlighted: boolean = false; // 是否高亮显示
     private highlightNode: Node = null!; // 高亮效果节点
+    
+    // 粒子特效相关
+    private particleEffectNode: Node = null!; // 粒子特效节点
     
     // 依附相关
     private attachedBuilding: Node = null!; // 依附的建筑物
@@ -107,6 +120,9 @@ export class Wisp extends Component {
 
         // 监听点击事件
         this.node.on(Node.EventType.TOUCH_END, this.onWispClick, this);
+        
+        // 初始化粒子特效
+        this.initParticleEffect();
     }
 
     onDestroy() {
@@ -117,6 +133,9 @@ export class Wisp extends Component {
         if (this.isAttached && this.attachedBuilding && this.attachedBuilding.isValid) {
             this.detachFromBuilding();
         }
+
+        // 清理粒子特效
+        this.cleanupParticleEffect();
 
         // 减少人口
         if (this.gameManager) {
@@ -368,6 +387,12 @@ export class Wisp extends Component {
 
         // 最后设置依附状态
         this.isAttached = true;
+        
+        // 依附时根据需要控制粒子特效显示
+        if (this.particleEffectNode && this.particleEffectNode.isValid) {
+            // 依附时可以选择隐藏粒子特效，或者继续显示，根据游戏设计调整
+            this.particleEffectNode.active = this.enableParticleEffect;
+        }
 
         console.debug('Wisp: Attached to building and disappeared into it');
     }
@@ -388,6 +413,11 @@ export class Wisp extends Component {
 
         // 小精灵重新显示
         this.node.active = true;
+        
+        // 从建筑物卸下时恢复粒子特效显示
+        if (this.particleEffectNode && this.particleEffectNode.isValid) {
+            this.particleEffectNode.active = this.enableParticleEffect;
+        }
         
         // 设置位置到建筑物下方更远的位置，超出依附范围
         if (building && building.isValid) {
@@ -943,6 +973,51 @@ export class Wisp extends Component {
         }, 0.5);
     }
 
+    /**
+     * 初始化粒子特效
+     */
+    private initParticleEffect() {
+        if (this.spriteFlashEffect && this.enableParticleEffect) {
+            // 创建粒子特效节点
+            this.particleEffectNode = instantiate(this.spriteFlashEffect);
+            // 将粒子特效节点设置为小精灵的子节点，使其跟随小精灵移动
+            this.particleEffectNode.setParent(this.node);
+            // 设置粒子特效偏移量
+            this.particleEffectNode.setPosition(this.particleEffectOffset);
+            // 激活粒子特效
+            this.particleEffectNode.active = true;
+        }
+    }
+    
+    /**
+     * 清理粒子特效
+     */
+    private cleanupParticleEffect() {
+        if (this.particleEffectNode && this.particleEffectNode.isValid) {
+            this.particleEffectNode.destroy();
+        }
+    }
+    
+    /**
+     * 设置粒子特效启用状态
+     */
+    setParticleEffectEnabled(enabled: boolean) {
+        this.enableParticleEffect = enabled;
+        if (this.particleEffectNode && this.particleEffectNode.isValid) {
+            this.particleEffectNode.active = enabled;
+        } else if (enabled && this.spriteFlashEffect && !this.particleEffectNode) {
+            // 如果需要启用但还没有创建粒子特效，重新初始化
+            this.initParticleEffect();
+        }
+    }
+    
+    /**
+     * 获取粒子特效启用状态
+     */
+    isParticleEffectEnabled(): boolean {
+        return this.enableParticleEffect;
+    }
+    
     /**
      * 是否存活
      */

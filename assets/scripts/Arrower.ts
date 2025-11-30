@@ -1432,11 +1432,14 @@ export class Arrower extends Component {
             console.debug('Arrower: Shoot sound clip is null');
         }
 
+        // 保存当前目标的引用，避免回调函数中引用失效的目标
+        const targetNode = this.currentTarget;
+        
         // 初始化弓箭，设置命中回调
         console.debug(`Arrower: Initializing arrow with damage: ${this.attackDamage}`);
         arrowScript.init(
             startPos,
-            this.currentTarget,
+            targetNode,
             this.attackDamage,
             (damage: number) => {
                 // 命中目标时造成伤害
@@ -1446,12 +1449,18 @@ export class Arrower extends Component {
                 if (this.hitSound) {
                     AudioManager.Instance?.playSFX(this.hitSound);
                 }
-                const enemyScript = this.currentTarget?.getComponent('Enemy') as any;
-                if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
-                    if (enemyScript.takeDamage) {
-                        enemyScript.takeDamage(damage);
-                        console.debug(`Arrower: Arrow hit enemy, dealt ${damage} damage`);
+                
+                // 检查目标是否仍然有效
+                if (targetNode && targetNode.isValid && targetNode.active) {
+                    const enemyScript = targetNode.getComponent('Enemy') as any;
+                    if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
+                        if (enemyScript.takeDamage) {
+                            enemyScript.takeDamage(damage);
+                            console.debug(`Arrower: Arrow hit enemy, dealt ${damage} damage`);
+                        }
                     }
+                } else {
+                    console.debug('Arrower: Target is invalid, cannot deal damage');
                 }
             }
         );

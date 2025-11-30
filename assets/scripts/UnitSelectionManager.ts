@@ -186,6 +186,12 @@ export class UnitSelectionManager extends Component {
             if (arrowerScript && arrowerScript.setHighlight) {
                 arrowerScript.setHighlight(false);
             }
+            
+            // 检查是否是女猎手
+            const hunterScript = selectedUnit.getComponent('Hunter') as any;
+            if (hunterScript && hunterScript.setHighlight) {
+                hunterScript.setHighlight(false);
+            }
         }
     }
 

@@ -265,6 +265,9 @@ export class Enemy extends Component {
             return null;
         };
         
+        // 索敌范围：200像素
+        const detectionRange = 200;
+        
         // 优先查找附近的防御塔和战争古树（在攻击范围内）
         let towers: Node[] = [];
         let towersNode = find('Towers');
@@ -280,12 +283,12 @@ export class Enemy extends Component {
 
         // 查找战争古树
         let trees: Node[] = [];
-        let treesNode = find('WarAncientTrees');
-        if (!treesNode && this.node.scene) {
-            treesNode = findNodeRecursive(this.node.scene, 'WarAncientTrees');
+        let warAncientTrees = find('WarAncientTrees');
+        if (!warAncientTrees && this.node.scene) {
+            warAncientTrees = findNodeRecursive(this.node.scene, 'WarAncientTrees');
         }
-        if (treesNode) {
-            trees = treesNode.children;
+        if (warAncientTrees) {
+            trees = warAncientTrees.children;
         }
 
         // 查找月亮井
@@ -310,87 +313,154 @@ export class Enemy extends Component {
         
         let nearestTarget: Node = null!;
         let minDistance = Infinity;
+        let targetPriority = Infinity;
+        
+        // 定义优先级：水晶>树木>弓箭手>建筑物>小精灵
+        const PRIORITY = {
+            CRYSTAL: 1,
+            TREE: 2,
+            ARCHER: 3,
+            BUILDING: 4,
+            WISP: 5
+        };
 
-        // 查找攻击范围内的防御塔（优先攻击防御塔）
+        // 1. 检查水晶是否在范围内（优先级最高）
+        if (this.targetCrystal && this.targetCrystal.isValid) {
+            const crystalScript = this.targetCrystal.getComponent('Crystal') as any;
+            if (crystalScript && crystalScript.isAlive && crystalScript.isAlive()) {
+                const distance = Vec3.distance(this.node.worldPosition, this.targetCrystal.worldPosition);
+                if (distance <= detectionRange) {
+                    nearestTarget = this.targetCrystal;
+                    minDistance = distance;
+                    targetPriority = PRIORITY.CRYSTAL;
+                }
+            }
+        }
+
+        // 2. 查找范围内的树木（优先级次之）
+        // 查找树木
+        let treesNode = find('Trees');
+        if (!treesNode && this.node.scene) {
+            treesNode = findNodeRecursive(this.node.scene, 'Trees');
+        }
+        
+        if (treesNode) {
+            const trees = treesNode.children || [];
+            for (const tree of trees) {
+                if (tree && tree.active && tree.isValid) {
+                    const treeScript = tree.getComponent('Tree') as any;
+                    // 检查树木是否存活
+                    if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
+                        const distance = Vec3.distance(this.node.worldPosition, tree.worldPosition);
+                        // 如果树木在范围内，且优先级更高或距离更近
+                        if (distance <= detectionRange) {
+                            if (PRIORITY.TREE < targetPriority || 
+                                (PRIORITY.TREE === targetPriority && distance < minDistance)) {
+                                minDistance = distance;
+                                nearestTarget = tree;
+                                targetPriority = PRIORITY.TREE;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 3. 查找范围内的弓箭手（优先级第三）
         for (const tower of towers) {
             if (tower && tower.active && tower.isValid) {
                 const towerScript = tower.getComponent('Arrower') as any;
-                // 检查防御塔是否存活
+                // 检查弓箭手是否存活
                 if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
                     const distance = Vec3.distance(this.node.worldPosition, tower.worldPosition);
-                    // 如果防御塔在攻击范围内，优先选择最近的
-                    if (distance <= this.attackRange && distance < minDistance) {
-                        minDistance = distance;
-                        nearestTarget = tower;
+                    // 如果弓箭手在范围内，且优先级更高或距离更近
+                    if (distance <= detectionRange) {
+                        if (PRIORITY.ARCHER < targetPriority || 
+                            (PRIORITY.ARCHER === targetPriority && distance < minDistance)) {
+                            minDistance = distance;
+                            nearestTarget = tower;
+                            targetPriority = PRIORITY.ARCHER;
+                        }
                     }
                 }
             }
         }
 
-        // 查找攻击范围内的战争古树（如果防御塔不在范围内，攻击战争古树）
+        // 4. 查找范围内的建筑物（战争古树和月亮井，优先级第四）
+        // 战争古树
         for (const tree of trees) {
             if (tree && tree.active && tree.isValid) {
                 const treeScript = tree.getComponent('WarAncientTree') as any;
                 // 检查战争古树是否存活
                 if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
                     const distance = Vec3.distance(this.node.worldPosition, tree.worldPosition);
-                    // 如果战争古树在攻击范围内，选择最近的
-                    if (distance <= this.attackRange && distance < minDistance) {
-                        minDistance = distance;
-                        nearestTarget = tree;
+                    // 如果战争古树在范围内，且优先级更高或距离更近
+                    if (distance <= detectionRange) {
+                        if (PRIORITY.BUILDING < targetPriority || 
+                            (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
+                            minDistance = distance;
+                            nearestTarget = tree;
+                            targetPriority = PRIORITY.BUILDING;
+                        }
                     }
                 }
             }
         }
-
-        // 查找攻击范围内的月亮井（如果防御塔和战争古树不在范围内，攻击月亮井）
+        // 月亮井
         for (const well of wells) {
             if (well && well.active && well.isValid) {
                 const wellScript = well.getComponent('MoonWell') as any;
                 // 检查月亮井是否存活
                 if (wellScript && wellScript.isAlive && wellScript.isAlive()) {
                     const distance = Vec3.distance(this.node.worldPosition, well.worldPosition);
-                    // 如果月亮井在攻击范围内，选择最近的
-                    if (distance <= this.attackRange && distance < minDistance) {
-                        minDistance = distance;
-                        nearestTarget = well;
+                    // 如果月亮井在范围内，且优先级更高或距离更近
+                    if (distance <= detectionRange) {
+                        if (PRIORITY.BUILDING < targetPriority || 
+                            (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
+                            minDistance = distance;
+                            nearestTarget = well;
+                            targetPriority = PRIORITY.BUILDING;
+                        }
                     }
                 }
             }
         }
 
-        // 查找攻击范围内的小精灵（如果防御塔、战争古树和月亮井不在范围内，攻击小精灵）
+        // 5. 查找范围内的小精灵（优先级最低）
         for (const wisp of wisps) {
             if (wisp && wisp.active && wisp.isValid) {
                 const wispScript = wisp.getComponent('Wisp') as any;
                 // 检查小精灵是否存活
                 if (wispScript && wispScript.isAlive && wispScript.isAlive()) {
                     const distance = Vec3.distance(this.node.worldPosition, wisp.worldPosition);
-                    // 如果小精灵在攻击范围内，选择最近的
-                    if (distance <= this.attackRange && distance < minDistance) {
-                        minDistance = distance;
-                        nearestTarget = wisp;
+                    // 如果小精灵在范围内，且优先级更高或距离更近
+                    if (distance <= detectionRange) {
+                        if (PRIORITY.WISP < targetPriority || 
+                            (PRIORITY.WISP === targetPriority && distance < minDistance)) {
+                            minDistance = distance;
+                            nearestTarget = wisp;
+                            targetPriority = PRIORITY.WISP;
+                        }
                     }
                 }
             }
         }
 
-        // 如果找到防御塔、战争古树、月亮井或小精灵，优先攻击
+        // 如果找到目标，设置为当前目标
         if (nearestTarget) {
             this.currentTarget = nearestTarget;
-            return;
-        }
-        
-        // 没有防御塔在攻击范围内，目标设为水晶
-        if (this.targetCrystal && this.targetCrystal.isValid) {
-            const crystalScript = this.targetCrystal.getComponent('Crystal') as any;
-            if (crystalScript && crystalScript.isAlive && crystalScript.isAlive()) {
-                this.currentTarget = this.targetCrystal;
+        } else {
+            // 200像素范围内没有任何我方单位，目标设为水晶
+            if (this.targetCrystal && this.targetCrystal.isValid) {
+                const crystalScript = this.targetCrystal.getComponent('Crystal') as any;
+                if (crystalScript && crystalScript.isAlive && crystalScript.isAlive()) {
+                    this.currentTarget = this.targetCrystal;
+                } else {
+                    this.currentTarget = null!;
+                }
             } else {
                 this.currentTarget = null!;
             }
-        } else {
-            this.currentTarget = null!;
         }
     }
 
@@ -477,8 +547,8 @@ export class Enemy extends Component {
     }
 
     checkForTargetsOnPath() {
-        // 检查路径上是否有防御塔或战争古树（检测范围比攻击范围稍大）
-        const detectionRange = this.attackRange * 1.5; // 1.5倍攻击范围用于检测路径上的目标
+        // 检测范围：200像素
+        const detectionRange = 200;
         
         const findNodeRecursive = (node: Node, name: string): Node | null => {
             if (node.name === name) {
@@ -490,8 +560,60 @@ export class Enemy extends Component {
             }
             return null;
         };
+        
+        // 定义优先级：水晶>树木>弓箭手>建筑物>小精灵
+        const PRIORITY = {
+            CRYSTAL: 1,
+            TREE: 2,
+            ARCHER: 3,
+            BUILDING: 4,
+            WISP: 5
+        };
+        
+        let nearestTarget: Node = null!;
+        let minDistance = Infinity;
+        let targetPriority = Infinity;
 
-        // 检查防御塔
+        // 1. 检查水晶是否在范围内（优先级最高）
+        if (this.targetCrystal && this.targetCrystal.isValid) {
+            const crystalScript = this.targetCrystal.getComponent('Crystal') as any;
+            if (crystalScript && crystalScript.isAlive && crystalScript.isAlive()) {
+                const distance = Vec3.distance(this.node.worldPosition, this.targetCrystal.worldPosition);
+                if (distance <= detectionRange) {
+                    nearestTarget = this.targetCrystal;
+                    minDistance = distance;
+                    targetPriority = PRIORITY.CRYSTAL;
+                }
+            }
+        }
+
+        // 2. 检查树木
+        let treesNode = find('Trees');
+        if (!treesNode && this.node.scene) {
+            treesNode = findNodeRecursive(this.node.scene, 'Trees');
+        }
+        
+        if (treesNode) {
+            const trees = treesNode.children || [];
+            for (const tree of trees) {
+                if (tree && tree.active && tree.isValid) {
+                    const treeScript = tree.getComponent('Tree') as any;
+                    if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
+                        const distance = Vec3.distance(this.node.worldPosition, tree.worldPosition);
+                        if (distance <= detectionRange) {
+                            if (PRIORITY.TREE < targetPriority || 
+                                (PRIORITY.TREE === targetPriority && distance < minDistance)) {
+                                minDistance = distance;
+                                nearestTarget = tree;
+                                targetPriority = PRIORITY.TREE;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 3. 检查弓箭手
         let towersNode = find('Towers');
         if (!towersNode && this.node.scene) {
             towersNode = findNodeRecursive(this.node.scene, 'Towers');
@@ -505,39 +627,45 @@ export class Enemy extends Component {
                     if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
                         const distance = Vec3.distance(this.node.worldPosition, tower.worldPosition);
                         if (distance <= detectionRange) {
-                            // 找到路径上的防御塔，设置为目标
-                            this.currentTarget = tower;
-                            return;
+                            if (PRIORITY.ARCHER < targetPriority || 
+                                (PRIORITY.ARCHER === targetPriority && distance < minDistance)) {
+                                minDistance = distance;
+                                nearestTarget = tower;
+                                targetPriority = PRIORITY.ARCHER;
+                            }
                         }
                     }
                 }
             }
         }
 
-        // 检查战争古树
-        let treesNode = find('WarAncientTrees');
-        if (!treesNode && this.node.scene) {
-            treesNode = findNodeRecursive(this.node.scene, 'WarAncientTrees');
+        // 4. 检查战争古树
+        let warAncientTrees = find('WarAncientTrees');
+        if (!warAncientTrees && this.node.scene) {
+            warAncientTrees = findNodeRecursive(this.node.scene, 'WarAncientTrees');
         }
         
-        if (treesNode) {
-            const trees = treesNode.children || [];
+        if (warAncientTrees) {
+            const trees = warAncientTrees.children || [];
             for (const tree of trees) {
                 if (tree && tree.active && tree.isValid) {
                     const treeScript = tree.getComponent('WarAncientTree') as any;
                     if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
                         const distance = Vec3.distance(this.node.worldPosition, tree.worldPosition);
                         if (distance <= detectionRange) {
-                            // 找到路径上的战争古树，设置为目标
-                            this.currentTarget = tree;
-                            return;
+                            if (PRIORITY.BUILDING < targetPriority || 
+                                (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
+                                minDistance = distance;
+                                nearestTarget = tree;
+                                targetPriority = PRIORITY.BUILDING;
+                            }
                         }
                     }
                 }
             }
         }
 
-        // 检查月亮井
+        // 5. 检查月亮井
         let wellsNode = find('MoonWells');
         if (!wellsNode && this.node.scene) {
             wellsNode = findNodeRecursive(this.node.scene, 'MoonWells');
@@ -551,16 +679,19 @@ export class Enemy extends Component {
                     if (wellScript && wellScript.isAlive && wellScript.isAlive()) {
                         const distance = Vec3.distance(this.node.worldPosition, well.worldPosition);
                         if (distance <= detectionRange) {
-                            // 找到路径上的月亮井，设置为目标
-                            this.currentTarget = well;
-                            return;
+                            if (PRIORITY.BUILDING < targetPriority || 
+                                (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
+                                minDistance = distance;
+                                nearestTarget = well;
+                                targetPriority = PRIORITY.BUILDING;
+                            }
                         }
                     }
                 }
             }
         }
 
-        // 检查小精灵
+        // 6. 检查小精灵
         let wispsNode = find('Wisps');
         if (!wispsNode && this.node.scene) {
             wispsNode = findNodeRecursive(this.node.scene, 'Wisps');
@@ -574,13 +705,21 @@ export class Enemy extends Component {
                     if (wispScript && wispScript.isAlive && wispScript.isAlive()) {
                         const distance = Vec3.distance(this.node.worldPosition, wisp.worldPosition);
                         if (distance <= detectionRange) {
-                            // 找到路径上的小精灵，设置为目标
-                            this.currentTarget = wisp;
-                            return;
+                            if (PRIORITY.WISP < targetPriority || 
+                                (PRIORITY.WISP === targetPriority && distance < minDistance)) {
+                                minDistance = distance;
+                                nearestTarget = wisp;
+                                targetPriority = PRIORITY.WISP;
+                            }
                         }
                     }
                 }
             }
+        }
+        
+        // 如果找到目标，设置为当前目标
+        if (nearestTarget) {
+            this.currentTarget = nearestTarget;
         }
     }
 
@@ -598,15 +737,6 @@ export class Enemy extends Component {
         }
 
         this.animationTimer += deltaTime;
-
-        // 如果使用Animation组件播放动画，检查动画状态
-        if (this.animationComponent) {
-            // 如果isPlayingAttackAnimation为false，停止所有动画
-            if (!this.isPlayingAttackAnimation) {
-                this.animationComponent.stop();
-                console.info('Enemy.updateAnimation: Animation stopped because isPlayingAttackAnimation is false');
-            }
-        }
 
         // 根据当前播放的动画类型更新帧
         if (this.isPlayingIdleAnimation) {
@@ -737,7 +867,10 @@ export class Enemy extends Component {
             return;
         }
 
+        // 停止所有动画
         this.stopAllAnimations();
+        
+        // 设置攻击动画状态
         this.isPlayingAttackAnimation = true;
         
         // 使用Animation组件播放攻击动画
@@ -746,17 +879,23 @@ export class Enemy extends Component {
             // 清除之前的动画事件
             this.animationComponent.off(Animation.EventType.FINISHED);
             
+            // 先停止当前可能正在播放的动画，确保每次都能重新开始
+            this.animationComponent.stop();
+            
             // 播放攻击动画
             console.info(`Enemy.playAttackAnimation: Playing animation ${this.attackAnimationName}`);
             
             // 获取动画状态，设置动画速度与attackAnimationDuration保持同步
             const state = this.animationComponent.getState(this.attackAnimationName);
             if (state) {
+                // 重置动画播放头到开始位置
+                state.time = 0;
                 // 设置动画时长与attackAnimationDuration参数保持一致
                 state.speed = state.duration / this.attackAnimationDuration;
                 console.info(`Enemy.playAttackAnimation: Animation state found, duration: ${state.duration}, speed: ${state.speed}`);
             }
             
+            // 播放动画
             this.animationComponent.play(this.attackAnimationName);
             
             // 不使用动画事件，而是使用定时器方式来处理攻击回调
@@ -863,19 +1002,22 @@ export class Enemy extends Component {
             console.info('Enemy.attackCallback: Attack callback called');
             if (currentTarget && currentTarget.isValid && currentTarget.active) {
                 const towerScript = currentTarget.getComponent('Arrower') as any;
-                const treeScript = currentTarget.getComponent('WarAncientTree') as any;
+                const warAncientTreeScript = currentTarget.getComponent('WarAncientTree') as any;
+                const normalTreeScript = currentTarget.getComponent('Tree') as any;
                 const wellScript = currentTarget.getComponent('MoonWell') as any;
                 const crystalScript = currentTarget.getComponent('Crystal') as any;
                 const wispScript = currentTarget.getComponent('Wisp') as any;
-                const targetScript = towerScript || treeScript || wellScript || crystalScript || wispScript;
+                const targetScript = towerScript || warAncientTreeScript || normalTreeScript || wellScript || crystalScript || wispScript;
                 
                 if (targetScript && targetScript.takeDamage) {
                     targetScript.takeDamage(this.attackDamage);
                     // 根据目标类型输出日志
                     if (towerScript) {
                         console.info(`Enemy.attackCallback: Attacked arrower, dealt ${this.attackDamage} damage`);
-                    } else if (treeScript) {
+                    } else if (warAncientTreeScript) {
                         console.info(`Enemy.attackCallback: Attacked war ancient tree, dealt ${this.attackDamage} damage`);
+                    } else if (normalTreeScript) {
+                        console.info(`Enemy.attackCallback: Attacked normal tree, dealt ${this.attackDamage} damage`);
                     } else if (wellScript) {
                         console.info(`Enemy.attackCallback: Attacked moon well, dealt ${this.attackDamage} damage`);
                     } else if (crystalScript) {

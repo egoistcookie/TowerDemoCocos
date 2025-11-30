@@ -19,6 +19,18 @@ export class TowerBuilder extends Component {
     @property(SpriteFrame)
     moonWellIcon: SpriteFrame = null!; // 月亮井图标
 
+    @property(Prefab)
+    treePrefab: Prefab = null!; // 普通树木预制体
+
+    @property(SpriteFrame)
+    treeIcon: SpriteFrame = null!; // 普通树木图标
+
+    @property(Prefab)
+    hunterHallPrefab: Prefab = null!; // 猎手大厅预制体
+
+    @property(SpriteFrame)
+    hunterHallIcon: SpriteFrame = null!; // 猎手大厅图标
+
     @property(Node)
     buildingSelectionPanel: Node = null!; // 建筑物选择面板节点
 
@@ -40,11 +52,23 @@ export class TowerBuilder extends Component {
     @property(Node)
     moonWellContainer: Node = null!; // 月亮井容器
 
+    @property(Node)
+    treeContainer: Node = null!; // 普通树木容器
+
+    @property(Node)
+    hunterHallContainer: Node = null!; // 猎手大厅容器
+
     @property
     towerCost: number = 10; // 战争古树建造成本（10金币）
 
     @property
     moonWellCost: number = 10; // 月亮井建造成本（10金币）
+
+    @property
+    treeCost: number = 1; // 普通树木建造成本（1金币）
+
+    @property
+    hunterHallCost: number = 10; // 猎手大厅建造成本（10金币）
 
     private isBuildingMode: boolean = false;
     private previewTower: Node = null!;
@@ -101,6 +125,38 @@ export class TowerBuilder extends Component {
                     this.moonWellContainer.setParent(canvas);
                 } else if (this.node.scene) {
                     this.moonWellContainer.setParent(this.node.scene);
+                }
+            }
+        }
+        
+        // 创建普通树木容器
+        if (!this.treeContainer) {
+            const existingTrees = find('Trees');
+            if (existingTrees) {
+                this.treeContainer = existingTrees;
+            } else {
+                this.treeContainer = new Node('Trees');
+                const canvas = find('Canvas');
+                if (canvas) {
+                    this.treeContainer.setParent(canvas);
+                } else if (this.node.scene) {
+                    this.treeContainer.setParent(this.node.scene);
+                }
+            }
+        }
+
+        // 创建猎手大厅容器
+        if (!this.hunterHallContainer) {
+            const existingHalls = find('HunterHalls');
+            if (existingHalls) {
+                this.hunterHallContainer = existingHalls;
+            } else {
+                this.hunterHallContainer = new Node('HunterHalls');
+                const canvas = find('Canvas');
+                if (canvas) {
+                    this.hunterHallContainer.setParent(canvas);
+                } else if (this.node.scene) {
+                    this.hunterHallContainer.setParent(this.node.scene);
                 }
             }
         }
@@ -206,6 +262,24 @@ export class TowerBuilder extends Component {
                 cost: this.moonWellCost,
                 icon: this.moonWellIcon || null!,
                 description: '增加10个人口上限'
+            });
+        }
+        if (this.treePrefab) {
+            buildingTypes.push({
+                name: '普通树木',
+                prefab: this.treePrefab,
+                cost: this.treeCost,
+                icon: this.treeIcon || null!,
+                description: '阻挡敌人，建造成本低'
+            });
+        }
+        if (this.hunterHallPrefab) {
+            buildingTypes.push({
+                name: '猎手大厅',
+                prefab: this.hunterHallPrefab,
+                cost: this.hunterHallCost,
+                icon: this.hunterHallIcon || null!,
+                description: '可以生产女猎手单位'
             });
         }
         this.buildingPanel.setBuildingTypes(buildingTypes);
@@ -404,8 +478,8 @@ export class TowerBuilder extends Component {
         }
 
         // 检查是否与现有战争古树重叠
-        const trees = this.warAncientTreeContainer?.children || [];
-        for (const tree of trees) {
+        const warAncients = this.warAncientTreeContainer?.children || [];
+        for (const tree of warAncients) {
             if (tree.active) {
                 const treeDistance = Vec3.distance(position, tree.worldPosition);
                 if (treeDistance < 80) { // 战争古树之间的最小距离（稍大一些）
@@ -420,6 +494,28 @@ export class TowerBuilder extends Component {
             if (well.active) {
                 const wellDistance = Vec3.distance(position, well.worldPosition);
                 if (wellDistance < 80) { // 月亮井之间的最小距离
+                    return false;
+                }
+            }
+        }
+        
+        // 检查是否与现有普通树木重叠
+        const trees = this.treeContainer?.children || [];
+        for (const tree of trees) {
+            if (tree.active) {
+                const treeDistance = Vec3.distance(position, tree.worldPosition);
+                if (treeDistance < 60) { // 普通树木之间的最小距离
+                    return false;
+                }
+            }
+        }
+
+        // 检查是否与现有猎手大厅重叠
+        const hunterHalls = this.hunterHallContainer?.children || [];
+        for (const hall of hunterHalls) {
+            if (hall.active) {
+                const hallDistance = Vec3.distance(position, hall.worldPosition);
+                if (hallDistance < 80) { // 猎手大厅之间的最小距离
                     return false;
                 }
             }
@@ -458,6 +554,10 @@ export class TowerBuilder extends Component {
             this.buildWarAncientTree(worldPosition);
         } else if (building.name === '月亮井' || building.prefab === this.moonWellPrefab) {
             this.buildMoonWell(worldPosition);
+        } else if (building.name === '普通树木' || building.prefab === this.treePrefab) {
+            this.buildTree(worldPosition);
+        } else if (building.name === '猎手大厅' || building.prefab === this.hunterHallPrefab) {
+            this.buildHunterHall(worldPosition);
         } else {
             // 可以扩展其他建筑物类型
             console.warn('TowerBuilder.buildBuilding: Unknown building type:', building.name);
@@ -547,6 +647,84 @@ export class TowerBuilder extends Component {
         }
 
         console.debug('TowerBuilder.buildMoonWell: Built at', worldPosition);
+    }
+    
+    /**
+     * 建造普通树木
+     */
+    buildTree(worldPosition: Vec3) {
+        if (!this.treePrefab) {
+            console.error('TowerBuilder.buildTree: treePrefab is null!');
+            return;
+        }
+
+        // 消耗金币
+        if (this.gameManager) {
+            this.gameManager.spendGold(this.treeCost);
+        }
+
+        // 创建普通树木
+        const tree = instantiate(this.treePrefab);
+        
+        // 设置父节点
+        const parent = this.treeContainer || this.node;
+        if (parent && !parent.active) {
+            parent.active = true;
+        }
+        
+        tree.setParent(parent);
+        tree.active = true;
+        tree.setPosition(0, 0, 0);
+        tree.setRotationFromEuler(0, 0, 0);
+        tree.setScale(1, 1, 1);
+        tree.setWorldPosition(worldPosition);
+
+        // 设置建造成本
+        const treeScript = tree.getComponent('Tree') as any;
+        if (treeScript) {
+            treeScript.buildCost = this.treeCost;
+        }
+
+        console.debug('TowerBuilder.buildTree: Built at', worldPosition);
+    }
+
+    /**
+     * 建造猎手大厅
+     */
+    buildHunterHall(worldPosition: Vec3) {
+        if (!this.hunterHallPrefab) {
+            console.error('TowerBuilder.buildHunterHall: hunterHallPrefab is null!');
+            return;
+        }
+
+        // 消耗金币
+        if (this.gameManager) {
+            this.gameManager.spendGold(this.hunterHallCost);
+        }
+
+        // 创建猎手大厅
+        const hall = instantiate(this.hunterHallPrefab);
+        
+        // 设置父节点
+        const parent = this.hunterHallContainer || this.node;
+        if (parent && !parent.active) {
+            parent.active = true;
+        }
+        
+        hall.setParent(parent);
+        hall.active = true;
+        hall.setPosition(0, 0, 0);
+        hall.setRotationFromEuler(0, 0, 0);
+        hall.setScale(1, 1, 1);
+        hall.setWorldPosition(worldPosition);
+
+        // 设置建造成本
+        const hallScript = hall.getComponent('HunterHall') as any;
+        if (hallScript) {
+            hallScript.buildCost = this.hunterHallCost;
+        }
+
+        console.debug('TowerBuilder.buildHunterHall: Built at', worldPosition);
     }
 
     // 可以通过按钮调用
