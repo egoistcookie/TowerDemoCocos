@@ -29,3 +29,6 @@ node_modules/
 *meta
 scene.scene
 *.prefab
+assets/anim/orc-attck.anim
+assets/prefabs/Arrow.prefab
+assets/prefabs/Enemy.prefab

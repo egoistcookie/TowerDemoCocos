@@ -100,6 +100,8 @@ export class Hunter extends Component {
     private manualMoveTarget: Vec3 | null = null!; // 手动移动目标位置
     private unitSelectionManager: UnitSelectionManager = null!; // 单位选择管理器
     private globalTouchHandler: ((event: EventTouch) => void) | null = null; // 全局触摸事件处理器
+    private isHighlighted: boolean = false; // 是否高亮显示
+    private highlightNode: Node | null = null; // 高亮效果节点
 
     start() {
         console.info('Hunter: Starting, node name:', this.node.name);
@@ -243,6 +245,9 @@ export class Hunter extends Component {
             console.debug('Hunter.update: manualMoveTarget exists, calling moveToManualTarget');
             // 手动移动目标位置
             this.moveToManualTarget(deltaTime);
+            console.debug('Hunter.update: Calling updateAnimation after manual move');
+            // 手动移动时，也需要更新动画
+            this.updateAnimation(deltaTime);
             console.debug('Hunter.update: Exiting after manual move');
             return; // 手动移动时，不执行自动寻敌
         }
@@ -954,7 +959,55 @@ export class Hunter extends Component {
      * 设置高亮显示
      */
     setHighlight(highlighted: boolean) {
-        // 这里可以添加高亮逻辑，例如改变透明度、添加光晕效果等
-        // 目前简单实现，不做任何操作
+        if (this.isHighlighted === highlighted) {
+            return; // 状态相同，无需更新
+        }
+        
+        this.isHighlighted = highlighted;
+        
+        if (highlighted) {
+            this.createHighlight();
+        } else {
+            this.removeHighlight();
+        }
+    }
+    
+    /**
+     * 创建高亮效果
+     */
+    private createHighlight() {
+        if (this.highlightNode && this.highlightNode.isValid) {
+            return; // 已经存在高亮效果
+        }
+        
+        // 创建高亮节点
+        this.highlightNode = new Node('Highlight');
+        this.highlightNode.setParent(this.node);
+        this.highlightNode.setPosition(0, 0, 0);
+        
+        // 添加Graphics组件
+        const graphics = this.highlightNode.addComponent(Graphics);
+        if (graphics) {
+            // 绘制高亮边框
+            graphics.strokeColor = new Color(100, 200, 255, 255); // 亮蓝色边框
+            graphics.lineWidth = 3;
+            graphics.circle(0, 0, this.collisionRadius + 5); // 半径为碰撞半径+5
+            graphics.stroke();
+            
+            // 绘制半透明填充
+            graphics.fillColor = new Color(100, 200, 255, 50); // 半透明蓝色填充
+            graphics.circle(0, 0, this.collisionRadius + 5);
+            graphics.fill();
+        }
+    }
+    
+    /**
+     * 移除高亮效果
+     */
+    private removeHighlight() {
+        if (this.highlightNode && this.highlightNode.isValid) {
+            this.highlightNode.destroy();
+            this.highlightNode = null;
+        }
     }
 }
