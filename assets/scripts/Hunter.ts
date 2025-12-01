@@ -3,7 +3,7 @@ import { AudioManager } from './AudioManager';
 import { GameManager, GameState } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
-import { Arrow } from './Arrow';
+import { Boomerang } from './Boomerang';
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
 const { ccclass, property } = _decorator;
@@ -1067,11 +1067,11 @@ export class Hunter extends Component {
             return;
         }
 
-        // 创建弓箭特效（抛物线轨迹）
+        // 创建回旋镖特效（抛物线轨迹）
         if (this.arrowPrefab) {
-            this.createArrow();
+            this.createBoomerang();
         } else if (this.bulletPrefab) {
-            // 如果没有弓箭预制体，使用旧的子弹系统
+            // 如果没有回旋镖预制体，使用旧的子弹系统
             this.createBullet();
         } else {
             // 直接伤害（无特效）
@@ -1288,7 +1288,7 @@ export class Hunter extends Component {
         }
     }
 
-    createArrow() {
+    createBoomerang() {
         if (!this.arrowPrefab || !this.currentTarget) {
             return;
         }
@@ -1298,33 +1298,33 @@ export class Hunter extends Component {
             return;
         }
 
-        // 创建弓箭节点
-        const arrow = instantiate(this.arrowPrefab);
+        // 创建回旋镖节点
+        const boomerang = instantiate(this.arrowPrefab);
         
         // 设置父节点（添加到场景或Canvas）
         const canvas = find('Canvas');
         const scene = this.node.scene;
         const parentNode = canvas || scene || this.node.parent;
         if (parentNode) {
-            arrow.setParent(parentNode);
+            boomerang.setParent(parentNode);
         } else {
-            arrow.setParent(this.node.parent);
+            boomerang.setParent(this.node.parent);
         }
 
-        // 设置初始位置（防御塔位置）
+        // 设置初始位置（女猎手位置）
         const startPos = this.node.worldPosition.clone();
-        arrow.setWorldPosition(startPos);
+        boomerang.setWorldPosition(startPos);
 
         // 确保节点激活
-        arrow.active = true;
+        boomerang.active = true;
 
-        // 获取或添加Arrow组件
-        let arrowScript = arrow.getComponent(Arrow);
-        if (!arrowScript) {
-            arrowScript = arrow.addComponent(Arrow);
+        // 获取或添加Boomerang组件
+        let boomerangScript = boomerang.getComponent(Boomerang);
+        if (!boomerangScript) {
+            boomerangScript = boomerang.addComponent(Boomerang);
         }
 
-        // 播放箭矢射出音效
+        // 播放回旋镖射出音效
         if (this.shootSound && AudioManager.Instance) {
             AudioManager.Instance.playSFX(this.shootSound);
         }
@@ -1332,13 +1332,13 @@ export class Hunter extends Component {
         // 保存当前目标的引用，避免回调函数中引用失效的目标
         const targetNode = this.currentTarget;
         
-        // 初始化弓箭，设置命中回调
-        arrowScript.init(
+        // 初始化回旋镖，设置命中回调
+        boomerangScript.init(
             startPos,
             targetNode,
             this.attackDamage,
             (damage: number) => {
-                // 播放箭矢击中音效
+                // 播放回旋镖击中音效
                 if (this.hitSound) {
                     AudioManager.Instance?.playSFX(this.hitSound);
                 }
@@ -1352,7 +1352,8 @@ export class Hunter extends Component {
                         }
                     }
                 }
-            }
+            },
+            this.node // 传递女猎手节点作为ownerNode，用于回旋镖返回
         );
     }
 
