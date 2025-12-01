@@ -3,6 +3,7 @@ import { GameManager } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
 import { AudioManager } from './AudioManager';
+import { UnitType } from './WarAncientTree';
 const { ccclass, property } = _decorator;
 
 @ccclass('Enemy')
@@ -325,13 +326,12 @@ export class Enemy extends Component {
         let minDistance = Infinity;
         let targetPriority = Infinity;
         
-        // 定义优先级：水晶>树木>弓箭手>建筑物>小精灵
+        // 定义优先级：水晶>树木>角色>建筑物
         const PRIORITY = {
             CRYSTAL: 1,
             TREE: 2,
-            ARCHER: 3,
-            BUILDING: 4,
-            WISP: 5
+            CHARACTER: 3,
+            BUILDING: 4
         };
 
         // 1. 检查水晶是否在范围内（优先级最高）
@@ -376,7 +376,9 @@ export class Enemy extends Component {
             }
         }
         
-        // 3. 查找范围内的弓箭手（优先级第三）
+        // 3. 查找范围内的角色（优先级第三）
+        // 查找所有角色单位：弓箭手、小精灵、女猎手
+        // 1) 弓箭手
         for (const tower of towers) {
             if (tower && tower.active && tower.isValid) {
                 const towerScript = tower.getComponent('Arrower') as any;
@@ -385,11 +387,38 @@ export class Enemy extends Component {
                     const distance = Vec3.distance(this.node.worldPosition, tower.worldPosition);
                     // 如果弓箭手在范围内，且优先级更高或距离更近
                     if (distance <= detectionRange) {
-                        if (PRIORITY.ARCHER < targetPriority || 
-                            (PRIORITY.ARCHER === targetPriority && distance < minDistance)) {
+                        if (PRIORITY.CHARACTER < targetPriority || 
+                            (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
                             minDistance = distance;
                             nearestTarget = tower;
-                            targetPriority = PRIORITY.ARCHER;
+                            targetPriority = PRIORITY.CHARACTER;
+                        }
+                    }
+                }
+            }
+        }
+        // 2) 女猎手
+        let hunters: Node[] = [];
+        let huntersNode = find('Hunters');
+        if (!huntersNode && this.node.scene) {
+            huntersNode = findNodeRecursive(this.node.scene, 'Hunters');
+        }
+        if (huntersNode) {
+            hunters = huntersNode.children;
+        }
+        for (const hunter of hunters) {
+            if (hunter && hunter.active && hunter.isValid) {
+                const hunterScript = hunter.getComponent('Hunter') as any;
+                // 检查女猎手是否存活
+                if (hunterScript && hunterScript.isAlive && hunterScript.isAlive()) {
+                    const distance = Vec3.distance(this.node.worldPosition, hunter.worldPosition);
+                    // 如果女猎手在范围内，且优先级更高或距离更近
+                    if (distance <= detectionRange) {
+                        if (PRIORITY.CHARACTER < targetPriority || 
+                            (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
+                            minDistance = distance;
+                            nearestTarget = hunter;
+                            targetPriority = PRIORITY.CHARACTER;
                         }
                     }
                 }
@@ -455,7 +484,7 @@ export class Enemy extends Component {
             }
         }
 
-        // 5. 查找范围内的小精灵（优先级最低）
+        // 3.3) 小精灵
         for (const wisp of wisps) {
             if (wisp && wisp.active && wisp.isValid) {
                 const wispScript = wisp.getComponent('Wisp') as any;
@@ -464,11 +493,11 @@ export class Enemy extends Component {
                     const distance = Vec3.distance(this.node.worldPosition, wisp.worldPosition);
                     // 如果小精灵在范围内，且优先级更高或距离更近
                     if (distance <= detectionRange) {
-                        if (PRIORITY.WISP < targetPriority || 
-                            (PRIORITY.WISP === targetPriority && distance < minDistance)) {
+                        if (PRIORITY.CHARACTER < targetPriority || 
+                            (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
                             minDistance = distance;
                             nearestTarget = wisp;
-                            targetPriority = PRIORITY.WISP;
+                            targetPriority = PRIORITY.CHARACTER;
                         }
                     }
                 }
@@ -590,13 +619,12 @@ export class Enemy extends Component {
             return null;
         };
         
-        // 定义优先级：水晶>树木>弓箭手>建筑物>小精灵
+        // 定义优先级：水晶>树木>角色>建筑物
         const PRIORITY = {
             CRYSTAL: 1,
             TREE: 2,
-            ARCHER: 3,
-            BUILDING: 4,
-            WISP: 5
+            CHARACTER: 3,
+            BUILDING: 4
         };
         
         let nearestTarget: Node = null!;
@@ -642,7 +670,8 @@ export class Enemy extends Component {
             }
         }
         
-        // 3. 检查弓箭手
+        // 3. 检查角色单位（优先级第三）
+        // 1) 弓箭手
         let towersNode = find('Towers');
         if (!towersNode && this.node.scene) {
             towersNode = findNodeRecursive(this.node.scene, 'Towers');
@@ -656,11 +685,36 @@ export class Enemy extends Component {
                     if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
                         const distance = Vec3.distance(this.node.worldPosition, tower.worldPosition);
                         if (distance <= detectionRange) {
-                            if (PRIORITY.ARCHER < targetPriority || 
-                                (PRIORITY.ARCHER === targetPriority && distance < minDistance)) {
+                            if (PRIORITY.CHARACTER < targetPriority || 
+                                (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
                                 minDistance = distance;
                                 nearestTarget = tower;
-                                targetPriority = PRIORITY.ARCHER;
+                                targetPriority = PRIORITY.CHARACTER;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // 2) 女猎手
+        let huntersNode = find('Hunters');
+        if (!huntersNode && this.node.scene) {
+            huntersNode = findNodeRecursive(this.node.scene, 'Hunters');
+        }
+        
+        if (huntersNode) {
+            const hunters = huntersNode.children || [];
+            for (const hunter of hunters) {
+                if (hunter && hunter.active && hunter.isValid) {
+                    const hunterScript = hunter.getComponent('Hunter') as any;
+                    if (hunterScript && hunterScript.isAlive && hunterScript.isAlive()) {
+                        const distance = Vec3.distance(this.node.worldPosition, hunter.worldPosition);
+                        if (distance <= detectionRange) {
+                            if (PRIORITY.CHARACTER < targetPriority || 
+                                (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
+                                minDistance = distance;
+                                nearestTarget = hunter;
+                                targetPriority = PRIORITY.CHARACTER;
                             }
                         }
                     }
@@ -720,7 +774,7 @@ export class Enemy extends Component {
             }
         }
 
-        // 6. 检查小精灵
+        // 3.3) 小精灵
         let wispsNode = find('Wisps');
         if (!wispsNode && this.node.scene) {
             wispsNode = findNodeRecursive(this.node.scene, 'Wisps');
@@ -734,11 +788,40 @@ export class Enemy extends Component {
                     if (wispScript && wispScript.isAlive && wispScript.isAlive()) {
                         const distance = Vec3.distance(this.node.worldPosition, wisp.worldPosition);
                         if (distance <= detectionRange) {
-                            if (PRIORITY.WISP < targetPriority || 
-                                (PRIORITY.WISP === targetPriority && distance < minDistance)) {
+                            if (PRIORITY.CHARACTER < targetPriority || 
+                                (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
                                 minDistance = distance;
                                 nearestTarget = wisp;
-                                targetPriority = PRIORITY.WISP;
+                                targetPriority = PRIORITY.CHARACTER;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 4. 检查建筑物（优先级第四）
+        // 4.1) 战争古树（已在前面检查）
+        // 4.2) 月亮井（已在前面检查）
+        // 4.3) 猎手大厅
+        let hallsNode = find('HunterHalls');
+        if (!hallsNode && this.node.scene) {
+            hallsNode = findNodeRecursive(this.node.scene, 'HunterHalls');
+        }
+        
+        if (hallsNode) {
+            const halls = hallsNode.children || [];
+            for (const hall of halls) {
+                if (hall && hall.active && hall.isValid) {
+                    const hallScript = hall.getComponent('HunterHall') as any;
+                    if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
+                        const distance = Vec3.distance(this.node.worldPosition, hall.worldPosition);
+                        if (distance <= detectionRange) {
+                            if (PRIORITY.BUILDING < targetPriority || 
+                                (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
+                                minDistance = distance;
+                                nearestTarget = hall;
+                                targetPriority = PRIORITY.BUILDING;
                             }
                         }
                     }

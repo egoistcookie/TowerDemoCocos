@@ -5,6 +5,7 @@ import { DamageNumber } from './DamageNumber';
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
 import { SelectionManager } from './SelectionManager';
+import { UnitType } from './WarAncientTree';
 const { ccclass, property } = _decorator;
 
 @ccclass('MoonWell')
@@ -41,6 +42,9 @@ export class MoonWell extends Component {
 
     @property(SpriteFrame)
     cardIcon: SpriteFrame = null!; // 单位名片图片
+
+    // 单位类型
+    public unitType: UnitType = UnitType.BUILDING;
 
     private currentHealth: number = 80;
     private healthBar: HealthBar = null!;

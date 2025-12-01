@@ -8,6 +8,14 @@ import { UnitInfo } from './UnitInfoPanel';
 import { SelectionManager } from './SelectionManager';
 const { ccclass, property } = _decorator;
 
+// 单位类型枚举
+export enum UnitType {
+    BUILDING = 'BUILDING',
+    CHARACTER = 'CHARACTER',
+    TREE = 'TREE',
+    CRYSTAL = 'CRYSTAL'
+}
+
 @ccclass('WarAncientTree')
 export class WarAncientTree extends Component {
     @property
@@ -45,6 +53,9 @@ export class WarAncientTree extends Component {
 
     @property(SpriteFrame)
     cardIcon: SpriteFrame = null!; // 单位名片图片
+
+    // 单位类型
+    public unitType: UnitType = UnitType.BUILDING;
 
     // 攻击动画相关属性
     @property(SpriteFrame)

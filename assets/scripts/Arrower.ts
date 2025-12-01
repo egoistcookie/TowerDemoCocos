@@ -6,6 +6,7 @@ import { DamageNumber } from './DamageNumber';
 import { Arrow } from './Arrow';
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
+import { UnitType } from './WarAncientTree';
 const { ccclass, property } = _decorator;
 
 @ccclass('Arrower')
@@ -78,6 +79,9 @@ export class Arrower extends Component {
 
     @property(SpriteFrame)
     cardIcon: SpriteFrame = null!; // 单位名片图片
+
+    // 单位类型
+    public unitType: UnitType = UnitType.CHARACTER;
 
     private currentHealth: number = 50;
     private healthBar: HealthBar = null!;

@@ -5,6 +5,7 @@ import { DamageNumber } from './DamageNumber';
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
 import { GamePopup } from './GamePopup';
+import { UnitType } from './WarAncientTree';
 const { ccclass, property } = _decorator;
 
 @ccclass('Wisp')
@@ -38,6 +39,9 @@ export class Wisp extends Component {
 
     @property(SpriteFrame)
     cardIcon: SpriteFrame = null!; // 单位名片图片
+
+    // 单位类型
+    public unitType: UnitType = UnitType.CHARACTER;
 
     // 粒子特效相关属性
     @property(Prefab)
