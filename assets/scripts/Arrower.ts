@@ -118,9 +118,6 @@ export class Arrower extends Component {
             this.defaultSpriteFrame = this.sprite.spriteFrame;
             // 保存默认缩放
             this.defaultScale = this.node.scale.clone();
-            console.debug('Arrower: Sprite component found, default spriteFrame and scale saved');
-        } else {
-            console.error('Arrower: Sprite component not found! Attack animation will not work.');
         }
         
         // 初始化攻击动画帧
@@ -137,8 +134,6 @@ export class Arrower extends Component {
         
         // 监听点击事件
         this.node.on(Node.EventType.TOUCH_END, this.onTowerClick, this);
-        
-        console.debug('Arrower: Started at position:', this.node.worldPosition);
     }
 
     /**
@@ -174,7 +169,6 @@ export class Arrower extends Component {
         // 如果已经在编辑器中设置了attackAnimationFrames，直接使用
         if (this.attackAnimationFrames && this.attackAnimationFrames.length > 0) {
             const validFrames = this.attackAnimationFrames.filter(frame => frame != null);
-            console.debug(`Arrower: Using ${validFrames.length} valid frames from attackAnimationFrames array (total: ${this.attackAnimationFrames.length})`);
             if (validFrames.length < this.attackAnimationFrames.length) {
                 console.warn(`Arrower: Warning - ${this.attackAnimationFrames.length - validFrames.length} frames are null or invalid!`);
             }
@@ -183,7 +177,6 @@ export class Arrower extends Component {
 
         // 如果没有设置帧数组，尝试从纹理中加载
         if (this.attackAnimationTexture) {
-            console.debug('Arrower: Loading attack animation frames from texture...');
             this.loadFramesFromTexture();
         } else {
             console.warn('Arrower: No attack animation frames or texture set. Attack animation will not play.');
@@ -198,7 +191,6 @@ export class Arrower extends Component {
         // 这里假设纹理是单行排列的12帧
         
         if (!this.sprite) {
-            console.error('Arrower: Sprite component not found!');
             return;
         }
 
@@ -283,7 +275,6 @@ export class Arrower extends Component {
             
             if (distanceToManualTarget <= arrivalThreshold) {
                 // 到达手动移动目标，清除手动目标
-                console.debug(`Arrower: Reached manual move target at (${this.manualMoveTarget.x.toFixed(1)}, ${this.manualMoveTarget.y.toFixed(1)})`);
                 this.manualMoveTarget = null!;
                 this.isManuallyControlled = false;
                 this.stopMoving();
@@ -304,7 +295,6 @@ export class Arrower extends Component {
         const hasCollisionNow = this.checkCollisionAtPosition(currentPos);
         if (hasCollisionNow) {
             // 即使不移动，如果有碰撞也要推开
-            console.debug(`Arrower: Collision detected even when not moving! Position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)})`);
             const pushDirection = this.calculatePushAwayDirection(currentPos);
             if (pushDirection.length() > 0.1) {
                 const pushDistance = this.moveSpeed * deltaTime * 1.5;
@@ -312,7 +302,6 @@ export class Arrower extends Component {
                 Vec3.scaleAndAdd(pushPos, currentPos, pushDirection, pushDistance);
                 const finalPushPos = this.checkCollisionAndAdjust(currentPos, pushPos);
                 this.node.setWorldPosition(finalPushPos);
-                console.debug(`Arrower: Pushing away from collision (not moving) at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}) to (${finalPushPos.x.toFixed(1)}, ${finalPushPos.y.toFixed(1)})`);
             }
         }
 
@@ -471,15 +460,6 @@ export class Arrower extends Component {
             }
         }
 
-        // 如果找到目标，输出调试信息（每60帧一次）
-        if (nearestEnemy && Math.random() < 0.016) {
-            if (minDistance <= this.attackRange) {
-                console.debug(`Arrower: Found target enemy at distance ${minDistance.toFixed(2)}, attacking!`);
-            } else {
-                console.debug(`Arrower: Found target enemy at distance ${minDistance.toFixed(2)}, moving towards it!`);
-            }
-        }
-
         this.currentTarget = nearestEnemy;
     }
 
@@ -500,11 +480,6 @@ export class Arrower extends Component {
         const targetPos = this.currentTarget.worldPosition;
         const distance = Vec3.distance(towerPos, targetPos);
         
-        // 调试：每60帧输出一次位置信息
-        if (Math.random() < 0.016) {
-            console.debug(`Arrower: Moving towards target. Position: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}), Target: (${targetPos.x.toFixed(1)}, ${targetPos.y.toFixed(1)}), Distance: ${distance.toFixed(1)}`);
-        }
-
         // 如果已经在攻击范围内，停止移动
         if (distance <= this.attackRange) {
             this.stopMoving();
@@ -512,15 +487,11 @@ export class Arrower extends Component {
         }
 
         // 首先检查当前位置是否有碰撞，如果有，先推开
-        console.debug(`Arrower: Checking collision before moving at (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)})`);
         const hasCollision = this.checkCollisionAtPosition(towerPos);
-        console.debug(`Arrower: Collision check result: ${hasCollision}`);
         
         if (hasCollision) {
             // 当前位置有碰撞，先推开
-            console.debug(`Arrower: Current position has collision! Position: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}), calculating push direction...`);
             const pushDirection = this.calculatePushAwayDirection(towerPos);
-            console.debug(`Arrower: Push direction: (${pushDirection.x.toFixed(2)}, ${pushDirection.y.toFixed(2)}), length: ${pushDirection.length().toFixed(2)}`);
             if (pushDirection.length() > 0.1) {
                 const pushDistance = this.moveSpeed * deltaTime * 1.5; // 推开速度更快
                 const pushPos = new Vec3();
@@ -530,15 +501,7 @@ export class Arrower extends Component {
                 const finalPushPos = this.checkCollisionAndAdjust(towerPos, pushPos);
                 this.node.setWorldPosition(finalPushPos);
                 
-                console.debug(`Arrower: Pushing away from collision at (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}) to (${finalPushPos.x.toFixed(1)}, ${finalPushPos.y.toFixed(1)})`);
                 return; // 先推开，下一帧再移动
-            } else {
-                console.warn(`Arrower: Has collision but push direction is too weak! Position: (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)})`);
-            }
-        } else {
-            // 调试：每60帧输出一次，确认碰撞检测在工作
-            if (Math.random() < 0.016) {
-                console.debug(`Arrower: No collision at position (${towerPos.x.toFixed(1)}, ${towerPos.y.toFixed(1)}), collisionRadius: ${this.collisionRadius}`);
             }
         }
 
@@ -557,11 +520,6 @@ export class Arrower extends Component {
 
         // 检查新位置是否有碰撞，并调整
         const adjustedPos = this.checkCollisionAndAdjust(towerPos, newPos);
-        
-        // 如果调整后的位置与原始位置不同，说明发生了避障
-        if (Vec3.distance(adjustedPos, newPos) > 1.0) {
-            console.debug(`Arrower: Adjusted position due to collision. Original: (${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)}), Adjusted: (${adjustedPos.x.toFixed(1)}, ${adjustedPos.y.toFixed(1)})`);
-        }
 
         // 更新位置
         this.node.setWorldPosition(adjustedPos);
@@ -678,12 +636,6 @@ export class Arrower extends Component {
      * @returns 如果有碰撞返回true
      */
     checkCollisionAtPosition(position: Vec3): boolean {
-        // 调试：总是输出，确认方法被调用（但限制频率避免刷屏）
-        this.collisionCheckCount++;
-        if (this.collisionCheckCount % 10 === 0) { // 每10次调用输出一次
-            console.debug(`Arrower: checkCollisionAtPosition called #${this.collisionCheckCount} at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), collisionRadius: ${this.collisionRadius}`);
-        }
-        
         // 检查与水晶的碰撞
         const crystal = find('Crystal');
         if (!crystal) {
@@ -706,7 +658,6 @@ export class Arrower extends Component {
                     const crystalRadius = 50;
                     const minDistance = this.collisionRadius + crystalRadius;
                     if (crystalDistance < minDistance) {
-                        console.debug(`Arrower: Collision with crystal! Distance: ${crystalDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, Arrower at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Crystal at (${foundCrystal.worldPosition.x.toFixed(1)}, ${foundCrystal.worldPosition.y.toFixed(1)})`);
                         return true;
                     }
                 }
@@ -716,7 +667,6 @@ export class Arrower extends Component {
             const crystalRadius = 50; // 增大水晶半径，确保不会太近
             const minDistance = this.collisionRadius + crystalRadius;
             if (crystalDistance < minDistance) {
-                console.debug(`Arrower: Collision with crystal! Distance: ${crystalDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, Arrower at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Crystal at (${crystal.worldPosition.x.toFixed(1)}, ${crystal.worldPosition.y.toFixed(1)})`);
                 return true;
             }
         }
@@ -884,16 +834,15 @@ export class Arrower extends Component {
             const crystalRadius = 50;
             const minDistance = this.collisionRadius + crystalRadius;
             if (distance < minDistance && distance > 0.1) {
-                const pushDir = new Vec3();
-                Vec3.subtract(pushDir, currentPos, crystalPos);
-                pushDir.normalize();
-                // 增强推力，确保能推开
-                const strength = Math.max(1.0, (minDistance - distance) / minDistance * 2.0);
-                Vec3.scaleAndAdd(pushForce, pushForce, pushDir, strength);
-                maxPushStrength = Math.max(maxPushStrength, strength);
-                obstacleCount++;
-                console.debug(`Arrower: Pushing away from crystal, distance: ${distance.toFixed(1)}, strength: ${strength.toFixed(2)}`);
-            }
+                    const pushDir = new Vec3();
+                    Vec3.subtract(pushDir, currentPos, crystalPos);
+                    pushDir.normalize();
+                    // 增强推力，确保能推开
+                    const strength = Math.max(1.0, (minDistance - distance) / minDistance * 2.0);
+                    Vec3.scaleAndAdd(pushForce, pushForce, pushDir, strength);
+                    maxPushStrength = Math.max(maxPushStrength, strength);
+                    obstacleCount++;
+                }
         }
 
         // 检查其他防御塔
@@ -909,16 +858,15 @@ export class Arrower extends Component {
                     const otherRadius = otherTowerScript && otherTowerScript.collisionRadius ? otherTowerScript.collisionRadius : this.collisionRadius;
                     const minDistance = (this.collisionRadius + otherRadius) * 1.2;
                     if (distance < minDistance && distance > 0.1) {
-                        const pushDir = new Vec3();
-                        Vec3.subtract(pushDir, currentPos, towerPos);
-                        pushDir.normalize();
-                        // 增强推力，重叠越多推力越大
-                        const strength = Math.max(2.0, (minDistance - distance) / minDistance * 3.0);
-                        Vec3.scaleAndAdd(pushForce, pushForce, pushDir, strength);
-                        maxPushStrength = Math.max(maxPushStrength, strength);
-                        obstacleCount++;
-                        console.debug(`Arrower: Pushing away from other tower, distance: ${distance.toFixed(1)}, minDistance: ${minDistance.toFixed(1)}, strength: ${strength.toFixed(2)}`);
-                    }
+                    const pushDir = new Vec3();
+                    Vec3.subtract(pushDir, currentPos, towerPos);
+                    pushDir.normalize();
+                    // 增强推力，重叠越多推力越大
+                    const strength = Math.max(2.0, (minDistance - distance) / minDistance * 3.0);
+                    Vec3.scaleAndAdd(pushForce, pushForce, pushDir, strength);
+                    maxPushStrength = Math.max(maxPushStrength, strength);
+                    obstacleCount++;
+                }
                 }
             }
         }
@@ -1065,10 +1013,7 @@ export class Arrower extends Component {
             Vec3.lerp(finalDir, desiredDirection, avoidanceForce, avoidanceWeight);
             finalDir.normalize();
             
-            // 调试：如果避障权重很高，输出日志
-            if (avoidanceWeight > 0.7) {
-                console.debug(`Arrower: Strong avoidance! Weight: ${avoidanceWeight.toFixed(2)}, MaxStrength: ${maxStrength.toFixed(2)}, ObstacleCount: ${obstacleCount}`);
-            }
+
             
             return finalDir;
         }
@@ -1094,7 +1039,6 @@ export class Arrower extends Component {
         const enemyScript = this.currentTarget.getComponent('Enemy') as any;
         if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
             // 播放攻击动画，动画完成后才射出弓箭
-            console.debug('Arrower: Attack triggered, playing attack animation...');
             this.playAttackAnimation(() => {
                 // 动画播放完成后的回调，在这里创建弓箭
                 this.executeAttack();
@@ -1125,46 +1069,33 @@ export class Arrower extends Component {
             this.createBullet();
         } else {
             // 直接伤害（无特效）
-            if (enemyScript.takeDamage) {
-                enemyScript.takeDamage(this.attackDamage);
-                console.debug(`Arrower: Attacked enemy, dealt ${this.attackDamage} damage`);
-            }
+                if (enemyScript.takeDamage) {
+                    enemyScript.takeDamage(this.attackDamage);
+                }
         }
     }
 
     playAttackAnimation(onComplete?: () => void) {
         // 如果正在播放动画，不重复播放
         if (this.isPlayingAttackAnimation) {
-            console.debug('Arrower: Animation already playing, skipping...');
             return;
         }
 
         // 如果没有Sprite组件或没有动画帧，直接返回
         if (!this.sprite) {
-            console.warn('Arrower: Sprite component not found, cannot play attack animation');
-            // 尝试重新获取Sprite组件
-            this.sprite = this.node.getComponent(Sprite);
-            if (!this.sprite) {
-                console.error('Arrower: Failed to get Sprite component!');
-                return;
-            }
+            return;
         }
 
         // 如果没有设置动画帧，直接返回
         if (!this.attackAnimationFrames || this.attackAnimationFrames.length === 0) {
-            console.warn('Arrower: Attack animation frames not set, skipping animation');
-            console.warn(`Arrower: attackAnimationFrames is ${this.attackAnimationFrames ? 'defined but empty' : 'null/undefined'}`);
             return;
         }
 
         // 检查帧是否有效
         const validFrames = this.attackAnimationFrames.filter(frame => frame != null);
         if (validFrames.length === 0) {
-            console.error('Arrower: All animation frames are null or invalid!');
             return;
         }
-
-        console.debug(`Arrower: Starting attack animation with ${validFrames.length} frames, duration: ${this.attackAnimationDuration}s`);
 
         // 根据敌人位置决定是否翻转
         let shouldFlip = false;
@@ -1182,7 +1113,6 @@ export class Arrower extends Component {
                     const healthBarScale = this.healthBarNode.scale.clone();
                     this.healthBarNode.setScale(-Math.abs(healthBarScale.x), healthBarScale.y, healthBarScale.z);
                 }
-                console.debug('Arrower: Enemy on left, flipping attack animation');
             } else {
                 // 保持原样：scale.x = 1
                 this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
@@ -1191,7 +1121,6 @@ export class Arrower extends Component {
                     const healthBarScale = this.healthBarNode.scale.clone();
                     this.healthBarNode.setScale(Math.abs(healthBarScale.x), healthBarScale.y, healthBarScale.z);
                 }
-                console.debug('Arrower: Enemy on right, keeping normal orientation');
             }
         }
 
@@ -1201,9 +1130,6 @@ export class Arrower extends Component {
         const frames = validFrames;
         const frameCount = frames.length;
         const frameDuration = this.attackAnimationDuration / frameCount; // 每帧的时长
-        let currentFrameIndex = 0;
-
-        console.debug(`Arrower: Frame duration: ${frameDuration.toFixed(3)}s per frame`);
 
         // 使用update方法播放动画（更可靠）
         let animationTimer = 0;
@@ -1218,7 +1144,6 @@ export class Arrower extends Component {
         // 使用update方法逐帧播放
         const animationUpdate = (deltaTime: number) => {
             if (!this.sprite || !this.sprite.isValid || this.isDestroyed) {
-                console.warn('Arrower: Animation stopped - sprite invalid or tower destroyed');
                 this.isPlayingAttackAnimation = false;
                 this.unschedule(animationUpdate);
                 return;
@@ -1236,7 +1161,6 @@ export class Arrower extends Component {
                     this.sprite.spriteFrame = frames[frameCount - 1];
                 }
                 // 动画播放完成，恢复默认SpriteFrame
-                console.debug('Arrower: Attack animation completed, restoring default sprite');
                 this.restoreDefaultSprite();
                 this.unschedule(animationUpdate);
                 
@@ -1323,9 +1247,6 @@ export class Arrower extends Component {
             graphics.lineTo(toPos.x, toPos.y);
             graphics.stroke();
             
-            // 每次攻击都输出日志，方便调试
-            console.debug(`Arrower: Created laser effect from tower at (${this.node.worldPosition.x.toFixed(2)}, ${this.node.worldPosition.y.toFixed(2)}) to enemy at (${targetPos.x.toFixed(2)}, ${targetPos.y.toFixed(2)})`);
-            
             // 添加渐隐效果
             const startAlpha = 255;
             const fadeDuration = 0.2; // 稍微延长显示时间
@@ -1362,29 +1283,18 @@ export class Arrower extends Component {
                     laserNode.destroy();
                 }
             }, 0.3);
-        } else {
-            console.error('Arrower: Failed to add Graphics component to laser node!');
         }
     }
 
     createArrow() {
-        if (!this.arrowPrefab) {
-            console.warn('Arrower: arrowPrefab is not set!');
-            return;
-        }
-
-        if (!this.currentTarget) {
-            console.warn('Arrower: currentTarget is null!');
+        if (!this.arrowPrefab || !this.currentTarget) {
             return;
         }
 
         // 检查目标是否有效
         if (!this.currentTarget.isValid || !this.currentTarget.active) {
-            console.warn('Arrower: currentTarget is invalid or inactive!');
             return;
         }
-
-        console.debug(`Arrower: Creating arrow, target: ${this.currentTarget.name}, position: ${this.currentTarget.worldPosition}`);
 
         // 创建弓箭节点
         const arrow = instantiate(this.arrowPrefab);
@@ -1395,16 +1305,13 @@ export class Arrower extends Component {
         const parentNode = canvas || scene || this.node.parent;
         if (parentNode) {
             arrow.setParent(parentNode);
-            console.debug(`Arrower: Arrow parent set to ${parentNode.name}`);
         } else {
             arrow.setParent(this.node.parent);
-            console.debug(`Arrower: Arrow parent set to tower parent`);
         }
 
         // 设置初始位置（防御塔位置）
         const startPos = this.node.worldPosition.clone();
         arrow.setWorldPosition(startPos);
-        console.debug(`Arrower: Arrow initial position: (${startPos.x.toFixed(2)}, ${startPos.y.toFixed(2)})`);
 
         // 确保节点激活
         arrow.active = true;
@@ -1412,39 +1319,23 @@ export class Arrower extends Component {
         // 获取或添加Arrow组件
         let arrowScript = arrow.getComponent(Arrow);
         if (!arrowScript) {
-            console.debug('Arrower: Arrow component not found, adding it...');
             arrowScript = arrow.addComponent(Arrow);
-        } else {
-            console.debug('Arrower: Arrow component found');
         }
 
         // 播放箭矢射出音效
-        console.debug('Arrower: Attempting to play shoot sound');
-        if (this.shootSound) {
-            console.debug('Arrower: Shoot sound clip exists');
-            if (AudioManager.Instance) {
-                console.debug('Arrower: AudioManager.Instance exists, calling playSFX');
-                AudioManager.Instance.playSFX(this.shootSound);
-            } else {
-                console.debug('Arrower: AudioManager.Instance is null');
-            }
-        } else {
-            console.debug('Arrower: Shoot sound clip is null');
+        if (this.shootSound && AudioManager.Instance) {
+            AudioManager.Instance.playSFX(this.shootSound);
         }
 
         // 保存当前目标的引用，避免回调函数中引用失效的目标
         const targetNode = this.currentTarget;
         
         // 初始化弓箭，设置命中回调
-        console.debug(`Arrower: Initializing arrow with damage: ${this.attackDamage}`);
         arrowScript.init(
             startPos,
             targetNode,
             this.attackDamage,
             (damage: number) => {
-                // 命中目标时造成伤害
-                console.debug(`Arrower: Arrow hit callback called with damage: ${damage}`);
-                
                 // 播放箭矢击中音效
                 if (this.hitSound) {
                     AudioManager.Instance?.playSFX(this.hitSound);
@@ -1456,11 +1347,8 @@ export class Arrower extends Component {
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         if (enemyScript.takeDamage) {
                             enemyScript.takeDamage(damage);
-                            console.debug(`Arrower: Arrow hit enemy, dealt ${damage} damage`);
                         }
                     }
-                } else {
-                    console.debug('Arrower: Target is invalid, cannot deal damage');
                 }
             }
         );
@@ -1929,8 +1817,6 @@ export class Arrower extends Component {
         this.manualMoveTarget = adjustedPos.clone();
         this.isManuallyControlled = true;
         
-        console.debug(`Arrower: Manual move target set to (${adjustedPos.x.toFixed(1)}, ${adjustedPos.y.toFixed(1)})`);
-        
         // 清除当前自动寻敌目标，优先执行手动移动
         this.currentTarget = null!;
     }
@@ -1987,20 +1873,17 @@ export class Arrower extends Component {
             // 先尝试右侧
             const rightPos = new Vec3(initialPos.x + offsetStep * attempt, initialPos.y, initialPos.z);
             if (!this.hasUnitAtMovePosition(rightPos, checkRadius)) {
-                console.debug(`Arrower: Found available move position at right offset ${offsetStep * attempt}`);
                 return rightPos;
             }
 
             // 再尝试左侧
             const leftPos = new Vec3(initialPos.x - offsetStep * attempt, initialPos.y, initialPos.z);
             if (!this.hasUnitAtMovePosition(leftPos, checkRadius)) {
-                console.debug(`Arrower: Found available move position at left offset ${offsetStep * attempt}`);
                 return leftPos;
             }
         }
 
         // 如果所有位置都被占用，返回初始位置（让Tower自己处理碰撞）
-        console.warn('Arrower: Could not find available move position, using initial position');
         return initialPos;
     }
 
@@ -2145,7 +2028,6 @@ export class Arrower extends Component {
             // 回收80%金币
             const refund = Math.floor(this.buildCost * 0.8);
             this.gameManager.addGold(refund);
-            console.debug(`Arrower: Sold, refunded ${refund} gold`);
         }
 
         // 隐藏面板
@@ -2172,7 +2054,6 @@ export class Arrower extends Component {
         const upgradeCost = this.buildCost * 2;
         
         if (!this.gameManager.canAfford(upgradeCost)) {
-            console.debug(`Arrower: Not enough gold for upgrade! Need ${upgradeCost}, have ${this.gameManager.getGold()}`);
             return;
         }
 
@@ -2183,8 +2064,6 @@ export class Arrower extends Component {
         this.level++;
         this.attackDamage = Math.floor(this.attackDamage * 1.5); // 攻击力增加50%
         this.attackInterval = this.attackInterval / 1.5; // 攻击速度增加50%（间隔减少）
-
-        console.debug(`Arrower: Upgraded to level ${this.level}, damage: ${this.attackDamage}, interval: ${this.attackInterval.toFixed(2)}`);
 
         // 更新单位信息面板
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {

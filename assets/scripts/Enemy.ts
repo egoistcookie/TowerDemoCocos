@@ -301,6 +301,16 @@ export class Enemy extends Component {
             wells = wellsNode.children;
         }
 
+        // 查找猎手大厅
+        let halls: Node[] = [];
+        let hallsNode = find('HunterHalls');
+        if (!hallsNode && this.node.scene) {
+            hallsNode = findNodeRecursive(this.node.scene, 'HunterHalls');
+        }
+        if (hallsNode) {
+            halls = hallsNode.children;
+        }
+
         // 查找小精灵
         let wisps: Node[] = [];
         let wispsNode = find('Wisps');
@@ -386,7 +396,7 @@ export class Enemy extends Component {
             }
         }
 
-        // 4. 查找范围内的建筑物（战争古树和月亮井，优先级第四）
+        // 4. 查找范围内的建筑物（战争古树、月亮井和猎手大厅，优先级第四）
         // 战争古树
         for (const tree of trees) {
             if (tree && tree.active && tree.isValid) {
@@ -419,6 +429,25 @@ export class Enemy extends Component {
                             (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
                             minDistance = distance;
                             nearestTarget = well;
+                            targetPriority = PRIORITY.BUILDING;
+                        }
+                    }
+                }
+            }
+        }
+        // 猎手大厅
+        for (const hall of halls) {
+            if (hall && hall.active && hall.isValid) {
+                const hallScript = hall.getComponent('HunterHall') as any;
+                // 检查猎手大厅是否存活
+                if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
+                    const distance = Vec3.distance(this.node.worldPosition, hall.worldPosition);
+                    // 如果猎手大厅在范围内，且优先级更高或距离更近
+                    if (distance <= detectionRange) {
+                        if (PRIORITY.BUILDING < targetPriority || 
+                            (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
+                            minDistance = distance;
+                            nearestTarget = hall;
                             targetPriority = PRIORITY.BUILDING;
                         }
                     }
@@ -1005,9 +1034,10 @@ export class Enemy extends Component {
                 const warAncientTreeScript = currentTarget.getComponent('WarAncientTree') as any;
                 const normalTreeScript = currentTarget.getComponent('Tree') as any;
                 const wellScript = currentTarget.getComponent('MoonWell') as any;
+                const hallScript = currentTarget.getComponent('HunterHall') as any;
                 const crystalScript = currentTarget.getComponent('Crystal') as any;
                 const wispScript = currentTarget.getComponent('Wisp') as any;
-                const targetScript = towerScript || warAncientTreeScript || normalTreeScript || wellScript || crystalScript || wispScript;
+                const targetScript = towerScript || warAncientTreeScript || normalTreeScript || wellScript || hallScript || crystalScript || wispScript;
                 
                 if (targetScript && targetScript.takeDamage) {
                     targetScript.takeDamage(this.attackDamage);
@@ -1020,6 +1050,8 @@ export class Enemy extends Component {
                         console.info(`Enemy.attackCallback: Attacked normal tree, dealt ${this.attackDamage} damage`);
                     } else if (wellScript) {
                         console.info(`Enemy.attackCallback: Attacked moon well, dealt ${this.attackDamage} damage`);
+                    } else if (hallScript) {
+                        console.info(`Enemy.attackCallback: Attacked hunter hall, dealt ${this.attackDamage} damage`);
                     } else if (crystalScript) {
                         console.info(`Enemy.attackCallback: Attacked crystal, dealt ${this.attackDamage} damage`);
                     } else if (wispScript) {
