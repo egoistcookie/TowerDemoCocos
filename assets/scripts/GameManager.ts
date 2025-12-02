@@ -1,5 +1,6 @@
 import { _decorator, Component, Node, Label, director, find } from 'cc';
 import { Crystal } from './Crystal';
+import { CameraController } from './CameraController';
 const { ccclass, property } = _decorator;
 
 export enum GameState {
@@ -49,7 +50,37 @@ export class GameManager extends Component {
         if (this.gameOverPanel) {
             this.gameOverPanel.active = false;
         }
+        
+        // 初始化相机控制器
+        this.initCameraController();
+        
         this.updateUI();
+    }
+    
+    /**
+     * 初始化相机控制器
+     */
+    initCameraController() {
+        // 查找相机节点
+        const cameraNode = find('Canvas/Camera') || find('Camera');
+        if (cameraNode) {
+            // 为相机节点添加CameraController组件
+            let cameraController = cameraNode.getComponent(CameraController);
+            if (!cameraController) {
+                cameraController = cameraNode.addComponent(CameraController);
+            }
+            
+            // 配置相机控制器
+            cameraController.scrollSpeed = 5;
+            cameraController.mouseSensitivity = 0.5;
+            cameraController.maxY = 0;
+            cameraController.minY = -2000; // 设置足够大的滚动范围
+            cameraController.worldHeight = 2668; // 设置世界高度
+            
+            console.log('CameraController initialized successfully!');
+        } else {
+            console.error('GameManager: Camera node not found! Cannot initialize CameraController.');
+        }
     }
 
     onDestroy() {

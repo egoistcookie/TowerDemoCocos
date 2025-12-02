@@ -627,211 +627,178 @@ export class Enemy extends Component {
             BUILDING: 4
         };
         
-        let nearestTarget: Node = null!;
-        let minDistance = Infinity;
-        let targetPriority = Infinity;
-
-        // 1. 检查水晶是否在范围内（优先级最高）
+        // 收集所有可能的目标对象
+        const allPotentialTargets: Node[] = [];
+        const enemyPos = this.node.worldPosition;
+        
+        // 1. 添加水晶（如果存在且存活）
         if (this.targetCrystal && this.targetCrystal.isValid) {
             const crystalScript = this.targetCrystal.getComponent('Crystal') as any;
             if (crystalScript && crystalScript.isAlive && crystalScript.isAlive()) {
-                const distance = Vec3.distance(this.node.worldPosition, this.targetCrystal.worldPosition);
-                if (distance <= detectionRange) {
-                    nearestTarget = this.targetCrystal;
-                    minDistance = distance;
-                    targetPriority = PRIORITY.CRYSTAL;
-                }
+                allPotentialTargets.push(this.targetCrystal);
             }
         }
-
-        // 2. 检查树木
+        
+        // 2. 添加树木
         let treesNode = find('Trees');
         if (!treesNode && this.node.scene) {
             treesNode = findNodeRecursive(this.node.scene, 'Trees');
         }
-        
         if (treesNode) {
             const trees = treesNode.children || [];
             for (const tree of trees) {
                 if (tree && tree.active && tree.isValid) {
                     const treeScript = tree.getComponent('Tree') as any;
                     if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
-                        const distance = Vec3.distance(this.node.worldPosition, tree.worldPosition);
-                        if (distance <= detectionRange) {
-                            if (PRIORITY.TREE < targetPriority || 
-                                (PRIORITY.TREE === targetPriority && distance < minDistance)) {
-                                minDistance = distance;
-                                nearestTarget = tree;
-                                targetPriority = PRIORITY.TREE;
-                            }
-                        }
+                        allPotentialTargets.push(tree);
                     }
                 }
             }
         }
         
-        // 3. 检查角色单位（优先级第三）
-        // 1) 弓箭手
+        // 3. 添加角色单位
+        // 3.1) 弓箭手
         let towersNode = find('Towers');
         if (!towersNode && this.node.scene) {
             towersNode = findNodeRecursive(this.node.scene, 'Towers');
         }
-        
         if (towersNode) {
             const towers = towersNode.children || [];
             for (const tower of towers) {
                 if (tower && tower.active && tower.isValid) {
                     const towerScript = tower.getComponent('Arrower') as any;
                     if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
-                        const distance = Vec3.distance(this.node.worldPosition, tower.worldPosition);
-                        if (distance <= detectionRange) {
-                            if (PRIORITY.CHARACTER < targetPriority || 
-                                (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
-                                minDistance = distance;
-                                nearestTarget = tower;
-                                targetPriority = PRIORITY.CHARACTER;
-                            }
-                        }
+                        allPotentialTargets.push(tower);
                     }
                 }
             }
         }
-        // 2) 女猎手
+        
+        // 3.2) 女猎手
         let huntersNode = find('Hunters');
         if (!huntersNode && this.node.scene) {
             huntersNode = findNodeRecursive(this.node.scene, 'Hunters');
         }
-        
         if (huntersNode) {
             const hunters = huntersNode.children || [];
             for (const hunter of hunters) {
                 if (hunter && hunter.active && hunter.isValid) {
                     const hunterScript = hunter.getComponent('Hunter') as any;
                     if (hunterScript && hunterScript.isAlive && hunterScript.isAlive()) {
-                        const distance = Vec3.distance(this.node.worldPosition, hunter.worldPosition);
-                        if (distance <= detectionRange) {
-                            if (PRIORITY.CHARACTER < targetPriority || 
-                                (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
-                                minDistance = distance;
-                                nearestTarget = hunter;
-                                targetPriority = PRIORITY.CHARACTER;
-                            }
-                        }
+                        allPotentialTargets.push(hunter);
                     }
                 }
             }
-        }
-
-        // 4. 检查战争古树
-        let warAncientTrees = find('WarAncientTrees');
-        if (!warAncientTrees && this.node.scene) {
-            warAncientTrees = findNodeRecursive(this.node.scene, 'WarAncientTrees');
         }
         
-        if (warAncientTrees) {
-            const trees = warAncientTrees.children || [];
-            for (const tree of trees) {
-                if (tree && tree.active && tree.isValid) {
-                    const treeScript = tree.getComponent('WarAncientTree') as any;
-                    if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
-                        const distance = Vec3.distance(this.node.worldPosition, tree.worldPosition);
-                        if (distance <= detectionRange) {
-                            if (PRIORITY.BUILDING < targetPriority || 
-                                (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
-                                minDistance = distance;
-                                nearestTarget = tree;
-                                targetPriority = PRIORITY.BUILDING;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 5. 检查月亮井
-        let wellsNode = find('MoonWells');
-        if (!wellsNode && this.node.scene) {
-            wellsNode = findNodeRecursive(this.node.scene, 'MoonWells');
-        }
-        
-        if (wellsNode) {
-            const wells = wellsNode.children || [];
-            for (const well of wells) {
-                if (well && well.active && well.isValid) {
-                    const wellScript = well.getComponent('MoonWell') as any;
-                    if (wellScript && wellScript.isAlive && wellScript.isAlive()) {
-                        const distance = Vec3.distance(this.node.worldPosition, well.worldPosition);
-                        if (distance <= detectionRange) {
-                            if (PRIORITY.BUILDING < targetPriority || 
-                                (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
-                                minDistance = distance;
-                                nearestTarget = well;
-                                targetPriority = PRIORITY.BUILDING;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
         // 3.3) 小精灵
         let wispsNode = find('Wisps');
         if (!wispsNode && this.node.scene) {
             wispsNode = findNodeRecursive(this.node.scene, 'Wisps');
         }
-        
         if (wispsNode) {
             const wisps = wispsNode.children || [];
             for (const wisp of wisps) {
                 if (wisp && wisp.active && wisp.isValid) {
                     const wispScript = wisp.getComponent('Wisp') as any;
                     if (wispScript && wispScript.isAlive && wispScript.isAlive()) {
-                        const distance = Vec3.distance(this.node.worldPosition, wisp.worldPosition);
-                        if (distance <= detectionRange) {
-                            if (PRIORITY.CHARACTER < targetPriority || 
-                                (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
-                                minDistance = distance;
-                                nearestTarget = wisp;
-                                targetPriority = PRIORITY.CHARACTER;
-                            }
-                        }
+                        allPotentialTargets.push(wisp);
                     }
                 }
             }
         }
         
-        // 4. 检查建筑物（优先级第四）
-        // 4.1) 战争古树（已在前面检查）
-        // 4.2) 月亮井（已在前面检查）
+        // 4. 添加建筑物
+        // 4.1) 战争古树
+        let warAncientTrees = find('WarAncientTrees');
+        if (!warAncientTrees && this.node.scene) {
+            warAncientTrees = findNodeRecursive(this.node.scene, 'WarAncientTrees');
+        }
+        if (warAncientTrees) {
+            const trees = warAncientTrees.children || [];
+            for (const tree of trees) {
+                if (tree && tree.active && tree.isValid) {
+                    const treeScript = tree.getComponent('WarAncientTree') as any;
+                    if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
+                        allPotentialTargets.push(tree);
+                    }
+                }
+            }
+        }
+        
+        // 4.2) 月亮井
+        let wellsNode = find('MoonWells');
+        if (!wellsNode && this.node.scene) {
+            wellsNode = findNodeRecursive(this.node.scene, 'MoonWells');
+        }
+        if (wellsNode) {
+            const wells = wellsNode.children || [];
+            for (const well of wells) {
+                if (well && well.active && well.isValid) {
+                    const wellScript = well.getComponent('MoonWell') as any;
+                    if (wellScript && wellScript.isAlive && wellScript.isAlive()) {
+                        allPotentialTargets.push(well);
+                    }
+                }
+            }
+        }
+        
         // 4.3) 猎手大厅
         let hallsNode = find('HunterHalls');
         if (!hallsNode && this.node.scene) {
             hallsNode = findNodeRecursive(this.node.scene, 'HunterHalls');
         }
-        
         if (hallsNode) {
             const halls = hallsNode.children || [];
             for (const hall of halls) {
                 if (hall && hall.active && hall.isValid) {
                     const hallScript = hall.getComponent('HunterHall') as any;
                     if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
-                        const distance = Vec3.distance(this.node.worldPosition, hall.worldPosition);
-                        if (distance <= detectionRange) {
-                            if (PRIORITY.BUILDING < targetPriority || 
-                                (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
-                                minDistance = distance;
-                                nearestTarget = hall;
-                                targetPriority = PRIORITY.BUILDING;
-                            }
-                        }
+                        allPotentialTargets.push(hall);
                     }
                 }
             }
         }
         
+        // 过滤出在检测范围内的目标，并选择最佳目标
+        let bestTarget: Node | null = null;
+        let bestPriority = Infinity;
+        let bestDistance = Infinity;
+        
+        for (const target of allPotentialTargets) {
+            if (!target || !target.isValid) continue;
+            
+            // 计算距离
+            const distance = Vec3.distance(enemyPos, target.worldPosition);
+            if (distance > detectionRange) continue;
+            
+            // 确定目标优先级
+            let targetPriority: number;
+            if (target.getComponent('Crystal')) {
+                targetPriority = PRIORITY.CRYSTAL;
+            } else if (target.getComponent('Tree')) {
+                targetPriority = PRIORITY.TREE;
+            } else if (target.getComponent('Arrower') || target.getComponent('Hunter') || target.getComponent('Wisp')) {
+                targetPriority = PRIORITY.CHARACTER;
+            } else if (target.getComponent('WarAncientTree') || target.getComponent('MoonWell') || target.getComponent('HunterHall')) {
+                targetPriority = PRIORITY.BUILDING;
+            } else {
+                // 未知类型，跳过
+                continue;
+            }
+            
+            // 选择优先级最高且距离最近的目标
+            if (targetPriority < bestPriority || 
+                (targetPriority === bestPriority && distance < bestDistance)) {
+                bestTarget = target;
+                bestPriority = targetPriority;
+                bestDistance = distance;
+            }
+        }
+        
         // 如果找到目标，设置为当前目标
-        if (nearestTarget) {
-            this.currentTarget = nearestTarget;
+        if (bestTarget) {
+            this.currentTarget = bestTarget;
         }
     }
 
@@ -1120,7 +1087,8 @@ export class Enemy extends Component {
                 const hallScript = currentTarget.getComponent('HunterHall') as any;
                 const crystalScript = currentTarget.getComponent('Crystal') as any;
                 const wispScript = currentTarget.getComponent('Wisp') as any;
-                const targetScript = towerScript || warAncientTreeScript || normalTreeScript || wellScript || hallScript || crystalScript || wispScript;
+                const hunterScript = currentTarget.getComponent('Hunter') as any;
+                const targetScript = towerScript || warAncientTreeScript || normalTreeScript || wellScript || hallScript || crystalScript || wispScript || hunterScript;
                 
                 if (targetScript && targetScript.takeDamage) {
                     targetScript.takeDamage(this.attackDamage);
@@ -1139,6 +1107,8 @@ export class Enemy extends Component {
                         console.info(`Enemy.attackCallback: Attacked crystal, dealt ${this.attackDamage} damage`);
                     } else if (wispScript) {
                         console.info(`Enemy.attackCallback: Attacked wisp, dealt ${this.attackDamage} damage`);
+                    } else if (hunterScript) {
+                        console.info(`Enemy.attackCallback: Attacked hunter, dealt ${this.attackDamage} damage`);
                     }
                 } else {
                     // 目标无效，清除目标
