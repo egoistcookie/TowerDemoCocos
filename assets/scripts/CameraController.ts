@@ -28,6 +28,9 @@ export class CameraController extends Component {
     private startTouchPos: Vec2 = new Vec2();
     private isScrolling: boolean = false;
     private lastCameraY: number = 0;
+    private longPressTimer: number = 0; // 长按计时器
+    private isLongPressStarted: boolean = false; // 长按是否已开始
+    private readonly LONG_PRESS_DURATION: number = 1.5; // 长按持续时间（秒）
     
     start() {
         if (!this.camera) {
@@ -72,15 +75,37 @@ export class CameraController extends Component {
         if (this.isUIElement(targetNode)) {
             // 如果是UI元素，不启用滚动
             this.isScrolling = false;
+            this.isLongPressStarted = false;
             return;
         }
         
-        this.isScrolling = true;
+        // 初始化长按计时器
+        this.longPressTimer = 0;
+        this.isLongPressStarted = false;
+        this.isScrolling = false;
         this.startTouchPos = event.getLocation();
     }
     
+    update(deltaTime: number) {
+        // 更新长按计时器
+        if (!this.isLongPressStarted && this.startTouchPos.x !== 0 && this.startTouchPos.y !== 0) {
+            this.longPressTimer += deltaTime;
+            
+            // 长按时间达到1.5秒，允许拖动
+            if (this.longPressTimer >= this.LONG_PRESS_DURATION) {
+                this.isLongPressStarted = true;
+                this.isScrolling = true;
+            }
+        }
+    }
+    
     onTouchMove(event: EventTouch) {
-        if (!this.isScrolling) return;
+        // 如果还没有完成长按，不处理拖动
+        if (!this.isScrolling) {
+            // 如果正在长按计时中，更新起始位置，避免手指轻微移动导致位置偏差
+            this.startTouchPos = event.getLocation();
+            return;
+        }
         
         const currentPos = event.getLocation();
         const delta = currentPos.clone().subtract(this.startTouchPos);
@@ -93,7 +118,11 @@ export class CameraController extends Component {
     }
     
     onTouchEnd(event: EventTouch) {
+        // 重置长按状态
         this.isScrolling = false;
+        this.isLongPressStarted = false;
+        this.startTouchPos = new Vec2();
+        this.longPressTimer = 0;
     }
     
     onMouseWheel(event: any) {
