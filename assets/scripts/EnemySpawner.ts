@@ -193,8 +193,8 @@ export class EnemySpawner extends Component {
         enemy.setParent(this.enemyContainer || this.node);
         enemy.setWorldPosition(spawnPos);
 
-        // 设置敌人的目标水晶
-        const enemyScript = enemy.getComponent('Enemy') as any;
+        // 设置敌人的目标水晶，支持Enemy和OrcWarrior
+        const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
         if (enemyScript) {
             if (this.targetCrystal) {
                 enemyScript.targetCrystal = this.targetCrystal;

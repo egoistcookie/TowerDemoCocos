@@ -436,10 +436,6 @@ export class Arrower extends Component {
         }
         
         if (!enemiesNode) {
-            // 调试：每60帧输出一次，避免刷屏
-            if (Math.random() < 0.016) {
-                console.warn('Arrower: Enemies container not found!');
-            }
             this.currentTarget = null!;
             return;
         }
@@ -451,7 +447,8 @@ export class Arrower extends Component {
 
         for (const enemy of enemies) {
             if (enemy && enemy.active && enemy.isValid) {
-                const enemyScript = enemy.getComponent('Enemy') as any;
+                // 获取敌人脚本，支持Enemy和OrcWarrior
+                const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
                 // 检查敌人是否存活
                 if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                     const distance = Vec3.distance(this.node.worldPosition, enemy.worldPosition);
@@ -473,8 +470,8 @@ export class Arrower extends Component {
             return;
         }
 
-        // 检查目标是否仍然存活
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any;
+        // 检查目标是否仍然存活，支持Enemy和OrcWarrior
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any;
         if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
             this.stopMoving();
             return;
@@ -736,7 +733,8 @@ export class Arrower extends Component {
             const enemies = enemiesNode.children || [];
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid && enemy.active) {
-                    const enemyScript = enemy.getComponent('Enemy') as any;
+                    // 获取敌人脚本，支持Enemy和OrcWarrior
+                    const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const enemyDistance = Vec3.distance(position, enemy.worldPosition);
                         const enemyRadius = 30; // 增大敌人半径
@@ -881,7 +879,8 @@ export class Arrower extends Component {
             const enemies = enemiesNode.children || [];
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid && enemy.active) {
-                    const enemyScript = enemy.getComponent('Enemy') as any;
+                    // 获取敌人脚本，支持Enemy和OrcWarrior
+                    const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const enemyPos = enemy.worldPosition;
                         const distance = Vec3.distance(currentPos, enemyPos);
@@ -984,7 +983,8 @@ export class Arrower extends Component {
             const enemies = enemiesNode.children || [];
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid && enemy.active) {
-                    const enemyScript = enemy.getComponent('Enemy') as any;
+                    // 获取敌人脚本，支持Enemy和OrcWarrior
+                    const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const enemyPos = enemy.worldPosition;
                         const distance = Vec3.distance(currentPos, enemyPos);
@@ -1040,7 +1040,8 @@ export class Arrower extends Component {
         // 攻击时停止移动
         this.stopMoving();
 
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any;
+        // 获取敌人脚本，支持Enemy和OrcWarrior
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any;
         if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
             // 播放攻击动画，动画完成后才射出弓箭
             this.playAttackAnimation(() => {
@@ -1059,7 +1060,8 @@ export class Arrower extends Component {
             return;
         }
 
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any;
+        // 获取敌人脚本，支持Enemy和OrcWarrior
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any;
         if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
             this.currentTarget = null!;
             return;
@@ -1073,9 +1075,9 @@ export class Arrower extends Component {
             this.createBullet();
         } else {
             // 直接伤害（无特效）
-                if (enemyScript.takeDamage) {
-                    enemyScript.takeDamage(this.attackDamage);
-                }
+            if (enemyScript.takeDamage) {
+                enemyScript.takeDamage(this.attackDamage);
+            }
         }
     }
 

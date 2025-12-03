@@ -440,6 +440,38 @@ export class MoonWell extends Component {
             }
         }
 
+        // 3. 治疗附近的女猎手
+        let huntersNode = find('Hunters');
+        
+        // 如果直接查找失败，尝试递归查找
+        if (!huntersNode && this.node.scene) {
+            huntersNode = findNodeRecursive(this.node.scene, 'Hunters');
+        }
+
+        if (huntersNode) {
+            const hunters = huntersNode.children || [];
+            for (const hunter of hunters) {
+                if (!hunter || !hunter.isValid || !hunter.active) {
+                    continue;
+                }
+
+                const hunterScript = hunter.getComponent('Hunter') as any;
+                if (!hunterScript || !hunterScript.isAlive || !hunterScript.isAlive()) {
+                    continue;
+                }
+
+                // 计算距离
+                const distance = Vec3.distance(moonWellPos, hunter.worldPosition);
+                if (distance <= this.healRange) {
+                    // 在治疗范围内，恢复血量
+                    if (hunterScript.heal) {
+                        hunterScript.heal(this.healAmount);
+                        healedCount++;
+                    }
+                }
+            }
+        }
+
         // 调试信息（降低频率）
         if (healedCount > 0 && Math.random() < 0.1) { // 约10%的概率输出
             console.debug(`MoonWell: Healed ${healedCount} unit(s) within range ${this.healRange}`);

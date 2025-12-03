@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip, Animation, AnimationState } from 'cc';
+import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip } from 'cc';
 import { GameManager } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
@@ -6,22 +6,22 @@ import { AudioManager } from './AudioManager';
 import { UnitType } from './WarAncientTree';
 const { ccclass, property } = _decorator;
 
-@ccclass('Enemy')
-export class Enemy extends Component {
+@ccclass('OrcWarrior')
+export class OrcWarrior extends Component {
     @property
-    maxHealth: number = 30;
+    maxHealth: number = 50;
 
     @property
-    moveSpeed: number = 50;
+    moveSpeed: number = 40;
 
     @property
-    attackDamage: number = 5;
+    attackDamage: number = 8;
 
     @property
-    attackInterval: number = 2.0;
+    attackInterval: number = 1.5;
 
     @property
-    attackRange: number = 50;
+    attackRange: number = 60;
 
     @property(Node)
     targetCrystal: Node = null!;
@@ -40,15 +40,14 @@ export class Enemy extends Component {
     walkAnimationFrames: SpriteFrame[] = []; // 行走动画帧
     
     @property(SpriteFrame)
+    attackAnimationFrames: SpriteFrame[] = []; // 攻击动画帧
+    
+    @property(SpriteFrame)
     hitAnimationFrames: SpriteFrame[] = []; // 被攻击动画帧
     
     @property(SpriteFrame)
     deathAnimationFrames: SpriteFrame[] = []; // 死亡动画帧
-    
-    // 动画名称配置
-    @property
-    attackAnimationName: string = 'orc-attck'; // 攻击动画名称，可在编辑器中配置
-    
+
     // 动画时长属性
     @property
     idleAnimationDuration: number = 1.0; // 待机动画总时长
@@ -65,7 +64,7 @@ export class Enemy extends Component {
     @property
     deathAnimationDuration: number = 1.0; // 死亡动画总时长
 
-    private currentHealth: number = 30;
+    private currentHealth: number = 50;
     private healthBar: HealthBar = null!;
     private healthBarNode: Node = null!;
     private isDestroyed: boolean = false;
@@ -74,7 +73,7 @@ export class Enemy extends Component {
     private gameManager: GameManager = null!;
     
     @property
-    goldReward: number = 2; // 消灭敌人获得的金币
+    goldReward: number = 3; // 消灭敌人获得的金币
     
     @property(AudioClip)
     deathSound: AudioClip = null!; // 敌人死亡音效
@@ -95,15 +94,13 @@ export class Enemy extends Component {
     private defaultSpriteFrame: SpriteFrame = null!;
     private defaultScale: Vec3 = new Vec3(1, 1, 1); // 默认缩放比例，用于方向翻转
     private isHit: boolean = false; // 表示敌人是否正在被攻击
-    private attackCallback: (() => void) | null = null; // 攻击动画完成后的回调函数
-    
-    // Animation组件相关
-    private animationComponent: Animation = null!; // Animation组件引用
+    private attackComplete: boolean = false; // 攻击动画是否完成
 
     start() {
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
         this.attackTimer = 0;
+        this.attackComplete = false;
         
         // 保存默认缩放比例
         this.defaultScale = this.node.scale.clone();
@@ -111,7 +108,6 @@ export class Enemy extends Component {
         // 初始化动画相关属性
         this.sprite = this.node.getComponent(Sprite);
         this.uiTransform = this.node.getComponent(UITransform);
-        this.animationComponent = this.node.getComponent(Animation);
         
         if (this.sprite) {
             this.defaultSpriteFrame = this.sprite.spriteFrame;
@@ -152,6 +148,7 @@ export class Enemy extends Component {
         
         // 初始播放待机动画
         this.playIdleAnimation();
+        
     }
 
     createHealthBar() {
@@ -191,7 +188,11 @@ export class Enemy extends Component {
                 return null;
             };
             this.gameManager = findInScene(scene, GameManager);
+            if (this.gameManager) {
+                return;
+            }
         }
+        
     }
 
     update(deltaTime: number) {
@@ -868,14 +869,33 @@ export class Enemy extends Component {
 
     // 更新攻击动画
     updateAttackAnimation() {
-        // 如果使用Animation组件播放动画，直接返回
-        if (this.animationComponent) {
+        if (this.attackAnimationFrames.length === 0) {
+            this.isPlayingAttackAnimation = false;
+            this.playIdleAnimation();
             return;
         }
-        
-        // 不再使用序列帧攻击动画，直接停止动画
-        this.isPlayingAttackAnimation = false;
-        this.playIdleAnimation();
+
+        const frameDuration = this.attackAnimationDuration / this.attackAnimationFrames.length;
+        const frameIndex = Math.floor(this.animationTimer / frameDuration);
+
+        if (frameIndex < this.attackAnimationFrames.length) {
+            if (frameIndex !== this.currentAnimationFrameIndex) {
+                this.currentAnimationFrameIndex = frameIndex;
+                this.sprite.spriteFrame = this.attackAnimationFrames[frameIndex];
+                
+                // 在攻击动画的后半段造成伤害
+                const attackPoint = Math.floor(this.attackAnimationFrames.length * 0.5);
+                if (frameIndex === attackPoint && !this.attackComplete) {
+                    this.dealDamage();
+                    this.attackComplete = true;
+                }
+            }
+        } else {
+            // 攻击动画播放完成，重置状态
+            this.isPlayingAttackAnimation = false;
+            this.attackComplete = false;
+            this.playIdleAnimation();
+        }
     }
 
     // 更新被攻击动画
@@ -944,7 +964,6 @@ export class Enemy extends Component {
     // 播放攻击动画
     playAttackAnimation() {
         if (this.isPlayingDeathAnimation || this.isDestroyed) {
-            console.info('Enemy.playAttackAnimation: Is playing death animation or destroyed, returning');
             return;
         }
 
@@ -953,65 +972,13 @@ export class Enemy extends Component {
         
         // 设置攻击动画状态
         this.isPlayingAttackAnimation = true;
+        this.attackComplete = false;
+        this.animationTimer = 0;
+        this.currentAnimationFrameIndex = -1;
         
-        // 使用Animation组件播放攻击动画
-        if (this.animationComponent) {
-            console.info('Enemy.playAttackAnimation: Using Animation component');
-            // 清除之前的动画事件
-            this.animationComponent.off(Animation.EventType.FINISHED);
-            
-            // 先停止当前可能正在播放的动画，确保每次都能重新开始
-            this.animationComponent.stop();
-            
-            // 播放攻击动画
-            console.info(`Enemy.playAttackAnimation: Playing animation ${this.attackAnimationName}`);
-            
-            // 获取动画状态，设置动画速度与attackAnimationDuration保持同步
-            const state = this.animationComponent.getState(this.attackAnimationName);
-            if (state) {
-                // 重置动画播放头到开始位置
-                state.time = 0;
-                // 设置动画时长与attackAnimationDuration参数保持一致
-                state.speed = state.duration / this.attackAnimationDuration;
-                console.info(`Enemy.playAttackAnimation: Animation state found, duration: ${state.duration}, speed: ${state.speed}`);
-            }
-            
-            // 播放动画
-            this.animationComponent.play(this.attackAnimationName);
-            
-            // 不使用动画事件，而是使用定时器方式来处理攻击回调
-            // 攻击动画播放完成时调用攻击回调和结束动画
-            const finishTimer = this.attackAnimationDuration; // 攻击动画播放完成时触发
-            
-            // 攻击动画播放完成时调用攻击回调并结束动画
-            this.scheduleOnce(() => {
-                if (this.isPlayingAttackAnimation) {
-                    console.info('Enemy.playAttackAnimation: Attack animation finished, calling attack callback and stopping animation');
-                    
-                    // 调用攻击回调函数
-                    if (this.attackCallback) {
-                        this.attackCallback();
-                        this.attackCallback = null;
-                    }
-                    
-                    // 播放攻击音效
-                    if (this.attackSound) {
-                        console.info('Enemy.playAttackAnimation: Playing attack sound');
-                        AudioManager.Instance.playSFX(this.attackSound);
-                    }
-                    
-                    // 结束动画
-                    this.isPlayingAttackAnimation = false;
-                    
-                    // 动画结束后切换回待机动画
-                    this.playIdleAnimation();
-                }
-            }, finishTimer);
-        } else {
-            console.info('Enemy.playAttackAnimation: No Animation component, using frame animation');
-            // 如果没有Animation组件，使用原来的帧动画
-            this.animationTimer = 0;
-            this.currentAnimationFrameIndex = -1;
+        // 播放攻击音效
+        if (this.attackSound) {
+            AudioManager.Instance.playSFX(this.attackSound);
         }
     }
 
@@ -1057,15 +1024,38 @@ export class Enemy extends Component {
         }
     }
 
+    // 处理实际伤害
+    dealDamage() {
+        if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
+            this.currentTarget = null!;
+            return;
+        }
+
+        const towerScript = this.currentTarget.getComponent('Arrower') as any;
+        const warAncientTreeScript = this.currentTarget.getComponent('WarAncientTree') as any;
+        const normalTreeScript = this.currentTarget.getComponent('Tree') as any;
+        const wellScript = this.currentTarget.getComponent('MoonWell') as any;
+        const hallScript = this.currentTarget.getComponent('HunterHall') as any;
+        const crystalScript = this.currentTarget.getComponent('Crystal') as any;
+        const wispScript = this.currentTarget.getComponent('Wisp') as any;
+        const hunterScript = this.currentTarget.getComponent('Hunter') as any;
+        const targetScript = towerScript || warAncientTreeScript || normalTreeScript || wellScript || hallScript || crystalScript || wispScript || hunterScript;
+        
+        if (targetScript && targetScript.takeDamage) {
+            targetScript.takeDamage(this.attackDamage);
+        } else {
+            // 目标无效，清除目标
+            this.currentTarget = null!;
+        }
+    }
+
     attack() {
         if (!this.currentTarget || this.isDestroyed) {
-            console.info('Enemy.attack: No target or destroyed, returning');
             return;
         }
 
         // 再次检查目标是否有效
         if (!this.currentTarget.isValid || !this.currentTarget.active) {
-            console.info('Enemy.attack: Target is invalid or inactive, returning');
             this.currentTarget = null!;
             return;
         }
@@ -1075,55 +1065,7 @@ export class Enemy extends Component {
         Vec3.subtract(direction, this.currentTarget.worldPosition, this.node.worldPosition);
         this.flipDirection(direction);
 
-        // 保存当前目标，用于攻击动画完成后造成伤害
-        const currentTarget = this.currentTarget;
-        
-        // 设置攻击回调函数
-        this.attackCallback = () => {
-            console.info('Enemy.attackCallback: Attack callback called');
-            if (currentTarget && currentTarget.isValid && currentTarget.active) {
-                const towerScript = currentTarget.getComponent('Arrower') as any;
-                const warAncientTreeScript = currentTarget.getComponent('WarAncientTree') as any;
-                const normalTreeScript = currentTarget.getComponent('Tree') as any;
-                const wellScript = currentTarget.getComponent('MoonWell') as any;
-                const hallScript = currentTarget.getComponent('HunterHall') as any;
-                const crystalScript = currentTarget.getComponent('Crystal') as any;
-                const wispScript = currentTarget.getComponent('Wisp') as any;
-                const hunterScript = currentTarget.getComponent('Hunter') as any;
-                const targetScript = towerScript || warAncientTreeScript || normalTreeScript || wellScript || hallScript || crystalScript || wispScript || hunterScript;
-                
-                if (targetScript && targetScript.takeDamage) {
-                    targetScript.takeDamage(this.attackDamage);
-                    // 根据目标类型输出日志
-                    if (towerScript) {
-                        console.info(`Enemy.attackCallback: Attacked arrower, dealt ${this.attackDamage} damage`);
-                    } else if (warAncientTreeScript) {
-                        console.info(`Enemy.attackCallback: Attacked war ancient tree, dealt ${this.attackDamage} damage`);
-                    } else if (normalTreeScript) {
-                        console.info(`Enemy.attackCallback: Attacked normal tree, dealt ${this.attackDamage} damage`);
-                    } else if (wellScript) {
-                        console.info(`Enemy.attackCallback: Attacked moon well, dealt ${this.attackDamage} damage`);
-                    } else if (hallScript) {
-                        console.info(`Enemy.attackCallback: Attacked hunter hall, dealt ${this.attackDamage} damage`);
-                    } else if (crystalScript) {
-                        console.info(`Enemy.attackCallback: Attacked crystal, dealt ${this.attackDamage} damage`);
-                    } else if (wispScript) {
-                        console.info(`Enemy.attackCallback: Attacked wisp, dealt ${this.attackDamage} damage`);
-                    } else if (hunterScript) {
-                        console.info(`Enemy.attackCallback: Attacked hunter, dealt ${this.attackDamage} damage`);
-                    }
-                } else {
-                    // 目标无效，清除目标
-                    console.info('Enemy.attackCallback: Target is invalid, clearing target');
-                    this.currentTarget = null!;
-                }
-            } else {
-                console.info('Enemy.attackCallback: Current target is invalid or inactive');
-            }
-        };
-
         // 播放攻击动画
-        console.info('Enemy.attack: Playing attack animation:', this.attackAnimationName);
         this.playAttackAnimation();
     }
 
@@ -1257,7 +1199,6 @@ export class Enemy extends Component {
         }
         if (this.gameManager) {
             this.gameManager.addGold(this.goldReward);
-            console.info(`Enemy: Died, rewarded ${this.goldReward} gold`);
         }
 
         // 销毁血条节点
@@ -1282,47 +1223,16 @@ export class Enemy extends Component {
                 }
             }, this.deathAnimationDuration * 1000);
         } else {
-            // 如果没有死亡动画帧，使用原来的倒下和渐隐效果
-            tween(this.node)
-                .to(0.3, { angle: 90 })
-                .call(() => {
-                    // 渐隐消失
-                    const sprite = this.node.getComponent(Sprite);
-                    const startOpacity = sprite ? sprite.color.a : 255;
-                    
-                    tween(this.node)
-                        .to(1.0, { 
-                            position: this.node.position.clone().add3f(0, -20, 0)
-                        })
-                        .parallel(
-                            tween().to(1.0, {}, {
-                                onUpdate: (target, ratio) => {
-                                    if (sprite && this.node && this.node.isValid) {
-                                        const color = sprite.color.clone();
-                                        color.a = startOpacity * (1 - ratio);
-                                        sprite.color = color;
-                                    }
-                                }
-                            })
-                        )
-                        .call(() => {
-                            // 确保节点被真正销毁
-                            if (this.node && this.node.isValid) {
-                                this.node.destroy();
-                            }
-                        })
-                        .start();
-                })
-                .start();
+            // 没有死亡动画帧，直接销毁
+            this.node.destroy();
         }
     }
 
-    getHealth(): number {
-        return this.currentHealth;
-    }
-
+    /**
+     * 检查敌人是否存活
+     * @returns 是否存活
+     */
     isAlive(): boolean {
         return !this.isDestroyed && this.currentHealth > 0;
     }
 }
-

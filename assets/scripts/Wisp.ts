@@ -385,6 +385,11 @@ export class Wisp extends Component {
                 const moonWellScript = building.getComponent('MoonWell') as any;
                 if (moonWellScript && moonWellScript.attachWisp) {
                     moonWellScript.attachWisp(this.node);
+                } else {
+                    const hunterHallScript = building.getComponent('HunterHall') as any;
+                    if (hunterHallScript && hunterHallScript.attachWisp) {
+                        hunterHallScript.attachWisp(this.node);
+                    }
                 }
             }
         }
@@ -622,6 +627,40 @@ export class Wisp extends Component {
             }
         }
         
+        // 查找猎手大厅
+        let hunterHallsNode = find('HunterHalls');
+        if (!hunterHallsNode && this.node.scene) {
+            const findNodeRecursive = (node: Node, name: string): Node | null => {
+                if (node.name === name) {
+                    return node;
+                }
+                for (const child of node.children) {
+                    const found = findNodeRecursive(child, name);
+                    if (found) return found;
+                }
+                return null;
+            };
+            hunterHallsNode = findNodeRecursive(this.node.scene, 'HunterHalls');
+        }
+        
+        if (hunterHallsNode) {
+            const hunterHalls = hunterHallsNode.children || [];
+            for (const hall of hunterHalls) {
+                if (hall && hall.isValid && hall.active) {
+                    const hallScript = hall.getComponent('HunterHall') as any;
+                    if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
+                        const distance = Vec3.distance(targetPos, hall.worldPosition);
+                        // 如果距离建筑物很近（10像素以内），立即依附
+                        if (distance <= attachRange) {
+                            // 依附到建筑物
+                            this.attachToBuilding(hall);
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        
         return false;
     }
 
@@ -690,6 +729,28 @@ export class Wisp extends Component {
                         if (distance <= attachRange) {
                             // 与月亮井重叠，自动依附
                             this.attachToBuilding(well);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 查找猎手大厅
+        let hunterHallsNode = find('HunterHalls');
+        if (!hunterHallsNode && this.node.scene) {
+            hunterHallsNode = findNodeRecursive(this.node.scene, 'HunterHalls');
+        }
+        if (hunterHallsNode) {
+            const hunterHalls = hunterHallsNode.children || [];
+            for (const hall of hunterHalls) {
+                if (hall && hall.isValid && hall.active) {
+                    const hallScript = hall.getComponent('HunterHall') as any;
+                    if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
+                        const distance = Vec3.distance(wispPos, hall.worldPosition);
+                        if (distance <= attachRange) {
+                            // 与猎手大厅重叠，自动依附
+                            this.attachToBuilding(hall);
                             return;
                         }
                     }
@@ -774,6 +835,46 @@ export class Wisp extends Component {
                         moonWellScript.currentHealth = Math.min(maxHealth, currentHealth + this.healAmount);
                         if (moonWellScript.healthBar) {
                             moonWellScript.healthBar.setHealth(moonWellScript.currentHealth);
+                        }
+                        healed = true;
+                    }
+                }
+            }
+            if (healed) {
+                this.showHealEffect();
+                this.showHealNumber();
+            }
+            return;
+        }
+
+        const hunterHallScript = this.attachedBuilding.getComponent('HunterHall') as any;
+        if (hunterHallScript && hunterHallScript.isAlive && hunterHallScript.isAlive()) {
+            // 检查建筑物是否满血，避免不必要的治疗
+            if (hunterHallScript.getHealth && hunterHallScript.getMaxHealth) {
+                const currentHealth = hunterHallScript.getHealth();
+                const maxHealth = hunterHallScript.getMaxHealth();
+                if (currentHealth >= maxHealth) {
+                    return; // 满血，不治疗
+                }
+            }
+
+            let healed = false;
+            if (hunterHallScript.heal) {
+                // 保存治疗前的血量
+                const beforeHealth = hunterHallScript.getHealth ? hunterHallScript.getHealth() : hunterHallScript.currentHealth;
+                hunterHallScript.heal(this.healAmount);
+                // 检查治疗后是否真的恢复了血量
+                const afterHealth = hunterHallScript.getHealth ? hunterHallScript.getHealth() : hunterHallScript.currentHealth;
+                healed = afterHealth > beforeHealth;
+            } else if (hunterHallScript.getHealth && hunterHallScript.getMaxHealth) {
+                const currentHealth = hunterHallScript.getHealth();
+                const maxHealth = hunterHallScript.getMaxHealth();
+                if (currentHealth < maxHealth) {
+                    // 直接设置血量
+                    if (hunterHallScript.currentHealth !== undefined) {
+                        hunterHallScript.currentHealth = Math.min(maxHealth, currentHealth + this.healAmount);
+                        if (hunterHallScript.healthBar) {
+                            hunterHallScript.healthBar.setHealth(hunterHallScript.currentHealth);
                         }
                         healed = true;
                     }

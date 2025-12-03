@@ -435,6 +435,7 @@ export class Hunter extends Component {
     }
 
     findTarget() {
+        console.log('Hunter: findTarget called');
         // 使用递归查找Enemies容器（更可靠）
         const findNodeRecursive = (node: Node, name: string): Node | null => {
             if (node.name === name) {
@@ -456,14 +457,12 @@ export class Hunter extends Component {
         }
         
         if (!enemiesNode) {
-            // 调试：每60帧输出一次，避免刷屏
-            if (Math.random() < 0.016) {
-                console.warn('Hunter: Enemies container not found!');
-            }
+            console.log('Hunter: Enemies node not found');
             this.currentTarget = null!;
             return;
         }
         
+        console.log('Hunter: Found Enemies node with', enemiesNode.children.length, 'children');
         const enemies = enemiesNode.children || [];
         let nearestEnemy: Node = null!;
         let minDistance = Infinity;
@@ -471,19 +470,31 @@ export class Hunter extends Component {
 
         for (const enemy of enemies) {
             if (enemy && enemy.active && enemy.isValid) {
-                const enemyScript = enemy.getComponent('Enemy') as any;
+                console.log('Hunter: Checking enemy', enemy.name, 'at position', enemy.worldPosition);
+                // 获取敌人脚本，支持Enemy和OrcWarrior
+                const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
+                console.log('Hunter: Enemy script found:', !!enemyScript);
                 // 检查敌人是否存活
                 if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                     const distance = Vec3.distance(this.node.worldPosition, enemy.worldPosition);
+                    console.log('Hunter: Enemy', enemy.name, 'is alive, distance:', distance, 'detectionRange:', detectionRange);
                     // 在2倍攻击范围内，选择最近的敌人
                     if (distance <= detectionRange && distance < minDistance) {
+                        console.log('Hunter: Setting', enemy.name, 'as nearest enemy, distance:', distance);
                         minDistance = distance;
                         nearestEnemy = enemy;
                     }
+                } else {
+                    console.log('Hunter: Enemy', enemy.name, 'is not alive or has no valid script');
                 }
             }
         }
 
+        if (nearestEnemy) {
+            console.log('Hunter: Found nearest enemy:', nearestEnemy.name, 'at distance:', minDistance);
+        } else {
+            console.log('Hunter: No enemy found in range');
+        }
         this.currentTarget = nearestEnemy;
     }
 
@@ -493,8 +504,8 @@ export class Hunter extends Component {
             return;
         }
 
-        // 检查目标是否仍然存活
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any;
+        // 检查目标是否仍然存活，支持Enemy和OrcWarrior
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any;
         if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
             this.stopMoving();
             return;
@@ -734,7 +745,8 @@ export class Hunter extends Component {
             const enemies = enemiesNode.children || [];
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid && enemy.active) {
-                    const enemyScript = enemy.getComponent('Enemy') as any;
+                    // 获取敌人脚本，支持Enemy和OrcWarrior
+                    const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const enemyDistance = Vec3.distance(position, enemy.worldPosition);
                         const enemyRadius = 30; // 增大敌人半径
@@ -879,7 +891,8 @@ export class Hunter extends Component {
             const enemies = enemiesNode.children || [];
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid && enemy.active) {
-                    const enemyScript = enemy.getComponent('Enemy') as any;
+                    // 获取敌人脚本，支持Enemy和OrcWarrior
+                    const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const enemyPos = enemy.worldPosition;
                         const distance = Vec3.distance(currentPos, enemyPos);
@@ -990,7 +1003,8 @@ export class Hunter extends Component {
             const enemies = enemiesNode.children || [];
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid && enemy.active) {
-                    const enemyScript = enemy.getComponent('Enemy') as any;
+                    // 获取敌人脚本，支持Enemy和OrcWarrior
+                    const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const enemyPos = enemy.worldPosition;
                         const distance = Vec3.distance(currentPos, enemyPos);
@@ -1033,12 +1047,15 @@ export class Hunter extends Component {
     }
 
     attack() {
+        console.log('Hunter: attack called, currentTarget:', this.currentTarget ? this.currentTarget.name : 'null');
         if (!this.currentTarget || this.isDestroyed) {
+            console.log('Hunter: attack aborted - no target or destroyed');
             return;
         }
 
         // 再次检查目标是否有效
         if (!this.currentTarget.isValid || !this.currentTarget.active) {
+            console.log('Hunter: attack aborted - target invalid or inactive');
             this.currentTarget = null!;
             return;
         }
@@ -1046,14 +1063,19 @@ export class Hunter extends Component {
         // 攻击时停止移动
         this.stopMoving();
 
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any;
+        // 获取敌人脚本，支持Enemy和OrcWarrior
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any;
+        console.log('Hunter: attack - enemyScript found:', !!enemyScript);
         if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
+            console.log('Hunter: attack - enemy is alive, playing attack animation');
             // 播放攻击动画，动画完成后才射出弓箭
             this.playAttackAnimation(() => {
+                console.log('Hunter: attack animation completed, executing attack');
                 // 动画播放完成后的回调，在这里创建弓箭
                 this.executeAttack();
             });
         } else {
+            console.log('Hunter: attack aborted - enemy not alive');
             // 目标已死亡，清除目标
             this.currentTarget = null!;
         }
@@ -1065,7 +1087,8 @@ export class Hunter extends Component {
             return;
         }
 
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any;
+        // 获取敌人脚本，支持Enemy和OrcWarrior
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any;
         if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
             this.currentTarget = null!;
             return;
@@ -1079,9 +1102,9 @@ export class Hunter extends Component {
             this.createBullet();
         } else {
             // 直接伤害（无特效）
-                if (enemyScript.takeDamage) {
-                    enemyScript.takeDamage(this.attackDamage);
-                }
+            if (enemyScript.takeDamage) {
+                enemyScript.takeDamage(this.attackDamage);
+            }
         }
     }
 
@@ -1349,7 +1372,8 @@ export class Hunter extends Component {
                 
                 // 检查目标是否仍然有效
                 if (targetNode && targetNode.isValid && targetNode.active) {
-                    const enemyScript = targetNode.getComponent('Enemy') as any;
+                    // 支持Enemy和OrcWarrior
+                    const enemyScript = targetNode.getComponent('Enemy') as any || targetNode.getComponent('OrcWarrior') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         if (enemyScript.takeDamage) {
                             enemyScript.takeDamage(damage);

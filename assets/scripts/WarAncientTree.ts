@@ -13,7 +13,8 @@ export enum UnitType {
     BUILDING = 'BUILDING',
     CHARACTER = 'CHARACTER',
     TREE = 'TREE',
-    CRYSTAL = 'CRYSTAL'
+    CRYSTAL = 'CRYSTAL',
+    ENEMY = 'ENEMY' // 敌方单位类型
 }
 
 @ccclass('WarAncientTree')
@@ -379,7 +380,8 @@ export class WarAncientTree extends Component {
 
         for (const enemy of enemies) {
             if (enemy && enemy.active && enemy.isValid) {
-                const enemyScript = enemy.getComponent('Enemy') as any;
+                // 获取敌人脚本，支持Enemy和OrcWarrior
+                const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
                 if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                     const distance = Vec3.distance(this.node.worldPosition, enemy.worldPosition);
                     if (distance <= this.attackRange && distance < minDistance) {
@@ -403,7 +405,8 @@ export class WarAncientTree extends Component {
             return;
         }
 
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any;
+        // 获取敌人脚本，支持Enemy和OrcWarrior
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any;
         if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
             // 播放攻击动画，动画完成后才攻击
             this.playAttackAnimation(() => {
@@ -419,7 +422,8 @@ export class WarAncientTree extends Component {
             return;
         }
 
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any;
+        // 获取敌人脚本，支持Enemy和OrcWarrior
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any;
         if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
             this.currentTarget = null!;
             return;

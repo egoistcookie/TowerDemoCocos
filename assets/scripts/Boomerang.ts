@@ -144,8 +144,8 @@ export class Boomerang extends Component {
 
         // 对当前目标造成伤害
         if (this.onHitCallback) {
-            // 直接获取当前目标的脚本并造成伤害，而不是使用闭包中的旧目标
-            const enemyScript = this.targetNode.getComponent('Enemy') as any;
+            // 直接获取当前目标的脚本并造成伤害，支持Enemy和OrcWarrior
+            const enemyScript = this.targetNode.getComponent('Enemy') as any || this.targetNode.getComponent('OrcWarrior') as any;
             if (enemyScript && enemyScript.isAlive && enemyScript.isAlive() && enemyScript.takeDamage) {
                 console.info(`Boomerang: Dealing ${this.currentDamage} damage to ${this.targetNode.name}`);
                 enemyScript.takeDamage(this.currentDamage);
@@ -248,8 +248,8 @@ export class Boomerang extends Component {
                     continue;
                 }
 
-                // 检查敌人是否存活
-                const enemyScript = enemy.getComponent('Enemy') as any;
+                // 检查敌人是否存活，支持Enemy和OrcWarrior
+                const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
                 const isAlive = enemyScript && enemyScript.isAlive && enemyScript.isAlive();
                 console.info(`Boomerang: Enemy ${enemy.name}, has script: ${!!enemyScript}, isAlive: ${isAlive}`);
                 
