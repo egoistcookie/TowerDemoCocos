@@ -1349,7 +1349,8 @@ export class Arrower extends Component {
                 
                 // 检查目标是否仍然有效
                 if (targetNode && targetNode.isValid && targetNode.active) {
-                    const enemyScript = targetNode.getComponent('Enemy') as any;
+                    // 获取敌人脚本，支持Enemy和OrcWarrior
+                    const enemyScript = targetNode.getComponent('Enemy') as any || targetNode.getComponent('OrcWarrior') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         if (enemyScript.takeDamage) {
                             enemyScript.takeDamage(damage);
@@ -1375,7 +1376,8 @@ export class Arrower extends Component {
         direction.normalize();
 
         // 直接造成伤害（简化处理）
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any;
+        // 获取敌人脚本，支持Enemy和OrcWarrior
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any;
         if (enemyScript && enemyScript.takeDamage) {
             enemyScript.takeDamage(this.attackDamage);
         }

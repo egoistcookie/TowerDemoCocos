@@ -1400,7 +1400,8 @@ export class Hunter extends Component {
         direction.normalize();
 
         // 直接造成伤害（简化处理）
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any;
+        // 获取敌人脚本，支持Enemy和OrcWarrior
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any;
         if (enemyScript && enemyScript.takeDamage) {
             enemyScript.takeDamage(this.attackDamage);
         }
