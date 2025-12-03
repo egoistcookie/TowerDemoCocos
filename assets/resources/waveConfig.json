@@ -1,0 +1,84 @@
+{
+  "waves": [
+    {
+      "id": 1,
+      "name": "第一波",
+      "description": "",
+      "preWaveDelay": 3,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 10,
+          "interval": 1.0
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "第二波",
+      "description": "",
+      "preWaveDelay": 5,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 15,
+          "interval": 0.8
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "第三波",
+      "description": "",
+      "preWaveDelay": 5,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 10,
+          "interval": 0.7
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 5,
+          "interval": 1.5
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "第四波",
+      "description": "",
+      "preWaveDelay": 6,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 8,
+          "interval": 1.0
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 10,
+          "interval": 1.2
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "第五波",
+      "description": "",
+      "preWaveDelay": 8,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 15,
+          "interval": 0.6
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 15,
+          "interval": 1.0
+        }
+      ]
+    }
+  ]
+}

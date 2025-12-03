@@ -3,5 +3,8 @@
   "uuid": "0cc03785-f86c-42f6-9feb-6520cfa767ca",
   "creator": {
     "version": "3.8.7"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
   }
 }

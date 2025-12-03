@@ -1,16 +1,29 @@
-import { _decorator, Component, Node, Prefab, instantiate, Vec3, view, find } from 'cc';
+import { _decorator, Component, Node, Prefab, instantiate, Vec3, view, find, resources, JsonAsset } from 'cc';
 import { GameManager, GameState } from './GameManager';
 import { UIManager } from './UIManager';
 const { ccclass, property } = _decorator;
 
+// 定义波次配置接口
+interface EnemyConfig {
+    prefabName: string;
+    count: number;
+    interval: number;
+}
+
+interface WaveConfig {
+    id: number;
+    name: string;
+    description: string;
+    preWaveDelay: number;
+    enemies: EnemyConfig[];
+}
+
+interface WaveConfigFile {
+    waves: WaveConfig[];
+}
+
 @ccclass('EnemySpawner')
 export class EnemySpawner extends Component {
-    @property(Prefab)
-    enemyPrefab: Prefab = null!;
-
-    @property
-    spawnInterval: number = 1.5; // 生成间隔（秒）
-
     @property
     spawnDistance: number = 400; // 从中心生成的距离
 
@@ -20,16 +33,40 @@ export class EnemySpawner extends Component {
     @property(Node)
     enemyContainer: Node = null!;
 
-    private spawnTimer: number = 0;
-    private totalTime: number = 0; // 游戏总运行时间
-    private lastDifficultyLevel: number = 0; // 上一次的难度等级
+    // 敌人预制体映射，键为预制体名称
+    @property({
+        type: [Prefab],
+        tooltip: "敌人预制体数组，名称应与配置文件中的prefabName一致"
+    })
+    enemyPrefabs: Prefab[] = [];
+
     private gameManager: GameManager = null!;
     private uiManager: UIManager = null!;
+    
+    // 波次配置
+    private waveConfig: WaveConfigFile | null = null;
+    private currentWaveIndex: number = -1;
+    private currentWave: WaveConfig | null = null;
+    private isWaveActive: boolean = false;
+    private preWaveDelayTimer: number = 0;
+    
+    // 当前敌人配置
+    private currentEnemyIndex: number = 0;
+    private currentEnemyConfig: EnemyConfig | null = null;
+    private enemiesSpawnedCount: number = 0;
+    private enemySpawnTimer: number = 0;
+    
+    // 敌人预制体映射表
+    private enemyPrefabMap: Map<string, Prefab> = new Map();
 
     start() {
-        this.spawnTimer = 0;
-        this.totalTime = 0;
-        this.lastDifficultyLevel = 0;
+        // 初始化变量
+        this.currentWaveIndex = -1;
+        this.isWaveActive = false;
+        this.preWaveDelayTimer = 0;
+        this.currentEnemyIndex = 0;
+        this.enemiesSpawnedCount = 0;
+        this.enemySpawnTimer = 0;
         
         // 查找游戏管理器（使用递归查找，更可靠）
         this.findGameManager();
@@ -50,6 +87,68 @@ export class EnemySpawner extends Component {
             this.enemyContainer = new Node('Enemies');
             this.enemyContainer.setParent(this.node.scene);
         }
+        
+        // 初始化敌人预制体映射表
+        this.initEnemyPrefabMap();
+        
+        // 加载波次配置
+        this.loadWaveConfig();
+    }
+    
+    /**
+     * 初始化敌人预制体映射表
+     */
+    private initEnemyPrefabMap() {
+        // 清空映射表
+        this.enemyPrefabMap.clear();
+        
+        // 将敌人预制体添加到映射表
+        for (const prefab of this.enemyPrefabs) {
+            // 使用预制体资源的名称作为键
+            // 在Cocos Creator中，prefab.name是预制体资源的名称，prefab.data.name是根节点的名称
+            // 我们需要确保配置文件中的prefabName与预制体资源名称匹配
+            // 或者，我们可以假设预制体数组的顺序与配置文件中的顺序一致
+            // 这里我们直接使用配置文件中的名称来命名预制体
+            // 对于Enemy和OrcWarrior，我们需要确保它们的名称与配置文件中的一致
+            // 我们可以手动映射，或者从预制体数据中获取
+            
+            // 检查预制体根节点的名称，因为在编辑器中，预制体根节点的名称通常与预制体资源名称一致
+            let prefabName = prefab.data.name;
+            console.info(`EnemySpawner: Prefab data name: ${prefabName}, Prefab name: ${prefab.name}`);
+            
+            // 特殊处理，确保名称匹配
+            if (prefabName.toLowerCase().includes('enemy')) {
+                prefabName = 'Enemy';
+            } else if (prefabName.toLowerCase().includes('orc') || prefabName.toLowerCase().includes('warrior')) {
+                prefabName = 'OrcWarrior';
+            }
+            
+            this.enemyPrefabMap.set(prefabName, prefab);
+            console.info(`EnemySpawner: Added enemy prefab ${prefabName} to map`);
+        }
+    }
+    
+    /**
+     * 加载波次配置文件
+     */
+    private loadWaveConfig() {
+        console.info('EnemySpawner: Attempting to load wave config from path: config/waveConfig');
+        resources.load('waveConfig', JsonAsset, (err, jsonAsset) => {
+            if (err) {
+                console.error('EnemySpawner: Failed to load waveConfig.json', err);
+                console.error('EnemySpawner: Please ensure waveConfig.json is located in assets/resources/ folder');
+                
+                // 尝试使用本地配置作为备用方案
+                this.useLocalWaveConfig();
+                return;
+            }
+            
+            this.waveConfig = jsonAsset.json as WaveConfigFile;
+            console.info(`EnemySpawner: Loaded waveConfig with ${this.waveConfig.waves.length} waves`);
+            
+            // 开始第一波
+            this.startNextWave();
+        });
     }
 
     findGameManager() {
@@ -95,8 +194,6 @@ export class EnemySpawner extends Component {
             const gameState = this.gameManager.getGameState();
             if (gameState !== GameState.Playing) {
                 // 游戏已结束（胜利或失败），停止刷新
-                // 重置计时器，防止累积
-                this.spawnTimer = 0;
                 return;
             }
         } else {
@@ -105,58 +202,149 @@ export class EnemySpawner extends Component {
             if (Math.random() < 0.001) { // 约每1000帧一次
                 console.warn('EnemySpawner: GameManager not found, continuing to search...');
             }
-            // 继续运行，允许生成敌人（如果GameManager真的不存在，游戏本身就有问题）
         }
 
-        // 只有在游戏进行中时才更新计时器
-        this.spawnTimer += deltaTime;
-        this.totalTime += deltaTime;
-
-        // 计算当前的生成间隔
-        // 每隔30秒，刷新速度提升一倍（即间隔减半）
-        const difficultyLevel = Math.floor(this.totalTime / 30);
-        // 限制最小间隔为0.1秒，防止生成过多导致卡顿
-        const currentInterval = Math.max(0.1, this.spawnInterval / Math.pow(2, difficultyLevel));
-
-        // 当难度等级提升时
-        if (difficultyLevel > this.lastDifficultyLevel) {
-            this.lastDifficultyLevel = difficultyLevel;
-            console.debug(`EnemySpawner: Difficulty increased to level ${difficultyLevel}, spawn interval: ${currentInterval.toFixed(3)}s`);
+        // 只有在游戏进行中时才处理波次
+        this.updateWave(deltaTime);
+    }
+    
+    /**
+     * 更新波次状态
+     */
+    private updateWave(deltaTime: number) {
+        // 检查是否所有波次都已完成
+        if (this.waveConfig === null || this.currentWaveIndex >= this.waveConfig.waves.length) {
+            return;
+        }
+        
+        // 如果没有当前波次，尝试获取
+        if (!this.currentWave && this.currentWaveIndex >= 0) {
+            this.currentWave = this.waveConfig.waves[this.currentWaveIndex];
+        }
+        
+        // 如果没有激活的波次，开始下一波的延迟
+        if (!this.isWaveActive) {
+            this.preWaveDelayTimer += deltaTime;
             
-            // 触发UI提示
-            if (this.uiManager) {
-                this.uiManager.showAnnouncement("敌军增援到达！小心！");
-                this.uiManager.showWarningEffect();
-            } else {
-                // 尝试重新查找
-                const uiNode = find('UI') || find('Canvas/UI');
-                if (uiNode) {
-                    this.uiManager = uiNode.getComponent(UIManager) || find('Canvas')?.getComponentInChildren(UIManager);
-                    if (this.uiManager) {
-                        this.uiManager.showAnnouncement("敌军增援到达！小心！");
-                        this.uiManager.showWarningEffect();
-                    }
-                }
+            // 如果延迟时间到，开始下一波
+            if (this.preWaveDelayTimer >= (this.currentWave?.preWaveDelay || 0)) {
+                this.startNextWave();
+            }
+            return;
+        }
+        
+        // 如果没有当前敌人配置，获取下一个敌人配置
+        if (this.currentEnemyConfig === null) {
+            if (!this.getCurrentEnemyConfig()) {
+                // 所有敌人配置都已完成，结束当前波次
+                this.endCurrentWave();
+                return;
             }
         }
-
-        if (this.spawnTimer >= currentInterval) {
-            // 再次检查游戏状态，确保在spawnEnemy调用前游戏仍在进行
-            if (this.gameManager) {
-                const gameState = this.gameManager.getGameState();
-                if (gameState === GameState.Playing) {
-                    this.spawnEnemy();
-                } else {
-                    // 游戏已结束，不生成敌人
-                    console.debug(`EnemySpawner: Game state is ${gameState === GameState.Victory ? 'Victory' : 'Defeat'}, stopping enemy spawn`);
-                }
-            } else {
-                // 如果还是没有GameManager，但仍然允许生成敌人（避免完全停止）
-                // 但这种情况应该很少发生
-                this.spawnEnemy();
-            }
-            this.spawnTimer = 0;
+        
+        // 更新敌人生成计时器
+        this.enemySpawnTimer += deltaTime;
+        
+        // 如果到了生成间隔，生成敌人
+        if (this.enemySpawnTimer >= (this.currentEnemyConfig?.interval || 0)) {
+            this.spawnEnemy();
+            this.enemySpawnTimer = 0;
         }
+    }
+    
+    /**
+     * 开始下一波
+     */
+    private startNextWave() {
+        // 检查是否还有波次
+        if (this.waveConfig === null) {
+            console.error('EnemySpawner: Wave config is null, cannot start next wave');
+            return;
+        }
+        
+        // 检查是否还有波次可玩
+        if (this.currentWaveIndex >= this.waveConfig.waves.length - 1) {
+            console.info('EnemySpawner: All waves completed');
+            return;
+        }
+        
+        // 增加波次索引
+        this.currentWaveIndex++;
+        
+        // 检查索引是否有效
+        if (this.currentWaveIndex < 0 || this.currentWaveIndex >= this.waveConfig.waves.length) {
+            console.error(`EnemySpawner: Invalid wave index ${this.currentWaveIndex}, total waves: ${this.waveConfig.waves.length}`);
+            return;
+        }
+        
+        this.currentWave = this.waveConfig.waves[this.currentWaveIndex];
+        
+        // 重置波次状态
+        this.isWaveActive = true;
+        this.preWaveDelayTimer = 0;
+        this.currentEnemyIndex = 0;
+        this.enemiesSpawnedCount = 0;
+        this.enemySpawnTimer = 0;
+        this.currentEnemyConfig = null;
+        
+        // 输出波次信息
+        console.info(`EnemySpawner: Starting wave ${this.currentWave.id} - ${this.currentWave.name}`);
+        console.info(`EnemySpawner: Description: ${this.currentWave.description}`);
+        
+        // 触发UI提示
+        if (this.uiManager) {
+            this.uiManager.showAnnouncement(`${this.currentWave.name} - ${this.currentWave.description}`);
+            this.uiManager.showWarningEffect();
+        }
+    }
+    
+    /**
+     * 结束当前波次
+     */
+    private endCurrentWave() {
+        this.isWaveActive = false;
+        this.currentEnemyConfig = null;
+        console.info(`EnemySpawner: Wave ${this.currentWave?.id || 0} completed`);
+        
+        // 如果还有下一波，开始下一波的延迟
+        if (this.waveConfig && this.currentWaveIndex < this.waveConfig.waves.length - 1) {
+            console.info(`EnemySpawner: Preparing for next wave in ${this.waveConfig.waves[this.currentWaveIndex + 1].preWaveDelay} seconds`);
+        } else {
+            console.info(`EnemySpawner: All waves completed!`);
+        }
+    }
+    
+    /**
+     * 获取当前敌人配置
+     * @returns 是否获取到敌人配置
+     */
+    private getCurrentEnemyConfig(): boolean {
+        if (this.currentWave === null) {
+            console.error('EnemySpawner: currentWave is null, cannot get enemy config');
+            return false;
+        }
+        
+        if (this.currentEnemyIndex >= this.currentWave.enemies.length) {
+            console.info(`EnemySpawner: All enemy configs for wave ${this.currentWave.id} completed`);
+            return false;
+        }
+        
+        this.currentEnemyConfig = this.currentWave.enemies[this.currentEnemyIndex];
+        this.enemiesSpawnedCount = 0;
+        
+        // 检查敌人预制体是否存在
+        const prefabName = this.currentEnemyConfig.prefabName;
+        const prefab = this.enemyPrefabMap.get(prefabName);
+        if (!prefab) {
+            console.error(`EnemySpawner: Enemy prefab ${prefabName} not found in map, available prefabs: ${Array.from(this.enemyPrefabMap.keys())}`);
+            
+            // 尝试获取下一个敌人配置
+            this.currentEnemyIndex++;
+            return this.getCurrentEnemyConfig();
+        }
+        
+        console.info(`EnemySpawner: Now spawning ${this.currentEnemyConfig.count} ${this.currentEnemyConfig.prefabName} enemies with interval ${this.currentEnemyConfig.interval}s`);
+        return true;
     }
 
     spawnEnemy() {
@@ -164,12 +352,30 @@ export class EnemySpawner extends Component {
         if (this.gameManager) {
             const gameState = this.gameManager.getGameState();
             if (gameState !== GameState.Playing) {
-                console.debug(`EnemySpawner: Game ended (state: ${gameState === GameState.Victory ? 'Victory' : 'Defeat'}), canceling enemy spawn`);
+                console.info(`EnemySpawner: Game ended (state: ${gameState === GameState.Victory ? 'Victory' : 'Defeat'}), canceling enemy spawn`);
                 return;
             }
         }
         
-        if (!this.enemyPrefab || !this.targetCrystal) {
+        if (!this.currentEnemyConfig || !this.targetCrystal) {
+            return;
+        }
+        
+        // 检查是否已经生成了足够的敌人
+        if (this.enemiesSpawnedCount >= this.currentEnemyConfig.count) {
+            // 本类型敌人已生成完毕，获取下一个敌人配置
+            this.currentEnemyIndex++;
+            this.currentEnemyConfig = null;
+            this.enemiesSpawnedCount = 0;
+            return;
+        }
+        
+        // 获取敌人预制体
+        const prefabName = this.currentEnemyConfig.prefabName;
+        const enemyPrefab = this.enemyPrefabMap.get(prefabName);
+        
+        if (!enemyPrefab) {
+            console.error(`EnemySpawner: Enemy prefab ${prefabName} not found in prefab map`);
             return;
         }
 
@@ -189,7 +395,7 @@ export class EnemySpawner extends Component {
         }
 
         // 实例化敌人
-        const enemy = instantiate(this.enemyPrefab);
+        const enemy = instantiate(enemyPrefab);
         enemy.setParent(this.enemyContainer || this.node);
         enemy.setWorldPosition(spawnPos);
 
@@ -198,14 +404,72 @@ export class EnemySpawner extends Component {
         if (enemyScript) {
             if (this.targetCrystal) {
                 enemyScript.targetCrystal = this.targetCrystal;
-                console.debug('EnemySpawner: Set targetCrystal for enemy:', this.targetCrystal.name, 'at', this.targetCrystal.worldPosition);
             } else {
                 // 如果EnemySpawner没有设置targetCrystal，让Enemy自己查找
                 console.warn('EnemySpawner: targetCrystal not set, Enemy will try to find it');
             }
-            console.debug('EnemySpawner: Spawned enemy at:', spawnPos);
+            console.info(`EnemySpawner: Spawned ${prefabName} enemy at:`, spawnPos);
         } else {
-            console.error('EnemySpawner: Enemy script not found on enemy prefab');
+            console.error(`EnemySpawner: Enemy script not found on ${prefabName} prefab`);
         }
+        
+        // 增加已生成敌人计数
+        this.enemiesSpawnedCount++;
+        
+        // 如果已生成足够的敌人，获取下一个敌人配置
+        if (this.enemiesSpawnedCount >= this.currentEnemyConfig.count) {
+            this.currentEnemyIndex++;
+            this.currentEnemyConfig = null;
+            this.enemiesSpawnedCount = 0;
+        }
+    }
+    
+    /**
+     * 重置波次系统
+     */
+    reset() {
+        this.currentWaveIndex = -1;
+        this.isWaveActive = false;
+        this.preWaveDelayTimer = 0;
+        this.currentEnemyIndex = 0;
+        this.enemiesSpawnedCount = 0;
+        this.enemySpawnTimer = 0;
+        this.currentWave = null;
+        this.currentEnemyConfig = null;
+        
+        // 重新初始化敌人预制体映射表
+        this.initEnemyPrefabMap();
+        
+        // 重新加载配置并开始第一波
+        this.loadWaveConfig();
+    }
+    
+    /**
+     * 使用本地波次配置作为备用方案
+     */
+    private useLocalWaveConfig() {
+        console.info('EnemySpawner: Using local wave config as fallback');
+        
+        // 创建本地波次配置
+        this.waveConfig = {
+            waves: [
+                {
+                    id: 1,
+                    name: "第一波",
+                    description: "基础敌人来袭",
+                    preWaveDelay: 3,
+                    enemies: [
+                        {
+                            prefabName: "Enemy",
+                            count: 10,
+                            interval: 1.0
+                        }
+                    ]
+                }
+            ]
+        };
+        
+        // 开始第一波
+        this.startNextWave();
     }
 }

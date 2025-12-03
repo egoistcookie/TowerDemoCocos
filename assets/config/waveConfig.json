@@ -1,0 +1,84 @@
+{
+  "waves": [
+    {
+      "id": 1,
+      "name": "第一波",
+      "description": "基础敌人来袭",
+      "preWaveDelay": 3,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 10,
+          "interval": 1.0
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "第二波",
+      "description": "更多基础敌人",
+      "preWaveDelay": 5,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 15,
+          "interval": 0.8
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "第三波",
+      "description": "兽人战士加入",
+      "preWaveDelay": 5,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 10,
+          "interval": 0.7
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 5,
+          "interval": 1.5
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "第四波",
+      "description": "兽人战士为主",
+      "preWaveDelay": 6,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 8,
+          "interval": 1.0
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 10,
+          "interval": 1.2
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "第五波",
+      "description": "终极挑战",
+      "preWaveDelay": 8,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 15,
+          "interval": 0.6
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 15,
+          "interval": 1.0
+        }
+      ]
+    }
+  ]
+}
