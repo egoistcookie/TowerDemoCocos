@@ -317,8 +317,8 @@ export class CountdownPopup extends Component {
         if (this.isShowingNextWaveText) {
             this.nextWaveTextTimer += deltaTime;
             
-            // 显示2秒后，切换到倒计时
-            if (this.nextWaveTextTimer >= 2) {
+            // 显示5秒后，切换到倒计时
+            if (this.nextWaveTextTimer >= 5) {
                 console.info('CountdownPopup: Switching from "下一波敌人" text to countdown');
                 
                 // 隐藏"下一波敌人"文本，显示倒计时

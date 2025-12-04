@@ -471,8 +471,8 @@ export class Hunter extends Component {
         for (const enemy of enemies) {
             if (enemy && enemy.active && enemy.isValid) {
                 console.log('Hunter: Checking enemy', enemy.name, 'at position', enemy.worldPosition);
-                // 获取敌人脚本，支持Enemy和OrcWarrior
-                const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
+                // 获取敌人脚本，支持Enemy、OrcWarrior和OrcWarlord
+                const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('OrcWarlord') as any;
                 console.log('Hunter: Enemy script found:', !!enemyScript);
                 // 检查敌人是否存活
                 if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
@@ -504,8 +504,8 @@ export class Hunter extends Component {
             return;
         }
 
-        // 检查目标是否仍然存活，支持Enemy和OrcWarrior
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any;
+        // 检查目标是否仍然存活，支持Enemy、OrcWarrior和OrcWarlord
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any;
         if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
             this.stopMoving();
             return;
@@ -1063,8 +1063,8 @@ export class Hunter extends Component {
         // 攻击时停止移动
         this.stopMoving();
 
-        // 获取敌人脚本，支持Enemy和OrcWarrior
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any;
+        // 获取敌人脚本，支持Enemy、OrcWarrior和OrcWarlord
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any;
         console.log('Hunter: attack - enemyScript found:', !!enemyScript);
         if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
             console.log('Hunter: attack - enemy is alive, playing attack animation');
@@ -1087,8 +1087,8 @@ export class Hunter extends Component {
             return;
         }
 
-        // 获取敌人脚本，支持Enemy和OrcWarrior
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any;
+        // 获取敌人脚本，支持Enemy、OrcWarrior和OrcWarlord
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any;
         if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
             this.currentTarget = null!;
             return;

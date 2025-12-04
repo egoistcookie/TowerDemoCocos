@@ -133,6 +133,8 @@ export class EnemySpawner extends Component {
             // 特殊处理，确保名称匹配
             if (prefabName.toLowerCase().includes('enemy')) {
                 prefabName = 'Enemy';
+            } else if (prefabName.toLowerCase().includes('orcwarlord') || prefabName.toLowerCase().includes('warlord')) {
+                prefabName = 'OrcWarlord';
             } else if (prefabName.toLowerCase().includes('orc') || prefabName.toLowerCase().includes('warrior')) {
                 prefabName = 'OrcWarrior';
             }
@@ -481,8 +483,8 @@ export class EnemySpawner extends Component {
         enemy.setParent(this.enemyContainer || this.node);
         enemy.setWorldPosition(spawnPos);
 
-        // 设置敌人的目标水晶，支持Enemy和OrcWarrior
-        const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
+        // 设置敌人的目标水晶，支持Enemy、OrcWarrior和OrcWarlord
+        const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('OrcWarlord') as any;
         if (enemyScript) {
             if (this.targetCrystal) {
                 enemyScript.targetCrystal = this.targetCrystal;

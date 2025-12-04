@@ -447,8 +447,8 @@ export class Arrower extends Component {
 
         for (const enemy of enemies) {
             if (enemy && enemy.active && enemy.isValid) {
-                // 获取敌人脚本，支持Enemy和OrcWarrior
-                const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
+                // 获取敌人脚本，支持Enemy、OrcWarrior和OrcWarlord
+                const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('OrcWarlord') as any;
                 // 检查敌人是否存活
                 if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                     const distance = Vec3.distance(this.node.worldPosition, enemy.worldPosition);
@@ -470,8 +470,8 @@ export class Arrower extends Component {
             return;
         }
 
-        // 检查目标是否仍然存活，支持Enemy和OrcWarrior
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any;
+        // 检查目标是否仍然存活，支持Enemy、OrcWarrior和OrcWarlord
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any;
         if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
             this.stopMoving();
             return;
@@ -1040,8 +1040,8 @@ export class Arrower extends Component {
         // 攻击时停止移动
         this.stopMoving();
 
-        // 获取敌人脚本，支持Enemy和OrcWarrior
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any;
+        // 获取敌人脚本，支持Enemy、OrcWarrior和OrcWarlord
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any;
         if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
             // 播放攻击动画，动画完成后才射出弓箭
             this.playAttackAnimation(() => {
@@ -1060,8 +1060,8 @@ export class Arrower extends Component {
             return;
         }
 
-        // 获取敌人脚本，支持Enemy和OrcWarrior
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any;
+        // 获取敌人脚本，支持Enemy、OrcWarrior和OrcWarlord
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any;
         if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
             this.currentTarget = null!;
             return;
@@ -1349,8 +1349,8 @@ export class Arrower extends Component {
                 
                 // 检查目标是否仍然有效
                 if (targetNode && targetNode.isValid && targetNode.active) {
-                    // 获取敌人脚本，支持Enemy和OrcWarrior
-                    const enemyScript = targetNode.getComponent('Enemy') as any || targetNode.getComponent('OrcWarrior') as any;
+                    // 获取敌人脚本，支持Enemy、OrcWarrior和OrcWarlord
+                    const enemyScript = targetNode.getComponent('Enemy') as any || targetNode.getComponent('OrcWarrior') as any || targetNode.getComponent('OrcWarlord') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         if (enemyScript.takeDamage) {
                             enemyScript.takeDamage(damage);
@@ -1376,8 +1376,8 @@ export class Arrower extends Component {
         direction.normalize();
 
         // 直接造成伤害（简化处理）
-        // 获取敌人脚本，支持Enemy和OrcWarrior
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any;
+        // 获取敌人脚本，支持Enemy、OrcWarrior和OrcWarlord
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any;
         if (enemyScript && enemyScript.takeDamage) {
             enemyScript.takeDamage(this.attackDamage);
         }
