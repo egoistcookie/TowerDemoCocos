@@ -3,57 +3,93 @@
     {
       "id": 1,
       "name": "第一波",
-      "description": "",
+      "description": "基础敌人来袭",
       "preWaveDelay": 3,
       "enemies": [
         {
           "prefabName": "Enemy",
-          "count": 10,
-          "interval": 1.0
+          "count": 8,
+          "interval": 1.2
         }
       ]
     },
     {
       "id": 2,
       "name": "第二波",
-      "description": "",
+      "description": "更多基础敌人",
       "preWaveDelay": 5,
       "enemies": [
         {
           "prefabName": "Enemy",
-          "count": 15,
-          "interval": 0.8
+          "count": 12,
+          "interval": 1.0
         }
       ]
     },
     {
       "id": 3,
       "name": "第三波",
-      "description": "",
+      "description": "兽人战士加入",
       "preWaveDelay": 5,
       "enemies": [
         {
           "prefabName": "Enemy",
           "count": 10,
-          "interval": 0.7
+          "interval": 0.8
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 5,
-          "interval": 1.5
+          "count": 3,
+          "interval": 1.8
         }
       ]
     },
     {
       "id": 4,
       "name": "第四波",
-      "description": "",
+      "description": "增强挑战",
       "preWaveDelay": 6,
       "enemies": [
         {
           "prefabName": "Enemy",
-          "count": 8,
+          "count": 15,
+          "interval": 0.7
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 4,
+          "interval": 1.5
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "第五波",
+      "description": "兽人战士为主",
+      "preWaveDelay": 6,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 10,
           "interval": 1.0
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 8,
+          "interval": 1.3
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "第六波",
+      "description": "双重威胁",
+      "preWaveDelay": 7,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 12,
+          "interval": 0.9
         },
         {
           "prefabName": "OrcWarrior",
@@ -63,20 +99,254 @@
       ]
     },
     {
-      "id": 5,
-      "name": "第五波",
-      "description": "",
+      "id": 7,
+      "name": "第七波",
+      "description": "精英敌人出现",
+      "preWaveDelay": 7,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 15,
+          "interval": 0.8
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 12,
+          "interval": 1.1
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "第八波",
+      "description": "高强度挑战",
+      "preWaveDelay": 8,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 20,
+          "interval": 0.7
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 15,
+          "interval": 1.0
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "第九波",
+      "description": "兽人战士大军",
       "preWaveDelay": 8,
       "enemies": [
         {
           "prefabName": "Enemy",
           "count": 15,
+          "interval": 0.9
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 20,
+          "interval": 0.9
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "第十波",
+      "description": "终极基础挑战",
+      "preWaveDelay": 10,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 25,
           "interval": 0.6
         },
         {
           "prefabName": "OrcWarrior",
           "count": 15,
           "interval": 1.0
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "name": "第十一波",
+      "description": "强化敌人来袭",
+      "preWaveDelay": 5,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 20,
+          "interval": 0.5
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 20,
+          "interval": 0.8
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "name": "第十二波",
+      "description": "更强大的兽人战士",
+      "preWaveDelay": 6,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 25,
+          "interval": 0.5
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 25,
+          "interval": 0.8
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "name": "第十三波",
+      "description": "密集攻势",
+      "preWaveDelay": 6,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 30,
+          "interval": 0.4
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 20,
+          "interval": 0.7
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "name": "第十四波",
+      "description": "兽人战士主力",
+      "preWaveDelay": 7,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 20,
+          "interval": 0.6
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 30,
+          "interval": 0.7
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "name": "第十五波",
+      "description": "精英大军",
+      "preWaveDelay": 7,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 25,
+          "interval": 0.5
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 35,
+          "interval": 0.7
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "name": "第十六波",
+      "description": "地狱模式开启",
+      "preWaveDelay": 8,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 35,
+          "interval": 0.4
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 30,
+          "interval": 0.6
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "name": "第十七波",
+      "description": "兽人战士狂潮",
+      "preWaveDelay": 8,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 30,
+          "interval": 0.5
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 40,
+          "interval": 0.6
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "name": "第十八波",
+      "description": "终极挑战接近",
+      "preWaveDelay": 9,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 40,
+          "interval": 0.4
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 35,
+          "interval": 0.5
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "name": "第十九波",
+      "description": "最后冲刺",
+      "preWaveDelay": 9,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 35,
+          "interval": 0.4
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 45,
+          "interval": 0.5
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "name": "第二十波",
+      "description": "最终决战",
+      "preWaveDelay": 10,
+      "enemies": [
+        {
+          "prefabName": "Enemy",
+          "count": 50,
+          "interval": 0.3
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 50,
+          "interval": 0.5
         }
       ]
     }

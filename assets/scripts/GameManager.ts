@@ -32,7 +32,7 @@ export class GameManager extends Component {
     populationLabel: Label = null!; // 人口标签
 
     private gameState: GameState = GameState.Playing;
-    private gameTime: number = 180; // 3分钟 = 180秒
+    private gameTime: number = 600; // 10分钟 = 600秒
     private crystalScript: Crystal = null!;
     private gold: number = 10; // 初始金币
     private population: number = 0; // 当前人口

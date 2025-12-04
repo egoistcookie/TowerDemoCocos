@@ -41,13 +41,14 @@ export class EnemySpawner extends Component {
     enemyPrefabs: Prefab[] = [];
 
     private gameManager: GameManager = null!;
-    private uiManager: UIManager = null!;
+    private uiManager: any = null!;
     
     // 波次配置
     private waveConfig: WaveConfigFile | null = null;
     private currentWaveIndex: number = -1;
     private currentWave: WaveConfig | null = null;
     private isWaveActive: boolean = false;
+    private isCountdownActive: boolean = false; // 倒计时是否激活
     private preWaveDelayTimer: number = 0;
     
     // 当前敌人配置
@@ -71,11 +72,24 @@ export class EnemySpawner extends Component {
         // 查找游戏管理器（使用递归查找，更可靠）
         this.findGameManager();
         
-        // 查找UIManager
-        const uiNode = find('UI') || find('Canvas/UI');
-        if (uiNode) {
-            this.uiManager = uiNode.getComponent(UIManager) || find('Canvas')?.getComponentInChildren(UIManager);
+        // 查找UIManager - 尝试多种方式
+        this.uiManager = null;
+        
+        // 方式1: 直接从场景根节点查找UIManager组件
+        const scene = this.node.scene;
+        if (scene) {
+            this.uiManager = scene.getComponentInChildren(UIManager);
         }
+        
+        // 方式2: 如果方式1失败，尝试查找UI节点
+        if (!this.uiManager) {
+            const uiNode = find('UI') || find('Canvas/UI') || find('Canvas');
+            if (uiNode) {
+                this.uiManager = uiNode.getComponent(UIManager) || uiNode.getComponentInChildren(UIManager);
+            }
+        }
+        
+        console.info(`EnemySpawner: UIManager found: ${this.uiManager ? 'Yes' : 'No'}`);
 
         // 查找水晶
         if (!this.targetCrystal) {
@@ -224,6 +238,11 @@ export class EnemySpawner extends Component {
         
         // 如果没有激活的波次，开始下一波的延迟
         if (!this.isWaveActive) {
+            // 如果正在倒计时，不要开始下一波
+            if (this.isCountdownActive) {
+                return;
+            }
+            
             this.preWaveDelayTimer += deltaTime;
             
             // 如果延迟时间到，开始下一波
@@ -305,6 +324,69 @@ export class EnemySpawner extends Component {
         this.isWaveActive = false;
         this.currentEnemyConfig = null;
         console.info(`EnemySpawner: Wave ${this.currentWave?.id || 0} completed`);
+        
+        // 检查是否是第5、10、15波完成，每隔5波出现一次弹窗
+        if (this.waveConfig && (this.currentWaveIndex + 1) % 5 === 0 && (this.currentWaveIndex + 1) < this.waveConfig.waves.length) {
+            console.info(`EnemySpawner: Wave ${this.currentWaveIndex + 1} completed, showing countdown popup`);
+            
+            // 设置倒计时激活标志
+            this.isCountdownActive = true;
+            
+            // 显示倒计时弹窗
+            if (this.uiManager) {
+                this.uiManager.showCountdownPopup(
+                    this.onCountdownComplete.bind(this),
+                    this.onCountdownManualClose.bind(this)
+                );
+            } else {
+                console.error('EnemySpawner: UIManager is null, cannot show countdown popup');
+                // 如果UI管理器不存在，直接继续下一波
+                this.continueToNextWaves();
+            }
+            
+            // 启动一个自动继续的定时器，确保即使没有弹窗也能继续游戏
+            this.scheduleOnce(() => {
+                if (this.isCountdownActive) {
+                    console.info('EnemySpawner: Countdown timeout, continuing to next waves');
+                    this.continueToNextWaves();
+                }
+            }, 60); // 60秒后自动继续
+            
+            return; // 暂停波次生成，等待倒计时完成
+        }
+        
+        // 如果还有下一波，开始下一波的延迟
+        if (this.waveConfig && this.currentWaveIndex < this.waveConfig.waves.length - 1) {
+            console.info(`EnemySpawner: Preparing for next wave in ${this.waveConfig.waves[this.currentWaveIndex + 1].preWaveDelay} seconds`);
+        } else {
+            console.info(`EnemySpawner: All waves completed!`);
+        }
+    }
+    
+    /**
+     * 倒计时完成回调
+     */
+    private onCountdownComplete() {
+        console.info(`EnemySpawner: Countdown completed, continuing to next waves`);
+        this.continueToNextWaves();
+    }
+    
+    /**
+     * 手动关闭倒计时回调
+     */
+    private onCountdownManualClose() {
+        console.info(`EnemySpawner: Countdown manually closed, continuing to next waves`);
+        this.continueToNextWaves();
+    }
+    
+    /**
+     * 继续生成下一波
+     */
+    private continueToNextWaves() {
+        // 确保波次系统继续运行
+        this.isWaveActive = false;
+        this.isCountdownActive = false; // 取消倒计时激活标志
+        this.preWaveDelayTimer = 0;
         
         // 如果还有下一波，开始下一波的延迟
         if (this.waveConfig && this.currentWaveIndex < this.waveConfig.waves.length - 1) {
