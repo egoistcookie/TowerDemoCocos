@@ -45,6 +45,14 @@ export class Hunter extends Component {
     @property(SpriteFrame)
     attackAnimationFrames: SpriteFrame[] = []; // 攻击动画帧数组（推荐：在编辑器中手动设置）
     
+    // 被攻击动画相关属性
+    @property(SpriteFrame)
+    hitAnimationFrames: SpriteFrame[] = []; // 被攻击动画帧数组
+    
+    // 死亡动画相关属性
+    @property(SpriteFrame)
+    deathAnimationFrames: SpriteFrame[] = []; // 死亡动画帧数组
+    
     // 音效相关属性
     @property(AudioClip)
     shootSound: AudioClip = null!; // 箭矢射出时的音效
@@ -63,6 +71,12 @@ export class Hunter extends Component {
 
     @property
     attackAnimationDuration: number = 0.5; // 攻击动画时长（秒）
+    
+    @property
+    hitAnimationDuration: number = 0.3; // 被攻击动画时长（秒）
+    
+    @property
+    deathAnimationDuration: number = 1.0; // 死亡动画时长（秒）
 
     // 移动相关属性
     @property
@@ -95,6 +109,8 @@ export class Hunter extends Component {
     private defaultSpriteFrame: SpriteFrame = null!; // 默认SpriteFrame（动画结束后恢复）
     private defaultScale: Vec3 = new Vec3(1, 1, 1); // 默认缩放（用于恢复翻转）
     private isPlayingAttackAnimation: boolean = false; // 是否正在播放攻击动画
+    private isPlayingHitAnimation: boolean = false; // 是否正在播放被攻击动画
+    private isPlayingDeathAnimation: boolean = false; // 是否正在播放死亡动画
     private isMoving: boolean = false; // 是否正在移动
     private moveTarget: Node = null!; // 移动目标（敌人）
     private isPlayingMoveAnimation: boolean = false; // 是否正在播放移动动画
@@ -107,6 +123,9 @@ export class Hunter extends Component {
     private isHighlighted: boolean = false; // 是否高亮显示
     private highlightNode: Node = null!; // 高亮效果节点
     private unitSelectionManager: UnitSelectionManager = null!; // 单位选择管理器
+    private isHit: boolean = false; // 是否正在被攻击
+    private animationTimer: number = 0; // 动画计时器
+    private currentAnimationFrameIndex: number = 0; // 当前动画帧索引
 
     start() {
         this.currentHealth = this.maxHealth;
@@ -1231,6 +1250,168 @@ export class Hunter extends Component {
             this.playMoveAnimation();
         }
     }
+    
+    /**
+     * 停止所有动画
+     */
+    stopAllAnimations() {
+        this.isPlayingAttackAnimation = false;
+        this.isPlayingHitAnimation = false;
+        // 不停止死亡动画
+        this.isHit = false; // 清除被攻击标志
+    }
+    
+    /**
+     * 播放被攻击动画
+     */
+    playHitAnimation() {
+        if (this.isPlayingDeathAnimation || this.isDestroyed) {
+            return;
+        }
+
+        this.stopAllAnimations();
+        this.isPlayingHitAnimation = true;
+        this.isHit = true; // 设置被攻击标志
+        this.animationTimer = 0;
+        this.currentAnimationFrameIndex = -1;
+        
+        // 立即播放第一帧
+        if (this.hitAnimationFrames.length > 0 && this.hitAnimationFrames[0]) {
+            this.sprite.spriteFrame = this.hitAnimationFrames[0];
+            this.currentAnimationFrameIndex = 0;
+        }
+        
+        // 开始动画更新
+        this.schedule(this.updateHitAnimation, 0);
+    }
+    
+    /**
+     * 播放死亡动画
+     */
+    playDeathAnimation() {
+        if (this.isPlayingDeathAnimation) {
+            return;
+        }
+
+        this.stopAllAnimations();
+        this.isPlayingDeathAnimation = true;
+        this.animationTimer = 0;
+        this.currentAnimationFrameIndex = -1;
+        
+        // 立即播放第一帧
+        if (this.deathAnimationFrames.length > 0 && this.deathAnimationFrames[0]) {
+            this.sprite.spriteFrame = this.deathAnimationFrames[0];
+            this.currentAnimationFrameIndex = 0;
+        }
+        
+        // 开始死亡动画更新
+        this.schedule(this.updateDeathAnimation, 0);
+    }
+    
+    /**
+     * 更新被攻击动画
+     */
+    updateHitAnimation(deltaTime: number) {
+        if (!this.sprite || !this.sprite.isValid || this.isDestroyed) {
+            this.isPlayingHitAnimation = false;
+            this.unschedule(this.updateHitAnimation);
+            return;
+        }
+        
+        this.animationTimer += deltaTime;
+        
+        // 计算当前应该显示的帧索引
+        const frameCount = this.hitAnimationFrames.length;
+        if (frameCount === 0) {
+            this.isPlayingHitAnimation = false;
+            this.unschedule(this.updateHitAnimation);
+            this.resumeMovement();
+            return;
+        }
+        
+        const frameDuration = this.hitAnimationDuration / frameCount;
+        const targetFrameIndex = Math.min(Math.floor(this.animationTimer / frameDuration), frameCount - 1);
+        
+        // 检查动画是否完成
+        if (this.animationTimer >= this.hitAnimationDuration) {
+            // 确保播放最后一帧
+            if (this.currentAnimationFrameIndex < frameCount - 1 && this.hitAnimationFrames[frameCount - 1]) {
+                this.sprite.spriteFrame = this.hitAnimationFrames[frameCount - 1];
+            }
+            // 动画播放完成，恢复移动或待机
+            this.isPlayingHitAnimation = false;
+            this.unschedule(this.updateHitAnimation);
+            this.resumeMovement();
+            return;
+        }
+        
+        // 更新到当前帧（只在帧变化时更新）
+        if (targetFrameIndex !== this.currentAnimationFrameIndex && this.hitAnimationFrames[targetFrameIndex]) {
+            this.sprite.spriteFrame = this.hitAnimationFrames[targetFrameIndex];
+            this.currentAnimationFrameIndex = targetFrameIndex;
+        }
+    }
+    
+    /**
+     * 更新死亡动画
+     */
+    updateDeathAnimation(deltaTime: number) {
+        if (!this.sprite || !this.sprite.isValid || this.isDestroyed) {
+            this.isPlayingDeathAnimation = false;
+            this.unschedule(this.updateDeathAnimation);
+            return;
+        }
+        
+        this.animationTimer += deltaTime;
+        
+        // 计算当前应该显示的帧索引
+        const frameCount = this.deathAnimationFrames.length;
+        if (frameCount === 0) {
+            this.isPlayingDeathAnimation = false;
+            this.unschedule(this.updateDeathAnimation);
+            return;
+        }
+        
+        const frameDuration = this.deathAnimationDuration / frameCount;
+        const targetFrameIndex = Math.min(Math.floor(this.animationTimer / frameDuration), frameCount - 1);
+        
+        // 检查动画是否完成
+        if (this.animationTimer >= this.deathAnimationDuration) {
+            // 确保播放最后一帧
+            if (this.currentAnimationFrameIndex < frameCount - 1 && this.deathAnimationFrames[frameCount - 1]) {
+                this.sprite.spriteFrame = this.deathAnimationFrames[frameCount - 1];
+            }
+            // 死亡动画播放完成，不再恢复
+            this.isPlayingDeathAnimation = false;
+            this.unschedule(this.updateDeathAnimation);
+            return;
+        }
+        
+        // 更新到当前帧（只在帧变化时更新）
+        if (targetFrameIndex !== this.currentAnimationFrameIndex && this.deathAnimationFrames[targetFrameIndex]) {
+            this.sprite.spriteFrame = this.deathAnimationFrames[targetFrameIndex];
+            this.currentAnimationFrameIndex = targetFrameIndex;
+        }
+    }
+    
+    /**
+     * 恢复移动
+     */
+    resumeMovement() {
+        // 清除被攻击标志
+        this.isHit = false;
+        
+        // 如果角色还活着，并且没有其他动画在播放，恢复移动
+        if (!this.isDestroyed && !this.isPlayingAttackAnimation && !this.isPlayingDeathAnimation) {
+            // 如果正在移动，恢复移动动画
+            if (this.isMoving) {
+                this.playMoveAnimation();
+            } else {
+                // 否则恢复默认SpriteFrame
+                this.restoreDefaultSprite();
+            }
+        }
+    }
 
     createLaserEffect(targetPos: Vec3) {
         // 创建激光效果节点
@@ -1421,6 +1602,9 @@ export class Hunter extends Component {
 
         // 显示伤害数字
         this.showDamageNumber(damage);
+        
+        // 播放受击动画
+        this.playHitAnimation();
 
         this.currentHealth -= damage;
 
@@ -1596,6 +1780,9 @@ export class Hunter extends Component {
             return;
         }
 
+        // 播放死亡动画
+        this.playDeathAnimation();
+
         this.isDestroyed = true;
 
         // 减少人口
@@ -1623,83 +1810,17 @@ export class Hunter extends Component {
         // 移除高亮效果
         this.removeHighlight();
 
-        // 触发爆炸效果
-        let explosionPrefab = this.explosionEffect;
-        
-        // 如果explosionEffect未设置，尝试从资源中加载
-        if (!explosionPrefab) {
-            console.warn('Hunter: explosionEffect prefab is not set, trying to load from resources...');
-            // 尝试从resources/prefabs加载Explosion预制体
-            resources.load('prefabs/Explosion', Prefab, (err, prefab) => {
-                if (err) {
-                    console.error('Hunter: Failed to load Explosion prefab from resources:', err);
-                    return;
-                }
-                explosionPrefab = prefab;
-                this.createExplosionEffect(explosionPrefab);
-            });
-            return;
-        }
-        
-        this.createExplosionEffect(explosionPrefab);
-    }
-
-    private createExplosionEffect(explosionPrefab: Prefab) {
-        if (!explosionPrefab) {
-            console.error('Hunter: Cannot create explosion effect, prefab is null!');
-            return;
-        }
-
-        console.debug('Hunter: Creating explosion effect at position:', this.node.worldPosition);
-        const explosion = instantiate(explosionPrefab);
-        
-        // 确保节点激活
-        explosion.active = true;
-        
-        // 先设置父节点和位置（使用场景根节点或Canvas，确保不会被防御塔销毁影响）
-        const canvas = find('Canvas');
-        const scene = this.node.scene;
-        const parentNode = canvas || scene || this.node.parent;
-        if (parentNode) {
-            explosion.setParent(parentNode);
-            explosion.setWorldPosition(this.node.worldPosition);
-            console.debug('Hunter: Explosion effect parent set, position:', explosion.worldPosition);
-        } else {
-            console.error('Hunter: Cannot find parent node for explosion effect!');
-            explosion.destroy();
-            return;
-        }
-        
-        // 立即设置缩放为0，确保不会显示在屏幕中央
-        explosion.setScale(0, 0, 1);
-        
-        // 检查ExplosionEffect组件是否存在
-        const explosionScript = explosion.getComponent('ExplosionEffect');
-        if (explosionScript) {
-            console.debug('Hunter: ExplosionEffect component found, animation should start automatically');
-        } else {
-            console.warn('Hunter: ExplosionEffect component not found on explosion prefab!');
-        }
-
-        // 延迟销毁爆炸效果节点（动画完成后，ExplosionEffect会自动销毁，这里作为备用）
-        this.scheduleOnce(() => {
-            if (explosion && explosion.isValid) {
-                console.debug('Hunter: Cleaning up explosion effect');
-                explosion.destroy();
-            }
-        }, 2.0); // 延长到2秒，确保动画完成
-
-        // 销毁血条节点
-        if (this.healthBarNode && this.healthBarNode.isValid) {
-            this.healthBarNode.destroy();
-        }
-
         // 真正销毁防御塔节点
         this.scheduleOnce(() => {
+            // 销毁血条节点
+            if (this.healthBarNode && this.healthBarNode.isValid) {
+                this.healthBarNode.destroy();
+            }
+            // 销毁防御塔节点
             if (this.node && this.node.isValid) {
                 this.node.destroy();
             }
-        }, 0.1); // 延迟一小段时间，确保爆炸效果已创建
+        }, this.deathAnimationDuration); // 延迟时间与死亡动画时长相同，确保死亡动画完整播放
     }
 
     getHealth(): number {
