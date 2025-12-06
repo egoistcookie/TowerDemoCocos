@@ -1,6 +1,9 @@
 import { _decorator, Component, Node, Prefab, instantiate, Vec3, view, find, resources, JsonAsset } from 'cc';
 import { GameManager, GameState } from './GameManager';
 import { UIManager } from './UIManager';
+import { Enemy } from './Enemy';
+import { OrcWarrior } from './OrcWarrior';
+import { OrcWarlord } from './OrcWarlord';
 const { ccclass, property } = _decorator;
 
 // 定义波次配置接口
@@ -205,11 +208,11 @@ export class EnemySpawner extends Component {
             this.findGameManager();
         }
         
-        // 检查游戏状态，如果不是Playing状态，停止刷新
+        // 检查游戏状态，只在Playing状态下刷新
         if (this.gameManager) {
             const gameState = this.gameManager.getGameState();
             if (gameState !== GameState.Playing) {
-                // 游戏已结束（胜利或失败），停止刷新
+                // 游戏已结束或暂停，停止刷新
                 return;
             }
         } else {
@@ -463,20 +466,17 @@ export class EnemySpawner extends Component {
             return;
         }
 
-        // 随机生成角度
-        const angle = Math.random() * Math.PI * 2;
+        // 从画面最上方生成敌人
+        // 获取屏幕尺寸和原点
+        const visibleSize = view.getVisibleSize();
+        const visibleOrigin = view.getVisibleOrigin();
         
-        // 计算生成位置（在屏幕边缘）
+        // 计算画面最上方的位置，敌人从屏幕顶部边缘生成，而不是屏幕外
         const spawnPos = new Vec3(
-            Math.cos(angle) * this.spawnDistance,
-            Math.sin(angle) * this.spawnDistance,
+            visibleOrigin.x + Math.random() * visibleSize.width, // x轴在屏幕宽度范围内随机
+            visibleOrigin.y + visibleSize.height - 10, // y轴固定在画面最上方边缘，-10像素确保敌人从屏幕内顶部生成
             0
         );
-
-        // 如果有水晶，以水晶为中心
-        if (this.targetCrystal) {
-            Vec3.add(spawnPos, this.targetCrystal.worldPosition, spawnPos);
-        }
 
         // 实例化敌人
         const enemy = instantiate(enemyPrefab);
@@ -484,7 +484,8 @@ export class EnemySpawner extends Component {
         enemy.setWorldPosition(spawnPos);
 
         // 设置敌人的目标水晶，支持Enemy、OrcWarrior和OrcWarlord
-        const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('OrcWarlord') as any;
+        // 尝试获取不同类型的敌人组件
+        const enemyScript = enemy.getComponent(Enemy) as any || enemy.getComponent(OrcWarrior) as any || enemy.getComponent(OrcWarlord) as any;
         if (enemyScript) {
             if (this.targetCrystal) {
                 enemyScript.targetCrystal = this.targetCrystal;
@@ -493,6 +494,12 @@ export class EnemySpawner extends Component {
                 console.warn('EnemySpawner: targetCrystal not set, Enemy will try to find it');
             }
             console.info(`EnemySpawner: Spawned ${prefabName} enemy at:`, spawnPos);
+            
+            // 检查单位是否首次出现
+            if (this.gameManager) {
+                const unitType = enemyScript.unitType || prefabName;
+                this.gameManager.checkUnitFirstAppearance(unitType, enemyScript);
+            }
         } else {
             console.error(`EnemySpawner: Enemy script not found on ${prefabName} prefab`);
         }

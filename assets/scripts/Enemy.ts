@@ -1,5 +1,5 @@
 import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip, Animation, AnimationState } from 'cc';
-import { GameManager } from './GameManager';
+import { GameManager, GameState } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
 import { AudioManager } from './AudioManager';
@@ -31,6 +31,16 @@ export class Enemy extends Component {
 
     // 单位类型
     public unitType: UnitType = UnitType.ENEMY;
+    
+    // 单位信息属性
+    @property
+    unitName: string = "敌人";
+    
+    @property
+    unitDescription: string = "普通的敌人，攻击力和生命值较低，但数量众多。";
+    
+    @property(SpriteFrame)
+    unitIcon: SpriteFrame = null!;
 
     // 动画帧属性
     @property(SpriteFrame)
@@ -199,6 +209,22 @@ export class Enemy extends Component {
         if (this.isDestroyed) {
             this.updateAnimation(deltaTime);
             return;
+        }
+
+        // 检查游戏状态 - 如果GameManager不存在，尝试重新查找
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        
+        // 检查游戏状态，只在Playing状态下运行
+        if (this.gameManager) {
+            const gameState = this.gameManager.getGameState();
+            if (gameState !== GameState.Playing) {
+                // 游戏已结束或暂停，停止移动和攻击
+                this.stopMoving();
+                this.currentTarget = null!;
+                return;
+            }
         }
 
         // 更新攻击计时器

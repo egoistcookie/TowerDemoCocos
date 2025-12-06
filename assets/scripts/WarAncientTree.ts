@@ -1,8 +1,9 @@
 import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Sprite, SpriteFrame, Color, Graphics, UITransform, Label, EventTouch } from 'cc';
-import { GameManager } from './GameManager';
+import { GameManager, GameState } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
 import { Arrow } from './Arrow';
+import { Arrower } from './Arrower';
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
 import { SelectionManager } from './SelectionManager';
@@ -57,6 +58,16 @@ export class WarAncientTree extends Component {
 
     // 单位类型
     public unitType: UnitType = UnitType.BUILDING;
+    
+    // 单位信息属性
+    @property
+    unitName: string = "战争古树";
+    
+    @property
+    unitDescription: string = "能够生产弓箭手的建筑物，同时拥有远程攻击能力。";
+    
+    @property(SpriteFrame)
+    unitIcon: SpriteFrame = null!;
 
     // 攻击动画相关属性
     @property(SpriteFrame)
@@ -290,6 +301,21 @@ export class WarAncientTree extends Component {
             return;
         }
 
+        // 检查游戏状态 - 如果GameManager不存在，尝试重新查找
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        
+        // 检查游戏状态，只在Playing状态下运行
+        if (this.gameManager) {
+            const gameState = this.gameManager.getGameState();
+            if (gameState !== GameState.Playing) {
+                // 游戏已结束或暂停，停止所有行动
+                this.currentTarget = null!;
+                return;
+            }
+        }
+
         // 更新攻击计时器
         this.attackTimer += deltaTime;
 
@@ -379,18 +405,18 @@ export class WarAncientTree extends Component {
         let minDistance = Infinity;
 
         for (const enemy of enemies) {
-            if (enemy && enemy.active && enemy.isValid) {
-                // 获取敌人脚本，支持Enemy和OrcWarrior
-                const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
-                if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
-                    const distance = Vec3.distance(this.node.worldPosition, enemy.worldPosition);
-                    if (distance <= this.attackRange && distance < minDistance) {
-                        minDistance = distance;
-                        nearestEnemy = enemy;
+                if (enemy && enemy.active && enemy.isValid) {
+                    // 获取敌人脚本，支持Enemy、OrcWarrior和OrcWarlord
+                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
+                    if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
+                        const distance = Vec3.distance(this.node.worldPosition, enemy.worldPosition);
+                        if (distance <= this.attackRange && distance < minDistance) {
+                            minDistance = distance;
+                            nearestEnemy = enemy;
+                        }
                     }
                 }
             }
-        }
 
         this.currentTarget = nearestEnemy;
     }
@@ -405,8 +431,8 @@ export class WarAncientTree extends Component {
             return;
         }
 
-        // 获取敌人脚本，支持Enemy和OrcWarrior
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any;
+        // 获取敌人脚本，支持Enemy、OrcWarrior和OrcWarlord
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any;
         if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
             // 播放攻击动画，动画完成后才攻击
             this.playAttackAnimation(() => {
@@ -422,8 +448,8 @@ export class WarAncientTree extends Component {
             return;
         }
 
-        // 获取敌人脚本，支持Enemy和OrcWarrior
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any;
+        // 获取敌人脚本，支持Enemy、OrcWarrior和OrcWarlord
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any;
         if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
             this.currentTarget = null!;
             return;
@@ -576,7 +602,7 @@ export class WarAncientTree extends Component {
             this.currentTarget,
             this.attackDamage,
             (damage: number) => {
-                const enemyScript = this.currentTarget?.getComponent('Enemy') as any;
+                const enemyScript = this.currentTarget?.getComponent('Enemy') as any || this.currentTarget?.getComponent('OrcWarrior') as any || this.currentTarget?.getComponent('OrcWarlord') as any;
                 if (enemyScript && enemyScript.takeDamage) {
                     enemyScript.takeDamage(damage);
                 }
@@ -626,9 +652,15 @@ export class WarAncientTree extends Component {
         tower.active = true;
 
         // 设置Tower的建造成本（如果需要）
-        const towerScript = tower.getComponent('Arrower') as any;
+        const towerScript = tower.getComponent(Arrower);
         if (towerScript) {
             towerScript.buildCost = 0; // 由战争古树生产的Arrower建造成本为0
+            
+            // 检查单位是否首次出现
+            if (this.gameManager) {
+                const unitType = towerScript.unitType || 'Arrower';
+                this.gameManager.checkUnitFirstAppearance(unitType, towerScript);
+            }
         }
 
         // 添加到生产的Tower列表
@@ -879,7 +911,7 @@ export class WarAncientTree extends Component {
             const enemies = enemiesNode.children || [];
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid && enemy.active) {
-                    const enemyScript = enemy.getComponent('Enemy') as any;
+                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const distance = Vec3.distance(position, enemy.worldPosition);
                         const enemyRadius = 30;

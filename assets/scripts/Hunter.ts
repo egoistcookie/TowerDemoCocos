@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, tween, EventTouch, input, Input, resources, Sprite, SpriteFrame, Texture2D, Camera, AudioClip } from 'cc';
+import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, tween, EventTouch, input, Input, resources, Sprite, SpriteFrame, Texture2D, Camera, AudioClip, view } from 'cc';
 import { AudioManager } from './AudioManager';
 import { GameManager, GameState } from './GameManager';
 import { HealthBar } from './HealthBar';
@@ -96,6 +96,16 @@ export class Hunter extends Component {
 
     // 单位类型
     public unitType: UnitType = UnitType.CHARACTER;
+    
+    // 单位信息属性
+    @property
+    unitName: string = "女猎手";
+    
+    @property
+    unitDescription: string = "远程攻击单位，投掷回旋镖攻击敌人，回旋镖可以反弹多次。";
+    
+    @property(SpriteFrame)
+    unitIcon: SpriteFrame = null!;
 
     private currentHealth: number = 50;
     private healthBar: HealthBar = null!;
@@ -279,41 +289,13 @@ export class Hunter extends Component {
             this.findGameManager();
         }
         
-        // 检查游戏状态，如果不是Playing状态，停止攻击
-        if (this.gameManager) {
-            const gameState = this.gameManager.getGameState();
-            if (gameState !== GameState.Playing) {
-                // 游戏已结束，停止攻击
-                this.currentTarget = null!;
-                return;
-            }
-        }
-
+        // 更新攻击计时器
         this.attackTimer += deltaTime;
 
-        // 优先处理手动移动目标
-        if (this.manualMoveTarget) {
-            const distanceToManualTarget = Vec3.distance(this.node.worldPosition, this.manualMoveTarget);
-            const arrivalThreshold = 10; // 到达阈值（像素）
-            
-            if (distanceToManualTarget <= arrivalThreshold) {
-                // 到达手动移动目标，清除手动目标
-                this.manualMoveTarget = null!;
-                this.isManuallyControlled = false;
-                this.stopMoving();
-            } else {
-                // 移动到手动目标位置
-                this.moveToPosition(this.manualMoveTarget, deltaTime);
-                return; // 手动移动时，不执行自动寻敌
-            }
-        }
-
-        // 查找目标（只有在没有手动移动目标时才执行）
-        if (!this.manualMoveTarget) {
-            this.findTarget();
-        }
-
-        // 无论是否移动，都要检查碰撞（防止重叠）
+        // 检查游戏状态
+        const gameState = this.gameManager ? this.gameManager.getGameState() : GameState.Playing;
+        
+        // 无论是否在Playing状态，都要保持碰撞检测，确保单位不会重叠
         const currentPos = this.node.worldPosition.clone();
         const hasCollisionNow = this.checkCollisionAtPosition(currentPos);
         if (hasCollisionNow) {
@@ -327,51 +309,73 @@ export class Hunter extends Component {
                 this.node.setWorldPosition(finalPushPos);
             }
         }
-
-        // 处理移动和攻击逻辑
-        if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
-            const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
-            
-            if (distance <= this.attackRange) {
-                // 在攻击范围内，停止移动并攻击
-                this.stopMoving();
+        
+        // 只在Playing状态下执行攻击和移动逻辑
+        if (gameState === GameState.Playing) {
+            // 优先处理手动移动目标
+            if (this.manualMoveTarget) {
+                const distanceToManualTarget = Vec3.distance(this.node.worldPosition, this.manualMoveTarget);
+                const arrivalThreshold = 10; // 到达阈值（像素）
                 
-                // 根据敌人位置保持正确的朝向
-                const towerPos = this.node.worldPosition;
-                const enemyPos = this.currentTarget.worldPosition;
-                if (enemyPos.x < towerPos.x) {
-                    // 敌人在左侧，保持翻转
-                    this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-                    // 血条反向翻转，保持正常朝向
-                    if (this.healthBarNode && this.healthBarNode.isValid) {
-                        this.healthBarNode.setScale(-1, 1, 1);
-                    }
+                if (distanceToManualTarget <= arrivalThreshold) {
+                    // 到达手动移动目标，清除手动目标
+                    this.manualMoveTarget = null!;
+                    this.isManuallyControlled = false;
+                    this.stopMoving();
                 } else {
-                    // 敌人在右侧，保持正常朝向
-                    this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-                    // 血条正常朝向
-                    if (this.healthBarNode && this.healthBarNode.isValid) {
-                        this.healthBarNode.setScale(1, 1, 1);
-                    }
+                    // 移动到手动目标位置
+                    this.moveToPosition(this.manualMoveTarget, deltaTime);
+                    return; // 手动移动时，不执行自动寻敌
                 }
+            }
+
+            // 查找目标（只有在没有手动移动目标时才执行）
+            if (!this.manualMoveTarget) {
+                this.findTarget();
+            }
+
+            // 处理移动和攻击逻辑
+            if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
+                const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
                 
-                if (this.attackTimer >= this.attackInterval) {
-                    // 再次检查游戏状态，确保游戏仍在进行
-                    if (this.gameManager && this.gameManager.getGameState() === GameState.Playing) {
+                if (distance <= this.attackRange) {
+                    // 在攻击范围内，停止移动并攻击
+                    this.stopMoving();
+                    
+                    // 根据敌人位置保持正确的朝向
+                    const towerPos = this.node.worldPosition;
+                    const enemyPos = this.currentTarget.worldPosition;
+                    if (enemyPos.x < towerPos.x) {
+                        // 敌人在左侧，保持翻转
+                        this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+                        // 血条反向翻转，保持正常朝向
+                        if (this.healthBarNode && this.healthBarNode.isValid) {
+                            this.healthBarNode.setScale(-1, 1, 1);
+                        }
+                    } else {
+                        // 敌人在右侧，保持正常朝向
+                        this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+                        // 血条正常朝向
+                        if (this.healthBarNode && this.healthBarNode.isValid) {
+                            this.healthBarNode.setScale(1, 1, 1);
+                        }
+                    }
+                    
+                    if (this.attackTimer >= this.attackInterval) {
                         this.attack();
                         this.attackTimer = 0;
                     }
+                } else if (distance <= this.attackRange * 2) {
+                    // 在2倍攻击范围内，朝敌人移动
+                    this.moveTowardsTarget(deltaTime);
+                } else {
+                    // 超出2倍攻击范围，停止移动
+                    this.stopMoving();
                 }
-            } else if (distance <= this.attackRange * 2) {
-                // 在2倍攻击范围内，朝敌人移动
-                this.moveTowardsTarget(deltaTime);
             } else {
-                // 超出2倍攻击范围，停止移动
+                // 没有目标，停止移动
                 this.stopMoving();
             }
-        } else {
-            // 没有目标，停止移动
-            this.stopMoving();
         }
     }
 
@@ -390,6 +394,18 @@ export class Hunter extends Component {
 
         // 如果已经到达目标位置，停止移动
         if (distance <= 10) {
+            // 到达手动移动目标，清除手动目标
+            this.manualMoveTarget = null!;
+            this.isManuallyControlled = false;
+            this.stopMoving();
+            return;
+        }
+
+        // 检查目标位置是否已有单位
+        if (this.checkCollisionAtPosition(targetPos)) {
+            // 目标位置已有单位，停止移动
+            this.manualMoveTarget = null!;
+            this.isManuallyControlled = false;
             this.stopMoving();
             return;
         }
@@ -454,7 +470,7 @@ export class Hunter extends Component {
     }
 
     findTarget() {
-        console.log('Hunter: findTarget called');
+
         // 使用递归查找Enemies容器（更可靠）
         const findNodeRecursive = (node: Node, name: string): Node | null => {
             if (node.name === name) {
@@ -476,12 +492,12 @@ export class Hunter extends Component {
         }
         
         if (!enemiesNode) {
-            console.log('Hunter: Enemies node not found');
+
             this.currentTarget = null!;
             return;
         }
         
-        console.log('Hunter: Found Enemies node with', enemiesNode.children.length, 'children');
+
         const enemies = enemiesNode.children || [];
         let nearestEnemy: Node = null!;
         let minDistance = Infinity;
@@ -489,30 +505,30 @@ export class Hunter extends Component {
 
         for (const enemy of enemies) {
             if (enemy && enemy.active && enemy.isValid) {
-                console.log('Hunter: Checking enemy', enemy.name, 'at position', enemy.worldPosition);
+
                 // 获取敌人脚本，支持Enemy、OrcWarrior和OrcWarlord
-                const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('OrcWarlord') as any;
-                console.log('Hunter: Enemy script found:', !!enemyScript);
+                const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
+
                 // 检查敌人是否存活
                 if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                     const distance = Vec3.distance(this.node.worldPosition, enemy.worldPosition);
-                    console.log('Hunter: Enemy', enemy.name, 'is alive, distance:', distance, 'detectionRange:', detectionRange);
+
                     // 在2倍攻击范围内，选择最近的敌人
                     if (distance <= detectionRange && distance < minDistance) {
-                        console.log('Hunter: Setting', enemy.name, 'as nearest enemy, distance:', distance);
+
                         minDistance = distance;
                         nearestEnemy = enemy;
                     }
                 } else {
-                    console.log('Hunter: Enemy', enemy.name, 'is not alive or has no valid script');
+
                 }
             }
         }
 
         if (nearestEnemy) {
-            console.log('Hunter: Found nearest enemy:', nearestEnemy.name, 'at distance:', minDistance);
+
         } else {
-            console.log('Hunter: No enemy found in range');
+
         }
         this.currentTarget = nearestEnemy;
     }
@@ -536,6 +552,13 @@ export class Hunter extends Component {
         
         // 如果已经在攻击范围内，停止移动
         if (distance <= this.attackRange) {
+            this.stopMoving();
+            return;
+        }
+
+        // 检查目标位置是否已有单位
+        if (this.checkCollisionAtPosition(targetPos)) {
+            // 目标位置已有单位，停止移动
             this.stopMoving();
             return;
         }
@@ -615,26 +638,34 @@ export class Hunter extends Component {
     }
 
     playMoveAnimation() {
-        // 如果正在播放移动动画，不重复播放
-        if (this.isPlayingMoveAnimation) {
-            return;
-        }
+        // 重置所有相关状态，确保可以播放
+        this.isPlayingMoveAnimation = false;
+        this.isMoving = true;
 
-        // 如果没有移动动画帧，使用默认SpriteFrame
+        // 确保gameManager引用存在
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        
+        // 检查移动动画帧
         if (!this.moveAnimationFrames || this.moveAnimationFrames.length === 0) {
+            console.warn('Hunter: No move animation frames available');
             return;
         }
 
         if (!this.sprite) {
+            console.warn('Hunter: Sprite component not found');
             return;
         }
 
         // 检查帧是否有效
         const validFrames = this.moveAnimationFrames.filter(frame => frame != null);
         if (validFrames.length === 0) {
+            console.warn('Hunter: No valid move animation frames');
             return;
         }
 
+        // 设置动画播放标志
         this.isPlayingMoveAnimation = true;
 
         const frames = validFrames;
@@ -643,14 +674,24 @@ export class Hunter extends Component {
         let animationTimer = 0;
         let lastFrameIndex = -1;
 
-        // 立即播放第一帧
+        // 立即播放第一帧，确保视觉上正确
         if (frames[0]) {
             this.sprite.spriteFrame = frames[0];
             lastFrameIndex = 0;
         }
 
-        // 使用update方法逐帧播放
+        // 取消之前可能存在的动画更新，避免冲突
+        this.unscheduleAllCallbacks();
+
+        // 使用固定时间间隔更新动画，确保流畅播放
         const animationUpdate = (deltaTime: number) => {
+            // 检查是否正在播放动画
+            if (!this.isPlayingMoveAnimation) {
+                this.unschedule(animationUpdate);
+                return;
+            }
+            
+            // 检查其他停止条件
             if (!this.isMoving || !this.sprite || !this.sprite.isValid || this.isDestroyed) {
                 this.isPlayingMoveAnimation = false;
                 this.unschedule(animationUpdate);
@@ -661,19 +702,27 @@ export class Hunter extends Component {
                 return;
             }
 
-            animationTimer += deltaTime;
+            // 检查游戏状态
+            const currentGameState = this.gameManager ? this.gameManager.getGameState() : GameState.Playing;
+            
+            // 只在Playing状态下更新动画
+            if (currentGameState === GameState.Playing) {
+                animationTimer += deltaTime;
 
-            // 循环播放动画
-            const targetFrameIndex = Math.floor(animationTimer / frameDuration) % frameCount;
+                // 循环播放动画
+                const targetFrameIndex = Math.floor(animationTimer / frameDuration) % frameCount;
 
-            if (targetFrameIndex !== lastFrameIndex && frames[targetFrameIndex]) {
-                this.sprite.spriteFrame = frames[targetFrameIndex];
-                lastFrameIndex = targetFrameIndex;
+                if (targetFrameIndex !== lastFrameIndex && frames[targetFrameIndex]) {
+                    this.sprite.spriteFrame = frames[targetFrameIndex];
+                    lastFrameIndex = targetFrameIndex;
+                }
             }
         };
 
-        // 开始动画更新
-        this.schedule(animationUpdate, 0);
+        // 开始动画更新，使用较小的时间间隔确保流畅
+        this.schedule(animationUpdate, 0.016); // 约60FPS
+        
+        console.debug('Hunter: Move animation started');
     }
 
     stopMoveAnimation() {
@@ -725,27 +774,31 @@ export class Hunter extends Component {
             }
         }
 
-        // 检查与其他女猎手的碰撞
+        // 检查与所有友方单位的碰撞（包括女猎手、弓箭手等）
         const scene = this.node.scene;
         if (scene) {
-            // 递归查找所有女猎手节点
-            const findAllHunters = (node: Node) => {
-                // 检查当前节点是否是女猎手
-                const hunterScript = node.getComponent('Hunter') as any;
-                if (hunterScript && node !== this.node && node.isValid && node.active) {
-                    const towerDistance = Vec3.distance(position, node.worldPosition);
-                    // 获取另一个女猎手的碰撞半径（如果有）
-                    const otherRadius = hunterScript.collisionRadius ? hunterScript.collisionRadius : this.collisionRadius;
+            // 递归查找所有友方单位节点
+            const checkAllFriendlyUnits = (node: Node) => {
+                // 检查当前节点是否是友方单位
+                const isFriendlyUnit = 
+                    node.getComponent('Hunter') as any || 
+                    node.getComponent('Arrower') as any ||
+                    node.getComponent('WarAncientTree') as any;
+                
+                if (isFriendlyUnit && node !== this.node && node.isValid && node.active) {
+                    const unitDistance = Vec3.distance(position, node.worldPosition);
+                    // 获取另一个单位的碰撞半径（如果有）
+                    const otherRadius = isFriendlyUnit.collisionRadius ? isFriendlyUnit.collisionRadius : this.collisionRadius;
                     const minDistance = (this.collisionRadius + otherRadius) * 1.2; // 增加20%的安全距离
                     
-                    if (towerDistance < minDistance) {
+                    if (unitDistance < minDistance) {
                         return true;
                     }
                 }
                 
                 // 递归检查子节点
                 for (const child of node.children) {
-                    if (findAllHunters(child)) {
+                    if (checkAllFriendlyUnits(child)) {
                         return true;
                     }
                 }
@@ -753,7 +806,7 @@ export class Hunter extends Component {
                 return false;
             };
             
-            if (findAllHunters(scene)) {
+            if (checkAllFriendlyUnits(scene)) {
                 return true;
             }
         }
@@ -764,8 +817,8 @@ export class Hunter extends Component {
             const enemies = enemiesNode.children || [];
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid && enemy.active) {
-                    // 获取敌人脚本，支持Enemy和OrcWarrior
-                    const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
+                    // 获取敌人脚本，支持Enemy、OrcWarrior和OrcWarlord
+                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const enemyDistance = Vec3.distance(position, enemy.worldPosition);
                         const enemyRadius = 30; // 增大敌人半径
@@ -782,21 +835,48 @@ export class Hunter extends Component {
     }
 
     /**
+     * 限制位置在屏幕范围内
+     * @param position 要检查的位置
+     * @returns 限制在屏幕范围内的位置
+     */
+    clampPositionToScreen(position: Vec3): Vec3 {
+        // 使用cc.view获取屏幕尺寸和设计分辨率
+        const visibleSize = view.getVisibleSize();
+        const designResolution = view.getDesignResolutionSize();
+        
+        // 计算屏幕边界，确保单位在可见屏幕内移动
+        const minX = this.collisionRadius;
+        const maxX = designResolution.width - this.collisionRadius;
+        const minY = this.collisionRadius;
+        const maxY = designResolution.height - this.collisionRadius;
+        
+        // 限制位置在屏幕范围内
+        const clampedPos = new Vec3(position);
+        clampedPos.x = Math.max(minX, Math.min(maxX, clampedPos.x));
+        clampedPos.y = Math.max(minY, Math.min(maxY, clampedPos.y));
+        
+        return clampedPos;
+    }
+
+    /**
      * 检查碰撞并调整位置
      * @param currentPos 当前位置
      * @param newPos 新位置
      * @returns 调整后的位置
      */
     checkCollisionAndAdjust(currentPos: Vec3, newPos: Vec3): Vec3 {
+        // 首先限制在屏幕范围内
+        const clampedNewPos = this.clampPositionToScreen(newPos);
+        
         // 如果新位置没有碰撞，直接返回
-        if (!this.checkCollisionAtPosition(newPos)) {
-            return newPos;
+        if (!this.checkCollisionAtPosition(clampedNewPos)) {
+            return clampedNewPos;
         }
 
         // 如果有碰撞，尝试寻找替代路径
         const direction = new Vec3();
-        Vec3.subtract(direction, newPos, currentPos);
-        const moveDistance = Vec3.distance(currentPos, newPos);
+        Vec3.subtract(direction, clampedNewPos, currentPos);
+        const moveDistance = Vec3.distance(currentPos, clampedNewPos);
         
         if (moveDistance < 0.1) {
             // 移动距离太小，尝试推开
@@ -804,8 +884,9 @@ export class Hunter extends Component {
             if (pushDir.length() > 0.1) {
                 const pushPos = new Vec3();
                 Vec3.scaleAndAdd(pushPos, currentPos, pushDir, this.collisionRadius * 0.5);
-                if (!this.checkCollisionAtPosition(pushPos)) {
-                    return pushPos;
+                const clampedPushPos = this.clampPositionToScreen(pushPos);
+                if (!this.checkCollisionAtPosition(clampedPushPos)) {
+                    return clampedPushPos;
                 }
             }
             return currentPos;
@@ -828,9 +909,10 @@ export class Hunter extends Component {
             for (let distMultiplier = 1.0; distMultiplier >= 0.3; distMultiplier -= 0.2) {
                 const testPos = new Vec3();
                 Vec3.scaleAndAdd(testPos, currentPos, offsetDir, moveDistance * distMultiplier);
+                const clampedTestPos = this.clampPositionToScreen(testPos);
 
-                if (!this.checkCollisionAtPosition(testPos)) {
-                    return testPos;
+                if (!this.checkCollisionAtPosition(clampedTestPos)) {
+                    return clampedTestPos;
                 }
             }
         }
@@ -840,8 +922,9 @@ export class Hunter extends Component {
         if (pushDir.length() > 0.1) {
             const pushPos = new Vec3();
             Vec3.scaleAndAdd(pushPos, currentPos, pushDir, this.collisionRadius * 0.3);
-            if (!this.checkCollisionAtPosition(pushPos)) {
-                return pushPos;
+            const clampedPushPos = this.clampPositionToScreen(pushPos);
+            if (!this.checkCollisionAtPosition(clampedPushPos)) {
+                return clampedPushPos;
             }
         }
 
@@ -911,7 +994,7 @@ export class Hunter extends Component {
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid && enemy.active) {
                     // 获取敌人脚本，支持Enemy和OrcWarrior
-                    const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
+                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const enemyPos = enemy.worldPosition;
                         const distance = Vec3.distance(currentPos, enemyPos);
@@ -1023,7 +1106,7 @@ export class Hunter extends Component {
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid && enemy.active) {
                     // 获取敌人脚本，支持Enemy和OrcWarrior
-                    const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
+                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const enemyPos = enemy.worldPosition;
                         const distance = Vec3.distance(currentPos, enemyPos);
@@ -1066,15 +1149,12 @@ export class Hunter extends Component {
     }
 
     attack() {
-        console.log('Hunter: attack called, currentTarget:', this.currentTarget ? this.currentTarget.name : 'null');
         if (!this.currentTarget || this.isDestroyed) {
-            console.log('Hunter: attack aborted - no target or destroyed');
             return;
         }
 
         // 再次检查目标是否有效
         if (!this.currentTarget.isValid || !this.currentTarget.active) {
-            console.log('Hunter: attack aborted - target invalid or inactive');
             this.currentTarget = null!;
             return;
         }
@@ -1082,19 +1162,15 @@ export class Hunter extends Component {
         // 攻击时停止移动
         this.stopMoving();
 
-        // 获取敌人脚本，支持Enemy、OrcWarrior和OrcWarlord
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any;
-        console.log('Hunter: attack - enemyScript found:', !!enemyScript);
+        // 获取敌人脚本，支持OrcWarlord、OrcWarrior和Enemy
+        const enemyScript = this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('Enemy') as any;
         if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
-            console.log('Hunter: attack - enemy is alive, playing attack animation');
-            // 播放攻击动画，动画完成后才射出弓箭
+            // 播放攻击动画，动画完成后才射出回旋镖
             this.playAttackAnimation(() => {
-                console.log('Hunter: attack animation completed, executing attack');
-                // 动画播放完成后的回调，在这里创建弓箭
+                // 动画播放完成后的回调，在这里创建回旋镖
                 this.executeAttack();
             });
         } else {
-            console.log('Hunter: attack aborted - enemy not alive');
             // 目标已死亡，清除目标
             this.currentTarget = null!;
         }
@@ -1106,19 +1182,19 @@ export class Hunter extends Component {
             return;
         }
 
-        // 获取敌人脚本，支持Enemy、OrcWarrior和OrcWarlord
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any;
+        // 获取敌人脚本，支持OrcWarlord、OrcWarrior和Enemy
+        const enemyScript = this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('Enemy') as any;
         if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
             this.currentTarget = null!;
             return;
         }
 
-        // 创建回旋镖特效（抛物线轨迹）
-        if (this.arrowPrefab) {
-            this.createBoomerang();
-        } else if (this.bulletPrefab) {
-            // 如果没有回旋镖预制体，使用旧的子弹系统
+        // 优先使用子弹预制体（如果存在），直接造成伤害
+        if (this.bulletPrefab) {
             this.createBullet();
+        } else if (this.arrowPrefab) {
+            // 如果子弹预制体不存在，使用弓箭预制体
+            this.createArrow();
         } else {
             // 直接伤害（无特效）
             if (enemyScript.takeDamage) {
@@ -1130,22 +1206,35 @@ export class Hunter extends Component {
     playAttackAnimation(onComplete?: () => void) {
         // 如果正在播放动画，不重复播放
         if (this.isPlayingAttackAnimation) {
+            // 如果已经在播放动画，直接调用回调
+            if (onComplete) {
+                onComplete();
+            }
             return;
         }
 
-        // 如果没有Sprite组件或没有动画帧，直接返回
+        // 如果没有Sprite组件或没有动画帧，直接调用回调
         if (!this.sprite) {
+            if (onComplete) {
+                onComplete();
+            }
             return;
         }
 
-        // 如果没有设置动画帧，直接返回
+        // 如果没有设置动画帧，直接调用回调
         if (!this.attackAnimationFrames || this.attackAnimationFrames.length === 0) {
+            if (onComplete) {
+                onComplete();
+            }
             return;
         }
 
         // 检查帧是否有效
         const validFrames = this.attackAnimationFrames.filter(frame => frame != null);
         if (validFrames.length === 0) {
+            if (onComplete) {
+                onComplete();
+            }
             return;
         }
 
@@ -1235,18 +1324,23 @@ export class Hunter extends Component {
     }
 
     restoreDefaultSprite() {
+        // 重置所有动画标志，确保可以重新播放动画
+        this.isPlayingMoveAnimation = false;
+        this.isPlayingAttackAnimation = false;
+        
         // 恢复默认SpriteFrame
         if (this.sprite && this.sprite.isValid && this.defaultSpriteFrame) {
             this.sprite.spriteFrame = this.defaultSpriteFrame;
         }
+        
         // 恢复血条的正常朝向
         if (this.healthBarNode && this.healthBarNode.isValid) {
             this.healthBarNode.setScale(1, 1, 1);
         }
-        this.isPlayingAttackAnimation = false;
         
-        // 如果正在移动，恢复移动动画
-        if (this.isMoving) {
+        // 检查游戏状态，如果是Playing状态且正在移动，确保移动动画能够播放
+        const gameState = this.gameManager ? this.gameManager.getGameState() : GameState.Playing;
+        if (this.isMoving && gameState === GameState.Playing) {
             this.playMoveAnimation();
         }
     }
@@ -1276,7 +1370,7 @@ export class Hunter extends Component {
         this.currentAnimationFrameIndex = -1;
         
         // 立即播放第一帧
-        if (this.hitAnimationFrames.length > 0 && this.hitAnimationFrames[0]) {
+        if (this.sprite && this.hitAnimationFrames.length > 0 && this.hitAnimationFrames[0]) {
             this.sprite.spriteFrame = this.hitAnimationFrames[0];
             this.currentAnimationFrameIndex = 0;
         }
@@ -1299,7 +1393,7 @@ export class Hunter extends Component {
         this.currentAnimationFrameIndex = -1;
         
         // 立即播放第一帧
-        if (this.deathAnimationFrames.length > 0 && this.deathAnimationFrames[0]) {
+        if (this.sprite && this.deathAnimationFrames.length > 0 && this.deathAnimationFrames[0]) {
             this.sprite.spriteFrame = this.deathAnimationFrames[0];
             this.currentAnimationFrameIndex = 0;
         }
@@ -1356,7 +1450,7 @@ export class Hunter extends Component {
      * 更新死亡动画
      */
     updateDeathAnimation(deltaTime: number) {
-        if (!this.sprite || !this.sprite.isValid || this.isDestroyed) {
+        if (!this.sprite || !this.sprite.isValid) {
             this.isPlayingDeathAnimation = false;
             this.unschedule(this.updateDeathAnimation);
             return;
@@ -1375,22 +1469,39 @@ export class Hunter extends Component {
         const frameDuration = this.deathAnimationDuration / frameCount;
         const targetFrameIndex = Math.min(Math.floor(this.animationTimer / frameDuration), frameCount - 1);
         
+        // 更新到当前帧（只在帧变化时更新）
+        if (targetFrameIndex !== this.currentAnimationFrameIndex && this.deathAnimationFrames[targetFrameIndex]) {
+            this.sprite.spriteFrame = this.deathAnimationFrames[targetFrameIndex];
+            this.currentAnimationFrameIndex = targetFrameIndex;
+            
+            // 解决最后三帧人物被拉高的问题
+            // 最后三帧人物只在图片下半部分
+            // 使用sprite的缩放而不是改变节点位置，避免节点回到原点
+            if (frameCount >= 3) {
+                if (targetFrameIndex >= frameCount - 3) { // 最后三帧（包括最后一帧）
+                    // 调整sprite的Y轴缩放，使人物保持在正确位置
+                    this.sprite.node.setScale(1, 0.8); // Y轴缩小到80%，可根据实际情况调整
+                } else {
+                    // 其他帧恢复正常比例
+                    this.sprite.node.setScale(1, 1);
+                }
+            }
+        }
+        
         // 检查动画是否完成
         if (this.animationTimer >= this.deathAnimationDuration) {
             // 确保播放最后一帧
             if (this.currentAnimationFrameIndex < frameCount - 1 && this.deathAnimationFrames[frameCount - 1]) {
                 this.sprite.spriteFrame = this.deathAnimationFrames[frameCount - 1];
+                // 最后一帧也要调整比例
+                if (frameCount >= 3) {
+                    this.sprite.node.setScale(1, 0.8); // Y轴缩小到80%
+                }
             }
             // 死亡动画播放完成，不再恢复
             this.isPlayingDeathAnimation = false;
             this.unschedule(this.updateDeathAnimation);
             return;
-        }
-        
-        // 更新到当前帧（只在帧变化时更新）
-        if (targetFrameIndex !== this.currentAnimationFrameIndex && this.deathAnimationFrames[targetFrameIndex]) {
-            this.sprite.spriteFrame = this.deathAnimationFrames[targetFrameIndex];
-            this.currentAnimationFrameIndex = targetFrameIndex;
         }
     }
     
@@ -1413,90 +1524,7 @@ export class Hunter extends Component {
         }
     }
 
-    createLaserEffect(targetPos: Vec3) {
-        // 创建激光效果节点
-        const laserNode = new Node('Laser');
-        
-        // 将激光节点添加到Canvas或场景根节点，确保在最上层显示
-        const canvas = find('Canvas');
-        if (canvas) {
-            laserNode.setParent(canvas);
-            // 如果添加到Canvas，需要UITransform组件
-            const uiTransform = laserNode.addComponent(UITransform);
-            if (uiTransform) {
-                // 设置足够大的内容区域，确保激光线不会被裁剪
-                uiTransform.setContentSize(2000, 2000);
-            }
-        } else {
-            const scene = this.node.scene;
-            if (scene) {
-                laserNode.setParent(scene);
-            } else {
-                laserNode.setParent(this.node.parent);
-            }
-        }
-        
-        // 设置激光节点的世界位置为防御塔位置
-        laserNode.setWorldPosition(this.node.worldPosition);
-        
-        // 添加Graphics组件用于绘制激光
-        const graphics = laserNode.addComponent(Graphics);
-        if (graphics) {
-            // 设置激光颜色为亮红色，更醒目
-            graphics.strokeColor.set(255, 0, 0, 255); // 纯红色，更明显
-            graphics.lineWidth = 6; // 加粗，更容易看到
-            
-            // 计算起点和终点（本地坐标）
-            const fromPos = new Vec3(0, 0, 0); // 本地坐标原点
-            const toPos = new Vec3();
-            // 将目标位置转换为激光节点的本地坐标
-            Vec3.subtract(toPos, targetPos, laserNode.worldPosition);
-            
-            // 绘制激光线
-            graphics.moveTo(fromPos.x, fromPos.y);
-            graphics.lineTo(toPos.x, toPos.y);
-            graphics.stroke();
-            
-            // 添加渐隐效果
-            const startAlpha = 255;
-            const fadeDuration = 0.2; // 稍微延长显示时间
-            const fadeTimer = 0.02; // 每帧更新间隔
-            
-            let elapsed = 0;
-            const fadeUpdate = () => {
-                elapsed += fadeTimer;
-                if (elapsed < fadeDuration && laserNode && laserNode.isValid && graphics) {
-                    const alpha = Math.floor(startAlpha * (1 - elapsed / fadeDuration));
-                    // Color对象的属性是只读的，需要clone后修改
-                    const fadeColor = graphics.strokeColor.clone();
-                    fadeColor.a = alpha;
-                    graphics.strokeColor = fadeColor;
-                    graphics.clear();
-                    graphics.moveTo(fromPos.x, fromPos.y);
-                    graphics.lineTo(toPos.x, toPos.y);
-                    graphics.stroke();
-                    this.scheduleOnce(fadeUpdate, fadeTimer);
-                } else {
-                    // 渐隐完成，销毁节点
-                    if (laserNode && laserNode.isValid) {
-                        laserNode.destroy();
-                    }
-                }
-            };
-            
-            // 开始渐隐
-            this.scheduleOnce(fadeUpdate, fadeTimer);
-            
-            // 备用：如果渐隐失败，0.3秒后强制销毁
-            this.scheduleOnce(() => {
-                if (laserNode && laserNode.isValid) {
-                    laserNode.destroy();
-                }
-            }, 0.3);
-        }
-    }
-
-    createBoomerang() {
+    createArrow() {
         if (!this.arrowPrefab || !this.currentTarget) {
             return;
         }
@@ -1506,33 +1534,33 @@ export class Hunter extends Component {
             return;
         }
 
-        // 创建回旋镖节点
-        const boomerang = instantiate(this.arrowPrefab);
+        // 创建箭头节点
+        const arrow = instantiate(this.arrowPrefab);
         
         // 设置父节点（添加到场景或Canvas）
         const canvas = find('Canvas');
         const scene = this.node.scene;
         const parentNode = canvas || scene || this.node.parent;
         if (parentNode) {
-            boomerang.setParent(parentNode);
+            arrow.setParent(parentNode);
         } else {
-            boomerang.setParent(this.node.parent);
+            arrow.setParent(this.node.parent);
         }
 
         // 设置初始位置（女猎手位置）
         const startPos = this.node.worldPosition.clone();
-        boomerang.setWorldPosition(startPos);
+        arrow.setWorldPosition(startPos);
 
         // 确保节点激活
-        boomerang.active = true;
+        arrow.active = true;
 
-        // 获取或添加Boomerang组件
-        let boomerangScript = boomerang.getComponent(Boomerang);
-        if (!boomerangScript) {
-            boomerangScript = boomerang.addComponent(Boomerang);
+        // 获取或添加Arrow组件
+        let arrowScript = arrow.getComponent('Arrow') as any;
+        if (!arrowScript) {
+            arrowScript = arrow.addComponent('Arrow') as any;
         }
 
-        // 播放回旋镖射出音效
+        // 播放箭矢射出音效
         if (this.shootSound && AudioManager.Instance) {
             AudioManager.Instance.playSFX(this.shootSound);
         }
@@ -1540,29 +1568,28 @@ export class Hunter extends Component {
         // 保存当前目标的引用，避免回调函数中引用失效的目标
         const targetNode = this.currentTarget;
         
-        // 初始化回旋镖，设置命中回调
-        boomerangScript.init(
+        // 初始化箭头，设置命中回调
+        arrowScript.init(
             startPos,
             targetNode,
             this.attackDamage,
             (damage: number) => {
-                // 播放回旋镖击中音效
+                // 播放箭矢击中音效
                 if (this.hitSound) {
                     AudioManager.Instance?.playSFX(this.hitSound);
                 }
                 
                 // 检查目标是否仍然有效
                 if (targetNode && targetNode.isValid && targetNode.active) {
-                    // 支持Enemy和OrcWarrior
-                    const enemyScript = targetNode.getComponent('Enemy') as any || targetNode.getComponent('OrcWarrior') as any;
+                    // 支持Enemy、OrcWarrior和OrcWarlord
+                    const enemyScript = targetNode.getComponent('Enemy') as any || targetNode.getComponent('OrcWarrior') as any || targetNode.getComponent('OrcWarlord') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         if (enemyScript.takeDamage) {
                             enemyScript.takeDamage(damage);
                         }
                     }
                 }
-            },
-            this.node // 传递女猎手节点作为ownerNode，用于回旋镖返回
+            }
         );
     }
 
@@ -1571,28 +1598,17 @@ export class Hunter extends Component {
             return;
         }
 
-        const bullet = instantiate(this.bulletPrefab);
-        bullet.setParent(this.node.parent);
-        bullet.setWorldPosition(this.node.worldPosition);
-
-        // 简单的子弹移动逻辑（可以创建Bullet脚本）
-        const direction = new Vec3();
-        Vec3.subtract(direction, this.currentTarget.worldPosition, this.node.worldPosition);
-        direction.normalize();
-
-        // 直接造成伤害（简化处理）
-        // 获取敌人脚本，支持Enemy和OrcWarrior
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any;
-        if (enemyScript && enemyScript.takeDamage) {
-            enemyScript.takeDamage(this.attackDamage);
+        // 检查目标是否有效
+        if (!this.currentTarget.isValid || !this.currentTarget.active) {
+            return;
         }
 
-        // 销毁子弹
-        this.scheduleOnce(() => {
-            if (bullet && bullet.isValid) {
-                bullet.destroy();
-            }
-        }, 0.1);
+        // 获取敌人脚本，支持OrcWarlord、OrcWarrior和Enemy
+        const enemyScript = this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('Enemy') as any;
+        if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
+            // 直接造成伤害（简化处理）
+            enemyScript.takeDamage(this.attackDamage);
+        }
     }
 
     takeDamage(damage: number) {
@@ -1988,13 +2004,13 @@ export class Hunter extends Component {
         // 查找Camera节点
         const cameraNode = find('Canvas/Camera') || this.node.scene?.getChildByName('Camera');
         if (!cameraNode) {
-            console.error('Hunter: Camera node not found!');
+
             return;
         }
         
         const camera = cameraNode.getComponent(Camera);
         if (!camera) {
-            console.error('Hunter: Camera component not found!');
+
             return;
         }
         
@@ -2126,7 +2142,7 @@ export class Hunter extends Component {
             const enemies = enemiesNode.children || [];
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid && enemy.active) {
-                    const enemyScript = enemy.getComponent('Enemy') as any;
+                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const distance = Vec3.distance(position, enemy.worldPosition);
                         const enemyRadius = 30;

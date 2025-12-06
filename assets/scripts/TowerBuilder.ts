@@ -1,8 +1,12 @@
-import { _decorator, Component, Node, Prefab, instantiate, Vec3, EventTouch, input, Input, Camera, find, view, UITransform, SpriteFrame, Graphics, Color } from 'cc';
+import { _decorator, Component, Node, Prefab, instantiate, Vec3, EventTouch, input, Input, Camera, find, view, UITransform, SpriteFrame, Graphics, Color, director } from 'cc';
 import { GameManager } from './GameManager';
 import { BuildingSelectionPanel, BuildingType } from './BuildingSelectionPanel';
 import { GamePopup } from './GamePopup';
 import { UnitSelectionManager } from './UnitSelectionManager';
+import { WarAncientTree } from './WarAncientTree';
+import { MoonWell } from './MoonWell';
+import { Tree } from './Tree';
+import { HunterHall } from './HunterHall';
 const { ccclass, property } = _decorator;
 
 @ccclass('TowerBuilder')
@@ -322,6 +326,7 @@ export class TowerBuilder extends Component {
         if (gmNode) {
             this.gameManager = gmNode.getComponent(GameManager);
             if (this.gameManager) {
+                console.info('TowerBuilder: Found GameManager by name');
                 return;
             }
         }
@@ -339,7 +344,43 @@ export class TowerBuilder extends Component {
                 return null;
             };
             this.gameManager = findInScene(scene, GameManager);
+            if (this.gameManager) {
+                console.info('TowerBuilder: Found GameManager recursively');
+                return;
+            }
         }
+        
+        // 方法3: 查找所有GameManager组件
+        const sceneNodes = director.getScene()?.children || [];
+        for (const child of sceneNodes) {
+            this.gameManager = child.getComponent(GameManager);
+            if (this.gameManager) {
+                console.info('TowerBuilder: Found GameManager by checking scene children');
+                return;
+            }
+        }
+        
+        // 方法4: 查找Canvas节点下的GameManager
+        const canvas = find('Canvas');
+        if (canvas) {
+            this.gameManager = canvas.getComponent(GameManager);
+            if (this.gameManager) {
+                console.info('TowerBuilder: Found GameManager on Canvas');
+                return;
+            }
+            
+            // 查找Canvas的子节点
+            for (const child of canvas.children) {
+                this.gameManager = child.getComponent(GameManager);
+                if (this.gameManager) {
+                    console.info('TowerBuilder: Found GameManager in Canvas children');
+                    return;
+                }
+            }
+        }
+        
+        // 如果还是找不到，输出警告
+        console.warn('TowerBuilder: GameManager not found!');
     }
 
     enableBuildingMode() {
@@ -597,10 +638,16 @@ export class TowerBuilder extends Component {
         tree.setScale(1, 1, 1);
         tree.setWorldPosition(worldPosition);
 
-        // 设置建造成本
-        const treeScript = tree.getComponent('WarAncientTree') as any;
+        // 设置建造成本并检查首次出现
+        const treeScript = tree.getComponent(WarAncientTree);
         if (treeScript) {
             treeScript.buildCost = this.towerCost;
+            
+            // 检查单位是否首次出现
+            if (this.gameManager) {
+                const unitType = treeScript.unitType || 'WarAncientTree';
+                this.gameManager.checkUnitFirstAppearance(unitType, treeScript);
+            }
         }
 
         console.debug('TowerBuilder.buildWarAncientTree: Built at', worldPosition);
@@ -637,12 +684,18 @@ export class TowerBuilder extends Component {
         well.setWorldPosition(worldPosition);
 
         // 设置建造成本并增加人口上限
-        const wellScript = well.getComponent('MoonWell') as any;
+        const wellScript = well.getComponent(MoonWell);
         if (wellScript) {
             wellScript.buildCost = this.moonWellCost;
             // 调用月亮井的方法来增加人口上限
             if (wellScript.increasePopulationLimit) {
                 wellScript.increasePopulationLimit();
+            }
+            
+            // 检查单位是否首次出现
+            if (this.gameManager) {
+                const unitType = wellScript.unitType || 'MoonWell';
+                this.gameManager.checkUnitFirstAppearance(unitType, wellScript);
             }
         }
 
@@ -679,10 +732,16 @@ export class TowerBuilder extends Component {
         tree.setScale(1, 1, 1);
         tree.setWorldPosition(worldPosition);
 
-        // 设置建造成本
-        const treeScript = tree.getComponent('Tree') as any;
+        // 设置建造成本并检查首次出现
+        const treeScript = tree.getComponent(Tree);
         if (treeScript) {
             treeScript.buildCost = this.treeCost;
+            
+            // 检查单位是否首次出现
+            if (this.gameManager) {
+                const unitType = treeScript.unitType || 'Tree';
+                this.gameManager.checkUnitFirstAppearance(unitType, treeScript);
+            }
         }
 
         console.debug('TowerBuilder.buildTree: Built at', worldPosition);
@@ -718,10 +777,16 @@ export class TowerBuilder extends Component {
         hall.setScale(1, 1, 1);
         hall.setWorldPosition(worldPosition);
 
-        // 设置建造成本
-        const hallScript = hall.getComponent('HunterHall') as any;
+        // 设置建造成本并检查首次出现
+        const hallScript = hall.getComponent(HunterHall);
         if (hallScript) {
             hallScript.buildCost = this.hunterHallCost;
+            
+            // 检查单位是否首次出现
+            if (this.gameManager) {
+                const unitType = hallScript.unitType || 'HunterHall';
+                this.gameManager.checkUnitFirstAppearance(unitType, hallScript);
+            }
         }
 
         console.debug('TowerBuilder.buildHunterHall: Built at', worldPosition);

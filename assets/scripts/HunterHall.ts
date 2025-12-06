@@ -1,5 +1,5 @@
 import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Sprite, SpriteFrame, Color, Graphics, UITransform, Label, EventTouch } from 'cc';
-import { GameManager } from './GameManager';
+import { GameManager, GameState } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
 import { UnitSelectionManager } from './UnitSelectionManager';
@@ -36,6 +36,16 @@ export class HunterHall extends Component {
 
     // 单位类型
     public unitType: UnitType = UnitType.BUILDING;
+    
+    // 单位信息属性
+    @property
+    unitName: string = "猎手大厅";
+    
+    @property
+    unitDescription: string = "能够生产女猎手的建筑物，提供强大的远程攻击单位。";
+    
+    @property(SpriteFrame)
+    unitIcon: SpriteFrame = null!;
 
     // 生产相关属性
     @property
@@ -256,6 +266,15 @@ export class HunterHall extends Component {
             return;
         }
 
+        // 检查游戏状态，如果不是Playing状态，停止生产
+        if (this.gameManager) {
+            const gameState = this.gameManager.getGameState();
+            if (gameState !== GameState.Playing) {
+                // 游戏已结束或暂停，停止生产
+                return;
+            }
+        }
+
         // 清理已死亡的Hunter
         this.cleanupDeadHunters();
 
@@ -337,12 +356,6 @@ export class HunterHall extends Component {
         hunter.setWorldPosition(spawnPos);
         hunter.active = true;
 
-        // 设置Hunter的建造成本（如果需要）
-        const hunterScript = hunter.getComponent('Hunter') as any;
-        if (hunterScript) {
-            hunterScript.buildCost = 0; // 由猎手大厅生产的Hunter建造成本为0
-        }
-
         // 添加到生产的Hunter列表
         this.producedHunters.push(hunter);
 
@@ -359,8 +372,12 @@ export class HunterHall extends Component {
             spawnPos.z
         );
 
-        // 让Hunter移动到目标位置
+        // 设置Hunter的建造成本（如果需要）
+        const hunterScript = hunter.getComponent('Hunter') as any;
         if (hunterScript) {
+            hunterScript.buildCost = 0; // 由猎手大厅生产的Hunter建造成本为0
+            
+            // 让Hunter移动到目标位置（先设置移动目标，再显示单位介绍）
             // 使用schedule在下一帧开始移动，确保Hunter已完全初始化
             this.scheduleOnce(() => {
                 if (hunter && hunter.isValid && hunterScript) {
@@ -392,7 +409,13 @@ export class HunterHall extends Component {
                         this.schedule(moveUpdate, 0);
                     }
                 }
-            }, 0.1);
+            }, 0.05);
+            
+            // 检查单位是否首次出现（在设置移动目标后显示单位介绍）
+            if (this.gameManager) {
+                const unitType = hunterScript.unitType || 'Hunter';
+                this.gameManager.checkUnitFirstAppearance(unitType, hunterScript);
+            }
         }
 
         console.debug(`HunterHall: Produced hunter ${this.producedHunters.length}/${this.maxHunterCount} at position (${spawnPos.x.toFixed(2)}, ${spawnPos.y.toFixed(2)})`);

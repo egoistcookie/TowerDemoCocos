@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, tween, EventTouch, input, Input, resources, Sprite, SpriteFrame, Texture2D, Camera, AudioClip } from 'cc';
+import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, tween, EventTouch, input, Input, resources, Sprite, SpriteFrame, Texture2D, Camera, AudioClip, view } from 'cc';
 import { AudioManager } from './AudioManager';
 import { GameManager, GameState } from './GameManager';
 import { HealthBar } from './HealthBar';
@@ -96,6 +96,16 @@ export class Arrower extends Component {
 
     // 单位类型
     public unitType: UnitType = UnitType.CHARACTER;
+    
+    // 单位信息属性
+    @property
+    unitName: string = "弓箭手";
+    
+    @property
+    unitDescription: string = "远程攻击单位，能够攻击远处的敌人，射速较快。";
+    
+    @property(SpriteFrame)
+    unitIcon: SpriteFrame = null!;
 
     private currentHealth: number = 50;
     private healthBar: HealthBar = null!;
@@ -279,11 +289,11 @@ export class Arrower extends Component {
             this.findGameManager();
         }
         
-        // 检查游戏状态，如果不是Playing状态，停止攻击
+        // 检查游戏状态，只在Playing状态下运行
         if (this.gameManager) {
             const gameState = this.gameManager.getGameState();
             if (gameState !== GameState.Playing) {
-                // 游戏已结束，停止攻击
+                // 游戏已结束或暂停，停止攻击和移动
                 this.currentTarget = null!;
                 return;
             }
@@ -467,7 +477,7 @@ export class Arrower extends Component {
         for (const enemy of enemies) {
             if (enemy && enemy.active && enemy.isValid) {
                 // 获取敌人脚本，支持Enemy、OrcWarrior和OrcWarlord
-                const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('OrcWarlord') as any;
+                const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
                 // 检查敌人是否存活
                 if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                     const distance = Vec3.distance(this.node.worldPosition, enemy.worldPosition);
@@ -753,7 +763,7 @@ export class Arrower extends Component {
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid && enemy.active) {
                     // 获取敌人脚本，支持Enemy和OrcWarrior
-                    const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
+                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const enemyDistance = Vec3.distance(position, enemy.worldPosition);
                         const enemyRadius = 30; // 增大敌人半径
@@ -770,21 +780,48 @@ export class Arrower extends Component {
     }
 
     /**
+     * 限制位置在屏幕范围内
+     * @param position 要检查的位置
+     * @returns 限制在屏幕范围内的位置
+     */
+    clampPositionToScreen(position: Vec3): Vec3 {
+        // 使用cc.view获取屏幕尺寸和设计分辨率
+        const visibleSize = view.getVisibleSize();
+        const designResolution = view.getDesignResolutionSize();
+        
+        // 计算屏幕边界，确保单位在可见屏幕内移动
+        const minX = this.collisionRadius;
+        const maxX = designResolution.width - this.collisionRadius;
+        const minY = this.collisionRadius;
+        const maxY = designResolution.height - this.collisionRadius;
+        
+        // 限制位置在屏幕范围内
+        const clampedPos = new Vec3(position);
+        clampedPos.x = Math.max(minX, Math.min(maxX, clampedPos.x));
+        clampedPos.y = Math.max(minY, Math.min(maxY, clampedPos.y));
+        
+        return clampedPos;
+    }
+
+    /**
      * 检查碰撞并调整位置
      * @param currentPos 当前位置
      * @param newPos 新位置
      * @returns 调整后的位置
      */
     checkCollisionAndAdjust(currentPos: Vec3, newPos: Vec3): Vec3 {
+        // 首先限制在屏幕范围内
+        const clampedNewPos = this.clampPositionToScreen(newPos);
+        
         // 如果新位置没有碰撞，直接返回
-        if (!this.checkCollisionAtPosition(newPos)) {
-            return newPos;
+        if (!this.checkCollisionAtPosition(clampedNewPos)) {
+            return clampedNewPos;
         }
 
         // 如果有碰撞，尝试寻找替代路径
         const direction = new Vec3();
-        Vec3.subtract(direction, newPos, currentPos);
-        const moveDistance = Vec3.distance(currentPos, newPos);
+        Vec3.subtract(direction, clampedNewPos, currentPos);
+        const moveDistance = Vec3.distance(currentPos, clampedNewPos);
         
         if (moveDistance < 0.1) {
             // 移动距离太小，尝试推开
@@ -792,8 +829,9 @@ export class Arrower extends Component {
             if (pushDir.length() > 0.1) {
                 const pushPos = new Vec3();
                 Vec3.scaleAndAdd(pushPos, currentPos, pushDir, this.collisionRadius * 0.5);
-                if (!this.checkCollisionAtPosition(pushPos)) {
-                    return pushPos;
+                const clampedPushPos = this.clampPositionToScreen(pushPos);
+                if (!this.checkCollisionAtPosition(clampedPushPos)) {
+                    return clampedPushPos;
                 }
             }
             return currentPos;
@@ -816,9 +854,10 @@ export class Arrower extends Component {
             for (let distMultiplier = 1.0; distMultiplier >= 0.3; distMultiplier -= 0.2) {
                 const testPos = new Vec3();
                 Vec3.scaleAndAdd(testPos, currentPos, offsetDir, moveDistance * distMultiplier);
+                const clampedTestPos = this.clampPositionToScreen(testPos);
 
-                if (!this.checkCollisionAtPosition(testPos)) {
-                    return testPos;
+                if (!this.checkCollisionAtPosition(clampedTestPos)) {
+                    return clampedTestPos;
                 }
             }
         }
@@ -828,8 +867,9 @@ export class Arrower extends Component {
         if (pushDir.length() > 0.1) {
             const pushPos = new Vec3();
             Vec3.scaleAndAdd(pushPos, currentPos, pushDir, this.collisionRadius * 0.3);
-            if (!this.checkCollisionAtPosition(pushPos)) {
-                return pushPos;
+            const clampedPushPos = this.clampPositionToScreen(pushPos);
+            if (!this.checkCollisionAtPosition(clampedPushPos)) {
+                return clampedPushPos;
             }
         }
 
@@ -899,7 +939,7 @@ export class Arrower extends Component {
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid && enemy.active) {
                     // 获取敌人脚本，支持Enemy和OrcWarrior
-                    const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
+                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const enemyPos = enemy.worldPosition;
                         const distance = Vec3.distance(currentPos, enemyPos);
@@ -1003,7 +1043,7 @@ export class Arrower extends Component {
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid && enemy.active) {
                     // 获取敌人脚本，支持Enemy和OrcWarrior
-                    const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
+                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const enemyPos = enemy.worldPosition;
                         const distance = Vec3.distance(currentPos, enemyPos);
@@ -1253,7 +1293,7 @@ export class Arrower extends Component {
         this.currentAnimationFrameIndex = -1;
         
         // 立即播放第一帧
-        if (this.hitAnimationFrames.length > 0 && this.hitAnimationFrames[0]) {
+        if (this.sprite && this.hitAnimationFrames.length > 0 && this.hitAnimationFrames[0]) {
             this.sprite.spriteFrame = this.hitAnimationFrames[0];
             this.currentAnimationFrameIndex = 0;
         }
@@ -1276,7 +1316,7 @@ export class Arrower extends Component {
         this.currentAnimationFrameIndex = -1;
         
         // 立即播放第一帧
-        if (this.deathAnimationFrames.length > 0 && this.deathAnimationFrames[0]) {
+        if (this.sprite && this.deathAnimationFrames.length > 0 && this.deathAnimationFrames[0]) {
             this.sprite.spriteFrame = this.deathAnimationFrames[0];
             this.currentAnimationFrameIndex = 0;
         }
@@ -1333,7 +1373,7 @@ export class Arrower extends Component {
      * 更新死亡动画
      */
     updateDeathAnimation(deltaTime: number) {
-        if (!this.sprite || !this.sprite.isValid || this.isDestroyed) {
+        if (!this.sprite || !this.sprite.isValid) {
             this.isPlayingDeathAnimation = false;
             this.unschedule(this.updateDeathAnimation);
             return;
@@ -1352,22 +1392,45 @@ export class Arrower extends Component {
         const frameDuration = this.deathAnimationDuration / frameCount;
         const targetFrameIndex = Math.min(Math.floor(this.animationTimer / frameDuration), frameCount - 1);
         
+        // 更新到当前帧（只在帧变化时更新）
+        if (targetFrameIndex !== this.currentAnimationFrameIndex && this.deathAnimationFrames[targetFrameIndex]) {
+            this.sprite.spriteFrame = this.deathAnimationFrames[targetFrameIndex];
+            this.currentAnimationFrameIndex = targetFrameIndex;
+            
+            // 解决最后两张帧人物被拉高的问题
+            // 最后两张帧（索引3和4，从0开始计数）人物只在图片下半部分
+            // 使用sprite的偏移而不是改变节点位置，避免节点回到原点
+            if (frameCount >= 5) {
+                if (targetFrameIndex === frameCount - 2 || targetFrameIndex === frameCount - 1) {
+                    // 调整sprite的offset来补偿人物位置，而不是改变整个节点位置
+                    if (this.sprite.spriteFrame) {
+                        // 向下调整精灵的Y轴偏移，使人物保持在正确位置
+                        const spriteFrame = this.sprite.spriteFrame;
+                        // 注意：在Cocos Creator中，SpriteFrame的offset是只读的，所以我们需要通过调整节点的scaleY或者使用其他方式
+                        // 这里使用调整节点scaleY的方式，只针对Y轴进行压缩
+                        this.sprite.node.setScale(1, 0.8); // Y轴缩小到80%，可根据实际情况调整
+                    }
+                } else {
+                    // 其他帧恢复正常比例
+                    this.sprite.node.setScale(1, 1);
+                }
+            }
+        }
+        
         // 检查动画是否完成
         if (this.animationTimer >= this.deathAnimationDuration) {
             // 确保播放最后一帧
             if (this.currentAnimationFrameIndex < frameCount - 1 && this.deathAnimationFrames[frameCount - 1]) {
                 this.sprite.spriteFrame = this.deathAnimationFrames[frameCount - 1];
+                // 最后一帧也要调整比例
+                if (frameCount >= 5) {
+                    this.sprite.node.setScale(1, 0.8); // Y轴缩小到80%
+                }
             }
             // 死亡动画播放完成，不再恢复
             this.isPlayingDeathAnimation = false;
             this.unschedule(this.updateDeathAnimation);
             return;
-        }
-        
-        // 更新到当前帧（只在帧变化时更新）
-        if (targetFrameIndex !== this.currentAnimationFrameIndex && this.deathAnimationFrames[targetFrameIndex]) {
-            this.sprite.spriteFrame = this.deathAnimationFrames[targetFrameIndex];
-            this.currentAnimationFrameIndex = targetFrameIndex;
         }
     }
     
@@ -1387,89 +1450,6 @@ export class Arrower extends Component {
                 // 否则恢复默认SpriteFrame
                 this.restoreDefaultSprite();
             }
-        }
-    }
-
-    createLaserEffect(targetPos: Vec3) {
-        // 创建激光效果节点
-        const laserNode = new Node('Laser');
-        
-        // 将激光节点添加到Canvas或场景根节点，确保在最上层显示
-        const canvas = find('Canvas');
-        if (canvas) {
-            laserNode.setParent(canvas);
-            // 如果添加到Canvas，需要UITransform组件
-            const uiTransform = laserNode.addComponent(UITransform);
-            if (uiTransform) {
-                // 设置足够大的内容区域，确保激光线不会被裁剪
-                uiTransform.setContentSize(2000, 2000);
-            }
-        } else {
-            const scene = this.node.scene;
-            if (scene) {
-                laserNode.setParent(scene);
-            } else {
-                laserNode.setParent(this.node.parent);
-            }
-        }
-        
-        // 设置激光节点的世界位置为防御塔位置
-        laserNode.setWorldPosition(this.node.worldPosition);
-        
-        // 添加Graphics组件用于绘制激光
-        const graphics = laserNode.addComponent(Graphics);
-        if (graphics) {
-            // 设置激光颜色为亮红色，更醒目
-            graphics.strokeColor.set(255, 0, 0, 255); // 纯红色，更明显
-            graphics.lineWidth = 6; // 加粗，更容易看到
-            
-            // 计算起点和终点（本地坐标）
-            const fromPos = new Vec3(0, 0, 0); // 本地坐标原点
-            const toPos = new Vec3();
-            // 将目标位置转换为激光节点的本地坐标
-            Vec3.subtract(toPos, targetPos, laserNode.worldPosition);
-            
-            // 绘制激光线
-            graphics.moveTo(fromPos.x, fromPos.y);
-            graphics.lineTo(toPos.x, toPos.y);
-            graphics.stroke();
-            
-            // 添加渐隐效果
-            const startAlpha = 255;
-            const fadeDuration = 0.2; // 稍微延长显示时间
-            const fadeTimer = 0.02; // 每帧更新间隔
-            
-            let elapsed = 0;
-            const fadeUpdate = () => {
-                elapsed += fadeTimer;
-                if (elapsed < fadeDuration && laserNode && laserNode.isValid && graphics) {
-                    const alpha = Math.floor(startAlpha * (1 - elapsed / fadeDuration));
-                    // Color对象的属性是只读的，需要clone后修改
-                    const fadeColor = graphics.strokeColor.clone();
-                    fadeColor.a = alpha;
-                    graphics.strokeColor = fadeColor;
-                    graphics.clear();
-                    graphics.moveTo(fromPos.x, fromPos.y);
-                    graphics.lineTo(toPos.x, toPos.y);
-                    graphics.stroke();
-                    this.scheduleOnce(fadeUpdate, fadeTimer);
-                } else {
-                    // 渐隐完成，销毁节点
-                    if (laserNode && laserNode.isValid) {
-                        laserNode.destroy();
-                    }
-                }
-            };
-            
-            // 开始渐隐
-            this.scheduleOnce(fadeUpdate, fadeTimer);
-            
-            // 备用：如果渐隐失败，0.3秒后强制销毁
-            this.scheduleOnce(() => {
-                if (laserNode && laserNode.isValid) {
-                    laserNode.destroy();
-                }
-            }, 0.3);
         }
     }
 
@@ -1757,6 +1737,9 @@ export class Arrower extends Component {
         }
 
         this.isDestroyed = true;
+
+        // 播放死亡动画
+        this.playDeathAnimation();
 
         // 减少人口
         // 如果buildCost为0，说明是战争古树生产的，人口会在WarAncientTree.cleanupDeadTowers中处理
@@ -2099,7 +2082,7 @@ export class Arrower extends Component {
             const enemies = enemiesNode.children || [];
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid && enemy.active) {
-                    const enemyScript = enemy.getComponent('Enemy') as any;
+                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const distance = Vec3.distance(position, enemy.worldPosition);
                         const enemyRadius = 30;

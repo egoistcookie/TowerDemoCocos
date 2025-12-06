@@ -1,5 +1,5 @@
-import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip } from 'cc';
-import { GameManager } from './GameManager';
+import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip, Animation, AnimationState } from 'cc';
+import { GameManager, GameState } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
 import { AudioManager } from './AudioManager';
@@ -31,6 +31,16 @@ export class OrcWarlord extends Component {
 
     // 单位类型
     public unitType: UnitType = UnitType.ENEMY;
+    
+    // 单位信息属性
+    @property
+    unitName: string = "兽人督军";
+    
+    @property
+    unitDescription: string = "兽人军队的首领，拥有强大的攻击力和生命值，还能释放战争咆哮增强周围敌人。";
+    
+    @property(SpriteFrame)
+    unitIcon: SpriteFrame = null!;
 
     // 动画帧属性
     @property(SpriteFrame)
@@ -100,11 +110,34 @@ export class OrcWarlord extends Component {
     private recentDamage: number = 0; // 最近1秒内受到的总伤害
     private damageTime: number = 0; // 最近一次伤害的时间戳
 
+    // 战争咆哮技能属性
+    @property
+    warcryCooldown: number = 30; // 战争咆哮冷却时间（秒）
+    @property
+    warcryDuration: number = 10; // 战争咆哮持续时间（秒）
+    @property
+    warcryEffect: number = 0.25; // 战争咆哮效果提升幅度（25%）
+    @property
+    warcryRange: number = 200; // 战争咆哮范围（像素）
+    @property(AudioClip)
+    warcrySound: AudioClip = null!; // 战争咆哮音效
+    @property(SpriteFrame)
+    warcryAnimationFrames: SpriteFrame[] = []; // 战争咆哮动画帧
+    @property
+    warcryAnimationDuration: number = 1.0; // 战争咆哮动画时长
+    
+    // 战争咆哮私有属性
+    private warcryTimer: number = 0; // 战争咆哮冷却计时器
+    private isPlayingWarcryAnimation: boolean = false; // 是否正在播放战争咆哮动画
+    private warcryBuffedEnemies: Set<Node> = new Set(); // 被战争咆哮影响的敌人集合
+    private warcryBuffEndTime: Map<Node, number> = new Map(); // 每个敌人的buff结束时间
+
     start() {
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
         this.attackTimer = 0;
         this.attackComplete = false;
+        this.warcryTimer = 0;
         
         // 保存默认缩放比例
         this.defaultScale = this.node.scale.clone();
@@ -206,8 +239,35 @@ export class OrcWarlord extends Component {
             return;
         }
 
+        // 检查游戏状态 - 如果GameManager不存在，尝试重新查找
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        
+        // 检查游戏状态，只在Playing状态下运行
+        if (this.gameManager) {
+            const gameState = this.gameManager.getGameState();
+            if (gameState !== GameState.Playing) {
+                // 游戏已结束或暂停，停止所有行动
+                this.stopMoving();
+                this.currentTarget = null!;
+                return;
+            }
+        }
+
         // 更新攻击计时器
         this.attackTimer += deltaTime;
+        
+        // 更新战争咆哮冷却计时器
+        this.warcryTimer += deltaTime;
+        
+        // 检查是否可以释放战争咆哮
+        if (this.warcryTimer >= this.warcryCooldown && !this.isHit && !this.isPlayingWarcryAnimation) {
+            this.playWarcryAnimation();
+        }
+        
+        // 更新战争咆哮buff状态
+        this.updateWarcryBuffs(deltaTime);
         
         // 重置最近1秒外的伤害
         if (this.damageTime > 0 && this.attackTimer - this.damageTime > 1.0) {
@@ -223,13 +283,13 @@ export class OrcWarlord extends Component {
             if (distance <= this.attackRange) {
                 // 在攻击范围内，停止移动并攻击
                 this.stopMoving();
-                if (this.attackTimer >= this.attackInterval && !this.isHit) {
+                if (this.attackTimer >= this.attackInterval && !this.isHit && !this.isPlayingWarcryAnimation) {
                     this.attack();
                     this.attackTimer = 0;
                 }
             } else {
                 // 不在攻击范围内，只有在没有被攻击时才继续移动
-                if (!this.isHit) {
+                if (!this.isHit && !this.isPlayingWarcryAnimation) {
                     this.moveTowardsTarget(deltaTime);
                     // 如果正在播放攻击动画，停止攻击动画
                     if (this.isPlayingAttackAnimation) {
@@ -239,7 +299,7 @@ export class OrcWarlord extends Component {
             }
         } else {
             // 没有目标，只有在没有被攻击时才向水晶移动
-            if (this.targetCrystal && this.targetCrystal.isValid && !this.isHit) {
+            if (this.targetCrystal && this.targetCrystal.isValid && !this.isHit && !this.isPlayingWarcryAnimation) {
                 this.moveTowardsCrystal(deltaTime);
                 // 如果正在播放攻击动画，停止攻击动画
                 if (this.isPlayingAttackAnimation) {
@@ -841,6 +901,8 @@ export class OrcWarlord extends Component {
             this.updateHitAnimation();
         } else if (this.isPlayingDeathAnimation) {
             this.updateDeathAnimation();
+        } else if (this.isPlayingWarcryAnimation) {
+            this.updateWarcryAnimation();
         }
     }
 
@@ -930,6 +992,35 @@ export class OrcWarlord extends Component {
         }
     }
 
+    // 更新战争咆哮动画
+    updateWarcryAnimation() {
+        if (this.warcryAnimationFrames.length === 0) {
+            this.isPlayingWarcryAnimation = false;
+            this.playIdleAnimation();
+            return;
+        }
+
+        const frameDuration = this.warcryAnimationDuration / this.warcryAnimationFrames.length;
+        const frameIndex = Math.floor(this.animationTimer / frameDuration);
+
+        if (frameIndex < this.warcryAnimationFrames.length) {
+            if (frameIndex !== this.currentAnimationFrameIndex) {
+                this.currentAnimationFrameIndex = frameIndex;
+                this.sprite.spriteFrame = this.warcryAnimationFrames[frameIndex];
+                
+                // 在动画中间点释放战争咆哮效果
+                const warcryPoint = Math.floor(this.warcryAnimationFrames.length * 0.5);
+                if (frameIndex === warcryPoint) {
+                    this.releaseWarcry();
+                }
+            }
+        } else {
+            // 战争咆哮动画播放完成，恢复待机
+            this.isPlayingWarcryAnimation = false;
+            this.playIdleAnimation();
+        }
+    }
+
     // 更新死亡动画
     updateDeathAnimation() {
         if (this.deathAnimationFrames.length === 0) {
@@ -938,11 +1029,20 @@ export class OrcWarlord extends Component {
         }
 
         const frameDuration = this.deathAnimationDuration / this.deathAnimationFrames.length;
-        const frameIndex = Math.floor(this.animationTimer / frameDuration) % this.deathAnimationFrames.length;
+        const frameIndex = Math.floor(this.animationTimer / frameDuration);
 
-        if (frameIndex !== this.currentAnimationFrameIndex) {
-            this.currentAnimationFrameIndex = frameIndex;
-            this.sprite.spriteFrame = this.deathAnimationFrames[frameIndex];
+        if (frameIndex < this.deathAnimationFrames.length) {
+            if (frameIndex !== this.currentAnimationFrameIndex) {
+                this.currentAnimationFrameIndex = frameIndex;
+                this.sprite.spriteFrame = this.deathAnimationFrames[frameIndex];
+            }
+        } else {
+            // 死亡动画播放完成，停留在最后一帧
+            this.isPlayingDeathAnimation = false;
+            // 保持最后一帧
+            if (this.deathAnimationFrames.length > 0) {
+                this.sprite.spriteFrame = this.deathAnimationFrames[this.deathAnimationFrames.length - 1];
+            }
         }
     }
 
@@ -991,6 +1091,25 @@ export class OrcWarlord extends Component {
         }
     }
 
+    // 播放战争咆哮动画
+    playWarcryAnimation() {
+        if (this.isPlayingDeathAnimation || this.isDestroyed) {
+            return;
+        }
+
+        this.stopAllAnimations();
+        this.isPlayingWarcryAnimation = true;
+        this.animationTimer = 0;
+        this.currentAnimationFrameIndex = -1;
+        
+        // 如果没有战争咆哮动画帧，直接释放效果
+        if (this.warcryAnimationFrames.length === 0) {
+            this.releaseWarcry();
+            this.isPlayingWarcryAnimation = false;
+            this.playIdleAnimation();
+        }
+    }
+
     // 播放被攻击动画
     playHitAnimation() {
         if (this.isPlayingDeathAnimation || this.isDestroyed) {
@@ -1022,6 +1141,7 @@ export class OrcWarlord extends Component {
         this.isPlayingWalkAnimation = false;
         this.isPlayingAttackAnimation = false;
         this.isPlayingHitAnimation = false;
+        this.isPlayingWarcryAnimation = false;
         // 不停止死亡动画
         this.isHit = false; // 清除被攻击标志
     }
@@ -1202,6 +1322,170 @@ export class OrcWarlord extends Component {
         }
     }
 
+    // 释放战争咆哮效果
+    releaseWarcry() {
+        // 播放战争咆哮音效
+        if (this.warcrySound) {
+            AudioManager.Instance.playSFX(this.warcrySound);
+        }
+        
+        // 查找附近的敌人
+        this.findNearbyEnemies();
+        
+        // 重置战争咆哮冷却计时器
+        this.warcryTimer = 0;
+    }
+    
+    // 查找附近的敌人并应用战争咆哮效果
+    findNearbyEnemies() {
+        // 查找Enemies容器
+        let enemiesNode = find('Enemies');
+        if (!enemiesNode && this.node.scene) {
+            const findNodeRecursive = (node: Node, name: string): Node | null => {
+                if (node.name === name) {
+                    return node;
+                }
+                for (const child of node.children) {
+                    const found = findNodeRecursive(child, name);
+                    if (found) return found;
+                }
+                return null;
+            };
+            enemiesNode = findNodeRecursive(this.node.scene, 'Enemies');
+        }
+        
+        if (!enemiesNode) {
+            return;
+        }
+        
+        const enemies = enemiesNode.children || [];
+        const currentTime = this.attackTimer;
+        
+        for (const enemy of enemies) {
+            if (!enemy || !enemy.isValid || !enemy.active) {
+                continue;
+            }
+            
+            // 计算距离
+            const distance = Vec3.distance(this.node.worldPosition, enemy.worldPosition);
+            if (distance <= this.warcryRange) {
+                // 检查敌人是否存活
+                const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('OrcWarlord') as any;
+                if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
+                    // 应用战争咆哮效果
+                    this.applyWarcryBuff(enemy, enemyScript, currentTime);
+                }
+            }
+        }
+    }
+    
+    // 应用战争咆哮buff
+    applyWarcryBuff(enemy: Node, enemyScript: any, currentTime: number) {
+        // 保存原始属性
+        if (!enemyScript._originalMoveSpeed) {
+            enemyScript._originalMoveSpeed = enemyScript.moveSpeed;
+        }
+        if (!enemyScript._originalAttackDamage) {
+            enemyScript._originalAttackDamage = enemyScript.attackDamage;
+        }
+        if (!enemyScript._originalAttackInterval) {
+            enemyScript._originalAttackInterval = enemyScript.attackInterval;
+        }
+        
+        // 提升属性
+        enemyScript.moveSpeed = enemyScript._originalMoveSpeed * (1 + this.warcryEffect);
+        enemyScript.attackDamage = enemyScript._originalAttackDamage * (1 + this.warcryEffect);
+        enemyScript.attackInterval = enemyScript._originalAttackInterval / (1 + this.warcryEffect);
+        
+        // 添加红光效果
+        this.addRedGlowEffect(enemy);
+        
+        // 添加到受影响敌人集合
+        this.warcryBuffedEnemies.add(enemy);
+        this.warcryBuffEndTime.set(enemy, currentTime + this.warcryDuration);
+    }
+    
+    // 移除战争咆哮buff
+    removeWarcryBuff(enemy: Node, enemyScript: any) {
+        if (enemyScript._originalMoveSpeed) {
+            enemyScript.moveSpeed = enemyScript._originalMoveSpeed;
+        }
+        if (enemyScript._originalAttackDamage) {
+            enemyScript.attackDamage = enemyScript._originalAttackDamage;
+        }
+        if (enemyScript._originalAttackInterval) {
+            enemyScript.attackInterval = enemyScript._originalAttackInterval;
+        }
+        
+        // 移除红光效果
+        this.removeRedGlowEffect(enemy);
+        
+        // 从集合中移除
+        this.warcryBuffedEnemies.delete(enemy);
+        this.warcryBuffEndTime.delete(enemy);
+    }
+    
+    // 添加红光效果
+    addRedGlowEffect(enemy: Node) {
+        // 移除已有的红光效果（如果有）
+        this.removeRedGlowEffect(enemy);
+        
+        // 获取敌人的Sprite组件
+        const sprite = enemy.getComponent(Sprite);
+        if (sprite) {
+            // 保存原始颜色，以便后续恢复
+            enemy['_originalColor'] = sprite.color.clone();
+            
+            // 设置红色发光效果（提高红色通道值）
+            sprite.color = new Color(255, 150, 150, 255); // 偏红色
+        }
+    }
+    
+    // 移除红光效果
+    removeRedGlowEffect(enemy: Node) {
+        // 获取敌人的Sprite组件
+        const sprite = enemy.getComponent(Sprite);
+        if (sprite && enemy['_originalColor']) {
+            // 恢复原始颜色
+            sprite.color = enemy['_originalColor'];
+            delete enemy['_originalColor'];
+        }
+    }
+    
+    // 更新战争咆哮buff状态
+    updateWarcryBuffs(deltaTime: number) {
+        if (this.warcryBuffedEnemies.size === 0) {
+            return;
+        }
+        
+        const currentTime = this.attackTimer;
+        const enemiesToRemove: Node[] = [];
+        
+        // 检查每个受影响的敌人
+        for (const enemy of this.warcryBuffedEnemies) {
+            if (!enemy || !enemy.isValid) {
+                enemiesToRemove.push(enemy);
+                continue;
+            }
+            
+            const endTime = this.warcryBuffEndTime.get(enemy);
+            if (endTime !== undefined && currentTime >= endTime) {
+                // Buff时间到，移除效果
+                const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('OrcWarlord') as any;
+                if (enemyScript) {
+                    this.removeWarcryBuff(enemy, enemyScript);
+                }
+                enemiesToRemove.push(enemy);
+            }
+        }
+        
+        // 清理无效敌人
+        for (const enemy of enemiesToRemove) {
+            this.warcryBuffedEnemies.delete(enemy);
+            this.warcryBuffEndTime.delete(enemy);
+        }
+    }
+    
     die() {
         if (this.isDestroyed) {
             return;
@@ -1211,6 +1495,18 @@ export class OrcWarlord extends Component {
         
         // 立即停止所有移动和动画
         this.stopAllAnimations();
+        
+        // 移除所有战争咆哮buff
+        for (const enemy of this.warcryBuffedEnemies) {
+            if (enemy && enemy.isValid) {
+                const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('OrcWarlord') as any;
+                if (enemyScript) {
+                    this.removeWarcryBuff(enemy, enemyScript);
+                }
+            }
+        }
+        this.warcryBuffedEnemies.clear();
+        this.warcryBuffEndTime.clear();
         
         // 奖励金币
         if (!this.gameManager) {
@@ -1233,18 +1529,12 @@ export class OrcWarlord extends Component {
         // 优先播放死亡动画
         this.playDeathAnimation();
 
-        // 如果有死亡动画帧，等待动画播放完成后销毁
-        if (this.deathAnimationFrames.length > 0) {
-            // 延迟销毁，等待死亡动画播放完成
-            setTimeout(() => {
-                if (this.node && this.node.isValid) {
-                    this.node.destroy();
-                }
-            }, this.deathAnimationDuration * 1000);
-        } else {
-            // 没有死亡动画帧，直接销毁
-            this.node.destroy();
-        }
+        // 尸体暂留1分钟后销毁
+        setTimeout(() => {
+            if (this.node && this.node.isValid) {
+                this.node.destroy();
+            }
+        }, 60000); // 60秒 = 1分钟
     }
 
     /**

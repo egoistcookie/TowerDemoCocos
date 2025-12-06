@@ -7,7 +7,7 @@
       "preWaveDelay": 3,
       "enemies": [
         {
-          "prefabName": "OrcWarlord",
+          "prefabName": "Enemy",
           "count": 10,
           "interval": 1.0
         }

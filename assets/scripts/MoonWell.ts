@@ -45,6 +45,16 @@ export class MoonWell extends Component {
 
     // 单位类型
     public unitType: UnitType = UnitType.BUILDING;
+    
+    // 单位信息属性
+    @property
+    unitName: string = "月亮井";
+    
+    @property
+    unitDescription: string = "能够恢复周围单位生命值，并提供人口上限的建筑物。";
+    
+    @property(SpriteFrame)
+    unitIcon: SpriteFrame = null!;
 
     private currentHealth: number = 80;
     private healthBar: HealthBar = null!;

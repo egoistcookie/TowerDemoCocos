@@ -1,5 +1,5 @@
 import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip } from 'cc';
-import { GameManager } from './GameManager';
+import { GameManager, GameState } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
 import { AudioManager } from './AudioManager';
@@ -31,6 +31,16 @@ export class OrcWarrior extends Component {
 
     // 单位类型
     public unitType: UnitType = UnitType.ENEMY;
+    
+    // 单位信息属性
+    @property
+    unitName: string = "兽人战士";
+    
+    @property
+    unitDescription: string = "强大的兽人战士，拥有较高的攻击力和生命值。";
+    
+    @property(SpriteFrame)
+    unitIcon: SpriteFrame = null!;
 
     // 动画帧属性
     @property(SpriteFrame)
@@ -200,6 +210,22 @@ export class OrcWarrior extends Component {
         if (this.isDestroyed) {
             this.updateAnimation(deltaTime);
             return;
+        }
+
+        // 检查游戏状态 - 如果GameManager不存在，尝试重新查找
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        
+        // 检查游戏状态，只在Playing状态下运行
+        if (this.gameManager) {
+            const gameState = this.gameManager.getGameState();
+            if (gameState !== GameState.Playing) {
+                // 游戏已结束或暂停，停止移动和攻击
+                this.stopMoving();
+                this.currentTarget = null!;
+                return;
+            }
         }
 
         // 更新攻击计时器

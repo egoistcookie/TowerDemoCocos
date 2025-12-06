@@ -1,4 +1,5 @@
-import { _decorator, Component, Node, Vec3, Sprite, tween } from 'cc';
+import { _decorator, Component, Node, Vec3, Sprite, tween, find } from 'cc';
+import { GameManager, GameState } from './GameManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('Arrow')
@@ -20,6 +21,7 @@ export class Arrow extends Component {
     private onHitCallback: ((damage: number) => void) | null = null;
     private isFlying: boolean = false;
     private lastPos: Vec3 = new Vec3();
+    private gameManager: GameManager | null = null;
 
     /**
      * 初始化弓箭
@@ -127,6 +129,20 @@ export class Arrow extends Component {
             return;
         }
 
+        // 检查游戏状态 - 如果GameManager不存在，尝试重新查找
+        if (!this.gameManager) {
+            this.gameManager = find('GameManager')?.getComponent(GameManager);
+        }
+        
+        // 检查游戏状态，如果不是Playing状态，停止飞行
+        if (this.gameManager) {
+            const gameState = this.gameManager.getGameState();
+            if (gameState !== GameState.Playing) {
+                // 游戏已暂停或结束，停止飞行
+                return;
+            }
+        }
+
         // 更新计时器
         this.elapsedTime += deltaTime;
         
@@ -154,6 +170,12 @@ export class Arrow extends Component {
         
         // 计算当前在抛物线上的位置
         const currentPos = this.calculateParabolicPosition(currentRatio);
+        
+        // 检查路径上是否有兽人督军尸体
+        if (this.checkForOrcWarlordCorpse(this.lastPos, currentPos)) {
+            return;
+        }
+        
         this.node.setWorldPosition(currentPos);
         
         // 更新旋转角度，使箭头始终指向飞行方向
@@ -193,6 +215,174 @@ export class Arrow extends Component {
                 this.node.destroy();
             }
         }
+    }
+    
+    /**
+     * 递归查找节点
+     * @param node 起始节点
+     * @param name 节点名称
+     * @returns 找到的节点
+     */
+    findNodeRecursive(node: Node, name: string): Node | null {
+        if (node.name === name) {
+            return node;
+        }
+        for (const child of node.children) {
+            const found = this.findNodeRecursive(child, name);
+            if (found) {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 检查路径上是否有兽人督军尸体
+     * @param startPos 起始位置
+     * @param endPos 结束位置
+     * @returns 是否命中尸体
+     */
+    checkForOrcWarlordCorpse(startPos: Vec3, endPos: Vec3): boolean {
+        // 查找Enemies容器，使用多层级查找策略
+        let enemiesNode = find('Enemies');
+        
+        if (!enemiesNode && this.node.scene) {
+            enemiesNode = this.findNodeRecursive(this.node.scene, 'Enemies');
+        }
+        
+        if (!enemiesNode) {
+            // 尝试从场景根节点查找
+            const scene = this.node.scene;
+            if (scene) {
+                for (const child of scene.children) {
+                    if (child.name === 'Enemies') {
+                        enemiesNode = child;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (!enemiesNode) {
+            return false;
+        }
+        
+        const enemies = enemiesNode.children || [];
+        
+        for (const enemy of enemies) {
+            if (!enemy || !enemy.isValid) {
+                continue;
+            }
+            
+            // 检查是否是兽人督军
+            const orcScript = enemy.getComponent('OrcWarlord') as any;
+            if (!orcScript) {
+                continue;
+            }
+            
+            // 检查是否已经死亡
+            const isAlive = orcScript.isAlive && orcScript.isAlive();
+            if (!isAlive && enemy.isValid) {
+                // 检查整个飞行路径是否与尸体相交
+                const corpsePos = enemy.worldPosition;
+                const distance = this.getDistanceFromLine(startPos, endPos, corpsePos);
+                
+                // 如果距离小于30像素，认为命中尸体
+                if (distance < 30) {
+                    // 命中尸体，插在尸体身上
+                    this.attachToCorpse(enemy, startPos, endPos);
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * 将箭矢插在尸体身上
+     * @param corpseNode 尸体节点
+     * @param startPos 起始位置
+     * @param endPos 结束位置
+     */
+    attachToCorpse(corpseNode: Node, startPos: Vec3, endPos: Vec3): void {
+        if (!this.node || !this.node.isValid || !corpseNode || !corpseNode.isValid) {
+            return;
+        }
+        
+        // 计算命中点
+        const corpsePos = corpseNode.worldPosition;
+        const hitPos = this.calculateHitPoint(startPos, endPos, corpsePos);
+        
+        // 停止飞行状态
+        this.isFlying = false;
+        
+        // 将箭矢设为尸体的子节点
+        // 这样当尸体被销毁时，箭矢也会被自动销毁
+        this.node.removeFromParent();
+        corpseNode.addChild(this.node);
+        
+        // 设置箭矢位置（转换为局部位置）
+        const localPos = corpseNode.worldPosition.clone();
+        Vec3.subtract(localPos, hitPos, localPos);
+        this.node.setPosition(localPos);
+        
+        // 调整箭矢旋转，使其指向飞行方向
+        const direction = new Vec3();
+        Vec3.subtract(direction, endPos, startPos);
+        if (direction.length() > 0.1) {
+            const angle = Math.atan2(direction.y, direction.x) * 180 / Math.PI;
+            this.node.setRotationFromEuler(0, 0, angle);
+        }
+        
+        // 命中尸体不触发伤害回调
+        // 清除回调，防止后续调用
+        this.onHitCallback = null;
+    }
+
+    /**
+     * 计算命中点
+     * @param startPos 起始位置
+     * @param endPos 结束位置
+     * @param corpsePos 尸体位置
+     * @returns 命中点位置
+     */
+    calculateHitPoint(startPos: Vec3, endPos: Vec3, corpsePos: Vec3): Vec3 {
+        // 计算线段方向
+        const lineDir = Vec3.subtract(new Vec3(), endPos, startPos);
+        const lineLengthSqr = Vec3.lengthSqr(lineDir);
+        
+        if (lineLengthSqr === 0) {
+            return corpsePos.clone();
+        }
+        
+        // 计算投影点
+        const t = Math.max(0, Math.min(1, Vec3.dot(Vec3.subtract(new Vec3(), corpsePos, startPos), lineDir) / lineLengthSqr));
+        const projection = Vec3.add(new Vec3(), startPos, Vec3.multiplyScalar(new Vec3(), lineDir, t));
+        
+        return projection;
+    }
+    
+    /**
+     * 计算点到线段的最短距离
+     * @param lineStart 线段起点
+     * @param lineEnd 线段终点
+     * @param point 点
+     * @returns 最短距离
+     */
+    getDistanceFromLine(lineStart: Vec3, lineEnd: Vec3, point: Vec3): number {
+        const lineDir = Vec3.subtract(new Vec3(), lineEnd, lineStart);
+        const lineLengthSqr = Vec3.lengthSqr(lineDir);
+        
+        if (lineLengthSqr === 0) {
+            // 线段长度为0，直接返回点到起点的距离
+            return Vec3.distance(point, lineStart);
+        }
+        
+        const t = Math.max(0, Math.min(1, Vec3.dot(Vec3.subtract(new Vec3(), point, lineStart), lineDir) / lineLengthSqr));
+        const projection = Vec3.add(new Vec3(), lineStart, Vec3.multiplyScalar(new Vec3(), lineDir, t));
+        
+        return Vec3.distance(point, projection);
     }
 }
 

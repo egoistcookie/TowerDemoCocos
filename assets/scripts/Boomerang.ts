@@ -1,4 +1,5 @@
 import { _decorator, Component, Node, Vec3, Sprite, tween, find } from 'cc';
+import { GameManager, GameState } from './GameManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('Boomerang')
@@ -39,6 +40,7 @@ export class Boomerang extends Component {
     private currentDamage: number = 0; // 当前伤害值
     private isBouncing: boolean = false; // 是否正在弹射
     private hasHitTarget: boolean = false; // 是否已命中目标
+    private gameManager: GameManager | null = null; // 游戏管理器引用
 
     /**
      * 初始化回旋镖
@@ -125,66 +127,69 @@ export class Boomerang extends Component {
      * 命中目标
      */
     hitTarget() {
-        console.info('Boomerang: hitTarget called');
+        console.debug('Boomerang: hitTarget called');
         
         if (this.hasHitTarget) {
-            console.info('Boomerang: Already hit target, returning');
+            console.debug('Boomerang: Already hit target, returning');
             return; // 已经命中过了
         }
 
         if (!this.targetNode || !this.targetNode.isValid) {
-            console.info('Boomerang: Target invalid, starting return');
+            console.debug('Boomerang: Target invalid, starting return');
             // 目标无效，开始返回
             this.startReturn();
             return;
         }
 
         this.hasHitTarget = true;
-        console.info(`Boomerang: Hit target ${this.targetNode.name} at position (${this.targetNode.worldPosition.x.toFixed(2)}, ${this.targetNode.worldPosition.y.toFixed(2)}), damage: ${this.currentDamage}`);
+        console.debug(`Boomerang: Hit target ${this.targetNode.name} at position (${this.targetNode.worldPosition.x.toFixed(2)}, ${this.targetNode.worldPosition.y.toFixed(2)}), damage: ${this.currentDamage}`);
 
-        // 对当前目标造成伤害
+        // 直接对当前目标造成伤害，支持Enemy、OrcWarrior和OrcWarlord
+        const enemyScript = this.targetNode.getComponent('Enemy') as any || this.targetNode.getComponent('OrcWarrior') as any || this.targetNode.getComponent('OrcWarlord') as any;
+        if (enemyScript && enemyScript.isAlive && enemyScript.isAlive() && enemyScript.takeDamage) {
+            console.debug(`Boomerang: Dealing ${this.currentDamage} damage to ${this.targetNode.name}`);
+            enemyScript.takeDamage(this.currentDamage);
+        } else {
+            console.debug(`Boomerang: Cannot deal damage to ${this.targetNode.name}, enemy invalid`);
+        }
+        
+        // 调用回调函数，用于播放音效等辅助效果
         if (this.onHitCallback) {
-            // 直接获取当前目标的脚本并造成伤害，支持Enemy和OrcWarrior
-            const enemyScript = this.targetNode.getComponent('Enemy') as any || this.targetNode.getComponent('OrcWarrior') as any;
-            if (enemyScript && enemyScript.isAlive && enemyScript.isAlive() && enemyScript.takeDamage) {
-                console.info(`Boomerang: Dealing ${this.currentDamage} damage to ${this.targetNode.name}`);
-                enemyScript.takeDamage(this.currentDamage);
-            } else {
-                console.info(`Boomerang: Cannot deal damage to ${this.targetNode.name}, enemy invalid`);
-            }
+            console.debug(`Boomerang: Calling onHitCallback with damage ${this.currentDamage}`);
+            this.onHitCallback(this.currentDamage);
         }
 
         // 将当前目标添加到已命中集合
         this.enemiesHit.add(this.targetNode);
-        console.info(`Boomerang: Added target to enemiesHit, count: ${this.enemiesHit.size}`);
+        console.debug(`Boomerang: Added target to enemiesHit, count: ${this.enemiesHit.size}`);
 
         // 检查是否可以弹射
         if (this.bounceCount < this.maxBounces) {
-            console.info(`Boomerang: Can bounce, bounceCount: ${this.bounceCount}, maxBounces: ${this.maxBounces}`);
+            console.debug(`Boomerang: Can bounce, bounceCount: ${this.bounceCount}, maxBounces: ${this.maxBounces}`);
             // 寻找附近的敌人
             const nearbyEnemies = this.findNearbyEnemies(this.targetNode, this.bounceRange);
-            console.info(`Boomerang: Found ${nearbyEnemies.length} nearby enemies`);
+            console.debug(`Boomerang: Found ${nearbyEnemies.length} nearby enemies`);
             
             if (nearbyEnemies.length > 0) {
                 // 选择最近的敌人作为下一个目标
                 const nextTarget = this.findNearestEnemy(nearbyEnemies, this.targetNode.worldPosition);
                 if (nextTarget) {
-                    console.info(`Boomerang: Found nearest enemy ${nextTarget.name}, starting bounce`);
+                    console.debug(`Boomerang: Found nearest enemy ${nextTarget.name}, starting bounce`);
                     // 开始弹射
                     this.startBounce(nextTarget);
                     return;
                 } else {
-                    console.info('Boomerang: No nearest enemy found');
+                    console.debug('Boomerang: No nearest enemy found');
                 }
             } else {
-                console.info('Boomerang: No nearby enemies, cannot bounce');
+                console.debug('Boomerang: No nearby enemies, cannot bounce');
             }
         } else {
-            console.info(`Boomerang: Max bounces reached, bounceCount: ${this.bounceCount}`);
+            console.debug(`Boomerang: Max bounces reached, bounceCount: ${this.bounceCount}`);
         }
 
         // 没有找到下一个目标或达到最大弹射次数，开始返回
-        console.info('Boomerang: Starting return to owner');
+        console.debug('Boomerang: Starting return to owner');
         this.startReturn();
     }
 
@@ -195,32 +200,32 @@ export class Boomerang extends Component {
      * @returns 附近的敌人数组
      */
     findNearbyEnemies(centerNode: Node, range: number): Node[] {
-        console.info(`Boomerang: findNearbyEnemies called, centerNode: ${centerNode.name}, range: ${range}`);
+        console.debug(`Boomerang: findNearbyEnemies called, centerNode: ${centerNode.name}, range: ${range}`);
         
         const nearbyEnemies: Node[] = [];
         const centerPos = centerNode.worldPosition;
-        console.info(`Boomerang: Center position: (${centerPos.x.toFixed(2)}, ${centerPos.y.toFixed(2)})`);
+        console.debug(`Boomerang: Center position: (${centerPos.x.toFixed(2)}, ${centerPos.y.toFixed(2)})`);
 
         // 查找Enemies容器，先尝试直接查找，再尝试递归查找
         let enemiesNode = find('Enemies');
-        console.info(`Boomerang: Direct find Enemies result: ${enemiesNode ? enemiesNode.name : 'null'}`);
+        console.debug(`Boomerang: Direct find Enemies result: ${enemiesNode ? enemiesNode.name : 'null'}`);
         
         if (!enemiesNode && this.node.scene) {
             enemiesNode = this.findNodeRecursive(this.node.scene, 'Enemies');
-            console.info(`Boomerang: Recursive find Enemies result: ${enemiesNode ? enemiesNode.name : 'null'}`);
+            console.debug(`Boomerang: Recursive find Enemies result: ${enemiesNode ? enemiesNode.name : 'null'}`);
         }
         
         if (!enemiesNode) {
             // 尝试从场景根节点查找
             const scene = this.node.scene;
             if (scene) {
-                console.info(`Boomerang: Searching Enemies from scene root`);
+                console.debug(`Boomerang: Searching Enemies from scene root`);
                 // 遍历场景根节点的子节点
                 for (const child of scene.children) {
-                    console.info(`Boomerang: Scene child: ${child.name}`);
+                    console.debug(`Boomerang: Scene child: ${child.name}`);
                     if (child.name === 'Enemies') {
                         enemiesNode = child;
-                        console.info(`Boomerang: Found Enemies from scene root`);
+                        console.debug(`Boomerang: Found Enemies from scene root`);
                         break;
                     }
                 }
@@ -228,46 +233,38 @@ export class Boomerang extends Component {
         }
         
         if (!enemiesNode) {
-            console.info('Boomerang: Enemies node not found');
+            console.debug('Boomerang: Enemies node not found');
             return nearbyEnemies;
         }
         
-        console.info(`Boomerang: Enemies node found, children count: ${enemiesNode.children.length}`);
+        console.debug(`Boomerang: Enemies node found, children count: ${enemiesNode.children.length}`);
 
         // 遍历所有敌人
         const enemies = enemiesNode.children || [];
-        console.info(`Boomerang: Iterating through ${enemies.length} enemies`);
         
         for (const enemy of enemies) {
-            console.info(`Boomerang: Checking enemy: ${enemy ? enemy.name : 'null'}, isValid: ${enemy?.isValid}, active: ${enemy?.active}, isCenterNode: ${enemy === centerNode}`);
-            
             if (enemy && enemy.isValid && enemy.active && enemy !== centerNode) {
                 // 检查敌人是否已经被命中
                 if (this.enemiesHit.has(enemy)) {
-                    console.info(`Boomerang: Enemy ${enemy.name} already hit, skipping`);
                     continue;
                 }
 
-                // 检查敌人是否存活，支持Enemy和OrcWarrior
-                const enemyScript = enemy.getComponent('Enemy') as any || enemy.getComponent('OrcWarrior') as any;
+                // 检查敌人是否存活，支持OrcWarlord、OrcWarrior和Enemy
+                const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
                 const isAlive = enemyScript && enemyScript.isAlive && enemyScript.isAlive();
-                console.info(`Boomerang: Enemy ${enemy.name}, has script: ${!!enemyScript}, isAlive: ${isAlive}`);
                 
                 if (isAlive) {
                     // 检查距离
                     const enemyPos = enemy.worldPosition;
                     const distance = Vec3.distance(centerPos, enemyPos);
-                    console.info(`Boomerang: Enemy ${enemy.name} position: (${enemyPos.x.toFixed(2)}, ${enemyPos.y.toFixed(2)}), distance: ${distance.toFixed(2)}, range: ${range}`);
                     
                     if (distance <= range) {
-                        console.info(`Boomerang: Adding enemy ${enemy.name} to nearbyEnemies`);
                         nearbyEnemies.push(enemy);
                     }
                 }
             }
         }
         
-        console.info(`Boomerang: Found ${nearbyEnemies.length} nearby enemies`);
         return nearbyEnemies;
     }
 
@@ -278,10 +275,7 @@ export class Boomerang extends Component {
      * @returns 最近的敌人
      */
     findNearestEnemy(enemies: Node[], currentPos: Vec3): Node | null {
-        console.info(`Boomerang: findNearestEnemy called, enemies count: ${enemies.length}, currentPos: (${currentPos.x.toFixed(2)}, ${currentPos.y.toFixed(2)})`);
-        
         if (enemies.length === 0) {
-            console.info('Boomerang: No enemies to find nearest from');
             return null;
         }
 
@@ -289,21 +283,16 @@ export class Boomerang extends Component {
         let minDistance = Infinity;
 
         for (const enemy of enemies) {
-            console.info(`Boomerang: Checking enemy for nearest: ${enemy ? enemy.name : 'null'}, isValid: ${enemy?.isValid}`);
-            
             if (enemy && enemy.isValid) {
                 const distance = Vec3.distance(currentPos, enemy.worldPosition);
-                console.info(`Boomerang: Enemy ${enemy.name} distance: ${distance.toFixed(2)}, current min: ${minDistance.toFixed(2)}`);
                 
                 if (distance < minDistance) {
                     minDistance = distance;
                     nearestEnemy = enemy;
-                    console.info(`Boomerang: New nearest enemy: ${enemy.name}, distance: ${distance.toFixed(2)}`);
                 }
             }
         }
         
-        console.info(`Boomerang: Returning nearest enemy: ${nearestEnemy ? nearestEnemy.name : 'null'}, distance: ${minDistance.toFixed(2)}`);
         return nearestEnemy;
     }
 
@@ -375,7 +364,7 @@ export class Boomerang extends Component {
             this.returnTravelTime = 0.5; // 最小返回时间
         }
         
-        console.info(`Boomerang: Starting return to owner, returnDistance: ${returnDistance.toFixed(2)}, returnTravelTime: ${this.returnTravelTime.toFixed(2)}s`);
+
     }
 
     /**
@@ -418,6 +407,20 @@ export class Boomerang extends Component {
             return;
         }
 
+        // 检查游戏状态 - 如果GameManager不存在，尝试重新查找
+        if (!this.gameManager) {
+            this.gameManager = find('GameManager')?.getComponent(GameManager);
+        }
+        
+        // 检查游戏状态，如果不是Playing状态，停止飞行
+        if (this.gameManager) {
+            const gameState = this.gameManager.getGameState();
+            if (gameState !== GameState.Playing) {
+                // 游戏已暂停或结束，停止飞行
+                return;
+            }
+        }
+
         if (this.isReturning) {
             // 返回阶段
             this.returnElapsedTime += deltaTime;
@@ -425,6 +428,12 @@ export class Boomerang extends Component {
             
             // 计算当前返回位置
             const currentPos = this.calculateReturnPosition(returnRatio);
+            
+            // 检查路径上是否有兽人督军尸体
+            if (this.checkForOrcWarlordCorpse(this.lastPos, currentPos)) {
+                return;
+            }
+            
             this.node.setWorldPosition(currentPos);
             
             // 更新旋转角度，使箭头始终指向飞行方向
@@ -494,6 +503,12 @@ export class Boomerang extends Component {
         
         // 计算当前在抛物线上的位置
         const currentPos = this.calculateParabolicPosition(currentRatio);
+        
+        // 检查路径上是否有兽人督军尸体
+        if (this.checkForOrcWarlordCorpse(this.lastPos, currentPos)) {
+            return;
+        }
+        
         this.node.setWorldPosition(currentPos);
         
         // 更新旋转角度，使箭头始终指向飞行方向
@@ -528,5 +543,154 @@ export class Boomerang extends Component {
             this.hitTarget();
             return;
         }
+    }
+    
+    /**
+     * 将回旋镖插在尸体身上
+     * @param corpseNode 尸体节点
+     * @param startPos 起始位置
+     * @param endPos 结束位置
+     */
+    attachToCorpse(corpseNode: Node, startPos: Vec3, endPos: Vec3): void {
+        if (!this.node || !this.node.isValid || !corpseNode || !corpseNode.isValid) {
+            return;
+        }
+        
+        // 计算命中点
+        const corpsePos = corpseNode.worldPosition;
+        const hitPos = this.calculateHitPoint(startPos, endPos, corpsePos);
+        
+        // 停止飞行状态
+        this.isFlying = false;
+        this.isReturning = false;
+        
+        // 将回旋镖设为尸体的子节点
+        this.node.removeFromParent();
+        corpseNode.addChild(this.node);
+        
+        // 设置回旋镖位置（转换为局部位置）
+        const localPos = corpseNode.worldPosition.clone();
+        Vec3.subtract(localPos, hitPos, localPos);
+        this.node.setPosition(localPos);
+        
+        // 调整回旋镖旋转，使其指向飞行方向
+        const direction = new Vec3();
+        Vec3.subtract(direction, endPos, startPos);
+        if (direction.length() > 0.1) {
+            const angle = Math.atan2(direction.y, direction.x) * 180 / Math.PI;
+            this.node.setRotationFromEuler(0, 0, angle);
+        }
+        
+        // 命中尸体不触发伤害回调
+        // 清除回调，防止后续调用
+        this.onHitCallback = null;
+    }
+
+    /**
+     * 计算命中点
+     * @param startPos 起始位置
+     * @param endPos 结束位置
+     * @param corpsePos 尸体位置
+     * @returns 命中点位置
+     */
+    calculateHitPoint(startPos: Vec3, endPos: Vec3, corpsePos: Vec3): Vec3 {
+        // 计算线段方向
+        const lineDir = Vec3.subtract(new Vec3(), endPos, startPos);
+        const lineLengthSqr = Vec3.lengthSqr(lineDir);
+        
+        if (lineLengthSqr === 0) {
+            return corpsePos.clone();
+        }
+        
+        // 计算投影点
+        const t = Math.max(0, Math.min(1, Vec3.dot(Vec3.subtract(new Vec3(), corpsePos, startPos), lineDir) / lineLengthSqr));
+        const projection = Vec3.add(new Vec3(), startPos, Vec3.multiplyScalar(new Vec3(), lineDir, t));
+        
+        return projection;
+    }
+
+    /**
+     * 检查路径上是否有兽人督军尸体
+     * @param startPos 起始位置
+     * @param endPos 结束位置
+     * @returns 是否命中尸体
+     */
+    checkForOrcWarlordCorpse(startPos: Vec3, endPos: Vec3): boolean {
+        // 查找Enemies容器，使用与findNearbyEnemies相同的逻辑
+        let enemiesNode = find('Enemies');
+        
+        if (!enemiesNode && this.node.scene) {
+            enemiesNode = this.findNodeRecursive(this.node.scene, 'Enemies');
+        }
+        
+        if (!enemiesNode) {
+            // 尝试从场景根节点查找
+            const scene = this.node.scene;
+            if (scene) {
+                for (const child of scene.children) {
+                    if (child.name === 'Enemies') {
+                        enemiesNode = child;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (!enemiesNode) {
+            return false;
+        }
+        
+        const enemies = enemiesNode.children || [];
+        
+        for (const enemy of enemies) {
+            if (!enemy || !enemy.isValid) {
+                continue;
+            }
+            
+            // 检查是否是兽人督军
+            const orcScript = enemy.getComponent('OrcWarlord') as any;
+            if (!orcScript) {
+                continue;
+            }
+            
+            // 检查是否已经死亡
+            const isAlive = orcScript.isAlive && orcScript.isAlive();
+            if (!isAlive && enemy.isValid) {
+                // 检查整个飞行路径是否与尸体相交
+                const corpsePos = enemy.worldPosition;
+                const distance = this.getDistanceFromLine(startPos, endPos, corpsePos);
+                
+                // 如果距离小于30像素，认为命中尸体
+                if (distance < 30) {
+                    // 命中尸体，插在尸体身上
+                    this.attachToCorpse(enemy, startPos, endPos);
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * 计算点到线段的最短距离
+     * @param lineStart 线段起点
+     * @param lineEnd 线段终点
+     * @param point 点
+     * @returns 最短距离
+     */
+    getDistanceFromLine(lineStart: Vec3, lineEnd: Vec3, point: Vec3): number {
+        const lineDir = Vec3.subtract(new Vec3(), lineEnd, lineStart);
+        const lineLengthSqr = Vec3.lengthSqr(lineDir);
+        
+        if (lineLengthSqr === 0) {
+            // 线段长度为0，直接返回点到起点的距离
+            return Vec3.distance(point, lineStart);
+        }
+        
+        const t = Math.max(0, Math.min(1, Vec3.dot(Vec3.subtract(new Vec3(), point, lineStart), lineDir) / lineLengthSqr));
+        const projection = Vec3.add(new Vec3(), lineStart, Vec3.multiplyScalar(new Vec3(), lineDir, t));
+        
+        return Vec3.distance(point, projection);
     }
 }

@@ -29,6 +29,19 @@ export class Tree extends Component {
     @property(Prefab)
     damageNumberPrefab: Prefab = null!; // 伤害数字预制体
     
+    // 单位信息属性
+    @property
+    unitType: string = "TREE"; // 单位类型
+    
+    @property
+    unitName: string = "普通树木"; // 单位名称
+    
+    @property
+    unitDescription: string = "普通的树木，可以提供资源。";
+    
+    @property(SpriteFrame)
+    unitIcon: SpriteFrame = null!;
+    
     private currentHealth: number = 20;
     private healthBar: HealthBar = null!;
     private healthBarNode: Node = null!;
