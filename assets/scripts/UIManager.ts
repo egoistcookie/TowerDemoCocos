@@ -33,21 +33,21 @@ export class UIManager extends Component {
         // 绑定按钮事件
         if (this.buildButton) {
             this.buildButton.node.on(Button.EventType.CLICK, this.onBuildButtonClick, this);
-            console.info('UIManager: BuildButton event bound');
+            console.debug('UIManager: BuildButton event bound');
         } else {
             console.error('UIManager: BuildButton is null!');
         }
 
         if (this.restartButton) {
             this.restartButton.node.on(Button.EventType.CLICK, this.onRestartButtonClick, this);
-            console.info('UIManager: RestartButton event bound');
+            console.debug('UIManager: RestartButton event bound');
         } else {
             console.error('UIManager: RestartButton is null!');
         }
 
         // 检查TowerBuilder
         if (this.towerBuilder) {
-            console.info('UIManager: TowerBuilder node set:', this.towerBuilder.name);
+            console.debug('UIManager: TowerBuilder node set:', this.towerBuilder.name);
         } else {
             console.warn('UIManager: TowerBuilder node not set!');
         }
@@ -62,11 +62,11 @@ export class UIManager extends Component {
     private autoCreateCountdownPopup() {
         // 如果countdownPopup已经存在，不需要创建
         if (this.countdownPopup) {
-            console.info('UIManager: CountdownPopup already exists');
+            console.debug('UIManager: CountdownPopup already exists');
             return;
         }
         
-        console.info('UIManager: Auto-creating CountdownPopup');
+        console.debug('UIManager: Auto-creating CountdownPopup');
         
         // 获取Canvas或屏幕尺寸
         const canvas = find('Canvas');
@@ -106,7 +106,7 @@ export class UIManager extends Component {
         }
         uiTransform.setContentSize(popupSize, popupSize);
         
-        console.info(`UIManager: CountdownPopup created automatically at position (${posX}, ${posY}) with size ${popupSize}x${popupSize}`);
+        console.debug(`UIManager: CountdownPopup created automatically at position (${posX}, ${posY}) with size ${popupSize}x${popupSize}`);
     }
 
     createEffects() {
@@ -300,7 +300,7 @@ export class UIManager extends Component {
      * @param onManualClose 手动关闭回调
      */
     showCountdownPopup(onComplete: () => void, onManualClose: () => void) {
-        console.info('UIManager: Showing countdown popup');
+        console.debug('UIManager: Showing countdown popup');
         
         this.onCountdownComplete = onComplete;
         this.onCountdownManualClose = onManualClose;
@@ -309,7 +309,7 @@ export class UIManager extends Component {
         this.autoCreateCountdownPopup();
         
         if (this.countdownPopup) {
-            console.info('UIManager: CountdownPopup exists, calling show()');
+            console.debug('UIManager: CountdownPopup exists, calling show()');
             this.countdownPopup.show(
                 this.onCountdownCompleteHandler.bind(this),
                 this.onCountdownManualCloseHandler.bind(this)
@@ -336,7 +336,7 @@ export class UIManager extends Component {
      * 倒计时完成回调处理
      */
     private onCountdownCompleteHandler() {
-        console.info('UIManager: Countdown completed');
+        console.debug('UIManager: Countdown completed');
         
         if (this.onCountdownComplete) {
             this.onCountdownComplete();
@@ -350,7 +350,7 @@ export class UIManager extends Component {
      * 手动关闭倒计时弹窗回调处理
      */
     private onCountdownManualCloseHandler() {
-        console.info('UIManager: Countdown manually closed');
+        console.debug('UIManager: Countdown manually closed');
         
         if (this.onCountdownManualClose) {
             this.onCountdownManualClose();

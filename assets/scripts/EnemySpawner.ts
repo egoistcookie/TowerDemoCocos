@@ -4,6 +4,7 @@ import { UIManager } from './UIManager';
 import { Enemy } from './Enemy';
 import { OrcWarrior } from './OrcWarrior';
 import { OrcWarlord } from './OrcWarlord';
+import { TrollSpearman } from './TrollSpearman';
 const { ccclass, property } = _decorator;
 
 // 定义波次配置接口
@@ -92,7 +93,7 @@ export class EnemySpawner extends Component {
             }
         }
         
-        console.info(`EnemySpawner: UIManager found: ${this.uiManager ? 'Yes' : 'No'}`);
+        console.debug(`EnemySpawner: UIManager found: ${this.uiManager ? 'Yes' : 'No'}`);
 
         // 查找水晶
         if (!this.targetCrystal) {
@@ -131,7 +132,7 @@ export class EnemySpawner extends Component {
             
             // 检查预制体根节点的名称，因为在编辑器中，预制体根节点的名称通常与预制体资源名称一致
             let prefabName = prefab.data.name;
-            console.info(`EnemySpawner: Prefab data name: ${prefabName}, Prefab name: ${prefab.name}`);
+            console.debug(`EnemySpawner: Prefab data name: ${prefabName}, Prefab name: ${prefab.name}`);
             
             // 特殊处理，确保名称匹配
             if (prefabName.toLowerCase().includes('enemy')) {
@@ -140,10 +141,12 @@ export class EnemySpawner extends Component {
                 prefabName = 'OrcWarlord';
             } else if (prefabName.toLowerCase().includes('orc') || prefabName.toLowerCase().includes('warrior')) {
                 prefabName = 'OrcWarrior';
+            } else if (prefabName.toLowerCase().includes('troll') || prefabName.toLowerCase().includes('spearman')) {
+                prefabName = 'TrollSpearman';
             }
             
             this.enemyPrefabMap.set(prefabName, prefab);
-            console.info(`EnemySpawner: Added enemy prefab ${prefabName} to map`);
+            console.debug(`EnemySpawner: Added enemy prefab ${prefabName} to map`);
         }
     }
     
@@ -151,7 +154,7 @@ export class EnemySpawner extends Component {
      * 加载波次配置文件
      */
     private loadWaveConfig() {
-        console.info('EnemySpawner: Attempting to load wave config from path: config/waveConfig');
+        console.debug('EnemySpawner: Attempting to load wave config from path: config/waveConfig');
         resources.load('waveConfig', JsonAsset, (err, jsonAsset) => {
             if (err) {
                 console.error('EnemySpawner: Failed to load waveConfig.json', err);
@@ -163,7 +166,7 @@ export class EnemySpawner extends Component {
             }
             
             this.waveConfig = jsonAsset.json as WaveConfigFile;
-            console.info(`EnemySpawner: Loaded waveConfig with ${this.waveConfig.waves.length} waves`);
+            console.debug(`EnemySpawner: Loaded waveConfig with ${this.waveConfig.waves.length} waves`);
             
             // 开始第一波
             this.startNextWave();
@@ -288,7 +291,7 @@ export class EnemySpawner extends Component {
         
         // 检查是否还有波次可玩
         if (this.currentWaveIndex >= this.waveConfig.waves.length - 1) {
-            console.info('EnemySpawner: All waves completed');
+            console.debug('EnemySpawner: All waves completed');
             return;
         }
         
@@ -312,8 +315,8 @@ export class EnemySpawner extends Component {
         this.currentEnemyConfig = null;
         
         // 输出波次信息
-        console.info(`EnemySpawner: Starting wave ${this.currentWave.id} - ${this.currentWave.name}`);
-        console.info(`EnemySpawner: Description: ${this.currentWave.description}`);
+        console.debug(`EnemySpawner: Starting wave ${this.currentWave.id} - ${this.currentWave.name}`);
+        console.debug(`EnemySpawner: Description: ${this.currentWave.description}`);
         
         // 触发UI提示
         if (this.uiManager) {
@@ -328,11 +331,11 @@ export class EnemySpawner extends Component {
     private endCurrentWave() {
         this.isWaveActive = false;
         this.currentEnemyConfig = null;
-        console.info(`EnemySpawner: Wave ${this.currentWave?.id || 0} completed`);
+        console.debug(`EnemySpawner: Wave ${this.currentWave?.id || 0} completed`);
         
         // 检查是否是第5、10、15波完成，每隔5波出现一次弹窗
         if (this.waveConfig && (this.currentWaveIndex + 1) % 5 === 0 && (this.currentWaveIndex + 1) < this.waveConfig.waves.length) {
-            console.info(`EnemySpawner: Wave ${this.currentWaveIndex + 1} completed, showing countdown popup`);
+            console.debug(`EnemySpawner: Wave ${this.currentWaveIndex + 1} completed, showing countdown popup`);
             
             // 设置倒计时激活标志
             this.isCountdownActive = true;
@@ -352,7 +355,7 @@ export class EnemySpawner extends Component {
             // 启动一个自动继续的定时器，确保即使没有弹窗也能继续游戏
             this.scheduleOnce(() => {
                 if (this.isCountdownActive) {
-                    console.info('EnemySpawner: Countdown timeout, continuing to next waves');
+                    console.debug('EnemySpawner: Countdown timeout, continuing to next waves');
                     this.continueToNextWaves();
                 }
             }, 60); // 60秒后自动继续
@@ -362,9 +365,9 @@ export class EnemySpawner extends Component {
         
         // 如果还有下一波，开始下一波的延迟
         if (this.waveConfig && this.currentWaveIndex < this.waveConfig.waves.length - 1) {
-            console.info(`EnemySpawner: Preparing for next wave in ${this.waveConfig.waves[this.currentWaveIndex + 1].preWaveDelay} seconds`);
+            console.debug(`EnemySpawner: Preparing for next wave in ${this.waveConfig.waves[this.currentWaveIndex + 1].preWaveDelay} seconds`);
         } else {
-            console.info(`EnemySpawner: All waves completed!`);
+            console.debug(`EnemySpawner: All waves completed!`);
         }
     }
     
@@ -372,7 +375,7 @@ export class EnemySpawner extends Component {
      * 倒计时完成回调
      */
     private onCountdownComplete() {
-        console.info(`EnemySpawner: Countdown completed, continuing to next waves`);
+        console.debug(`EnemySpawner: Countdown completed, continuing to next waves`);
         this.continueToNextWaves();
     }
     
@@ -380,7 +383,7 @@ export class EnemySpawner extends Component {
      * 手动关闭倒计时回调
      */
     private onCountdownManualClose() {
-        console.info(`EnemySpawner: Countdown manually closed, continuing to next waves`);
+        console.debug(`EnemySpawner: Countdown manually closed, continuing to next waves`);
         this.continueToNextWaves();
     }
     
@@ -395,9 +398,9 @@ export class EnemySpawner extends Component {
         
         // 如果还有下一波，开始下一波的延迟
         if (this.waveConfig && this.currentWaveIndex < this.waveConfig.waves.length - 1) {
-            console.info(`EnemySpawner: Preparing for next wave in ${this.waveConfig.waves[this.currentWaveIndex + 1].preWaveDelay} seconds`);
+            console.debug(`EnemySpawner: Preparing for next wave in ${this.waveConfig.waves[this.currentWaveIndex + 1].preWaveDelay} seconds`);
         } else {
-            console.info(`EnemySpawner: All waves completed!`);
+            console.debug(`EnemySpawner: All waves completed!`);
         }
     }
     
@@ -412,7 +415,7 @@ export class EnemySpawner extends Component {
         }
         
         if (this.currentEnemyIndex >= this.currentWave.enemies.length) {
-            console.info(`EnemySpawner: All enemy configs for wave ${this.currentWave.id} completed`);
+            console.debug(`EnemySpawner: All enemy configs for wave ${this.currentWave.id} completed`);
             return false;
         }
         
@@ -430,7 +433,7 @@ export class EnemySpawner extends Component {
             return this.getCurrentEnemyConfig();
         }
         
-        console.info(`EnemySpawner: Now spawning ${this.currentEnemyConfig.count} ${this.currentEnemyConfig.prefabName} enemies with interval ${this.currentEnemyConfig.interval}s`);
+        console.debug(`EnemySpawner: Now spawning ${this.currentEnemyConfig.count} ${this.currentEnemyConfig.prefabName} enemies with interval ${this.currentEnemyConfig.interval}s`);
         return true;
     }
 
@@ -439,7 +442,7 @@ export class EnemySpawner extends Component {
         if (this.gameManager) {
             const gameState = this.gameManager.getGameState();
             if (gameState !== GameState.Playing) {
-                console.info(`EnemySpawner: Game ended (state: ${gameState === GameState.Victory ? 'Victory' : 'Defeat'}), canceling enemy spawn`);
+                console.debug(`EnemySpawner: Game ended (state: ${gameState === GameState.Victory ? 'Victory' : 'Defeat'}), canceling enemy spawn`);
                 return;
             }
         }
@@ -483,9 +486,9 @@ export class EnemySpawner extends Component {
         enemy.setParent(this.enemyContainer || this.node);
         enemy.setWorldPosition(spawnPos);
 
-        // 设置敌人的目标水晶，支持Enemy、OrcWarrior和OrcWarlord
+        // 设置敌人的目标水晶，支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
         // 尝试获取不同类型的敌人组件
-        const enemyScript = enemy.getComponent(Enemy) as any || enemy.getComponent(OrcWarrior) as any || enemy.getComponent(OrcWarlord) as any;
+        const enemyScript = enemy.getComponent(Enemy) as any || enemy.getComponent(OrcWarrior) as any || enemy.getComponent(OrcWarlord) as any || enemy.getComponent(TrollSpearman) as any;
         if (enemyScript) {
             if (this.targetCrystal) {
                 enemyScript.targetCrystal = this.targetCrystal;
@@ -493,7 +496,7 @@ export class EnemySpawner extends Component {
                 // 如果EnemySpawner没有设置targetCrystal，让Enemy自己查找
                 console.warn('EnemySpawner: targetCrystal not set, Enemy will try to find it');
             }
-            console.info(`EnemySpawner: Spawned ${prefabName} enemy at:`, spawnPos);
+            console.debug(`EnemySpawner: Spawned ${prefabName} enemy at:`, spawnPos);
             
             // 检查单位是否首次出现
             if (this.gameManager) {
@@ -539,7 +542,7 @@ export class EnemySpawner extends Component {
      * 使用本地波次配置作为备用方案
      */
     private useLocalWaveConfig() {
-        console.info('EnemySpawner: Using local wave config as fallback');
+        console.debug('EnemySpawner: Using local wave config as fallback');
         
         // 创建本地波次配置
         this.waveConfig = {

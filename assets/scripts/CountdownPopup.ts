@@ -40,11 +40,11 @@ export class CountdownPopup extends Component {
     }
 
     start() {
-        console.info('CountdownPopup: Start');
+        console.debug('CountdownPopup: Start');
         // 绑定关闭按钮事件
         if (this.closeButton) {
             this.closeButton.node.on(Button.EventType.CLICK, this.onCloseButtonClick, this);
-            console.info('CountdownPopup: Close button event bound');
+            console.debug('CountdownPopup: Close button event bound');
         } else {
             console.warn('CountdownPopup: Close button is null!');
         }
@@ -54,7 +54,7 @@ export class CountdownPopup extends Component {
      * 自动创建必要的UI元素
      */
     private autoCreateUI() {
-        console.info('CountdownPopup: Auto-creating UI elements');
+        console.debug('CountdownPopup: Auto-creating UI elements');
         
         // 确保弹窗节点有UITransform组件
         let uiTransform = this.node.getComponent(UITransform);
@@ -111,7 +111,7 @@ export class CountdownPopup extends Component {
             this.nextWaveLabel.fontSize = 24; // 适合小弹窗的字体大小
             this.nextWaveLabel.color = Color.YELLOW;
             this.nextWaveLabel.isBold = true;
-            console.info('CountdownPopup: Created NextWaveLabel');
+            console.debug('CountdownPopup: Created NextWaveLabel');
         }
         
         // 如果没有countdownLabel，创建一个
@@ -128,7 +128,7 @@ export class CountdownPopup extends Component {
             this.countdownLabel.fontSize = 24; // 保持字体大小不变
             this.countdownLabel.color = Color.YELLOW;
             this.countdownLabel.isBold = true;
-            console.info('CountdownPopup: Created CountdownLabel');
+            console.debug('CountdownPopup: Created CountdownLabel');
         }
         
         // 确保已经存在的countdownLabel字体大小不变
@@ -152,7 +152,7 @@ export class CountdownPopup extends Component {
      * 弹窗点击事件处理
      */
     private onPopupClick() {
-        console.info('CountdownPopup: Popup clicked');
+        console.debug('CountdownPopup: Popup clicked');
         this.isCounting = false;
         if (this.onManualClose) {
             this.onManualClose();
@@ -166,7 +166,7 @@ export class CountdownPopup extends Component {
      * 创建圆弧边框
      */
     private createArcBorder() {
-        console.info('CountdownPopup: Creating arc border');
+        console.debug('CountdownPopup: Creating arc border');
         
         // 创建圆弧边框节点
         const arcNode = new Node('ArcBorder');
@@ -182,7 +182,7 @@ export class CountdownPopup extends Component {
         // 保存graphics组件引用
         this.arcBorderGraphics = graphics;
         
-        console.info('CountdownPopup: Arc border created');
+        console.debug('CountdownPopup: Arc border created');
     }
     
     /**
@@ -240,14 +240,14 @@ export class CountdownPopup extends Component {
             this.countdownLabel.node.active = false;
         }
         
-        console.info('CountdownPopup: Popup shown, displaying "下一波敌人" text for 2 seconds');
+        console.debug('CountdownPopup: Popup shown, displaying "下一波敌人" text for 2 seconds');
     }
 
     /**
      * 隐藏倒计时弹窗，添加泡沫破碎消失效果
      */
     hide() {
-        console.info('CountdownPopup: Showing bubble burst effect');
+        console.debug('CountdownPopup: Showing bubble burst effect');
         
         this.isCounting = false;
         
@@ -279,7 +279,7 @@ export class CountdownPopup extends Component {
                 }
                 this.onCountdownComplete = null;
                 this.onManualClose = null;
-                console.info('CountdownPopup: Popup hidden');
+                console.debug('CountdownPopup: Popup hidden');
             })
             .start();
     }
@@ -302,7 +302,7 @@ export class CountdownPopup extends Component {
      * 关闭按钮点击事件
      */
     private onCloseButtonClick() {
-        console.info('CountdownPopup: Close button clicked');
+        console.debug('CountdownPopup: Close button clicked');
         this.isCounting = false;
         if (this.onManualClose) {
             this.onManualClose();
@@ -319,7 +319,7 @@ export class CountdownPopup extends Component {
             
             // 显示5秒后，切换到倒计时
             if (this.nextWaveTextTimer >= 5) {
-                console.info('CountdownPopup: Switching from "下一波敌人" text to countdown');
+                console.debug('CountdownPopup: Switching from "下一波敌人" text to countdown');
                 
                 // 隐藏"下一波敌人"文本，显示倒计时
                 if (this.nextWaveLabel) {
@@ -357,7 +357,7 @@ export class CountdownPopup extends Component {
                 // 倒计时结束，边框变为完全红色
                 this.updateArcBorder(1);
                 
-                console.info('CountdownPopup: Countdown completed');
+                console.debug('CountdownPopup: Countdown completed');
                 if (this.onCountdownComplete) {
                     this.onCountdownComplete();
                 } else {

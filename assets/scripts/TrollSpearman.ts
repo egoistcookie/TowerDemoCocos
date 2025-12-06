@@ -6,38 +6,41 @@ import { AudioManager } from './AudioManager';
 import { UnitType } from './WarAncientTree';
 const { ccclass, property } = _decorator;
 
-@ccclass('Enemy')
-export class Enemy extends Component {
+@ccclass('TrollSpearman')
+export class TrollSpearman extends Component {
     @property
-    maxHealth: number = 30;
+    maxHealth: number = 40;
 
     @property
-    moveSpeed: number = 50;
+    moveSpeed: number = 55;
 
     @property
-    attackDamage: number = 5;
+    attackDamage: number = 6;
 
     @property
-    attackInterval: number = 2.0;
+    attackInterval: number = 1.8;
 
     @property
-    attackRange: number = 50;
+    attackRange: number = 200;
 
     @property(Node)
     targetCrystal: Node = null!;
 
     @property(Prefab)
     damageNumberPrefab: Prefab = null!;
+    
+    @property(Prefab)
+    spearPrefab: Prefab = null!; // 长矛预制体
 
     // 单位类型
     public unitType: UnitType = UnitType.ENEMY;
     
     // 单位信息属性
     @property
-    unitName: string = "敌人";
+    unitName: string = "巨魔投矛手";
     
     @property
-    unitDescription: string = "普通的敌人，攻击力和生命值较低，但数量众多。";
+    unitDescription: string = "远程攻击的巨魔投矛手，拥有较远的攻击距离，但血量较低。";
     
     @property(SpriteFrame)
     unitIcon: SpriteFrame = null!;
@@ -50,6 +53,9 @@ export class Enemy extends Component {
     walkAnimationFrames: SpriteFrame[] = []; // 行走动画帧
     
     @property(SpriteFrame)
+    attackAnimationFrames: SpriteFrame[] = []; // 攻击动画帧
+    
+    @property(SpriteFrame)
     hitAnimationFrames: SpriteFrame[] = []; // 被攻击动画帧
     
     @property(SpriteFrame)
@@ -57,7 +63,7 @@ export class Enemy extends Component {
     
     // 动画名称配置
     @property
-    attackAnimationName: string = 'orc-attck'; // 攻击动画名称，可在编辑器中配置
+    attackAnimationName: string = 'troll-spear-attack'; // 攻击动画名称，可在编辑器中配置
     
     // 动画时长属性
     @property
@@ -67,7 +73,7 @@ export class Enemy extends Component {
     walkAnimationDuration: number = 1.0; // 行走动画总时长
     
     @property
-    attackAnimationDuration: number = 0.5; // 攻击动画总时长
+    attackAnimationDuration: number = 0.6; // 攻击动画总时长
     
     @property
     hitAnimationDuration: number = 0.3; // 被攻击动画总时长
@@ -75,7 +81,7 @@ export class Enemy extends Component {
     @property
     deathAnimationDuration: number = 1.0; // 死亡动画总时长
 
-    private currentHealth: number = 30;
+    private currentHealth: number = 40;
     private healthBar: HealthBar = null!;
     private healthBarNode: Node = null!;
     private isDestroyed: boolean = false;
@@ -84,7 +90,7 @@ export class Enemy extends Component {
     private gameManager: GameManager = null!;
     
     @property
-    goldReward: number = 2; // 消灭敌人获得的金币
+    goldReward: number = 3; // 消灭敌人获得的金币
     
     @property(AudioClip)
     deathSound: AudioClip = null!; // 敌人死亡音效
@@ -899,9 +905,36 @@ export class Enemy extends Component {
             return;
         }
         
-        // 不再使用序列帧攻击动画，直接停止动画
-        this.isPlayingAttackAnimation = false;
-        this.playIdleAnimation();
+        if (this.attackAnimationFrames.length === 0) {
+            this.isPlayingAttackAnimation = false;
+            this.playIdleAnimation();
+            return;
+        }
+
+        const frameDuration = this.attackAnimationDuration / this.attackAnimationFrames.length;
+        const frameIndex = Math.floor(this.animationTimer / frameDuration);
+
+        if (frameIndex < this.attackAnimationFrames.length) {
+            if (frameIndex !== this.currentAnimationFrameIndex) {
+                this.currentAnimationFrameIndex = frameIndex;
+                this.sprite.spriteFrame = this.attackAnimationFrames[frameIndex];
+                
+                // 在攻击动画的后半段造成伤害
+                const attackPoint = Math.floor(this.attackAnimationFrames.length * 0.5);
+                if (frameIndex === attackPoint && this.attackCallback) {
+                    this.attackCallback();
+                    this.attackCallback = null;
+                    // 播放攻击音效
+                    if (this.attackSound) {
+                        AudioManager.Instance.playSFX(this.attackSound);
+                    }
+                }
+            }
+        } else {
+            // 攻击动画播放完成，重置状态
+            this.isPlayingAttackAnimation = false;
+            this.playIdleAnimation();
+        }
     }
 
     // 更新被攻击动画
@@ -970,7 +1003,7 @@ export class Enemy extends Component {
     // 播放攻击动画
     playAttackAnimation() {
         if (this.isPlayingDeathAnimation || this.isDestroyed) {
-            console.debug('Enemy.playAttackAnimation: Is playing death animation or destroyed, returning');
+            console.debug('TrollSpearman.playAttackAnimation: Is playing death animation or destroyed, returning');
             return;
         }
 
@@ -979,10 +1012,12 @@ export class Enemy extends Component {
         
         // 设置攻击动画状态
         this.isPlayingAttackAnimation = true;
+        this.animationTimer = 0;
+        this.currentAnimationFrameIndex = -1;
         
         // 使用Animation组件播放攻击动画
         if (this.animationComponent) {
-            console.debug('Enemy.playAttackAnimation: Using Animation component');
+            console.debug('TrollSpearman.playAttackAnimation: Using Animation component');
             // 清除之前的动画事件
             this.animationComponent.off(Animation.EventType.FINISHED);
             
@@ -990,7 +1025,7 @@ export class Enemy extends Component {
             this.animationComponent.stop();
             
             // 播放攻击动画
-            console.debug(`Enemy.playAttackAnimation: Playing animation ${this.attackAnimationName}`);
+            console.debug(`TrollSpearman.playAttackAnimation: Playing animation ${this.attackAnimationName}`);
             
             // 获取动画状态，设置动画速度与attackAnimationDuration保持同步
             const state = this.animationComponent.getState(this.attackAnimationName);
@@ -999,7 +1034,7 @@ export class Enemy extends Component {
                 state.time = 0;
                 // 设置动画时长与attackAnimationDuration参数保持一致
                 state.speed = state.duration / this.attackAnimationDuration;
-                console.debug(`Enemy.playAttackAnimation: Animation state found, duration: ${state.duration}, speed: ${state.speed}`);
+                console.debug(`TrollSpearman.playAttackAnimation: Animation state found, duration: ${state.duration}, speed: ${state.speed}`);
             }
             
             // 播放动画
@@ -1012,7 +1047,7 @@ export class Enemy extends Component {
             // 攻击动画播放完成时调用攻击回调并结束动画
             this.scheduleOnce(() => {
                 if (this.isPlayingAttackAnimation) {
-                    console.debug('Enemy.playAttackAnimation: Attack animation finished, calling attack callback and stopping animation');
+                    console.debug('TrollSpearman.playAttackAnimation: Attack animation finished, calling attack callback and stopping animation');
                     
                     // 调用攻击回调函数
                     if (this.attackCallback) {
@@ -1022,7 +1057,7 @@ export class Enemy extends Component {
                     
                     // 播放攻击音效
                     if (this.attackSound) {
-                        console.debug('Enemy.playAttackAnimation: Playing attack sound');
+                        console.debug('TrollSpearman.playAttackAnimation: Playing attack sound');
                         AudioManager.Instance.playSFX(this.attackSound);
                     }
                     
@@ -1034,10 +1069,14 @@ export class Enemy extends Component {
                 }
             }, finishTimer);
         } else {
-            console.debug('Enemy.playAttackAnimation: No Animation component, using frame animation');
-            // 如果没有Animation组件，使用原来的帧动画
-            this.animationTimer = 0;
-            this.currentAnimationFrameIndex = -1;
+            console.debug('TrollSpearman.playAttackAnimation: No Animation component, using frame animation');
+            // 如果没有Animation组件，使用序列帧动画
+            if (this.attackAnimationFrames.length > 0) {
+                // 播放攻击音效
+                if (this.attackSound) {
+                    AudioManager.Instance.playSFX(this.attackSound);
+                }
+            }
         }
     }
 
@@ -1085,13 +1124,13 @@ export class Enemy extends Component {
 
     attack() {
         if (!this.currentTarget || this.isDestroyed) {
-            console.debug('Enemy.attack: No target or destroyed, returning');
+            console.debug('TrollSpearman.attack: No target or destroyed, returning');
             return;
         }
 
         // 再次检查目标是否有效
         if (!this.currentTarget.isValid || !this.currentTarget.active) {
-            console.debug('Enemy.attack: Target is invalid or inactive, returning');
+            console.debug('TrollSpearman.attack: Target is invalid or inactive, returning');
             this.currentTarget = null!;
             return;
         }
@@ -1106,50 +1145,17 @@ export class Enemy extends Component {
         
         // 设置攻击回调函数
         this.attackCallback = () => {
-            console.debug('Enemy.attackCallback: Attack callback called');
+            console.debug('TrollSpearman.attackCallback: Attack callback called');
             if (currentTarget && currentTarget.isValid && currentTarget.active) {
-                const towerScript = currentTarget.getComponent('Arrower') as any;
-                const warAncientTreeScript = currentTarget.getComponent('WarAncientTree') as any;
-                const normalTreeScript = currentTarget.getComponent('Tree') as any;
-                const wellScript = currentTarget.getComponent('MoonWell') as any;
-                const hallScript = currentTarget.getComponent('HunterHall') as any;
-                const crystalScript = currentTarget.getComponent('Crystal') as any;
-                const wispScript = currentTarget.getComponent('Wisp') as any;
-                const hunterScript = currentTarget.getComponent('Hunter') as any;
-                const targetScript = towerScript || warAncientTreeScript || normalTreeScript || wellScript || hallScript || crystalScript || wispScript || hunterScript;
-                
-                if (targetScript && targetScript.takeDamage) {
-                    targetScript.takeDamage(this.attackDamage);
-                    // 根据目标类型输出日志
-                    if (towerScript) {
-                        console.debug(`Enemy.attackCallback: Attacked arrower, dealt ${this.attackDamage} damage`);
-                    } else if (warAncientTreeScript) {
-                        console.debug(`Enemy.attackCallback: Attacked war ancient tree, dealt ${this.attackDamage} damage`);
-                    } else if (normalTreeScript) {
-                        console.debug(`Enemy.attackCallback: Attacked normal tree, dealt ${this.attackDamage} damage`);
-                    } else if (wellScript) {
-                        console.debug(`Enemy.attackCallback: Attacked moon well, dealt ${this.attackDamage} damage`);
-                    } else if (hallScript) {
-                        console.debug(`Enemy.attackCallback: Attacked hunter hall, dealt ${this.attackDamage} damage`);
-                    } else if (crystalScript) {
-                        console.debug(`Enemy.attackCallback: Attacked crystal, dealt ${this.attackDamage} damage`);
-                    } else if (wispScript) {
-                        console.debug(`Enemy.attackCallback: Attacked wisp, dealt ${this.attackDamage} damage`);
-                    } else if (hunterScript) {
-                        console.debug(`Enemy.attackCallback: Attacked hunter, dealt ${this.attackDamage} damage`);
-                    }
-                } else {
-                    // 目标无效，清除目标
-                    console.debug('Enemy.attackCallback: Target is invalid, clearing target');
-                    this.currentTarget = null!;
-                }
+                // 使用投掷长矛的方式攻击目标
+                this.createSpear(currentTarget);
             } else {
-                console.debug('Enemy.attackCallback: Current target is invalid or inactive');
+                console.debug('TrollSpearman.attackCallback: Current target is invalid or inactive');
             }
         };
 
         // 播放攻击动画
-        console.debug('Enemy.attack: Playing attack animation:', this.attackAnimationName);
+        console.debug('TrollSpearman.attack: Playing attack animation:', this.attackAnimationName);
         this.playAttackAnimation();
     }
 
@@ -1207,6 +1213,102 @@ export class Enemy extends Component {
                 this.playIdleAnimation();
             }
         }
+    }
+    
+    createSpear(targetNode: Node) {
+        if (!this.spearPrefab) {
+            console.warn('TrollSpearman.createSpear: No spear prefab assigned!');
+            return;
+        }
+
+        // 检查目标是否有效
+        if (!targetNode.isValid || !targetNode.active) {
+            return;
+        }
+
+        // 创建长矛节点
+        const spear = instantiate(this.spearPrefab);
+        
+        // 设置父节点（添加到场景或Canvas）
+        const canvas = find('Canvas');
+        const scene = this.node.scene;
+        const parentNode = canvas || scene || this.node.parent;
+        if (parentNode) {
+            spear.setParent(parentNode);
+        } else {
+            spear.setParent(this.node.parent);
+        }
+
+        // 设置初始位置（投矛手位置）
+        const startPos = this.node.worldPosition.clone();
+        spear.setWorldPosition(startPos);
+
+        // 确保节点激活
+        spear.active = true;
+
+        // 获取或添加Arrow组件（因为长矛的逻辑和弓箭类似，使用相同的组件）
+        let spearScript = spear.getComponent('Arrow') as any;
+        if (!spearScript) {
+            // 如果没有Arrow组件，尝试添加
+            // 在Cocos Creator中，直接使用组件名称添加
+            spearScript = spear.addComponent('Arrow');
+            if (!spearScript) {
+                console.error('TrollSpearman.createSpear: Failed to add Arrow component!');
+                return;
+            }
+        }
+
+        // 播放攻击音效
+        if (this.attackSound) {
+            AudioManager.Instance.playSFX(this.attackSound);
+        }
+
+        // 初始化长矛，设置命中回调
+        spearScript.init(
+            startPos,
+            targetNode,
+            this.attackDamage,
+            (damage: number) => {
+                // 检查目标是否仍然有效
+                if (targetNode && targetNode.isValid && targetNode.active) {
+                    const towerScript = targetNode.getComponent('Arrower') as any;
+                    const warAncientTreeScript = targetNode.getComponent('WarAncientTree') as any;
+                    const normalTreeScript = targetNode.getComponent('Tree') as any;
+                    const wellScript = targetNode.getComponent('MoonWell') as any;
+                    const hallScript = targetNode.getComponent('HunterHall') as any;
+                    const crystalScript = targetNode.getComponent('Crystal') as any;
+                    const wispScript = targetNode.getComponent('Wisp') as any;
+                    const hunterScript = targetNode.getComponent('Hunter') as any;
+                    const targetScript = towerScript || warAncientTreeScript || normalTreeScript || wellScript || hallScript || crystalScript || wispScript || hunterScript;
+                    
+                    if (targetScript && targetScript.takeDamage) {
+                        targetScript.takeDamage(damage);
+                        // 根据目标类型输出日志
+                        if (towerScript) {
+                            console.debug(`TrollSpearman.createSpear: Attacked arrower, dealt ${damage} damage`);
+                        } else if (warAncientTreeScript) {
+                            console.debug(`TrollSpearman.createSpear: Attacked war ancient tree, dealt ${damage} damage`);
+                        } else if (normalTreeScript) {
+                            console.debug(`TrollSpearman.createSpear: Attacked normal tree, dealt ${damage} damage`);
+                        } else if (wellScript) {
+                            console.debug(`TrollSpearman.createSpear: Attacked moon well, dealt ${damage} damage`);
+                        } else if (hallScript) {
+                            console.debug(`TrollSpearman.createSpear: Attacked hunter hall, dealt ${damage} damage`);
+                        } else if (crystalScript) {
+                            console.debug(`TrollSpearman.createSpear: Attacked crystal, dealt ${damage} damage`);
+                        } else if (wispScript) {
+                            console.debug(`TrollSpearman.createSpear: Attacked wisp, dealt ${damage} damage`);
+                        } else if (hunterScript) {
+                            console.debug(`TrollSpearman.createSpear: Attacked hunter, dealt ${damage} damage`);
+                        }
+                    } else {
+                        // 目标无效，清除目标
+                        console.debug('TrollSpearman.createSpear: Target is invalid, clearing target');
+                        this.currentTarget = null!;
+                    }
+                }
+            }
+        );
     }
 
     showDamageNumber(damage: number) {
@@ -1274,16 +1376,13 @@ export class Enemy extends Component {
 
         this.isDestroyed = true;
         
-        // 立即停止所有移动和动画
-        this.stopAllAnimations();
-        
         // 奖励金币
         if (!this.gameManager) {
             this.findGameManager();
         }
         if (this.gameManager) {
             this.gameManager.addGold(this.goldReward);
-            console.debug(`Enemy: Died, rewarded ${this.goldReward} gold`);
+            console.debug(`TrollSpearman: Died, rewarded ${this.goldReward} gold`);
         }
 
         // 销毁血条节点
@@ -1315,26 +1414,19 @@ export class Enemy extends Component {
                     // 渐隐消失
                     const sprite = this.node.getComponent(Sprite);
                     const startOpacity = sprite ? sprite.color.a : 255;
-                    
                     tween(this.node)
-                        .to(1.0, { 
-                            position: this.node.position.clone().add3f(0, -20, 0)
-                        })
-                        .parallel(
-                            tween().to(1.0, {}, {
-                                onUpdate: (target, ratio) => {
-                                    if (sprite && this.node && this.node.isValid) {
-                                        const color = sprite.color.clone();
-                                        color.a = startOpacity * (1 - ratio);
-                                        sprite.color = color;
-                                    }
+                        .to(1.5, {}, {
+                            onUpdate: (target, ratio) => {
+                                if (sprite) {
+                                    const color = sprite.color.clone();
+                                    color.a = Math.floor(startOpacity * (1 - ratio));
+                                    sprite.color = color;
                                 }
-                            })
-                        )
-                        .call(() => {
-                            // 确保节点被真正销毁
-                            if (this.node && this.node.isValid) {
-                                this.node.destroy();
+                            },
+                            onComplete: () => {
+                                if (this.node && this.node.isValid) {
+                                    this.node.destroy();
+                                }
                             }
                         })
                         .start();
@@ -1343,12 +1435,11 @@ export class Enemy extends Component {
         }
     }
 
-    getHealth(): number {
-        return this.currentHealth;
-    }
-
+    /**
+     * 检查敌人是否存活
+     * @returns 是否存活
+     */
     isAlive(): boolean {
         return !this.isDestroyed && this.currentHealth > 0;
     }
 }
-

@@ -406,8 +406,8 @@ export class WarAncientTree extends Component {
 
         for (const enemy of enemies) {
                 if (enemy && enemy.active && enemy.isValid) {
-                    // 获取敌人脚本，支持Enemy、OrcWarrior和OrcWarlord
-                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
+                    // 获取敌人脚本，支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
+                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any || enemy.getComponent('TrollSpearman') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const distance = Vec3.distance(this.node.worldPosition, enemy.worldPosition);
                         if (distance <= this.attackRange && distance < minDistance) {
@@ -431,8 +431,8 @@ export class WarAncientTree extends Component {
             return;
         }
 
-        // 获取敌人脚本，支持Enemy、OrcWarrior和OrcWarlord
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any;
+        // 获取敌人脚本，支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('TrollSpearman') as any;
         if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
             // 播放攻击动画，动画完成后才攻击
             this.playAttackAnimation(() => {
@@ -448,8 +448,8 @@ export class WarAncientTree extends Component {
             return;
         }
 
-        // 获取敌人脚本，支持Enemy、OrcWarrior和OrcWarlord
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any;
+        // 获取敌人脚本，支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('TrollSpearman') as any;
         if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
             this.currentTarget = null!;
             return;
@@ -602,7 +602,7 @@ export class WarAncientTree extends Component {
             this.currentTarget,
             this.attackDamage,
             (damage: number) => {
-                const enemyScript = this.currentTarget?.getComponent('Enemy') as any || this.currentTarget?.getComponent('OrcWarrior') as any || this.currentTarget?.getComponent('OrcWarlord') as any;
+                const enemyScript = this.currentTarget?.getComponent('Enemy') as any || this.currentTarget?.getComponent('OrcWarrior') as any || this.currentTarget?.getComponent('OrcWarlord') as any || this.currentTarget?.getComponent('TrollSpearman') as any;
                 if (enemyScript && enemyScript.takeDamage) {
                     enemyScript.takeDamage(damage);
                 }

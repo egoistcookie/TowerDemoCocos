@@ -30,6 +30,9 @@ export class Hunter extends Component {
     arrowPrefab: Prefab = null!; // 弓箭预制体（支持后期更新贴图）
 
     @property(Prefab)
+    boomerangPrefab: Prefab = null!; // 回旋镖预制体
+
+    @property(Prefab)
     explosionEffect: Prefab = null!;
 
     @property(Prefab)
@@ -506,8 +509,8 @@ export class Hunter extends Component {
         for (const enemy of enemies) {
             if (enemy && enemy.active && enemy.isValid) {
 
-                // 获取敌人脚本，支持Enemy、OrcWarrior和OrcWarlord
-                const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
+                // 获取敌人脚本，支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
+                const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any || enemy.getComponent('TrollSpearman') as any;
 
                 // 检查敌人是否存活
                 if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
@@ -539,8 +542,8 @@ export class Hunter extends Component {
             return;
         }
 
-        // 检查目标是否仍然存活，支持Enemy、OrcWarrior和OrcWarlord
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any;
+        // 检查目标是否仍然存活，支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('TrollSpearman') as any;
         if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
             this.stopMoving();
             return;
@@ -817,8 +820,8 @@ export class Hunter extends Component {
             const enemies = enemiesNode.children || [];
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid && enemy.active) {
-                    // 获取敌人脚本，支持Enemy、OrcWarrior和OrcWarlord
-                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
+                    // 获取敌人脚本，支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
+                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any || enemy.getComponent('TrollSpearman') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const enemyDistance = Vec3.distance(position, enemy.worldPosition);
                         const enemyRadius = 30; // 增大敌人半径
@@ -993,8 +996,8 @@ export class Hunter extends Component {
             const enemies = enemiesNode.children || [];
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid && enemy.active) {
-                    // 获取敌人脚本，支持Enemy和OrcWarrior
-                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
+                    // 获取敌人脚本，支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
+                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any || enemy.getComponent('TrollSpearman') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const enemyPos = enemy.worldPosition;
                         const distance = Vec3.distance(currentPos, enemyPos);
@@ -1105,8 +1108,8 @@ export class Hunter extends Component {
             const enemies = enemiesNode.children || [];
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid && enemy.active) {
-                    // 获取敌人脚本，支持Enemy和OrcWarrior
-                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
+                    // 获取敌人脚本，支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
+                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any || enemy.getComponent('TrollSpearman') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const enemyPos = enemy.worldPosition;
                         const distance = Vec3.distance(currentPos, enemyPos);
@@ -1162,8 +1165,8 @@ export class Hunter extends Component {
         // 攻击时停止移动
         this.stopMoving();
 
-        // 获取敌人脚本，支持OrcWarlord、OrcWarrior和Enemy
-        const enemyScript = this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('Enemy') as any;
+        // 获取敌人脚本，支持OrcWarlord、OrcWarrior、Enemy和TrollSpearman
+        const enemyScript = this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('TrollSpearman') as any;
         if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
             // 播放攻击动画，动画完成后才射出回旋镖
             this.playAttackAnimation(() => {
@@ -1182,15 +1185,18 @@ export class Hunter extends Component {
             return;
         }
 
-        // 获取敌人脚本，支持OrcWarlord、OrcWarrior和Enemy
-        const enemyScript = this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('Enemy') as any;
+        // 获取敌人脚本，支持OrcWarlord、OrcWarrior、Enemy和TrollSpearman
+        const enemyScript = this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('TrollSpearman') as any;
         if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
             this.currentTarget = null!;
             return;
         }
 
-        // 优先使用子弹预制体（如果存在），直接造成伤害
-        if (this.bulletPrefab) {
+        // 优先使用回旋镖预制体（如果存在）
+        if (this.boomerangPrefab) {
+            this.createBoomerang();
+        } else if (this.bulletPrefab) {
+            // 使用子弹预制体，直接造成伤害
             this.createBullet();
         } else if (this.arrowPrefab) {
             // 如果子弹预制体不存在，使用弓箭预制体
@@ -1201,6 +1207,80 @@ export class Hunter extends Component {
                 enemyScript.takeDamage(this.attackDamage);
             }
         }
+    }
+
+    /**
+     * 创建回旋镖
+     */
+    createBoomerang() {
+        if (!this.boomerangPrefab || !this.currentTarget) {
+            return;
+        }
+
+        // 检查目标是否有效
+        if (!this.currentTarget.isValid || !this.currentTarget.active) {
+            return;
+        }
+
+        // 创建回旋镖节点
+        const boomerang = instantiate(this.boomerangPrefab);
+        
+        // 设置父节点（添加到场景或Canvas）
+        const canvas = find('Canvas');
+        const scene = this.node.scene;
+        const parentNode = canvas || scene || this.node.parent;
+        if (parentNode) {
+            boomerang.setParent(parentNode);
+        } else {
+            boomerang.setParent(this.node.parent);
+        }
+
+        // 设置初始位置（女猎手位置）
+        const startPos = this.node.worldPosition.clone();
+        boomerang.setWorldPosition(startPos);
+
+        // 确保节点激活
+        boomerang.active = true;
+
+        // 获取Boomerang组件
+        const boomerangScript = boomerang.getComponent(Boomerang) as any;
+        if (!boomerangScript) {
+            console.error('Hunter: Boomerang prefab missing Boomerang component');
+            return;
+        }
+
+        // 播放箭矢射出音效
+        if (this.shootSound && AudioManager.Instance) {
+            AudioManager.Instance.playSFX(this.shootSound);
+        }
+
+        // 保存当前目标的引用，避免回调函数中引用失效的目标
+        const targetNode = this.currentTarget;
+        
+        // 初始化回旋镖
+        boomerangScript.init(
+            startPos,
+            targetNode,
+            this.attackDamage,
+            (damage: number) => {
+                // 播放箭矢击中音效
+                if (this.hitSound) {
+                    AudioManager.Instance?.playSFX(this.hitSound);
+                }
+                
+                // 检查目标是否仍然有效
+                if (targetNode && targetNode.isValid && targetNode.active) {
+                    // 支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
+                    const enemyScript = targetNode.getComponent('Enemy') as any || targetNode.getComponent('OrcWarrior') as any || targetNode.getComponent('OrcWarlord') as any || targetNode.getComponent('TrollSpearman') as any;
+                    if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
+                        if (enemyScript.takeDamage) {
+                            enemyScript.takeDamage(damage);
+                        }
+                    }
+                }
+            },
+            this.node // 传入女猎手节点作为ownerNode
+        );
     }
 
     playAttackAnimation(onComplete?: () => void) {
@@ -1581,8 +1661,8 @@ export class Hunter extends Component {
                 
                 // 检查目标是否仍然有效
                 if (targetNode && targetNode.isValid && targetNode.active) {
-                    // 支持Enemy、OrcWarrior和OrcWarlord
-                    const enemyScript = targetNode.getComponent('Enemy') as any || targetNode.getComponent('OrcWarrior') as any || targetNode.getComponent('OrcWarlord') as any;
+                    // 支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
+                const enemyScript = targetNode.getComponent('Enemy') as any || targetNode.getComponent('OrcWarrior') as any || targetNode.getComponent('OrcWarlord') as any || targetNode.getComponent('TrollSpearman') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         if (enemyScript.takeDamage) {
                             enemyScript.takeDamage(damage);
@@ -1603,8 +1683,8 @@ export class Hunter extends Component {
             return;
         }
 
-        // 获取敌人脚本，支持OrcWarlord、OrcWarrior和Enemy
-        const enemyScript = this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('Enemy') as any;
+        // 获取敌人脚本，支持OrcWarlord、OrcWarrior、Enemy和TrollSpearman
+        const enemyScript = this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('TrollSpearman') as any;
         if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
             // 直接造成伤害（简化处理）
             enemyScript.takeDamage(this.attackDamage);

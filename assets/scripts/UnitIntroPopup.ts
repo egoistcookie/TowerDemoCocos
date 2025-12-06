@@ -26,7 +26,7 @@ export class UnitIntroPopup extends Component {
         let gmNode = find('GameManager');
         if (gmNode) {
             this.gameManager = gmNode.getComponent(GameManager) as GameManager;
-            console.info('UnitIntroPopup: Found GameManager by name');
+            console.debug('UnitIntroPopup: Found GameManager by name');
         } else {
             // 从场景根节点查找
             const scene = this.node.scene;
@@ -42,7 +42,7 @@ export class UnitIntroPopup extends Component {
                 };
                 this.gameManager = findInScene(scene, GameManager) as GameManager;
                 if (this.gameManager) {
-                    console.info('UnitIntroPopup: Found GameManager recursively');
+                    console.debug('UnitIntroPopup: Found GameManager recursively');
                 } else {
                     console.warn('UnitIntroPopup: GameManager not found!');
                 }

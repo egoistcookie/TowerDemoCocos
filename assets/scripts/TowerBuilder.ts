@@ -326,7 +326,7 @@ export class TowerBuilder extends Component {
         if (gmNode) {
             this.gameManager = gmNode.getComponent(GameManager);
             if (this.gameManager) {
-                console.info('TowerBuilder: Found GameManager by name');
+                console.debug('TowerBuilder: Found GameManager by name');
                 return;
             }
         }
@@ -345,7 +345,7 @@ export class TowerBuilder extends Component {
             };
             this.gameManager = findInScene(scene, GameManager);
             if (this.gameManager) {
-                console.info('TowerBuilder: Found GameManager recursively');
+                console.debug('TowerBuilder: Found GameManager recursively');
                 return;
             }
         }
@@ -355,7 +355,7 @@ export class TowerBuilder extends Component {
         for (const child of sceneNodes) {
             this.gameManager = child.getComponent(GameManager);
             if (this.gameManager) {
-                console.info('TowerBuilder: Found GameManager by checking scene children');
+                console.debug('TowerBuilder: Found GameManager by checking scene children');
                 return;
             }
         }
@@ -365,7 +365,7 @@ export class TowerBuilder extends Component {
         if (canvas) {
             this.gameManager = canvas.getComponent(GameManager);
             if (this.gameManager) {
-                console.info('TowerBuilder: Found GameManager on Canvas');
+                console.debug('TowerBuilder: Found GameManager on Canvas');
                 return;
             }
             
@@ -373,7 +373,7 @@ export class TowerBuilder extends Component {
             for (const child of canvas.children) {
                 this.gameManager = child.getComponent(GameManager);
                 if (this.gameManager) {
-                    console.info('TowerBuilder: Found GameManager in Canvas children');
+                    console.debug('TowerBuilder: Found GameManager in Canvas children');
                     return;
                 }
             }

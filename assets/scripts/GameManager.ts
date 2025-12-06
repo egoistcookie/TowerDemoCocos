@@ -57,7 +57,7 @@ export class GameManager extends Component {
             return;
         }
         
-        console.info('GameManager: Auto-creating UnitIntroPopup');
+        console.debug('GameManager: Auto-creating UnitIntroPopup');
         
         // 添加Canvas节点作为容器（如果没有的话）
         let canvas = find('Canvas');
@@ -184,14 +184,14 @@ export class GameManager extends Component {
         // 设置到GameManager的属性
         this.unitIntroPopup = unitIntroPopup;
         
-        console.info('GameManager: UnitIntroPopup created with full UI structure');
+        console.debug('GameManager: UnitIntroPopup created with full UI structure');
     }
 
     start() {
         // 每次游戏开始时清空已出现单位类型集合
         this.appearedUnitTypes.clear();
         this.debugUnitTypes = [];
-        console.log(`GameManager: Cleared appearedUnitTypes collection on game start`);
+        console.debug(`GameManager: Cleared appearedUnitTypes collection on game start`);
         
         if (this.crystal) {
             this.crystalScript = this.crystal.getComponent(Crystal);
@@ -359,7 +359,7 @@ export class GameManager extends Component {
         // 暂停游戏时间
         director.getScheduler().setTimeScale(0);
         
-        console.info('GameManager: Game paused');
+        console.debug('GameManager: Game paused');
     }
     
     /**
@@ -372,7 +372,7 @@ export class GameManager extends Component {
         // 恢复游戏时间
         director.getScheduler().setTimeScale(this.originalTimeScale);
         
-        console.info('GameManager: Game resumed');
+        console.debug('GameManager: Game resumed');
         
         // 通知所有单位游戏已恢复，确保动画能够正确播放
         this.notifyGameResumed();
@@ -446,11 +446,11 @@ export class GameManager extends Component {
         // 优先使用unitScript.unitName，否则使用unitType
         const uniqueUnitType = unitScript.unitName || unitType;
         
-        console.log(`GameManager: Checking unit first appearance for type: ${uniqueUnitType}`);
-        console.log(`GameManager: Appeared unit types: ${Array.from(this.appearedUnitTypes)}`);
+        console.debug(`GameManager: Checking unit first appearance for type: ${uniqueUnitType}`);
+        console.debug(`GameManager: Appeared unit types: ${Array.from(this.appearedUnitTypes)}`);
         
         if (!this.appearedUnitTypes.has(uniqueUnitType)) {
-            console.log(`GameManager: First appearance of unit type: ${uniqueUnitType}, showing intro`);
+            console.debug(`GameManager: First appearance of unit type: ${uniqueUnitType}, showing intro`);
             this.appearedUnitTypes.add(uniqueUnitType);
             
             // 更新调试数组
@@ -459,7 +459,7 @@ export class GameManager extends Component {
             this.showUnitIntro(unitScript);
             return true;
         }
-        console.log(`GameManager: Unit type ${uniqueUnitType} has already appeared`);
+        console.debug(`GameManager: Unit type ${uniqueUnitType} has already appeared`);
         return false;
     }
     
@@ -468,7 +468,7 @@ export class GameManager extends Component {
      * @param unitScript 单位脚本
      */
     showUnitIntro(unitScript: any) {
-        console.log(`GameManager: Showing unit intro for unitScript with unitName: ${unitScript.unitName}`);
+        console.debug(`GameManager: Showing unit intro for unitScript with unitName: ${unitScript.unitName}`);
         
         // 自动创建单位介绍弹窗
         this.autoCreateUnitIntroPopup();
@@ -477,21 +477,21 @@ export class GameManager extends Component {
         let unitIcon = null;
         if (unitScript.cardIcon) {
             unitIcon = unitScript.cardIcon;
-            console.log(`GameManager: Using cardIcon for unit intro`);
+            console.debug(`GameManager: Using cardIcon for unit intro`);
         } else if (unitScript.defaultSpriteFrame) {
             unitIcon = unitScript.defaultSpriteFrame;
-            console.log(`GameManager: Using defaultSpriteFrame for unit intro`);
+            console.debug(`GameManager: Using defaultSpriteFrame for unit intro`);
         } else if (unitScript.node) {
             // 尝试获取单位的Sprite组件的spriteFrame
             const spriteComponent = unitScript.node.getComponent(Sprite);
             if (spriteComponent && spriteComponent.spriteFrame) {
                 unitIcon = spriteComponent.spriteFrame;
-                console.log(`GameManager: Using spriteComponent.spriteFrame for unit intro`);
+                console.debug(`GameManager: Using spriteComponent.spriteFrame for unit intro`);
             }
         }
         
         if (this.unitIntroPopup) {
-            console.log(`GameManager: Calling unitIntroPopup.show with unitName: ${unitScript.unitName}, unitDescription: ${unitScript.unitDescription}, unitIcon: ${unitIcon ? 'available' : 'null'}, unitType: ${unitScript.unitType}`);
+            console.debug(`GameManager: Calling unitIntroPopup.show with unitName: ${unitScript.unitName}, unitDescription: ${unitScript.unitDescription}, unitIcon: ${unitIcon ? 'available' : 'null'}, unitType: ${unitScript.unitType}`);
             this.unitIntroPopup.show({
                 unitName: unitScript.unitName || '未知单位',
                 unitDescription: unitScript.unitDescription || '暂无描述',
