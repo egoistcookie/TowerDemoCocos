@@ -34,10 +34,10 @@ export class Enemy extends Component {
     
     // 单位信息属性
     @property
-    unitName: string = "敌人";
+    unitName: string = "兽人";
     
     @property
-    unitDescription: string = "普通的敌人，攻击力和生命值较低，但数量众多。";
+    unitDescription: string = "普通的兽人，攻击力和生命值较低，但数量众多。";
     
     @property(SpriteFrame)
     unitIcon: SpriteFrame = null!;

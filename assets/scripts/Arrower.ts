@@ -39,7 +39,7 @@ export class Arrower extends Component {
     buildCost: number = 5; // 建造成本（用于回收和升级）
     
     @property
-    level: number = 1; // 防御塔等级
+    level: number = 1; // 弓箭手等级
 
     // 攻击动画相关属性
     @property(SpriteFrame)
@@ -238,7 +238,7 @@ export class Arrower extends Component {
         // 创建血条节点
         this.healthBarNode = new Node('HealthBar');
         this.healthBarNode.setParent(this.node);
-        this.healthBarNode.setPosition(0, 30, 0); // 在防御塔上方
+        this.healthBarNode.setPosition(0, 30, 0); // 在弓箭手上方
         // 确保血条初始缩放为正数（正常朝向）
         this.healthBarNode.setScale(1, 1, 1);
         
@@ -419,7 +419,7 @@ export class Arrower extends Component {
         // 更新位置
         this.node.setWorldPosition(adjustedPos);
 
-        // 根据移动方向翻转防御塔
+        // 根据移动方向翻转弓箭手
         if (direction.x < 0) {
             // 向左移动，翻转
             this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
@@ -443,7 +443,71 @@ export class Arrower extends Component {
         }
     }
 
-    findTarget() {
+    /**
+     * 检查单个节点是否是存活的敌人
+     * @param node 要检查的节点
+     * @returns 是否是存活的敌人
+     */
+    isAliveEnemy(node: Node): boolean {
+        if (!node || !node.isValid || !node.active) {
+            return false;
+        }
+        
+        const enemyScript = this.getEnemyScript(node);
+        if (!enemyScript) {
+            return false;
+        }
+        
+        // 检查敌人是否存活，支持多种存活检查方式
+        if (enemyScript.isAlive && typeof enemyScript.isAlive === 'function') {
+            return enemyScript.isAlive();
+        } else if (enemyScript.health !== undefined) {
+            return enemyScript.health > 0;
+        } else if (enemyScript.currentHealth !== undefined) {
+            return enemyScript.currentHealth > 0;
+        }
+        
+        return true;
+    }
+    
+    /**
+     * 获取节点的敌人脚本（如果是敌人的话）
+     * @param node 要获取脚本的节点
+     * @returns 敌人脚本，如果不是敌人则返回null
+     */
+    getEnemyScript(node: Node): any {
+        if (!node || !node.isValid || !node.active) {
+            return null;
+        }
+        
+        // 尝试获取所有可能的敌人组件类型
+        const possibleComponentNames = ['TrollSpearman', 'OrcWarrior', 'OrcWarlord', 'Enemy'];
+        for (const compName of possibleComponentNames) {
+            const comp = node.getComponent(compName) as any;
+            if (comp && comp.unitType === UnitType.ENEMY) {
+                return comp;
+            }
+        }
+        
+        // 遍历所有组件，查找具有unitType属性的组件
+        const allComponents = node.components;
+        for (const comp of allComponents) {
+            const typedComp = comp as any;
+            if (typedComp && typedComp.unitType === UnitType.ENEMY) {
+                return typedComp;
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * 获取所有符合条件的敌人节点
+     * @param includeOnlyAlive 是否只包含存活的敌人
+     * @param maxDistance 最大距离，超过此距离的敌人将被过滤
+     * @returns 符合条件的敌人节点数组
+     */
+    getEnemies(includeOnlyAlive: boolean = true, maxDistance: number = Infinity): Node[] {
         // 使用递归查找Enemies容器（更可靠）
         const findNodeRecursive = (node: Node, name: string): Node | null => {
             if (node.name === name) {
@@ -465,28 +529,52 @@ export class Arrower extends Component {
         }
         
         if (!enemiesNode) {
-            this.currentTarget = null!;
-            return;
+            return [];
         }
         
         const enemies = enemiesNode.children || [];
+        const result: Node[] = [];
+        
+        for (const enemy of enemies) {
+            if (enemy && enemy.active && enemy.isValid) {
+                // 检查是否是敌人
+                const enemyScript = this.getEnemyScript(enemy);
+                if (!enemyScript) {
+                    continue;
+                }
+                
+                // 检查距离
+                const distance = Vec3.distance(this.node.worldPosition, enemy.worldPosition);
+                if (distance > maxDistance) {
+                    continue;
+                }
+                
+                // 检查是否需要包含存活检查
+                if (includeOnlyAlive && !this.isAliveEnemy(enemy)) {
+                    continue;
+                }
+                
+                result.push(enemy);
+            }
+        }
+        
+        return result;
+    }
+    
+    findTarget() {
         let nearestEnemy: Node = null!;
         let minDistance = Infinity;
         const detectionRange = this.attackRange * 2; // 2倍攻击范围用于检测
-
+        
+        // 使用公共函数获取敌人
+        const enemies = this.getEnemies(true, detectionRange);
+        
         for (const enemy of enemies) {
-            if (enemy && enemy.active && enemy.isValid) {
-                // 获取敌人脚本，支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
-                const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any || enemy.getComponent('TrollSpearman') as any;
-                // 检查敌人是否存活
-                if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
-                    const distance = Vec3.distance(this.node.worldPosition, enemy.worldPosition);
-                    // 在2倍攻击范围内，选择最近的敌人
-                    if (distance <= detectionRange && distance < minDistance) {
-                        minDistance = distance;
-                        nearestEnemy = enemy;
-                    }
-                }
+            const distance = Vec3.distance(this.node.worldPosition, enemy.worldPosition);
+            // 选择最近的敌人
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearestEnemy = enemy;
             }
         }
 
@@ -499,9 +587,8 @@ export class Arrower extends Component {
             return;
         }
 
-        // 检查目标是否仍然存活，支持Enemy、OrcWarrior和OrcWarlord
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any;
-        if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
+        // 检查目标是否仍然存活，支持所有敌人类型
+        if (!this.isAliveEnemy(this.currentTarget)) {
             this.stopMoving();
             return;
         }
@@ -559,7 +646,7 @@ export class Arrower extends Component {
             // 血条位置已经在createHealthBar中设置为相对位置，会自动跟随
         }
 
-        // 根据移动方向翻转防御塔
+        // 根据移动方向翻转弓箭手
         if (direction.x < 0) {
             // 向左移动，翻转
             this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
@@ -701,7 +788,7 @@ export class Arrower extends Component {
             }
         }
 
-        // 检查与其他防御塔的碰撞
+        // 检查与其他弓箭手的碰撞
         let towersNode = find('Towers');
         // 如果直接查找失败，尝试递归查找
         if (!towersNode) {
@@ -728,7 +815,7 @@ export class Arrower extends Component {
                 if (tower && tower.isValid && tower.active && tower !== this.node) {
                     towerCount++;
                     const towerDistance = Vec3.distance(position, tower.worldPosition);
-                    // 获取另一个防御塔的碰撞半径（如果有）
+                    // 获取另一个弓箭手的碰撞半径（如果有）
                     const otherTowerScript = tower.getComponent('Arrower') as any;
                     const otherRadius = otherTowerScript && otherTowerScript.collisionRadius ? otherTowerScript.collisionRadius : this.collisionRadius;
                     const minDistance = (this.collisionRadius + otherRadius) * 1.2; // 增加20%的安全距离
@@ -745,7 +832,7 @@ export class Arrower extends Component {
                 }
             }
             
-            // 调试：如果没有找到其他防御塔
+            // 调试：如果没有找到其他弓箭手
             if (towerCount === 0 && Math.random() < 0.016) {
                 // console.debug(`Arrower: No other towers found in container (total: ${towers.length})`);
             }
@@ -756,22 +843,15 @@ export class Arrower extends Component {
             }
         }
 
-        // 检查与敌人的碰撞
-        const enemiesNode = find('Enemies');
-        if (enemiesNode) {
-            const enemies = enemiesNode.children || [];
-            for (const enemy of enemies) {
-                if (enemy && enemy.isValid && enemy.active) {
-                    // 获取敌人脚本，支持Enemy和OrcWarrior
-                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
-                    if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
-                        const enemyDistance = Vec3.distance(position, enemy.worldPosition);
-                        const enemyRadius = 30; // 增大敌人半径
-                        const minDistance = this.collisionRadius + enemyRadius;
-                        if (enemyDistance < minDistance) {
-                            return true;
-                        }
-                    }
+        // 检查与敌人的碰撞 - 使用公共敌人获取函数
+        const enemies = this.getEnemies(true);
+        for (const enemy of enemies) {
+            if (enemy && enemy.isValid && enemy.active) {
+                const enemyDistance = Vec3.distance(position, enemy.worldPosition);
+                const enemyRadius = 30; // 增大敌人半径
+                const minDistance = this.collisionRadius + enemyRadius;
+                if (enemyDistance < minDistance) {
+                    return true;
                 }
             }
         }
@@ -906,7 +986,7 @@ export class Arrower extends Component {
                 }
         }
 
-        // 检查其他防御塔
+        // 检查其他弓箭手
         const towersNode = find('Towers');
         if (towersNode) {
             const towers = towersNode.children || [];
@@ -914,7 +994,7 @@ export class Arrower extends Component {
                 if (tower && tower.isValid && tower.active && tower !== this.node) {
                     const towerPos = tower.worldPosition;
                     const distance = Vec3.distance(currentPos, towerPos);
-                    // 获取另一个防御塔的碰撞半径
+                    // 获取另一个弓箭手的碰撞半径
                     const otherTowerScript = tower.getComponent('Arrower') as any;
                     const otherRadius = otherTowerScript && otherTowerScript.collisionRadius ? otherTowerScript.collisionRadius : this.collisionRadius;
                     const minDistance = (this.collisionRadius + otherRadius) * 1.2;
@@ -932,29 +1012,22 @@ export class Arrower extends Component {
             }
         }
 
-        // 检查敌人
-        const enemiesNode = find('Enemies');
-        if (enemiesNode) {
-            const enemies = enemiesNode.children || [];
-            for (const enemy of enemies) {
-                if (enemy && enemy.isValid && enemy.active) {
-                    // 获取敌人脚本，支持Enemy和OrcWarrior
-                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
-                    if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
-                        const enemyPos = enemy.worldPosition;
-                        const distance = Vec3.distance(currentPos, enemyPos);
-                        const enemyRadius = 30;
-                        const minDistance = this.collisionRadius + enemyRadius;
-                        if (distance < minDistance && distance > 0.1) {
-                            const pushDir = new Vec3();
-                            Vec3.subtract(pushDir, currentPos, enemyPos);
-                            pushDir.normalize();
-                            const strength = Math.max(1.0, (minDistance - distance) / minDistance * 2.0);
-                            Vec3.scaleAndAdd(pushForce, pushForce, pushDir, strength);
-                            maxPushStrength = Math.max(maxPushStrength, strength);
-                            obstacleCount++;
-                        }
-                    }
+        // 检查敌人 - 使用公共敌人获取函数
+        const enemies = this.getEnemies(true, this.collisionRadius * 2);
+        for (const enemy of enemies) {
+            if (enemy && enemy.isValid && enemy.active) {
+                const enemyPos = enemy.worldPosition;
+                const distance = Vec3.distance(currentPos, enemyPos);
+                const enemyRadius = 30;
+                const minDistance = this.collisionRadius + enemyRadius;
+                if (distance < minDistance && distance > 0.1) {
+                    const pushDir = new Vec3();
+                    Vec3.subtract(pushDir, currentPos, enemyPos);
+                    pushDir.normalize();
+                    const strength = Math.max(1.0, (minDistance - distance) / minDistance * 2.0);
+                    Vec3.scaleAndAdd(pushForce, pushForce, pushDir, strength);
+                    maxPushStrength = Math.max(maxPushStrength, strength);
+                    obstacleCount++;
                 }
             }
         }
@@ -1008,7 +1081,7 @@ export class Arrower extends Component {
             }
         }
 
-        // 检查其他防御塔
+        // 检查其他弓箭手
         const towersNode = find('Towers');
         if (towersNode) {
             const towers = towersNode.children || [];
@@ -1016,7 +1089,7 @@ export class Arrower extends Component {
                 if (tower && tower.isValid && tower.active && tower !== this.node) {
                     const towerPos = tower.worldPosition;
                     const distance = Vec3.distance(currentPos, towerPos);
-                    // 获取另一个防御塔的碰撞半径
+                    // 获取另一个弓箭手的碰撞半径
                     const otherTowerScript = tower.getComponent('Arrower') as any;
                     const otherRadius = otherTowerScript && otherTowerScript.collisionRadius ? otherTowerScript.collisionRadius : this.collisionRadius;
                     const minDistance = (this.collisionRadius + otherRadius) * 1.2;
@@ -1036,32 +1109,25 @@ export class Arrower extends Component {
             }
         }
 
-        // 检查敌人
-        const enemiesNode = find('Enemies');
-        if (enemiesNode) {
-            const enemies = enemiesNode.children || [];
-            for (const enemy of enemies) {
-                if (enemy && enemy.isValid && enemy.active) {
-                    // 获取敌人脚本，支持Enemy和OrcWarrior
-                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
-                    if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
-                        const enemyPos = enemy.worldPosition;
-                        const distance = Vec3.distance(currentPos, enemyPos);
-                        const enemyRadius = 25;
-                        const minDistance = this.collisionRadius + enemyRadius;
-                        if (distance < detectionRange && distance > 0.1) {
-                            const avoidDir = new Vec3();
-                            Vec3.subtract(avoidDir, currentPos, enemyPos);
-                            avoidDir.normalize();
-                            let strength = 1 - (distance / detectionRange);
-                            if (distance < minDistance) {
-                                strength = 2.0;
-                            }
-                            Vec3.scaleAndAdd(avoidanceForce, avoidanceForce, avoidDir, strength);
-                            maxStrength = Math.max(maxStrength, strength);
-                            obstacleCount++;
-                        }
+        // 检查敌人 - 使用公共敌人获取函数
+        const enemies = this.getEnemies(true, detectionRange);
+        for (const enemy of enemies) {
+            if (enemy && enemy.isValid && enemy.active) {
+                const enemyPos = enemy.worldPosition;
+                const distance = Vec3.distance(currentPos, enemyPos);
+                const enemyRadius = 25;
+                const minDistance = this.collisionRadius + enemyRadius;
+                if (distance < detectionRange && distance > 0.1) {
+                    const avoidDir = new Vec3();
+                    Vec3.subtract(avoidDir, currentPos, enemyPos);
+                    avoidDir.normalize();
+                    let strength = 1 - (distance / detectionRange);
+                    if (distance < minDistance) {
+                        strength = 2.0;
                     }
+                    Vec3.scaleAndAdd(avoidanceForce, avoidanceForce, avoidDir, strength);
+                    maxStrength = Math.max(maxStrength, strength);
+                    obstacleCount++;
                 }
             }
         }
@@ -1099,9 +1165,8 @@ export class Arrower extends Component {
         // 攻击时停止移动
         this.stopMoving();
 
-        // 获取敌人脚本，支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('TrollSpearman') as any;
-        if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
+        // 检查目标是否是存活的敌人
+        if (this.isAliveEnemy(this.currentTarget)) {
             // 播放攻击动画，动画完成后才射出弓箭
             this.playAttackAnimation(() => {
                 // 动画播放完成后的回调，在这里创建弓箭
@@ -1119,12 +1184,14 @@ export class Arrower extends Component {
             return;
         }
 
-        // 获取敌人脚本，支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('TrollSpearman') as any;
-        if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
+        // 检查目标是否是存活的敌人
+        if (!this.isAliveEnemy(this.currentTarget)) {
             this.currentTarget = null!;
             return;
         }
+        
+        // 获取敌人脚本
+        const enemyScript = this.getEnemyScript(this.currentTarget);
 
         // 创建弓箭特效（抛物线轨迹）
         if (this.arrowPrefab) {
@@ -1134,7 +1201,7 @@ export class Arrower extends Component {
             this.createBullet();
         } else {
             // 直接伤害（无特效）
-            if (enemyScript.takeDamage) {
+            if (enemyScript && enemyScript.takeDamage) {
                 enemyScript.takeDamage(this.attackDamage);
             }
         }
@@ -1167,7 +1234,7 @@ export class Arrower extends Component {
         if (this.currentTarget && this.currentTarget.isValid) {
             const towerPos = this.node.worldPosition;
             const enemyPos = this.currentTarget.worldPosition;
-            // 如果敌人在左侧（敌人x < 防御塔x），需要翻转
+            // 如果敌人在左侧（敌人x < 弓箭手x），需要翻转
             shouldFlip = enemyPos.x < towerPos.x;
             
             if (shouldFlip) {
@@ -1476,7 +1543,7 @@ export class Arrower extends Component {
             arrow.setParent(this.node.parent);
         }
 
-        // 设置初始位置（防御塔位置）
+        // 设置初始位置（弓箭手位置）
         const startPos = this.node.worldPosition.clone();
         arrow.setWorldPosition(startPos);
 
@@ -1510,10 +1577,11 @@ export class Arrower extends Component {
                 
                 // 检查目标是否仍然有效
                 if (targetNode && targetNode.isValid && targetNode.active) {
-                    // 获取敌人脚本，支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
-                const enemyScript = targetNode.getComponent('Enemy') as any || targetNode.getComponent('OrcWarrior') as any || targetNode.getComponent('OrcWarlord') as any || targetNode.getComponent('TrollSpearman') as any;
-                    if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
-                        if (enemyScript.takeDamage) {
+                    // 检查目标是否是存活的敌人
+                    if (this.isAliveEnemy(targetNode)) {
+                        // 获取敌人脚本
+                        const enemyScript = this.getEnemyScript(targetNode);
+                        if (enemyScript && enemyScript.takeDamage) {
                             enemyScript.takeDamage(damage);
                         }
                     }
@@ -1537,10 +1605,12 @@ export class Arrower extends Component {
         direction.normalize();
 
         // 直接造成伤害（简化处理）
-        // 获取敌人脚本，支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('TrollSpearman') as any;
-        if (enemyScript && enemyScript.takeDamage) {
-            enemyScript.takeDamage(this.attackDamage);
+        // 获取敌人脚本，支持所有敌人类型
+        if (this.isAliveEnemy(this.currentTarget)) {
+            const enemyScript = this.getEnemyScript(this.currentTarget);
+            if (enemyScript && enemyScript.takeDamage) {
+                enemyScript.takeDamage(this.attackDamage);
+            }
         }
 
         // 销毁子弹
@@ -1695,7 +1765,7 @@ export class Arrower extends Component {
             damageNode.setParent(this.node.scene);
         }
         
-        // 设置位置（在防御塔上方）
+        // 设置位置（在弓箭手上方）
         damageNode.setWorldPosition(this.node.worldPosition.clone().add3f(0, 30, 0));
         
         // 如果有DamageNumber组件，设置伤害值
@@ -1766,13 +1836,13 @@ export class Arrower extends Component {
         // 移除高亮效果
         this.removeHighlight();
 
-        // 真正销毁防御塔节点
+        // 真正销毁弓箭手节点
         this.scheduleOnce(() => {
             // 销毁血条节点
             if (this.healthBarNode && this.healthBarNode.isValid) {
                 this.healthBarNode.destroy();
             }
-            // 销毁防御塔节点
+            // 销毁弓箭手节点
             if (this.node && this.node.isValid) {
                 this.node.destroy();
             }
@@ -1818,7 +1888,7 @@ export class Arrower extends Component {
         const uiTransform = this.selectionPanel.addComponent(UITransform);
         uiTransform.setContentSize(120, 40);
 
-        // 设置位置（在防御塔上方）
+        // 设置位置（在弓箭手上方）
         const worldPos = this.node.worldPosition.clone();
         worldPos.y += 50;
         this.selectionPanel.setWorldPosition(worldPos);
@@ -2072,24 +2142,14 @@ export class Arrower extends Component {
             }
         }
 
-        // 检查与敌人的碰撞
-        let enemiesNode = find('Enemies');
-        if (!enemiesNode && this.node.scene) {
-            enemiesNode = findNodeRecursive(this.node.scene, 'Enemies');
-        }
-        
-        if (enemiesNode) {
-            const enemies = enemiesNode.children || [];
-            for (const enemy of enemies) {
-                if (enemy && enemy.isValid && enemy.active) {
-                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
-                    if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
-                        const distance = Vec3.distance(position, enemy.worldPosition);
-                        const enemyRadius = 30;
-                        if (distance < radius + enemyRadius) {
-                            return true;
-                        }
-                    }
+        // 检查与敌人的碰撞 - 使用公共敌人获取函数
+        const enemies = this.getEnemies(true, radius * 2);
+        for (const enemy of enemies) {
+            if (enemy && enemy.isValid && enemy.active) {
+                const distance = Vec3.distance(position, enemy.worldPosition);
+                const enemyRadius = 30;
+                if (distance < radius + enemyRadius) {
+                    return true;
                 }
             }
         }
@@ -2142,7 +2202,7 @@ export class Arrower extends Component {
         // 隐藏面板
         this.hideSelectionPanel();
         
-        // 销毁防御塔（会真正从场景中移除）
+        // 销毁弓箭手（会真正从场景中移除）
         this.destroyTower();
     }
 
@@ -2169,7 +2229,7 @@ export class Arrower extends Component {
         // 消耗金币
         this.gameManager.spendGold(upgradeCost);
 
-        // 升级防御塔
+        // 升级弓箭手
         this.level++;
         this.attackDamage = Math.floor(this.attackDamage * 1.5); // 攻击力增加50%
         this.attackInterval = this.attackInterval / 1.5; // 攻击速度增加50%（间隔减少）

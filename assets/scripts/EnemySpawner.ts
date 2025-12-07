@@ -1,6 +1,6 @@
 import { _decorator, Component, Node, Prefab, instantiate, Vec3, view, find, resources, JsonAsset } from 'cc';
 import { GameManager, GameState } from './GameManager';
-import { UIManager } from './UIManager';
+// 移除UIManager导入，避免循环导入
 import { Enemy } from './Enemy';
 import { OrcWarrior } from './OrcWarrior';
 import { OrcWarlord } from './OrcWarlord';
@@ -79,17 +79,17 @@ export class EnemySpawner extends Component {
         // 查找UIManager - 尝试多种方式
         this.uiManager = null;
         
-        // 方式1: 直接从场景根节点查找UIManager组件
+        // 方式1: 直接从场景根节点查找UIManager组件，使用字符串字面量避免循环导入
         const scene = this.node.scene;
         if (scene) {
-            this.uiManager = scene.getComponentInChildren(UIManager);
+            this.uiManager = scene.getComponentInChildren('UIManager');
         }
         
-        // 方式2: 如果方式1失败，尝试查找UI节点
+        // 方式2: 如果方式1失败，尝试查找UI节点，使用字符串字面量避免循环导入
         if (!this.uiManager) {
             const uiNode = find('UI') || find('Canvas/UI') || find('Canvas');
             if (uiNode) {
-                this.uiManager = uiNode.getComponent(UIManager) || uiNode.getComponentInChildren(UIManager);
+                this.uiManager = uiNode.getComponent('UIManager') || uiNode.getComponentInChildren('UIManager');
             }
         }
         
@@ -168,8 +168,8 @@ export class EnemySpawner extends Component {
             this.waveConfig = jsonAsset.json as WaveConfigFile;
             console.debug(`EnemySpawner: Loaded waveConfig with ${this.waveConfig.waves.length} waves`);
             
-            // 开始第一波
-            this.startNextWave();
+            // 不立即开始第一波，只在游戏开始后才开始波次系统
+            console.debug('EnemySpawner: Wave config loaded, waiting for game to start before starting waves');
         });
     }
 
@@ -234,8 +234,46 @@ export class EnemySpawner extends Component {
      * 更新波次状态
      */
     private updateWave(deltaTime: number) {
+        // 优先检查游戏状态，只有在游戏进行中时才处理波次相关逻辑
+        if (this.gameManager) {
+            const gameState = this.gameManager.getGameState();
+            if (gameState !== GameState.Playing) {
+                // 游戏未开始，完全不处理波次系统（包括初始化和计时）
+                console.debug('EnemySpawner: Game not in Playing state, skipping wave updates entirely');
+                return;
+            }
+        }
+        
         // 检查是否所有波次都已完成
         if (this.waveConfig === null || this.currentWaveIndex >= this.waveConfig.waves.length) {
+            return;
+        }
+        
+        // 如果currentWaveIndex为-1，初始化波次系统并立即显示第一波提示
+        if (this.currentWaveIndex === -1) {
+            console.debug('EnemySpawner: Initializing wave system for first wave');
+            this.currentWaveIndex = 0;
+            this.currentWave = this.waveConfig.waves[0];
+            this.preWaveDelayTimer = 0;
+            this.isWaveActive = true;
+            
+            // 直接显示第一波提示，不等待延迟
+            console.debug(`EnemySpawner: Starting first wave ${this.currentWave.id} - ${this.currentWave.name}`);
+            console.debug(`EnemySpawner: Description: ${this.currentWave.description}`);
+            
+            // 触发UI提示
+            if (this.uiManager) {
+                this.uiManager.showAnnouncement(`${this.currentWave.name} - ${this.currentWave.description}`);
+                this.uiManager.showWarningEffect();
+            }
+            
+            // 重置波次状态，开始生成敌人
+            this.preWaveDelayTimer = 0;
+            this.currentEnemyIndex = 0;
+            this.enemiesSpawnedCount = 0;
+            this.enemySpawnTimer = 0;
+            this.currentEnemyConfig = null;
+            
             return;
         }
         
@@ -283,6 +321,17 @@ export class EnemySpawner extends Component {
      * 开始下一波
      */
     private startNextWave() {
+        // 检查游戏状态，只有在游戏进行中时才显示波次提示
+        if (this.gameManager) {
+            const gameState = this.gameManager.getGameState();
+            if (gameState !== GameState.Playing) {
+                console.debug(`EnemySpawner: Game not in Playing state (state: ${gameState}), cannot show wave announcement`);
+                // 只更新波次状态，不显示UI提示
+                this.currentWaveIndex++;
+                return;
+            }
+        }
+        
         // 检查是否还有波次
         if (this.waveConfig === null) {
             console.error('EnemySpawner: Wave config is null, cannot start next wave');
@@ -563,7 +612,7 @@ export class EnemySpawner extends Component {
             ]
         };
         
-        // 开始第一波
-        this.startNextWave();
+        // 不立即开始第一波，只在游戏开始后才开始波次系统
+        console.debug('EnemySpawner: Local wave config loaded, waiting for game to start before starting waves');
     }
 }
