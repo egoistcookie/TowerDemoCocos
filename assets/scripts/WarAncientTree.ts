@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Sprite, SpriteFrame, Color, Graphics, UITransform, Label, EventTouch } from 'cc';
+import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Sprite, SpriteFrame, Color, Graphics, UITransform, Label, EventTouch, Camera } from 'cc';
 import { GameManager, GameState } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
@@ -7,6 +7,8 @@ import { Arrower } from './Arrower';
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
 import { SelectionManager } from './SelectionManager';
+import { UnitConfigManager } from './UnitConfigManager';
+import { BuildingGridPanel } from './BuildingGridPanel';
 const { ccclass, property } = _decorator;
 
 // 单位类型枚举
@@ -61,7 +63,7 @@ export class WarAncientTree extends Component {
     
     // 单位信息属性
     @property
-    unitName: string = "战争古树";
+    unitName: string = "弓箭手小屋";
     
     @property
     unitDescription: string = "能够生产弓箭手的建筑物，同时拥有远程攻击能力。";
@@ -118,6 +120,13 @@ export class WarAncientTree extends Component {
     private globalTouchHandler: ((event: EventTouch) => void) | null = null; // 全局触摸事件处理器
     private unitSelectionManager: UnitSelectionManager = null!; // 单位选择管理器
 
+    // 网格位置相关
+    public gridX: number = -1; // 网格X坐标
+    public gridY: number = -1; // 网格Y坐标
+    private isMoving: boolean = false; // 是否正在移动
+    private moveStartPos: Vec3 = new Vec3(); // 移动起始位置
+    private gridPanel: BuildingGridPanel = null!; // 网格面板组件
+
     start() {
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
@@ -142,6 +151,9 @@ export class WarAncientTree extends Component {
 
         // 查找单位选择管理器
         this.findUnitSelectionManager();
+
+        // 查找网格面板
+        this.findGridPanel();
 
         // 查找Tower容器
         this.findTowerContainer();
@@ -654,7 +666,14 @@ export class WarAncientTree extends Component {
         // 设置Tower的建造成本（如果需要）
         const towerScript = tower.getComponent(Arrower);
         if (towerScript) {
-            towerScript.buildCost = 0; // 由战争古树生产的Arrower建造成本为0
+            // 先应用配置（排除 buildCost，因为需要在实例化时动态设置）
+            const configManager = UnitConfigManager.getInstance();
+            if (configManager.isConfigLoaded()) {
+                configManager.applyConfigToUnit('Arrower', towerScript, ['buildCost']);
+            }
+            
+            // 然后设置建造成本（由战争古树生产的Arrower建造成本为0）
+            towerScript.buildCost = 0;
             
             // 检查单位是否首次出现
             if (this.gameManager) {
@@ -1039,6 +1058,20 @@ export class WarAncientTree extends Component {
 
         this.isDestroyed = true;
 
+        // 释放网格占用
+        if (this.gridPanel && this.gridX >= 0 && this.gridY >= 0) {
+            this.gridPanel.releaseGrid(this.gridX, this.gridY);
+        }
+
+        // 移除移动事件监听
+        if (this.isMoving) {
+            const canvas = find('Canvas');
+            if (canvas) {
+                canvas.off(Node.EventType.TOUCH_MOVE, this.onMoveTouchMove, this);
+                canvas.off(Node.EventType.TOUCH_END, this.onMoveTouchEnd, this);
+            }
+        }
+
         // 卸下所有依附的小精灵，让它们出现在建筑物下方
         while (this.attachedWisps.length > 0) {
             // 先从列表中移除小精灵，再处理，避免null引用
@@ -1100,6 +1133,11 @@ export class WarAncientTree extends Component {
         event.propagationStopped = true;
         console.debug('WarAncientTree.onWarAncientTreeClick: Event propagation stopped');
 
+        // 如果正在移动，不处理点击
+        if (this.isMoving) {
+            return;
+        }
+
         // 如果已经显示选择面板，先隐藏
         if (this.selectionPanel && this.selectionPanel.isValid) {
             console.debug('WarAncientTree.onWarAncientTreeClick: Selection panel already shown, hiding it');
@@ -1107,10 +1145,162 @@ export class WarAncientTree extends Component {
             return;
         }
 
-        // 显示选择面板
-        console.debug('WarAncientTree.onWarAncientTreeClick: Showing selection panel');
-        this.showSelectionPanel();
-        console.debug('WarAncientTree.onWarAncientTreeClick: Method completed');
+        // 开始移动模式
+        this.startMoving(event);
+    }
+
+    /**
+     * 开始移动建筑物
+     */
+    startMoving(event: EventTouch) {
+        if (!this.gridPanel) {
+            this.findGridPanel();
+        }
+        
+        if (!this.gridPanel) {
+            // 如果没有网格面板，显示选择面板
+            this.showSelectionPanel();
+            return;
+        }
+
+        this.isMoving = true;
+        this.moveStartPos = this.node.worldPosition.clone();
+        
+        // 监听触摸移动和结束事件
+        const canvas = find('Canvas');
+        if (canvas) {
+            canvas.on(Node.EventType.TOUCH_MOVE, this.onMoveTouchMove, this);
+            canvas.on(Node.EventType.TOUCH_END, this.onMoveTouchEnd, this);
+        }
+        
+        // 高亮当前网格
+        this.gridPanel.highlightGrid(this.node.worldPosition);
+    }
+
+    /**
+     * 移动时的触摸移动事件
+     */
+    onMoveTouchMove(event: EventTouch) {
+        if (!this.isMoving || !this.gridPanel) {
+            return;
+        }
+
+        // 获取触摸位置并转换为世界坐标
+        const touchLocation = event.getLocation();
+        const cameraNode = find('Canvas/Camera');
+        if (!cameraNode) return;
+        
+        const camera = cameraNode.getComponent(Camera);
+        if (!camera) return;
+
+        const screenPos = new Vec3(touchLocation.x, touchLocation.y, 0);
+        const worldPos = new Vec3();
+        camera.screenToWorld(screenPos, worldPos);
+        worldPos.z = 0;
+
+        // 高亮网格
+        this.gridPanel.highlightGrid(worldPos);
+    }
+
+    /**
+     * 移动时的触摸结束事件
+     */
+    onMoveTouchEnd(event: EventTouch) {
+        if (!this.isMoving || !this.gridPanel) {
+            return;
+        }
+
+        // 移除事件监听
+        const canvas = find('Canvas');
+        if (canvas) {
+            canvas.off(Node.EventType.TOUCH_MOVE, this.onMoveTouchMove, this);
+            canvas.off(Node.EventType.TOUCH_END, this.onMoveTouchEnd, this);
+        }
+
+        this.isMoving = false;
+
+        // 获取触摸位置并转换为世界坐标
+        const touchLocation = event.getLocation();
+        const cameraNode = find('Canvas/Camera');
+        if (!cameraNode) {
+            this.gridPanel.clearHighlight();
+            return;
+        }
+        
+        const camera = cameraNode.getComponent(Camera);
+        if (!camera) {
+            this.gridPanel.clearHighlight();
+            return;
+        }
+
+        const screenPos = new Vec3(touchLocation.x, touchLocation.y, 0);
+        const worldPos = new Vec3();
+        camera.screenToWorld(screenPos, worldPos);
+        worldPos.z = 0;
+
+        // 获取最近的网格中心
+        const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
+        if (gridCenter) {
+            // 检查目标网格是否可用
+            const grid = this.gridPanel.worldToGrid(gridCenter);
+            if (grid && !this.gridPanel.isGridOccupied(grid.x, grid.y)) {
+                // 移动到新位置
+                this.moveToGridPosition(grid.x, grid.y);
+            } else {
+                // 目标网格已被占用，显示选择面板
+                this.showSelectionPanel();
+            }
+        } else {
+            // 不在网格内，显示选择面板
+            this.showSelectionPanel();
+        }
+
+        // 清除高亮
+        this.gridPanel.clearHighlight();
+    }
+
+    /**
+     * 移动到指定网格位置
+     */
+    moveToGridPosition(gridX: number, gridY: number) {
+        if (!this.gridPanel) {
+            this.findGridPanel();
+        }
+        
+        if (!this.gridPanel) {
+            return;
+        }
+
+        // 获取目标网格的世界坐标
+        const targetWorldPos = this.gridPanel.gridToWorld(gridX, gridY);
+        if (!targetWorldPos) {
+            return;
+        }
+
+        // 释放原网格
+        if (this.gridX >= 0 && this.gridY >= 0) {
+            this.gridPanel.releaseGrid(this.gridX, this.gridY);
+        }
+
+        // 占用新网格
+        this.gridPanel.occupyGrid(gridX, gridY, this.node);
+        this.gridX = gridX;
+        this.gridY = gridY;
+
+        // 移动建筑物到新位置
+        this.node.setWorldPosition(targetWorldPos);
+
+        console.debug(`WarAncientTree: Moved to grid (${gridX}, ${gridY})`);
+    }
+
+    /**
+     * 查找网格面板
+     */
+    findGridPanel() {
+        const gridPanelNode = find('BuildingGridPanel');
+        if (gridPanelNode) {
+            this.gridPanel = gridPanelNode.getComponent(BuildingGridPanel);
+        }
     }
 
     /**
@@ -1201,7 +1391,7 @@ export class WarAncientTree extends Component {
         }
         if (this.unitSelectionManager) {
             const unitInfo: UnitInfo = {
-                name: '战争古树',
+                name: '弓箭手小屋',
                 level: this.level,
                 currentHealth: this.currentHealth,
                 maxHealth: this.maxHealth,

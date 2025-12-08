@@ -1,4 +1,5 @@
 import { _decorator, Component, Node, Button, Label, find, director, UITransform, Color, Graphics, tween, Vec3, UIOpacity, Sprite, SpriteFrame, Prefab, instantiate, assetManager, director as directorModule, resources } from 'cc';
+import { UnitConfigManager } from './UnitConfigManager';
 const { ccclass, property } = _decorator;
 
 // 天赋类型
@@ -669,7 +670,7 @@ export class TalentSystem extends Component {
         statsNode.setParent(contentNode);
         statsNode.setPosition(0, -30, 0);
         
-        // 获取单位属性（这里使用模拟数据，实际应从单位脚本中获取）
+        // 从配置文件获取单位属性
         const unitStats = this.getUnitStats(unit.id);
         
         // 显示属性
@@ -716,56 +717,72 @@ export class TalentSystem extends Component {
     }
     
     getUnitStats(unitId: string): any {
-        // 根据单位ID返回相应的属性数据
-        // 这里使用模拟数据，实际应从单位脚本中获取
-        const statsMap: any = {
-            'arrower': {
-                '生命值': 50,
-                '攻击力': 10,
-                '攻击范围': '200像素',
-                '攻击间隔': '1.0秒',
-                '移动速度': '100像素/秒',
-                '建造成本': '5金币'
-            },
-            'hunter': {
-                '生命值': 50,
-                '攻击力': 10,
-                '攻击范围': '200像素',
-                '攻击间隔': '1.0秒',
-                '移动速度': '100像素/秒',
-                '建造成本': '5金币'
-            },
-            'wisp': {
-                '生命值': 30,
-                '治疗量': '2点/次',
-                '治疗间隔': '1.0秒',
-                '移动速度': '80像素/秒',
-                '人口占用': 1
-            },
-            'war_ancient_tree': {
-                '生命值': 100,
-                '攻击力': 15,
-                '攻击范围': '200像素',
-                '攻击间隔': '1.5秒',
-                '建造成本': '10金币',
-                '最大生产数量': 4
-            },
-            'moon_well': {
-                '生命值': 80,
-                '治疗范围': '100像素',
-                '治疗量': '1点/次',
-                '治疗间隔': '2.0秒',
-                '建造成本': '10金币',
-                '人口增加': 10
-            },
-            'tree': {
-                '生命值': 20,
-                '建造成本': '1金币',
-                '回收奖励': '1金币'
-            }
-        };
+        // 从配置文件读取单位属性
+        const configManager = UnitConfigManager.getInstance();
         
-        return statsMap[unitId] || {};
+        if (configManager.isConfigLoaded()) {
+            // 单位ID映射：处理不同格式的单位ID
+            const unitIdMap: Record<string, string> = {
+                'arrower': 'Arrower',
+                'Arrower': 'Arrower',
+                'hunter': 'Hunter',
+                'Hunter': 'Hunter',
+                'wisp': 'Wisp',
+                'Wisp': 'Wisp',
+                'war_ancient_tree': 'WarAncientTree',
+                'WarAncientTree': 'WarAncientTree',
+                'moon_well': 'MoonWell',
+                'MoonWell': 'MoonWell',
+                'tree': 'Tree',
+                'Tree': 'Tree'
+            };
+            
+            const normalizedUnitId = unitIdMap[unitId] || unitId;
+            const displayStats = configManager.getUnitDisplayStats(normalizedUnitId);
+            if (displayStats && Object.keys(displayStats).length > 0) {
+                return displayStats;
+            }
+        }
+        
+        // 如果配置未加载或找不到配置，返回空对象
+        return {};
+    }
+    
+    /**
+     * 尝试通过单位ID重新查找sprite组件
+     * @param unitId 单位ID
+     * @returns Sprite组件，如果找不到则返回null
+     */
+    private tryFindSpriteByUnitId(unitId: string): Sprite | null {
+        if (!this.talentPanel) {
+            return null;
+        }
+        
+        // 查找对应的卡片节点
+        const cardNodeName = `UnitCard_${unitId}`;
+        const cardsContainer = this.talentPanel.getChildByName('UnitCardsContainer');
+        if (!cardsContainer) {
+            return null;
+        }
+        
+        const cardNode = cardsContainer.getChildByName(cardNodeName);
+        if (!cardNode) {
+            return null;
+        }
+        
+        // 查找图标节点
+        const iconNode = cardNode.getChildByName('UnitIcon');
+        if (!iconNode) {
+            return null;
+        }
+        
+        // 查找sprite节点
+        const spriteNode = iconNode.getChildByName('UnitIconSprite');
+        if (!spriteNode) {
+            return null;
+        }
+        
+        return spriteNode.getComponent(Sprite);
     }
     
     /**
@@ -777,31 +794,10 @@ export class TalentSystem extends Component {
         console.log(`TalentSystem: Loading card icon for unit ${unitId}`);
         
         // 根据单位ID构建节点名称
-        const unitNameMap: Record<string, string> = {
-            'Arrower': 'Arrower',
-            'Hunter': 'Hunter',
-            'Wisp': 'Wisp',
-            'WarAncientTree': 'WarAncientTree',
-            'MoonWell': 'MoonWell',
-            'Tree': 'Tree'
-        };
+        const nodeName = unitId;
         
-        const nodeName = unitNameMap[unitId] || unitId;
-        
-        // 对于 Arrower 和 Hunter，优先从场景中查找实例
-        if (unitId === 'Arrower' || unitId === 'Hunter') {
-            // 1. 首先从场景中查找单位实例，获取其图标（最可靠）
-            this.tryGetIconFromScene(unitId, nodeName, sprite, () => {
-                // 2. 如果场景中没有找到，从预制体获取
-                this.tryGetIconFromPrefab(unitId, nodeName, sprite);
-            });
-        } else {
-            // 1. 首先从场景中查找单位，获取其图标
-            this.tryGetIconFromScene(unitId, nodeName, sprite, () => {
-                // 2. 如果场景中没有找到，从预制体获取
-                this.tryGetIconFromPrefab(unitId, nodeName, sprite);
-            });
-        }
+        // 直接从预制体获取图标（通过 UUID 加载）
+        this.tryGetIconFromPrefab(unitId, nodeName, sprite);
     }
     
     /**
@@ -863,291 +859,6 @@ export class TalentSystem extends Component {
     }
     
     /**
-     * 尝试从场景中获取单位图标
-     * @param unitId 单位ID
-     * @param nodeName 节点名称
-     * @param sprite Sprite组件
-     * @param callback 回调函数，场景中未找到时调用
-     */
-    private tryGetIconFromScene(unitId: string, nodeName: string, sprite: Sprite, callback: () => void) {
-        console.log(`TalentSystem: Trying to get icon from scene for unit ${unitId}`);
-        
-        // 获取Canvas节点
-        const canvas = find('Canvas');
-        if (!canvas) {
-            console.error(`TalentSystem: Canvas not found`);
-            callback();
-            return;
-        }
-        
-        let foundIcon = false;
-        
-        // 递归查找所有可能的单位节点
-        const searchNodesForIcon = (node: Node) => {
-            // 跳过卡片节点
-            if (node.name.includes('UnitCard_')) {
-                return;
-            }
-            
-            // 检查节点名称是否匹配
-            if (node.name === unitId || node.name === nodeName || 
-                node.name.toLowerCase() === unitId.toLowerCase() || 
-                node.name.toLowerCase() === nodeName.toLowerCase() ||
-                node.name.includes(unitId) || node.name.includes(nodeName)) {
-                
-                // 尝试获取节点的脚本组件
-                const componentName = unitId.charAt(0).toUpperCase() + unitId.slice(1);
-                const unitScript = node.getComponent(componentName) as any || 
-                                  node.getComponent(unitId) as any || 
-                                  node.getComponent(nodeName) as any;
-                
-                if (unitScript) {
-                    console.log(`TalentSystem: Found component in node ${node.name}`);
-                    if (this.tryGetIconFromUnitScript(unitScript, node, sprite, unitId)) {
-                        foundIcon = true;
-                        return;
-                    }
-                }
-                
-                // 如果没有找到组件，尝试直接获取节点的Sprite组件的spriteFrame
-                const spriteComponent = node.getComponent(Sprite);
-                if (spriteComponent && spriteComponent.spriteFrame) {
-                    console.log(`TalentSystem: Setting card icon from scene unit Sprite component spriteFrame`);
-                    sprite.spriteFrame = spriteComponent.spriteFrame;
-                    foundIcon = true;
-                    return;
-                }
-                
-                // 尝试查找子节点中的Sprite组件
-                for (const child of node.children) {
-                    const childSpriteComponent = child.getComponent(Sprite);
-                    if (childSpriteComponent && childSpriteComponent.spriteFrame) {
-                        console.log(`TalentSystem: Setting card icon from scene unit child Sprite component spriteFrame`);
-                        sprite.spriteFrame = childSpriteComponent.spriteFrame;
-                        foundIcon = true;
-                        return;
-                    }
-                }
-            }
-            
-            // 递归检查子节点
-            for (const child of node.children) {
-                if (foundIcon) {
-                    return;
-                }
-                searchNodesForIcon(child);
-            }
-        };
-        
-        // 开始搜索
-        searchNodesForIcon(canvas);
-        
-        // 特殊处理：检查各种单位容器
-        if (!foundIcon) {
-            // 检查 Arrower 单位（Towers 容器）
-            if (unitId === 'Arrower') {
-                // 先检查 Towers 容器
-                const towersNode = find('Towers');
-                if (towersNode) {
-                    console.log(`TalentSystem: Checking Towers container for Arrower units, children count: ${towersNode.children.length}`);
-                    for (const child of towersNode.children) {
-                        const unitScript = child.getComponent('Arrower') as any;
-                        if (unitScript) {
-                            console.log(`TalentSystem: Found Arrower script in Towers container`);
-                            if (this.tryGetIconFromUnitScript(unitScript, child, sprite, 'Arrower')) {
-                                foundIcon = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-                
-                // 如果没找到，尝试递归查找所有 Arrower 节点
-                if (!foundIcon) {
-                    console.log(`TalentSystem: Searching for Arrower nodes recursively...`);
-                    const searchArrower = (node: Node): boolean => {
-                        if (node.name === 'Arrower' || node.getComponent('Arrower')) {
-                            const unitScript = node.getComponent('Arrower') as any;
-                            if (unitScript) {
-                                console.log(`TalentSystem: Found Arrower node: ${node.name}`);
-                                if (this.tryGetIconFromUnitScript(unitScript, node, sprite, 'Arrower')) {
-                                    return true;
-                                }
-                            }
-                            // 也尝试直接从节点的 Sprite 组件获取
-                            const nodeSprite = node.getComponent(Sprite);
-                            if (nodeSprite && nodeSprite.spriteFrame) {
-                                console.log(`TalentSystem: Got icon from Arrower node Sprite component`);
-                                sprite.spriteFrame = nodeSprite.spriteFrame;
-                                return true;
-                            }
-                        }
-                        for (const child of node.children) {
-                            if (searchArrower(child)) {
-                                return true;
-                            }
-                        }
-                        return false;
-                    };
-                    if (canvas) {
-                        foundIcon = searchArrower(canvas);
-                    }
-                }
-                // 如果没找到，尝试从 WarAncientTree 的预制体获取
-                if (!foundIcon) {
-                    const warAncientTreeNode = find('WarAncientTree') || find('Canvas/WarAncientTree');
-                    if (warAncientTreeNode) {
-                        const warAncientTreeScript = warAncientTreeNode.getComponent('WarAncientTree') as any;
-                        if (warAncientTreeScript && warAncientTreeScript.towerPrefab) {
-                            console.log(`TalentSystem: Trying to get Arrower icon from WarAncientTree towerPrefab`);
-                            const prefabInstance = instantiate(warAncientTreeScript.towerPrefab);
-                            prefabInstance.active = true; // 确保激活
-                            
-                            const arrowerScript = prefabInstance.getComponent('Arrower') as any;
-                            if (arrowerScript) {
-                                if (this.tryGetIconFromUnitScript(arrowerScript, prefabInstance, sprite, 'Arrower')) {
-                                    foundIcon = true;
-                                }
-                            }
-                            
-                            // 如果脚本方法没找到，直接尝试获取Sprite组件
-                            if (!foundIcon) {
-                                const arrowerSprite = prefabInstance.getComponent(Sprite);
-                                if (arrowerSprite && arrowerSprite.spriteFrame) {
-                                    console.log(`TalentSystem: Got Arrower icon from prefab Sprite component`);
-                                    sprite.spriteFrame = arrowerSprite.spriteFrame;
-                                    foundIcon = true;
-                                }
-                            }
-                            
-                            prefabInstance.destroy();
-                        }
-                    }
-                }
-            }
-            // 检查 Hunter 单位（HunterHall 可能生产，也可能在 Towers 容器中）
-            else if (unitId === 'Hunter') {
-                // 先检查 Hunters 容器
-                const huntersNode = find('Hunters');
-                if (huntersNode) {
-                    console.log(`TalentSystem: Checking Hunters container for Hunter units`);
-                    for (const child of huntersNode.children) {
-                        const unitScript = child.getComponent('Hunter') as any;
-                        if (unitScript) {
-                            if (this.tryGetIconFromUnitScript(unitScript, child, sprite, 'Hunter')) {
-                                foundIcon = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-                // 如果没找到，检查 Towers 容器（Hunter 可能也在那里）
-                if (!foundIcon) {
-                    const towersNode = find('Towers');
-                    if (towersNode) {
-                        console.log(`TalentSystem: Checking Towers container for Hunter units`);
-                        for (const child of towersNode.children) {
-                            const unitScript = child.getComponent('Hunter') as any;
-                            if (unitScript) {
-                                if (this.tryGetIconFromUnitScript(unitScript, child, sprite, 'Hunter')) {
-                                    foundIcon = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-                // 如果还是没找到，尝试从 HunterHall 的预制体获取
-                if (!foundIcon) {
-                    const hunterHallNode = find('HunterHall') || find('Canvas/HunterHall');
-                    if (hunterHallNode) {
-                        const hunterHallScript = hunterHallNode.getComponent('HunterHall') as any;
-                        if (hunterHallScript && hunterHallScript.hunterPrefab) {
-                            console.log(`TalentSystem: Trying to get Hunter icon from HunterHall hunterPrefab`);
-                            const prefabInstance = instantiate(hunterHallScript.hunterPrefab);
-                            prefabInstance.active = true; // 确保激活
-                            
-                            const hunterScript = prefabInstance.getComponent('Hunter') as any;
-                            if (hunterScript) {
-                                if (this.tryGetIconFromUnitScript(hunterScript, prefabInstance, sprite, 'Hunter')) {
-                                    foundIcon = true;
-                                }
-                            }
-                            
-                            // 如果脚本方法没找到，直接尝试获取Sprite组件
-                            if (!foundIcon) {
-                                const hunterSprite = prefabInstance.getComponent(Sprite);
-                                if (hunterSprite && hunterSprite.spriteFrame) {
-                                    console.log(`TalentSystem: Got Hunter icon from prefab Sprite component`);
-                                    sprite.spriteFrame = hunterSprite.spriteFrame;
-                                    foundIcon = true;
-                                }
-                            }
-                            
-                            prefabInstance.destroy();
-                        }
-                    }
-                }
-            }
-            // 检查 Wisp 单位（可能在场景中）
-            else if (unitId === 'Wisp') {
-                const wispsNode = find('Wisps') || find('Canvas');
-                if (wispsNode) {
-                    console.log(`TalentSystem: Checking for Wisp units`);
-                    const searchWisps = (node: Node) => {
-                        const unitScript = node.getComponent('Wisp') as any;
-                        if (unitScript) {
-                            if (this.tryGetIconFromUnitScript(unitScript, node, sprite, 'Wisp')) {
-                                foundIcon = true;
-                                return true;
-                            }
-                        }
-                        for (const child of node.children) {
-                            if (searchWisps(child)) {
-                                return true;
-                            }
-                        }
-                        return false;
-                    };
-                    searchWisps(wispsNode);
-                }
-            }
-            // 检查建筑物单位
-            else if (unitId === 'WarAncientTree' || unitId === 'MoonWell' || unitId === 'Tree') {
-                const buildingsNode = find('Buildings') || find('Canvas');
-                if (buildingsNode) {
-                    console.log(`TalentSystem: Checking for ${unitId} units`);
-                    const searchBuildings = (node: Node) => {
-                        const componentName = unitId.charAt(0).toUpperCase() + unitId.slice(1);
-                        const unitScript = node.getComponent(componentName) as any || 
-                                          node.getComponent(unitId) as any;
-                        if (unitScript) {
-                            if (this.tryGetIconFromUnitScript(unitScript, node, sprite, unitId)) {
-                                foundIcon = true;
-                                return true;
-                            }
-                        }
-                        for (const child of node.children) {
-                            if (searchBuildings(child)) {
-                                return true;
-                            }
-                        }
-                        return false;
-                    };
-                    searchBuildings(buildingsNode);
-                }
-            }
-        }
-        
-        // 如果找到图标，返回；否则调用回调函数，从预制体获取
-        if (!foundIcon) {
-            callback();
-        } else {
-            console.log(`TalentSystem: Successfully got icon from scene for unit ${unitId}`);
-        }
-    }
-    
-    /**
      * 尝试从预制体获取单位图标
      * @param unitId 单位ID
      * @param nodeName 节点名称
@@ -1156,188 +867,58 @@ export class TalentSystem extends Component {
     private tryGetIconFromPrefab(unitId: string, nodeName: string, sprite: Sprite) {
         console.log(`TalentSystem: Trying to get icon from prefab for unit ${unitId}`);
         
-        // 尝试从场景中的单位获取预制体引用
-        let prefab: Prefab | null = null;
+        // 单位 prefab 的 UUID 映射表
+        const prefabUuidMap: Record<string, string> = {
+            'Arrower': 'bcbcc8da-eb3d-4ad2-a55a-b0a0cb5da998',
+            'Hunter': '989ff20a-2de2-44bb-9590-29df03813990',
+            'Wisp': 'b3d6d60e-5e41-4cb3-b233-704501403faf',
+            'WarAncientTree': 'be50baf7-2a47-44a1-85e1-8116927ef58e',
+            'MoonWell': '4e0a7549-50e8-4617-9b2c-012d49c17748',
+            'Tree': '61632be3-a1ef-40ba-ae2b-8ee982347b5e',
+        };
         
-        // 根据单位ID查找对应的预制体
-        if (unitId === 'Arrower') {
-            // 1. 优先使用TalentSystem的arrowerPrefab属性
-            console.log(`TalentSystem: Checking arrowerPrefab property, value: ${this.arrowerPrefab ? 'exists' : 'null/undefined'}`);
-            if (this.arrowerPrefab) {
-                console.log(`TalentSystem: Using arrowerPrefab from TalentSystem`);
-                prefab = this.arrowerPrefab;
-            } else {
-                // 2. 优先从场景中的WarAncientTree获取towerPrefab（更可靠）
-                console.log(`TalentSystem: arrowerPrefab is null, trying to get Arrower prefab from scene...`);
-                let warAncientTreeNode = find('WarAncientTree') || find('Canvas/WarAncientTree');
-                if (!warAncientTreeNode) {
-                    const warAncientTreesContainer = find('WarAncientTrees');
-                    if (warAncientTreesContainer && warAncientTreesContainer.children.length > 0) {
-                        warAncientTreeNode = warAncientTreesContainer.children[0];
-                        console.log(`TalentSystem: Found WarAncientTree from container`);
-                    }
-                }
-                if (warAncientTreeNode) {
-                    const warAncientTreeScript = warAncientTreeNode.getComponent('WarAncientTree') as any;
-                    if (warAncientTreeScript) {
-                        console.log(`TalentSystem: Found WarAncientTree script`);
-                        if (warAncientTreeScript.towerPrefab) {
-                            console.log(`TalentSystem: Found towerPrefab from WarAncientTree`);
-                            prefab = warAncientTreeScript.towerPrefab;
-                        } else {
-                            console.log(`TalentSystem: WarAncientTree found but no towerPrefab`);
-                        }
-                    } else {
-                        console.log(`TalentSystem: WarAncientTree node found but no script`);
-                    }
-                } else {
-                    console.log(`TalentSystem: WarAncientTree node not found in scene`);
-                }
-                
-                // 3. 如果场景中没有找到，尝试从resources加载
-                if (!prefab) {
-                    const prefabPath = 'prefabs/Arrower';
-                    console.log(`TalentSystem: Trying to load Arrower prefab from resources, path: ${prefabPath}`);
-                    const loadedPrefab = resources.get(prefabPath, Prefab);
-                    if (loadedPrefab) {
-                        console.log(`TalentSystem: Got Arrower prefab from resources (sync)`);
-                        prefab = loadedPrefab;
-                    } else {
-                        // 异步加载 - 使用 assetManager 加载（支持任意路径）
-                        console.log(`TalentSystem: Arrower prefab not in cache, loading async using assetManager...`);
-                        const spriteRef = sprite; // 保存 sprite 引用
-                        const unitIdRef = unitId; // 保存 unitId 引用
-                        
-                        // 尝试使用 assetManager 加载（支持 assets/prefabs/ 路径）
-                        const fullPath = `db://assets/prefabs/Arrower`;
-                        console.log(`TalentSystem: Trying to load Arrower from full path: ${fullPath}`);
-                        
-                        assetManager.loadAny({ path: fullPath, type: Prefab }, (err, asyncPrefab) => {
-                            console.log(`TalentSystem: Arrower assetManager load callback executed, err: ${err ? err.message : 'null'}, prefab: ${asyncPrefab ? 'exists' : 'null'}`);
-                            if (!err && asyncPrefab) {
-                                console.log(`TalentSystem: Loaded Arrower prefab using assetManager (async), spriteRef: ${spriteRef ? 'exists' : 'null'}`);
-                                if (spriteRef) {
-                                    this.loadIconFromPrefabInstance(asyncPrefab as Prefab, unitIdRef, spriteRef);
-                                } else {
-                                    console.log(`TalentSystem: Sprite reference is null in callback for ${unitIdRef}`);
-                                }
-                            } else {
-                                console.log(`TalentSystem: Failed to load Arrower prefab using assetManager, err: ${err}, trying resources.load...`);
-                                // 降级到 resources.load
-                                resources.load(prefabPath, Prefab, (err2, asyncPrefab2) => {
-                                    console.log(`TalentSystem: Arrower resources.load callback executed, err: ${err2 ? err2.message : 'null'}, prefab: ${asyncPrefab2 ? 'exists' : 'null'}`);
-                                    if (!err2 && asyncPrefab2) {
-                                        console.log(`TalentSystem: Loaded Arrower prefab from resources (async), spriteRef: ${spriteRef ? 'exists' : 'null'}`);
-                                        if (spriteRef) {
-                                            this.loadIconFromPrefabInstance(asyncPrefab2, unitIdRef, spriteRef);
-                                        }
-                                    } else {
-                                        console.log(`TalentSystem: Failed to load Arrower prefab from resources, err: ${err2}`);
-                                    }
-                                });
-                            }
-                        });
-                        console.log(`TalentSystem: Arrower async load request sent, returning...`);
-                        return; // 异步加载，先返回
-                    }
-                }
-            }
-        } else if (unitId === 'Hunter') {
-            // 1. 优先从场景中的HunterHall获取hunterPrefab（更可靠）
-            console.log(`TalentSystem: Trying to get Hunter prefab from scene...`);
-            let hunterHallNode = find('HunterHall') || find('Canvas/HunterHall');
-            if (!hunterHallNode) {
-                const hunterHallsContainer = find('HunterHalls');
-                if (hunterHallsContainer && hunterHallsContainer.children.length > 0) {
-                    hunterHallNode = hunterHallsContainer.children[0];
-                    console.log(`TalentSystem: Found HunterHall from container`);
-                }
-            }
-            if (hunterHallNode) {
-                const hunterHallScript = hunterHallNode.getComponent('HunterHall') as any;
-                if (hunterHallScript) {
-                    console.log(`TalentSystem: Found HunterHall script`);
-                    if (hunterHallScript.hunterPrefab) {
-                        console.log(`TalentSystem: Found hunterPrefab from HunterHall`);
-                        prefab = hunterHallScript.hunterPrefab;
-                    } else {
-                        console.log(`TalentSystem: HunterHall found but no hunterPrefab`);
-                    }
-                } else {
-                    console.log(`TalentSystem: HunterHall node found but no script`);
-                }
-            } else {
-                console.log(`TalentSystem: HunterHall node not found in scene`);
-            }
-            
-            // 2. 如果场景中没有找到，尝试从resources加载
-            if (!prefab) {
-                const prefabPath = 'prefabs/Hunter';
-                console.log(`TalentSystem: Trying to load Hunter prefab from resources, path: ${prefabPath}`);
-                const loadedPrefab = resources.get(prefabPath, Prefab);
-                if (loadedPrefab) {
-                    console.log(`TalentSystem: Got Hunter prefab from resources (sync)`);
-                    prefab = loadedPrefab;
-                } else {
-                    // 异步加载
-                    console.log(`TalentSystem: Hunter prefab not in cache, loading async...`);
-                    resources.load(prefabPath, Prefab, (err, asyncPrefab) => {
-                        console.log(`TalentSystem: Hunter async load callback, err: ${err}, prefab: ${asyncPrefab ? 'exists' : 'null'}`);
-                        if (!err && asyncPrefab) {
-                            console.log(`TalentSystem: Loaded Hunter prefab from resources (async)`);
-                            this.loadIconFromPrefabInstance(asyncPrefab, unitId, sprite);
-                        } else {
-                            console.log(`TalentSystem: Failed to load Hunter prefab from resources`);
-                        }
-                    });
-                    return; // 异步加载，先返回
-                }
-            }
-        } else if (unitId === 'WarAncientTree') {
-            // 从TowerBuilder获取warAncientTreePrefab
-            const towerBuilderNode = find('TowerBuilder') || find('Canvas/TowerBuilder');
-            if (towerBuilderNode) {
-                const towerBuilderScript = towerBuilderNode.getComponent('TowerBuilder') as any;
-                if (towerBuilderScript && towerBuilderScript.warAncientTreePrefab) {
-                    prefab = towerBuilderScript.warAncientTreePrefab;
-                }
-            }
-        } else if (unitId === 'MoonWell') {
-            // 从TowerBuilder获取moonWellPrefab
-            const towerBuilderNode = find('TowerBuilder') || find('Canvas/TowerBuilder');
-            if (towerBuilderNode) {
-                const towerBuilderScript = towerBuilderNode.getComponent('TowerBuilder') as any;
-                if (towerBuilderScript && towerBuilderScript.moonWellPrefab) {
-                    prefab = towerBuilderScript.moonWellPrefab;
-                }
-            }
-        } else if (unitId === 'Tree') {
-            // 从TowerBuilder获取treePrefab
-            const towerBuilderNode = find('TowerBuilder') || find('Canvas/TowerBuilder');
-            if (towerBuilderNode) {
-                const towerBuilderScript = towerBuilderNode.getComponent('TowerBuilder') as any;
-                if (towerBuilderScript && towerBuilderScript.treePrefab) {
-                    prefab = towerBuilderScript.treePrefab;
-                }
-            }
-        } else if (unitId === 'Wisp') {
-            // 从Crystal获取wispPrefab
-            const crystalNode = find('Crystal') || find('Canvas/Crystal');
-            if (crystalNode) {
-                const crystalScript = crystalNode.getComponent('Crystal') as any;
-                if (crystalScript && crystalScript.wispPrefab) {
-                    prefab = crystalScript.wispPrefab;
-                }
-            }
+        // 1. 优先使用 TalentSystem 的 arrowerPrefab 属性（如果配置了）
+        if (unitId === 'Arrower' && this.arrowerPrefab) {
+            console.log(`TalentSystem: Using arrowerPrefab from TalentSystem`);
+            this.loadIconFromPrefabInstance(this.arrowerPrefab, unitId, sprite);
+            return;
         }
         
-        // 如果找到预制体，尝试从中获取图标
-        if (prefab) {
-            console.log(`TalentSystem: Found prefab for ${unitId}, creating instance`);
-            this.loadIconFromPrefabInstance(prefab, unitId, sprite);
-        } else {
-            console.warn(`TalentSystem: Prefab not found for ${unitId}. Tried to find from scene nodes.`);
+        // 2. 通过 UUID 加载 prefab
+        const uuid = prefabUuidMap[unitId];
+        if (!uuid) {
+            console.info(`TalentSystem: No UUID mapping found for ${unitId}`);
+            return;
         }
+        
+        const spriteRef = sprite; // 保存 sprite 引用
+        const unitIdRef = unitId; // 保存 unitId 引用
+        
+        assetManager.loadAny({ uuid: uuid, type: Prefab }, (err, loadedPrefab) => {
+            console.log(`TalentSystem: ${unitIdRef} UUID load callback executed, err: ${err ? err.message : 'null'}, prefab: ${loadedPrefab ? 'exists' : 'null'}`);
+            if (!err && loadedPrefab) {
+                console.log(`TalentSystem: Loaded ${unitIdRef} prefab by UUID (async), spriteRef: ${spriteRef ? 'exists' : 'null'}`);
+                // 检查 sprite 是否有效，如果无效则尝试重新查找
+                let validSprite = spriteRef;
+                if (!validSprite || !validSprite.node || !validSprite.node.isValid) {
+                    console.log(`TalentSystem: Sprite reference is invalid, trying to find sprite by unitId ${unitIdRef}...`);
+                    validSprite = this.tryFindSpriteByUnitId(unitIdRef);
+                    if (validSprite) {
+                        console.log(`TalentSystem: Found sprite by unitId ${unitIdRef}`);
+                    } else {
+                        console.info(`TalentSystem: Could not find sprite by unitId ${unitIdRef}`);
+                    }
+                }
+                if (validSprite && validSprite.node && validSprite.node.isValid) {
+                    // 确保 sprite 节点仍然有效
+                    this.loadIconFromPrefabInstance(loadedPrefab as Prefab, unitIdRef, validSprite);
+                } else {
+                    console.info(`TalentSystem: Sprite reference is invalid in UUID load callback for ${unitIdRef}`);
+                }
+            } else {
+                console.info(`TalentSystem: Failed to load ${unitIdRef} prefab by UUID, err: ${err ? err.message : 'unknown error'}`);
+            }
+        });
     }
     
     /**
@@ -1354,6 +935,11 @@ export class TalentSystem extends Component {
         }
         if (!sprite) {
             console.log(`TalentSystem: Sprite is null for ${unitId}`);
+            return;
+        }
+        // 检查 sprite 节点是否仍然有效
+        if (!sprite.node || !sprite.node.isValid) {
+            console.info(`TalentSystem: Sprite node is invalid for ${unitId}, cannot set icon`);
             return;
         }
         
@@ -1377,6 +963,11 @@ export class TalentSystem extends Component {
                 prefabSprite.enabled = true;
                 // 等待一帧再检查
                 this.scheduleOnce(() => {
+                    // 检查 sprite 节点是否仍然有效
+                    if (!sprite.node || !sprite.node.isValid) {
+                        console.info(`TalentSystem: Sprite node is invalid when checking prefab data refresh for ${unitId}`);
+                        return;
+                    }
                     if (prefabSprite.spriteFrame) {
                         console.log(`TalentSystem: Got spriteFrame after refresh from prefab data for ${unitId}`);
                         sprite.spriteFrame = prefabSprite.spriteFrame;
@@ -1458,6 +1049,12 @@ export class TalentSystem extends Component {
                 
                 // 等待一帧确保组件初始化
                 this.scheduleOnce(() => {
+                    // 检查 sprite 节点是否仍然有效
+                    if (!spriteRef.node || !spriteRef.node.isValid) {
+                        console.info(`TalentSystem: Sprite node is invalid when checking root Sprite for ${unitId}`);
+                        prefabRef.destroy();
+                        return;
+                    }
                     let spriteFrame = rootSpriteRef.spriteFrame;
                     console.log(`TalentSystem: After first wait, spriteFrame: ${spriteFrame ? 'exists' : 'null'}`);
                     
@@ -1472,6 +1069,12 @@ export class TalentSystem extends Component {
                         rootSpriteRef.enabled = false;
                         rootSpriteRef.enabled = true;
                         this.scheduleOnce(() => {
+                            // 再次检查 sprite 节点是否仍然有效
+                            if (!spriteRef.node || !spriteRef.node.isValid) {
+                                console.info(`TalentSystem: Sprite node is invalid when checking root Sprite second wait for ${unitId}`);
+                                prefabRef.destroy();
+                                return;
+                            }
                             spriteFrame = rootSpriteRef.spriteFrame;
                             console.log(`TalentSystem: After second wait, spriteFrame: ${spriteFrame ? 'exists' : 'null'}`);
                             
@@ -1480,7 +1083,7 @@ export class TalentSystem extends Component {
                                 spriteRef.spriteFrame = spriteFrame;
                                 console.log(`TalentSystem: Icon set successfully for ${unitId}, spriteFrame: ${spriteRef.spriteFrame ? 'set' : 'not set'}`);
                             } else {
-                                console.log(`TalentSystem: Root Sprite spriteFrame is still null after second wait for ${unitId}, rootSprite enabled: ${rootSpriteRef.enabled}`);
+                                console.info(`TalentSystem: Root Sprite spriteFrame is still null after second wait for ${unitId}, rootSprite enabled: ${rootSpriteRef.enabled}. 没有获取到预制体的SpriteFrame`);
                             }
                             prefabRef.destroy();
                         }, 0.05); // 等待 0.05 秒
@@ -1509,6 +1112,12 @@ export class TalentSystem extends Component {
                     const childSpriteRef = childSprite;
                     
                     this.scheduleOnce(() => {
+                        // 检查 sprite 节点是否仍然有效
+                        if (!spriteRef.node || !spriteRef.node.isValid) {
+                            console.info(`TalentSystem: Sprite node is invalid when checking child Sprite for ${unitId}`);
+                            prefabRef.destroy();
+                            return;
+                        }
                         let spriteFrame = childSpriteRef.spriteFrame;
                         if (!spriteFrame) {
                             childSpriteRef.enabled = false;
@@ -1521,7 +1130,7 @@ export class TalentSystem extends Component {
                             spriteRef.spriteFrame = spriteFrame;
                             console.log(`TalentSystem: Icon set successfully from child Sprite after waiting for ${unitId}, spriteFrame: ${spriteRef.spriteFrame ? 'set' : 'not set'}`);
                         } else {
-                            console.log(`TalentSystem: Still no child spriteFrame after waiting for ${unitId}`);
+                            console.info(`TalentSystem: Still no child spriteFrame after waiting for ${unitId}. 没有获取到预制体的SpriteFrame`);
                         }
                         prefabRef.destroy();
                     }, 0.1);
@@ -1532,7 +1141,7 @@ export class TalentSystem extends Component {
             }
             
             // 6. 如果还是没有找到，输出警告
-            console.log(`TalentSystem: Could not find spriteFrame in prefab for ${unitId}, tried: cardIcon, unitIcon, defaultSpriteFrame, root Sprite, child Sprite`);
+            console.info(`TalentSystem: Could not find spriteFrame in prefab for ${unitId}, tried: cardIcon, unitIcon, defaultSpriteFrame, root Sprite, child Sprite. 没有获取到预制体的SpriteFrame`);
             
             prefabInstance.destroy();
         } else {
@@ -1540,7 +1149,10 @@ export class TalentSystem extends Component {
         }
         
         // 如果都获取不到，保持Sprite组件为空（不显示图标）
-        console.log(`TalentSystem: Could not get icon for ${unitId}, sprite will remain empty`);
+        // 最后检查一次 spriteFrame 是否已设置
+        if (!sprite.spriteFrame) {
+            console.info(`TalentSystem: Could not get icon for ${unitId}, sprite will remain empty. 没有获取到预制体的SpriteFrame`);
+        }
     }
     
     createTalentPointsDisplay() {

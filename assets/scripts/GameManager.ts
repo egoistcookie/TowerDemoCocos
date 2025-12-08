@@ -1,6 +1,7 @@
 import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button } from 'cc';
 import { Crystal } from './Crystal';
 import { UnitIntroPopup } from './UnitIntroPopup';
+import { UnitConfigManager } from './UnitConfigManager';
 const { ccclass, property } = _decorator;
 
 export enum GameState {
@@ -189,6 +190,14 @@ export class GameManager extends Component {
     }
 
     start() {
+        // 加载单位配置
+        const configManager = UnitConfigManager.getInstance();
+        configManager.loadConfig().then(() => {
+            console.log('GameManager: Unit config loaded successfully');
+        }).catch((err) => {
+            console.error('GameManager: Failed to load unit config', err);
+        });
+        
         // 每次游戏开始时清空已出现单位类型集合
         this.appearedUnitTypes.clear();
         this.debugUnitTypes = [];

@@ -7,6 +7,8 @@ import { WarAncientTree } from './WarAncientTree';
 import { MoonWell } from './MoonWell';
 import { Tree } from './Tree';
 import { HunterHall } from './HunterHall';
+import { UnitConfigManager } from './UnitConfigManager';
+import { BuildingGridPanel } from './BuildingGridPanel';
 const { ccclass, property } = _decorator;
 
 @ccclass('TowerBuilder')
@@ -62,6 +64,9 @@ export class TowerBuilder extends Component {
     @property(Node)
     hunterHallContainer: Node = null!; // 猎手大厅容器
 
+    @property(Node)
+    buildingGridPanel: Node = null!; // 建筑物网格面板节点
+
     @property
     towerCost: number = 10; // 战争古树建造成本（10金币）
 
@@ -79,6 +84,7 @@ export class TowerBuilder extends Component {
     private gameManager: GameManager = null!;
     private buildingPanel: BuildingSelectionPanel = null!;
     private currentSelectedBuilding: BuildingType | null = null;
+    private gridPanel: BuildingGridPanel = null!; // 网格面板组件
 
     start() {
         // 查找游戏管理器
@@ -164,6 +170,9 @@ export class TowerBuilder extends Component {
                 }
             }
         }
+
+        // 查找网格面板
+        this.findGridPanel();
 
         // 初始化建筑物选择面板
         this.initBuildingPanel();
@@ -252,7 +261,7 @@ export class TowerBuilder extends Component {
         const buildingTypes: BuildingType[] = [];
         if (this.warAncientTreePrefab) {
             buildingTypes.push({
-                name: '战争古树',
+                name: '弓箭手小屋',
                 prefab: this.warAncientTreePrefab,
                 cost: this.towerCost,
                 icon: this.warAncientTreeIcon || null!,
@@ -296,6 +305,42 @@ export class TowerBuilder extends Component {
         this.buildingPanel.setOnBuild((building: BuildingType, position: Vec3) => {
             this.buildBuilding(building, position);
         });
+
+        // 设置建造取消回调（当建造失败或取消时调用）
+        this.buildingPanel.setOnBuildCancel(() => {
+            this.disableBuildingMode();
+        });
+    }
+
+    /**
+     * 查找网格面板
+     */
+    findGridPanel() {
+        if (this.buildingGridPanel) {
+            this.gridPanel = this.buildingGridPanel.getComponent(BuildingGridPanel);
+            if (this.gridPanel) {
+                return;
+            }
+        }
+        
+        // 尝试查找场景中的网格面板
+        const gridPanelNode = find('BuildingGridPanel');
+        if (gridPanelNode) {
+            this.gridPanel = gridPanelNode.getComponent(BuildingGridPanel);
+            if (this.gridPanel) {
+                this.buildingGridPanel = gridPanelNode;
+                return;
+            }
+        }
+        
+        // 如果找不到，创建一个
+        const canvas = find('Canvas');
+        if (canvas) {
+            const gridNode = new Node('BuildingGridPanel');
+            gridNode.setParent(canvas);
+            this.gridPanel = gridNode.addComponent(BuildingGridPanel);
+            this.buildingGridPanel = gridNode;
+        }
     }
 
     /**
@@ -303,6 +348,10 @@ export class TowerBuilder extends Component {
      */
     onTouchMove(event: EventTouch) {
         if (!this.isBuildingMode || !this.currentSelectedBuilding) {
+            // 不在建造模式时清除高亮
+            if (this.gridPanel) {
+                this.gridPanel.clearHighlight();
+            }
             return;
         }
 
@@ -318,6 +367,27 @@ export class TowerBuilder extends Component {
                 return;
             }
         }
+
+        // 获取触摸位置并转换为世界坐标
+        const touchLocation = event.getLocation();
+        const cameraNode = find('Canvas/Camera') || this.node.scene?.getChildByName('Camera');
+        if (!cameraNode || !this.gridPanel) {
+            return;
+        }
+        
+        const camera = cameraNode.getComponent(Camera);
+        if (!camera) {
+            return;
+        }
+
+        // 将屏幕坐标转换为世界坐标
+        const screenPos = new Vec3(touchLocation.x, touchLocation.y, 0);
+        const worldPos = new Vec3();
+        camera.screenToWorld(screenPos, worldPos);
+        worldPos.z = 0;
+
+        // 高亮显示网格
+        this.gridPanel.highlightGrid(worldPos);
     }
 
     findGameManager() {
@@ -389,6 +459,14 @@ export class TowerBuilder extends Component {
         if (this.buildingPanel) {
             this.buildingPanel.show();
         }
+        
+        // 显示网格面板
+        if (!this.gridPanel) {
+            this.findGridPanel();
+        }
+        if (this.gridPanel) {
+            this.gridPanel.show();
+        }
     }
 
     disableBuildingMode() {
@@ -403,6 +481,13 @@ export class TowerBuilder extends Component {
         if (this.previewTower) {
             this.previewTower.destroy();
             this.previewTower = null!;
+        }
+        
+        // 清除网格高亮（可以选择隐藏网格面板或保持可见）
+        if (this.gridPanel) {
+            this.gridPanel.clearHighlight();
+            // 可选：隐藏网格面板
+            // this.gridPanel.hide();
         }
     }
 
@@ -486,11 +571,29 @@ export class TowerBuilder extends Component {
         camera.screenToWorld(screenPos, worldPos);
         worldPos.z = 0;
 
+        // 如果有网格面板，对齐到网格中心
+        let finalWorldPos = worldPos;
+        if (this.gridPanel) {
+            const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
+            if (gridCenter) {
+                finalWorldPos = gridCenter;
+            } else {
+                // 不在网格内，清除高亮并返回
+                this.gridPanel.clearHighlight();
+                return;
+            }
+        }
+
         // 检查是否可以建造
-        const canBuild = this.canBuildAt(worldPos, this.currentSelectedBuilding);
+        const canBuild = this.canBuildAt(finalWorldPos, this.currentSelectedBuilding);
         
         if (canBuild) {
-            this.buildBuilding(this.currentSelectedBuilding, worldPos);
+            this.buildBuilding(this.currentSelectedBuilding, finalWorldPos);
+        }
+        
+        // 清除高亮
+        if (this.gridPanel) {
+            this.gridPanel.clearHighlight();
         }
     }
 
@@ -499,7 +602,20 @@ export class TowerBuilder extends Component {
             return false;
         }
 
-        // 检查距离水晶的距离
+        // 如果有网格面板，检查位置是否在网格内
+        if (this.gridPanel) {
+            if (!this.gridPanel.isPositionInGrid(position)) {
+                return false;
+            }
+            
+            // 检查目标网格是否已被占用
+            const grid = this.gridPanel.worldToGrid(position);
+            if (grid && this.gridPanel.isGridOccupied(grid.x, grid.y)) {
+                return false;
+            }
+        }
+
+        // 检查距离水晶的距离（保留原有逻辑作为备用检查）
         const crystalPos = this.targetCrystal.worldPosition;
         const distance = Vec3.distance(position, crystalPos);
         
@@ -578,20 +694,27 @@ export class TowerBuilder extends Component {
             console.debug('TowerBuilder.buildBuilding: Not enough gold! Need', building.cost, 'but have', this.gameManager.getGold());
             // 显示金币不足弹窗
             GamePopup.showMessage('金币不足');
-            this.disableBuildingMode();
+            // 不退出建造模式，让用户可以继续尝试或选择其他建筑物
+            // 但需要重新显示建筑物选择面板
+            if (this.buildingPanel) {
+                this.buildingPanel.show();
+            }
             return;
         }
 
         // 检查是否可以在此位置建造
         if (!this.canBuildAt(worldPosition, building)) {
             console.debug('TowerBuilder.buildBuilding: Cannot build at this position');
-            // 即使不能建造，也退出建造模式
-            this.disableBuildingMode();
+            // 不能建造时不退出建造模式，让用户可以继续尝试其他位置
+            // 但需要重新显示建筑物选择面板
+            if (this.buildingPanel) {
+                this.buildingPanel.show();
+            }
             return;
         }
 
         // 根据建筑物类型选择建造方法
-        if (building.name === '战争古树' || building.prefab === this.warAncientTreePrefab) {
+        if (building.name === '弓箭手小屋' || building.prefab === this.warAncientTreePrefab) {
             this.buildWarAncientTree(worldPosition);
         } else if (building.name === '月亮井' || building.prefab === this.moonWellPrefab) {
             this.buildMoonWell(worldPosition);
@@ -604,7 +727,7 @@ export class TowerBuilder extends Component {
             console.warn('TowerBuilder.buildBuilding: Unknown building type:', building.name);
         }
 
-        // 退出建造模式
+        // 只有在成功建造后才退出建造模式
         this.disableBuildingMode();
     }
 
@@ -641,7 +764,24 @@ export class TowerBuilder extends Component {
         // 设置建造成本并检查首次出现
         const treeScript = tree.getComponent(WarAncientTree);
         if (treeScript) {
+            // 先应用配置（排除 buildCost，因为需要在实例化时动态设置）
+            const configManager = UnitConfigManager.getInstance();
+            if (configManager.isConfigLoaded()) {
+                configManager.applyConfigToUnit('WarAncientTree', treeScript, ['buildCost']);
+            }
+            
+            // 然后设置建造成本（覆盖配置中的值）
             treeScript.buildCost = this.towerCost;
+            
+            // 记录网格位置并标记占用
+            if (this.gridPanel) {
+                const grid = this.gridPanel.worldToGrid(worldPosition);
+                if (grid) {
+                    treeScript.gridX = grid.x;
+                    treeScript.gridY = grid.y;
+                    this.gridPanel.occupyGrid(grid.x, grid.y, tree);
+                }
+            }
             
             // 检查单位是否首次出现
             if (this.gameManager) {
@@ -686,7 +826,25 @@ export class TowerBuilder extends Component {
         // 设置建造成本并增加人口上限
         const wellScript = well.getComponent(MoonWell);
         if (wellScript) {
+            // 先应用配置（排除 buildCost）
+            const configManager = UnitConfigManager.getInstance();
+            if (configManager.isConfigLoaded()) {
+                configManager.applyConfigToUnit('MoonWell', wellScript, ['buildCost']);
+            }
+            
+            // 然后设置建造成本（覆盖配置中的值）
             wellScript.buildCost = this.moonWellCost;
+            
+            // 记录网格位置并标记占用
+            if (this.gridPanel) {
+                const grid = this.gridPanel.worldToGrid(worldPosition);
+                if (grid) {
+                    wellScript.gridX = grid.x;
+                    wellScript.gridY = grid.y;
+                    this.gridPanel.occupyGrid(grid.x, grid.y, well);
+                }
+            }
+            
             // 调用月亮井的方法来增加人口上限
             if (wellScript.increasePopulationLimit) {
                 wellScript.increasePopulationLimit();
@@ -735,7 +893,24 @@ export class TowerBuilder extends Component {
         // 设置建造成本并检查首次出现
         const treeScript = tree.getComponent(Tree);
         if (treeScript) {
+            // 先应用配置（排除 buildCost）
+            const configManager = UnitConfigManager.getInstance();
+            if (configManager.isConfigLoaded()) {
+                configManager.applyConfigToUnit('Tree', treeScript, ['buildCost']);
+            }
+            
+            // 然后设置建造成本（覆盖配置中的值）
             treeScript.buildCost = this.treeCost;
+            
+            // 记录网格位置并标记占用
+            if (this.gridPanel) {
+                const grid = this.gridPanel.worldToGrid(worldPosition);
+                if (grid) {
+                    treeScript.gridX = grid.x;
+                    treeScript.gridY = grid.y;
+                    this.gridPanel.occupyGrid(grid.x, grid.y, tree);
+                }
+            }
             
             // 检查单位是否首次出现
             if (this.gameManager) {
@@ -781,6 +956,16 @@ export class TowerBuilder extends Component {
         const hallScript = hall.getComponent(HunterHall);
         if (hallScript) {
             hallScript.buildCost = this.hunterHallCost;
+            
+            // 记录网格位置并标记占用
+            if (this.gridPanel) {
+                const grid = this.gridPanel.worldToGrid(worldPosition);
+                if (grid) {
+                    hallScript.gridX = grid.x;
+                    hallScript.gridY = grid.y;
+                    this.gridPanel.occupyGrid(grid.x, grid.y, hall);
+                }
+            }
             
             // 检查单位是否首次出现
             if (this.gameManager) {

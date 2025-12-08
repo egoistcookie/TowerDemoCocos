@@ -1,4 +1,5 @@
 import { _decorator, Component, Node, EventTarget, instantiate, EventTouch, Sprite, SpriteFrame, find, Prefab, Vec3, Graphics, UITransform, Color } from 'cc';
+import { UnitConfigManager } from './UnitConfigManager';
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
 import { GameManager, GameState } from './GameManager';
@@ -401,6 +402,15 @@ export class Crystal extends Component {
         wisp.setParent(this.wispContainer);
         wisp.setWorldPosition(spawnPos);
         wisp.active = true;
+
+        // 应用配置
+        const wispScript = wisp.getComponent('Wisp') as any;
+        if (wispScript) {
+            const configManager = UnitConfigManager.getInstance();
+            if (configManager.isConfigLoaded()) {
+                configManager.applyConfigToUnit('Wisp', wispScript);
+            }
+        }
 
         // 添加到生产的小精灵列表
         this.producedWisps.push(wisp);

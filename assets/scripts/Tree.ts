@@ -1,9 +1,10 @@
-import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, UITransform, Label, Color, SpriteFrame, Sprite, Graphics, EventTouch } from 'cc';
+import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, UITransform, Label, Color, SpriteFrame, Sprite, Graphics, EventTouch, Camera } from 'cc';
 import { GameManager } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
+import { BuildingGridPanel } from './BuildingGridPanel';
 const { ccclass, property } = _decorator;
 
 @ccclass('Tree')
@@ -53,6 +54,13 @@ export class Tree extends Component {
     private isHighlighted: boolean = false; // 是否高亮显示
     private highlightNode: Node = null!; // 高亮效果节点
     private unitSelectionManager: UnitSelectionManager = null!; // 单位选择管理器
+
+    // 网格位置相关
+    public gridX: number = -1; // 网格X坐标
+    public gridY: number = -1; // 网格Y坐标
+    private isMoving: boolean = false; // 是否正在移动
+    private moveStartPos: Vec3 = new Vec3(); // 移动起始位置
+    private gridPanel: BuildingGridPanel = null!; // 网格面板组件
     
     start() {
         this.currentHealth = this.maxHealth;
@@ -112,6 +120,16 @@ export class Tree extends Component {
         }
     }
     
+    /**
+     * 查找网格面板
+     */
+    findGridPanel() {
+        const gridPanelNode = find('BuildingGridPanel');
+        if (gridPanelNode) {
+            this.gridPanel = gridPanelNode.getComponent(BuildingGridPanel);
+        }
+    }
+
     /**
      * 查找单位选择管理器
      */
@@ -212,6 +230,20 @@ export class Tree extends Component {
         }
         
         this.isDestroyed = true;
+
+        // 释放网格占用
+        if (this.gridPanel && this.gridX >= 0 && this.gridY >= 0) {
+            this.gridPanel.releaseGrid(this.gridX, this.gridY);
+        }
+
+        // 移除移动事件监听
+        if (this.isMoving) {
+            const canvas = find('Canvas');
+            if (canvas) {
+                canvas.off(Node.EventType.TOUCH_MOVE, this.onMoveTouchMove, this);
+                canvas.off(Node.EventType.TOUCH_END, this.onMoveTouchEnd, this);
+            }
+        }
         
         // 播放爆炸特效
         if (this.explosionEffect) {
@@ -308,35 +340,211 @@ export class Tree extends Component {
         // 阻止事件传播
         event.propagationStopped = true;
 
+        // 如果正在移动，不处理点击
+        if (this.isMoving) {
+            return;
+        }
+
         // 如果已经显示选择面板，先隐藏
         if (this.selectionPanel && this.selectionPanel.isValid) {
             this.hideSelectionPanel();
             return;
         }
 
-        // 显示单位信息面板和范围
-        if (!this.unitSelectionManager) {
-            this.findUnitSelectionManager();
+        // 开始移动模式
+        this.startMoving(event);
+    }
+
+    /**
+     * 开始移动建筑物
+     */
+    startMoving(event: EventTouch) {
+        if (!this.gridPanel) {
+            this.findGridPanel();
         }
-        if (this.unitSelectionManager) {
-            const unitInfo: UnitInfo = {
-                name: '普通树木',
-                level: 1,
-                currentHealth: this.currentHealth,
-                maxHealth: this.maxHealth,
-                attackDamage: 0, // 普通树木没有攻击能力
-                populationCost: 0, // 不占用人口
-                icon: this.cardIcon || this.defaultSpriteFrame,
-                collisionRadius: this.collisionRadius,
-                onSellClick: () => {
-                    this.onSellClick();
-                }
-            };
-            this.unitSelectionManager.selectUnit(this.node, unitInfo);
+        
+        if (!this.gridPanel) {
+            // 如果没有网格面板，显示选择面板
+            if (!this.unitSelectionManager) {
+                this.findUnitSelectionManager();
+            }
+            if (this.unitSelectionManager) {
+                const unitInfo: UnitInfo = {
+                    name: '普通树木',
+                    level: 1,
+                    currentHealth: this.currentHealth,
+                    maxHealth: this.maxHealth,
+                    attackDamage: 0,
+                    populationCost: 0,
+                    icon: this.cardIcon || this.defaultSpriteFrame,
+                    collisionRadius: this.collisionRadius
+                };
+                this.unitSelectionManager.selectUnit(this.node, unitInfo);
+            }
+            return;
         }
 
-        // 显示选择面板
-        this.showSelectionPanel();
+        this.isMoving = true;
+        this.moveStartPos = this.node.worldPosition.clone();
+        
+        // 监听触摸移动和结束事件
+        const canvas = find('Canvas');
+        if (canvas) {
+            canvas.on(Node.EventType.TOUCH_MOVE, this.onMoveTouchMove, this);
+            canvas.on(Node.EventType.TOUCH_END, this.onMoveTouchEnd, this);
+        }
+        
+        // 高亮当前网格
+        this.gridPanel.highlightGrid(this.node.worldPosition);
+    }
+
+    /**
+     * 移动时的触摸移动事件
+     */
+    onMoveTouchMove(event: EventTouch) {
+        if (!this.isMoving || !this.gridPanel) {
+            return;
+        }
+
+        // 获取触摸位置并转换为世界坐标
+        const touchLocation = event.getLocation();
+        const cameraNode = find('Canvas/Camera');
+        if (!cameraNode) return;
+        
+        const camera = cameraNode.getComponent(Camera);
+        if (!camera) return;
+
+        const screenPos = new Vec3(touchLocation.x, touchLocation.y, 0);
+        const worldPos = new Vec3();
+        camera.screenToWorld(screenPos, worldPos);
+        worldPos.z = 0;
+
+        // 高亮网格
+        this.gridPanel.highlightGrid(worldPos);
+    }
+
+    /**
+     * 移动时的触摸结束事件
+     */
+    onMoveTouchEnd(event: EventTouch) {
+        if (!this.isMoving || !this.gridPanel) {
+            return;
+        }
+
+        // 移除事件监听
+        const canvas = find('Canvas');
+        if (canvas) {
+            canvas.off(Node.EventType.TOUCH_MOVE, this.onMoveTouchMove, this);
+            canvas.off(Node.EventType.TOUCH_END, this.onMoveTouchEnd, this);
+        }
+
+        this.isMoving = false;
+
+        // 获取触摸位置并转换为世界坐标
+        const touchLocation = event.getLocation();
+        const cameraNode = find('Canvas/Camera');
+        if (!cameraNode) {
+            this.gridPanel.clearHighlight();
+            return;
+        }
+        
+        const camera = cameraNode.getComponent(Camera);
+        if (!camera) {
+            this.gridPanel.clearHighlight();
+            return;
+        }
+
+        const screenPos = new Vec3(touchLocation.x, touchLocation.y, 0);
+        const worldPos = new Vec3();
+        camera.screenToWorld(screenPos, worldPos);
+        worldPos.z = 0;
+
+        // 获取最近的网格中心
+        const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
+        if (gridCenter) {
+            // 检查目标网格是否可用
+            const grid = this.gridPanel.worldToGrid(gridCenter);
+            if (grid && !this.gridPanel.isGridOccupied(grid.x, grid.y)) {
+                // 移动到新位置
+                this.moveToGridPosition(grid.x, grid.y);
+            } else {
+                // 目标网格已被占用，显示选择面板
+                if (!this.unitSelectionManager) {
+                    this.findUnitSelectionManager();
+                }
+                if (this.unitSelectionManager) {
+                    const unitInfo: UnitInfo = {
+                        name: '普通树木',
+                        level: 1,
+                        currentHealth: this.currentHealth,
+                        maxHealth: this.maxHealth,
+                        attackDamage: 0,
+                        populationCost: 0,
+                        icon: this.cardIcon || this.defaultSpriteFrame,
+                        collisionRadius: this.collisionRadius
+                    };
+                    this.unitSelectionManager.selectUnit(this.node, unitInfo);
+                }
+            }
+        } else {
+            // 不在网格内，显示选择面板
+            if (!this.unitSelectionManager) {
+                this.findUnitSelectionManager();
+            }
+            if (this.unitSelectionManager) {
+                const unitInfo: UnitInfo = {
+                    name: '普通树木',
+                    level: 1,
+                    currentHealth: this.currentHealth,
+                    maxHealth: this.maxHealth,
+                    attackDamage: 0, // 普通树木没有攻击能力
+                    populationCost: 0, // 不占用人口
+                    icon: this.cardIcon || this.defaultSpriteFrame,
+                    collisionRadius: this.collisionRadius,
+                    onSellClick: () => {
+                        this.onSellClick();
+                    }
+                };
+                this.unitSelectionManager.selectUnit(this.node, unitInfo);
+            }
+        }
+
+        // 清除高亮
+        this.gridPanel.clearHighlight();
+    }
+
+    /**
+     * 移动到指定网格位置
+     */
+    moveToGridPosition(gridX: number, gridY: number) {
+        if (!this.gridPanel) {
+            this.findGridPanel();
+        }
+        
+        if (!this.gridPanel) {
+            return;
+        }
+
+        // 获取目标网格的世界坐标
+        const targetWorldPos = this.gridPanel.gridToWorld(gridX, gridY);
+        if (!targetWorldPos) {
+            return;
+        }
+
+        // 释放原网格
+        if (this.gridX >= 0 && this.gridY >= 0) {
+            this.gridPanel.releaseGrid(this.gridX, this.gridY);
+        }
+
+        // 占用新网格
+        this.gridPanel.occupyGrid(gridX, gridY, this.node);
+        this.gridX = gridX;
+        this.gridY = gridY;
+
+        // 移动建筑物到新位置
+        this.node.setWorldPosition(targetWorldPos);
+
+        console.debug(`Tree: Moved to grid (${gridX}, ${gridY})`);
     }
 
     /**

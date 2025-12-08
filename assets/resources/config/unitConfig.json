@@ -1,0 +1,130 @@
+{
+  "Arrower": {
+    "baseStats": {
+      "maxHealth": 50,
+      "attackRange": 200,
+      "attackDamage": 10,
+      "attackInterval": 1.0,
+      "buildCost": 5,
+      "level": 1
+    },
+    "displayInfo": {
+      "name": "弓箭手",
+      "description": "远程攻击单位，能够攻击远处的敌人，射速较快"
+    },
+    "displayStats": {
+      "生命值": 50,
+      "攻击力": 10,
+      "攻击范围": "200像素",
+      "攻击间隔": "1.0秒",
+      "建造成本": "5金币"
+    }
+  },
+  "Hunter": {
+    "baseStats": {
+      "maxHealth": 50,
+      "attackRange": 200,
+      "attackDamage": 10,
+      "attackInterval": 1.0,
+      "buildCost": 5,
+      "level": 1
+    },
+    "displayInfo": {
+      "name": "女猎手",
+      "description": "远程攻击单位，投掷回旋镖攻击敌人，回旋镖可以反弹多次"
+    },
+    "displayStats": {
+      "生命值": 50,
+      "攻击力": 10,
+      "攻击范围": "200像素",
+      "攻击间隔": "1.0秒",
+      "建造成本": "5金币"
+    }
+  },
+  "Wisp": {
+    "baseStats": {
+      "maxHealth": 30,
+      "healAmount": 2,
+      "healInterval": 1.0,
+      "moveSpeed": 80,
+      "collisionRadius": 20
+    },
+    "displayInfo": {
+      "name": "小精灵",
+      "description": "能够治疗建筑物的小精灵，是维护基地的重要单位"
+    },
+    "displayStats": {
+      "生命值": 30,
+      "治疗量": "2点/次",
+      "治疗间隔": "1.0秒",
+      "移动速度": "80像素/秒"
+    }
+  },
+  "WarAncientTree": {
+    "baseStats": {
+      "maxHealth": 100,
+      "attackRange": 200,
+      "attackDamage": 15,
+      "attackInterval": 1.5,
+      "buildCost": 10,
+      "level": 1,
+      "collisionRadius": 50,
+      "maxTowerCount": 4,
+      "productionInterval": 2.0
+    },
+    "displayInfo": {
+      "name": "弓箭手小屋",
+      "description": "能够训练弓箭手的建筑物，同时拥有远程攻击能力"
+    },
+    "displayStats": {
+      "生命值": 100,
+      "攻击力": 15,
+      "攻击范围": "200像素",
+      "攻击间隔": "1.5秒",
+      "建造成本": "10金币",
+      "最大生产数量": 4
+    }
+  },
+  "MoonWell": {
+    "baseStats": {
+      "maxHealth": 80,
+      "buildCost": 10,
+      "populationIncrease": 10,
+      "healRange": 100,
+      "healAmount": 1,
+      "healInterval": 2.0,
+      "level": 1,
+      "collisionRadius": 40
+    },
+    "displayInfo": {
+      "name": "月亮井",
+      "description": "能够恢复周围单位生命值，并提供人口上限的建筑物"
+    },
+    "displayStats": {
+      "生命值": 80,
+      "治疗范围": "100像素",
+      "治疗量": "1点/次",
+      "治疗间隔": "2.0秒",
+      "建造成本": "10金币",
+      "人口增加": 10
+    }
+  },
+  "Tree": {
+    "baseStats": {
+      "maxHealth": 20,
+      "buildCost": 1,
+      "goldReward": 1,
+      "collisionRadius": 30
+    },
+    "displayInfo": {
+      "name": "普通树木",
+      "description": "普通的树木，可以提供资源"
+    },
+    "displayStats": {
+      "生命值": 20,
+      "建造成本": "1金币",
+      "回收奖励": "1金币"
+    }
+  }
+}
+

@@ -1,4 +1,5 @@
-import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Sprite, SpriteFrame, Color, Graphics, UITransform, Label, EventTouch } from 'cc';
+import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Sprite, SpriteFrame, Color, Graphics, UITransform, Label, EventTouch, Camera } from 'cc';
+import { UnitConfigManager } from './UnitConfigManager';
 import { GameManager, GameState } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
@@ -6,6 +7,7 @@ import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
 import { SelectionManager } from './SelectionManager';
 import { UnitType } from './WarAncientTree';
+import { BuildingGridPanel } from './BuildingGridPanel';
 const { ccclass, property } = _decorator;
 
 @ccclass('HunterHall')
@@ -86,6 +88,13 @@ export class HunterHall extends Component {
     private globalTouchHandler: ((event: EventTouch) => void) | null = null; // 全局触摸事件处理器
     private unitSelectionManager: UnitSelectionManager = null!; // 单位选择管理器
 
+    // 网格位置相关
+    public gridX: number = -1; // 网格X坐标
+    public gridY: number = -1; // 网格Y坐标
+    private isMoving: boolean = false; // 是否正在移动
+    private moveStartPos: Vec3 = new Vec3(); // 移动起始位置
+    private gridPanel: BuildingGridPanel = null!; // 网格面板组件
+
     start() {
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
@@ -139,6 +148,16 @@ export class HunterHall extends Component {
         }
         if (gmNode) {
             this.gameManager = gmNode.getComponent(GameManager);
+        }
+    }
+
+    /**
+     * 查找网格面板
+     */
+    findGridPanel() {
+        const gridPanelNode = find('BuildingGridPanel');
+        if (gridPanelNode) {
+            this.gridPanel = gridPanelNode.getComponent(BuildingGridPanel);
         }
     }
 
@@ -375,6 +394,11 @@ export class HunterHall extends Component {
         // 设置Hunter的建造成本（如果需要）
         const hunterScript = hunter.getComponent('Hunter') as any;
         if (hunterScript) {
+            // 应用配置
+            const configManager = UnitConfigManager.getInstance();
+            if (configManager.isConfigLoaded()) {
+                configManager.applyConfigToUnit('Hunter', hunterScript);
+            }
             hunterScript.buildCost = 0; // 由猎手大厅生产的Hunter建造成本为0
             
             // 让Hunter移动到目标位置（先设置移动目标，再显示单位介绍）
@@ -742,6 +766,20 @@ export class HunterHall extends Component {
 
         this.isDestroyed = true;
 
+        // 释放网格占用
+        if (this.gridPanel && this.gridX >= 0 && this.gridY >= 0) {
+            this.gridPanel.releaseGrid(this.gridX, this.gridY);
+        }
+
+        // 移除移动事件监听
+        if (this.isMoving) {
+            const canvas = find('Canvas');
+            if (canvas) {
+                canvas.off(Node.EventType.TOUCH_MOVE, this.onMoveTouchMove, this);
+                canvas.off(Node.EventType.TOUCH_END, this.onMoveTouchEnd, this);
+            }
+        }
+
         // 卸下所有依附的小精灵，让它们出现在建筑物下方
         while (this.attachedWisps.length > 0) {
             // 先从列表中移除小精灵，再处理，避免null引用
@@ -803,6 +841,11 @@ export class HunterHall extends Component {
         event.propagationStopped = true;
         console.debug('HunterHall.onHunterHallClick: Event propagation stopped');
 
+        // 如果正在移动，不处理点击
+        if (this.isMoving) {
+            return;
+        }
+
         // 如果已经显示选择面板，先隐藏
         if (this.selectionPanel && this.selectionPanel.isValid) {
             console.debug('HunterHall.onHunterHallClick: Selection panel already shown, hiding it');
@@ -810,10 +853,152 @@ export class HunterHall extends Component {
             return;
         }
 
-        // 显示选择面板
-        console.debug('HunterHall.onHunterHallClick: Showing selection panel');
-        this.showSelectionPanel();
-        console.debug('HunterHall.onHunterHallClick: Method completed');
+        // 开始移动模式
+        this.startMoving(event);
+    }
+
+    /**
+     * 开始移动建筑物
+     */
+    startMoving(event: EventTouch) {
+        if (!this.gridPanel) {
+            this.findGridPanel();
+        }
+        
+        if (!this.gridPanel) {
+            // 如果没有网格面板，显示选择面板
+            this.showSelectionPanel();
+            return;
+        }
+
+        this.isMoving = true;
+        this.moveStartPos = this.node.worldPosition.clone();
+        
+        // 监听触摸移动和结束事件
+        const canvas = find('Canvas');
+        if (canvas) {
+            canvas.on(Node.EventType.TOUCH_MOVE, this.onMoveTouchMove, this);
+            canvas.on(Node.EventType.TOUCH_END, this.onMoveTouchEnd, this);
+        }
+        
+        // 高亮当前网格
+        this.gridPanel.highlightGrid(this.node.worldPosition);
+    }
+
+    /**
+     * 移动时的触摸移动事件
+     */
+    onMoveTouchMove(event: EventTouch) {
+        if (!this.isMoving || !this.gridPanel) {
+            return;
+        }
+
+        // 获取触摸位置并转换为世界坐标
+        const touchLocation = event.getLocation();
+        const cameraNode = find('Canvas/Camera');
+        if (!cameraNode) return;
+        
+        const camera = cameraNode.getComponent(Camera);
+        if (!camera) return;
+
+        const screenPos = new Vec3(touchLocation.x, touchLocation.y, 0);
+        const worldPos = new Vec3();
+        camera.screenToWorld(screenPos, worldPos);
+        worldPos.z = 0;
+
+        // 高亮网格
+        this.gridPanel.highlightGrid(worldPos);
+    }
+
+    /**
+     * 移动时的触摸结束事件
+     */
+    onMoveTouchEnd(event: EventTouch) {
+        if (!this.isMoving || !this.gridPanel) {
+            return;
+        }
+
+        // 移除事件监听
+        const canvas = find('Canvas');
+        if (canvas) {
+            canvas.off(Node.EventType.TOUCH_MOVE, this.onMoveTouchMove, this);
+            canvas.off(Node.EventType.TOUCH_END, this.onMoveTouchEnd, this);
+        }
+
+        this.isMoving = false;
+
+        // 获取触摸位置并转换为世界坐标
+        const touchLocation = event.getLocation();
+        const cameraNode = find('Canvas/Camera');
+        if (!cameraNode) {
+            this.gridPanel.clearHighlight();
+            return;
+        }
+        
+        const camera = cameraNode.getComponent(Camera);
+        if (!camera) {
+            this.gridPanel.clearHighlight();
+            return;
+        }
+
+        const screenPos = new Vec3(touchLocation.x, touchLocation.y, 0);
+        const worldPos = new Vec3();
+        camera.screenToWorld(screenPos, worldPos);
+        worldPos.z = 0;
+
+        // 获取最近的网格中心
+        const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
+        if (gridCenter) {
+            // 检查目标网格是否可用
+            const grid = this.gridPanel.worldToGrid(gridCenter);
+            if (grid && !this.gridPanel.isGridOccupied(grid.x, grid.y)) {
+                // 移动到新位置
+                this.moveToGridPosition(grid.x, grid.y);
+            } else {
+                // 目标网格已被占用，显示选择面板
+                this.showSelectionPanel();
+            }
+        } else {
+            // 不在网格内，显示选择面板
+            this.showSelectionPanel();
+        }
+
+        // 清除高亮
+        this.gridPanel.clearHighlight();
+    }
+
+    /**
+     * 移动到指定网格位置
+     */
+    moveToGridPosition(gridX: number, gridY: number) {
+        if (!this.gridPanel) {
+            this.findGridPanel();
+        }
+        
+        if (!this.gridPanel) {
+            return;
+        }
+
+        // 获取目标网格的世界坐标
+        const targetWorldPos = this.gridPanel.gridToWorld(gridX, gridY);
+        if (!targetWorldPos) {
+            return;
+        }
+
+        // 释放原网格
+        if (this.gridX >= 0 && this.gridY >= 0) {
+            this.gridPanel.releaseGrid(this.gridX, this.gridY);
+        }
+
+        // 占用新网格
+        this.gridPanel.occupyGrid(gridX, gridY, this.node);
+        this.gridX = gridX;
+        this.gridY = gridY;
+
+        // 移动建筑物到新位置
+        this.node.setWorldPosition(targetWorldPos);
+
+        console.debug(`HunterHall: Moved to grid (${gridX}, ${gridY})`);
     }
 
     /**
