@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip, Animation, AnimationState } from 'cc';
+import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip, Animation, AnimationState, view } from 'cc';
 import { GameManager, GameState } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
@@ -397,9 +397,10 @@ export class OrcWarlord extends Component {
         let minDistance = Infinity;
         let targetPriority = Infinity;
         
-        // 定义优先级：水晶>树木>角色>建筑物
+        // 定义优先级：水晶>石墙（阻挡路径时）>树木>角色>建筑物
         const PRIORITY = {
             CRYSTAL: 1,
+            STONEWALL: 1.5, // 石墙优先级介于水晶和树木之间
             TREE: 2,
             CHARACTER: 3,
             BUILDING: 4
@@ -418,7 +419,22 @@ export class OrcWarlord extends Component {
             }
         }
 
-        // 2. 查找范围内的树木（优先级次之）
+        // 2. 检查路径是否被石墙阻挡（优先级第二）
+        const blockedStoneWall = this.checkPathBlockedByStoneWall();
+        if (blockedStoneWall) {
+            const distance = Vec3.distance(this.node.worldPosition, blockedStoneWall.worldPosition);
+            if (distance <= detectionRange) {
+                // 如果石墙在检测范围内，且优先级更高或距离更近
+                if (PRIORITY.STONEWALL < targetPriority || 
+                    (PRIORITY.STONEWALL === targetPriority && distance < minDistance)) {
+                    minDistance = distance;
+                    nearestTarget = blockedStoneWall;
+                    targetPriority = PRIORITY.STONEWALL;
+                }
+            }
+        }
+
+        // 3. 查找范围内的树木（优先级第三）
         // 查找树木
         let treesNode = find('Trees');
         if (!treesNode && this.node.scene) {
@@ -447,7 +463,7 @@ export class OrcWarlord extends Component {
             }
         }
         
-        // 3. 查找范围内的角色（优先级第三）
+        // 4. 查找范围内的角色（优先级第四）
         // 查找所有角色单位：弓箭手、小精灵、女猎手
         // 1) 弓箭手
         for (const tower of towers) {
@@ -496,7 +512,7 @@ export class OrcWarlord extends Component {
             }
         }
 
-        // 4. 查找范围内的建筑物（战争古树、月亮井和猎手大厅，优先级第四）
+        // 5. 查找范围内的建筑物（战争古树、月亮井和猎手大厅，优先级第五）
         // 战争古树
         for (const tree of trees) {
             if (tree && tree.active && tree.isValid) {
@@ -606,7 +622,44 @@ export class OrcWarlord extends Component {
             direction.normalize();
             const newPos = new Vec3();
             Vec3.scaleAndAdd(newPos, this.node.worldPosition, direction, this.moveSpeed * deltaTime);
-            this.node.setWorldPosition(newPos);
+            
+            // 检查移动路径上是否有石墙阻挡（如果目标不是石墙）
+            const targetScript = this.currentTarget.getComponent('StoneWall') as any;
+            if (!targetScript) {
+                // 目标不是石墙，检查路径上是否有石墙阻挡
+                if (this.checkCollisionWithStoneWall(newPos)) {
+                    // 路径被石墙阻挡，尝试绕路
+                    const detourPos = this.calculateDetourPosition(direction, deltaTime);
+                    if (detourPos) {
+                        // 找到绕路位置，移动到该位置
+                        const clampedPos = this.clampPositionToScreen(detourPos);
+                        this.node.setWorldPosition(clampedPos);
+                        
+                        // 根据移动方向翻转
+                        const detourDirection = new Vec3();
+                        Vec3.subtract(detourDirection, detourPos, this.node.worldPosition);
+                        this.flipDirection(detourDirection);
+                        
+                        // 播放行走动画
+                        this.playWalkAnimation();
+                        return;
+                    } else {
+                        // 无法绕路，攻击最近的石墙
+                        const nearestWall = this.findNearestStoneWall();
+                        if (nearestWall) {
+                            this.currentTarget = nearestWall;
+                            return;
+                        } else {
+                            // 找不到石墙，停止移动
+                            return;
+                        }
+                    }
+                }
+            }
+            
+            // 限制位置在屏幕范围内
+            const clampedPos = this.clampPositionToScreen(newPos);
+            this.node.setWorldPosition(clampedPos);
             
             // 根据移动方向翻转
             this.flipDirection(direction);
@@ -621,8 +674,13 @@ export class OrcWarlord extends Component {
             return;
         }
 
-        // 在移动前检查路径上是否有战争古树或防御塔
+        // 在移动前检查路径上是否有战争古树或防御塔或石墙
         this.checkForTargetsOnPath();
+
+        // 如果检测到目标（包括石墙），停止朝水晶移动，让update()方法处理目标
+        if (this.currentTarget) {
+            return;
+        }
 
         const crystalWorldPos = this.targetCrystal.worldPosition;
         const enemyWorldPos = this.node.worldPosition;
@@ -636,7 +694,33 @@ export class OrcWarlord extends Component {
             const moveDistance = this.moveSpeed * deltaTime;
             const newPos = new Vec3();
             Vec3.scaleAndAdd(newPos, enemyWorldPos, direction, moveDistance);
-            this.node.setWorldPosition(newPos);
+            
+            // 检查移动路径上是否有石墙阻挡
+            if (this.checkCollisionWithStoneWall(newPos)) {
+                // 路径被石墙阻挡，尝试绕路
+                const detourPos = this.calculateDetourPosition(direction, deltaTime);
+                if (detourPos) {
+                    // 找到绕路位置，移动到该位置
+                    const clampedPos = this.clampPositionToScreen(detourPos);
+                    this.node.setWorldPosition(clampedPos);
+                    
+                    // 根据移动方向翻转
+                    const detourDirection = new Vec3();
+                    Vec3.subtract(detourDirection, detourPos, this.node.worldPosition);
+                    this.flipDirection(detourDirection);
+                    
+                    // 播放行走动画
+                    this.playWalkAnimation();
+                    return;
+                } else {
+                    // 无法绕路，停止移动
+                    return;
+                }
+            }
+            
+            // 限制位置在屏幕范围内
+            const clampedPos = this.clampPositionToScreen(newPos);
+            this.node.setWorldPosition(clampedPos);
             
             // 根据移动方向翻转
             this.flipDirection(direction);
@@ -644,6 +728,176 @@ export class OrcWarlord extends Component {
             // 播放行走动画
             this.playWalkAnimation();
         }
+    }
+
+    /**
+     * 计算绕路位置
+     * @param direction 原始移动方向
+     * @param deltaTime 时间间隔
+     * @returns 如果找到可行的绕路位置返回该位置，否则返回null
+     */
+    calculateDetourPosition(direction: Vec3, deltaTime: number): Vec3 | null {
+        const moveDistance = this.moveSpeed * deltaTime;
+        const perpendicular = new Vec3(-direction.y, direction.x, 0); // 垂直于移动方向的方向
+        
+        // 使用较小的偏移距离，让移动更平滑
+        const offsetDistances = [30, 50, 80]; // 逐步增加偏移距离
+        
+        // 尝试不同偏移距离的绕路
+        for (const offsetDistance of offsetDistances) {
+            // 尝试左侧绕路
+            const leftOffset = new Vec3();
+            Vec3.scaleAndAdd(leftOffset, this.node.worldPosition, perpendicular, offsetDistance);
+            const leftPos = new Vec3();
+            Vec3.scaleAndAdd(leftPos, leftOffset, direction, moveDistance);
+            
+            if (!this.checkCollisionWithStoneWall(leftPos)) {
+                return leftPos;
+            }
+            
+            // 尝试右侧绕路
+            const rightOffset = new Vec3();
+            Vec3.scaleAndAdd(rightOffset, this.node.worldPosition, perpendicular, -offsetDistance);
+            const rightPos = new Vec3();
+            Vec3.scaleAndAdd(rightPos, rightOffset, direction, moveDistance);
+            
+            if (!this.checkCollisionWithStoneWall(rightPos)) {
+                return rightPos;
+            }
+        }
+        
+        // 无法找到可行的绕路位置
+        return null;
+    }
+
+    /**
+     * 查找最近的石墙
+     * @returns 最近的石墙节点，如果没有找到返回null
+     */
+    findNearestStoneWall(): Node | null {
+        // 递归查找所有带有StoneWall组件的节点
+        const findAllStoneWalls = (node: Node): Node[] => {
+            const walls: Node[] = [];
+            
+            // 检查当前节点是否有StoneWall组件
+            const wallScript = node.getComponent('StoneWall') as any;
+            if (wallScript && node.active && node.isValid) {
+                walls.push(node);
+            }
+            
+            // 递归检查子节点
+            for (const child of node.children) {
+                walls.push(...findAllStoneWalls(child));
+            }
+            
+            return walls;
+        };
+
+        // 从场景根节点开始查找所有石墙
+        const scene = this.node.scene;
+        if (!scene) {
+            return null;
+        }
+
+        const allStoneWalls = findAllStoneWalls(scene);
+        let nearestWall: Node | null = null;
+        let minDistance = Infinity;
+
+        for (const wall of allStoneWalls) {
+            if (!wall || !wall.active || !wall.isValid) continue;
+            
+            const wallScript = wall.getComponent('StoneWall') as any;
+            if (!wallScript || !wallScript.isAlive || !wallScript.isAlive()) continue;
+
+            const wallPos = wall.worldPosition;
+            const distance = Vec3.distance(this.node.worldPosition, wallPos);
+
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearestWall = wall;
+            }
+        }
+
+        return nearestWall;
+    }
+
+    /**
+     * 检查位置是否与石墙碰撞
+     * @param position 要检查的位置
+     * @returns 如果与石墙碰撞返回true，否则返回false
+     */
+    checkCollisionWithStoneWall(position: Vec3): boolean {
+        // 递归查找所有带有StoneWall组件的节点
+        const findAllStoneWalls = (node: Node): Node[] => {
+            const walls: Node[] = [];
+            
+            // 检查当前节点是否有StoneWall组件
+            const wallScript = node.getComponent('StoneWall') as any;
+            if (wallScript && node.active && node.isValid) {
+                walls.push(node);
+            }
+            
+            // 递归检查子节点
+            for (const child of node.children) {
+                walls.push(...findAllStoneWalls(child));
+            }
+            
+            return walls;
+        };
+
+        // 从场景根节点开始查找所有石墙
+        const scene = this.node.scene;
+        if (!scene) {
+            return false;
+        }
+
+        const allStoneWalls = findAllStoneWalls(scene);
+        const enemyRadius = 20; // 敌人的碰撞半径
+
+        for (const wall of allStoneWalls) {
+            if (!wall || !wall.active || !wall.isValid) continue;
+            
+            const wallScript = wall.getComponent('StoneWall') as any;
+            if (!wallScript || !wallScript.isAlive || !wallScript.isAlive()) continue;
+
+            const wallPos = wall.worldPosition;
+            const wallRadius = wallScript.collisionRadius || 40;
+            const distanceToWall = Vec3.distance(position, wallPos);
+            const minDistance = enemyRadius + wallRadius;
+
+            // 如果距离小于最小距离，说明碰撞
+            if (distanceToWall < minDistance) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * 限制位置在屏幕范围内
+     * @param position 要检查的位置
+     * @returns 限制在屏幕范围内的位置
+     */
+    clampPositionToScreen(position: Vec3): Vec3 {
+        // 使用cc.view获取屏幕尺寸和设计分辨率
+        const designResolution = view.getDesignResolutionSize();
+        
+        // 使用默认碰撞半径（敌人单位通常较小）
+        const collisionRadius = 20;
+        
+        // 计算屏幕边界，确保单位在可见屏幕内移动
+        const minX = collisionRadius;
+        const maxX = designResolution.width - collisionRadius;
+        const minY = collisionRadius;
+        const maxY = designResolution.height - collisionRadius;
+        
+        // 限制位置在屏幕范围内
+        const clampedPos = new Vec3(position);
+        clampedPos.x = Math.max(minX, Math.min(maxX, clampedPos.x));
+        clampedPos.y = Math.max(minY, Math.min(maxY, clampedPos.y));
+        
+        return clampedPos;
     }
 
     // 根据移动方向翻转敌人
@@ -665,6 +919,147 @@ export class OrcWarlord extends Component {
         }
     }
 
+    /**
+     * 检查路径是否被石墙阻挡
+     * @returns 如果路径被阻挡且无法绕开，返回最近的石墙节点；否则返回null
+     */
+    checkPathBlockedByStoneWall(): Node | null {
+        if (!this.targetCrystal || !this.targetCrystal.isValid) {
+            return null;
+        }
+
+        const findNodeRecursive = (node: Node, name: string): Node | null => {
+            if (node.name === name) {
+                return node;
+            }
+            for (const child of node.children) {
+                const found = findNodeRecursive(child, name);
+                if (found) return found;
+            }
+            return null;
+        };
+
+        // 查找所有石墙
+        let stoneWallsNode = find('StoneWalls');
+        if (!stoneWallsNode && this.node.scene) {
+            stoneWallsNode = findNodeRecursive(this.node.scene, 'StoneWalls');
+        }
+
+        if (!stoneWallsNode) {
+            return null;
+        }
+
+        const enemyPos = this.node.worldPosition;
+        const crystalPos = this.targetCrystal.worldPosition;
+        const direction = new Vec3();
+        Vec3.subtract(direction, crystalPos, enemyPos);
+        const distanceToCrystal = direction.length();
+        
+        if (distanceToCrystal < 0.1) {
+            return null; // 已经到达水晶
+        }
+
+        direction.normalize();
+        
+        // 检测路径上的石墙（分段检测）
+        const checkSteps = Math.ceil(distanceToCrystal / 50); // 每50像素检测一次
+        const stepSize = distanceToCrystal / checkSteps;
+        const stoneWalls = stoneWallsNode.children || [];
+        const blockingWalls: { wall: Node; distance: number }[] = [];
+
+        for (let i = 0; i <= checkSteps; i++) {
+            const checkPos = new Vec3();
+            Vec3.scaleAndAdd(checkPos, enemyPos, direction, stepSize * i);
+
+            // 检查这个位置是否有石墙
+            for (const wall of stoneWalls) {
+                if (!wall || !wall.active || !wall.isValid) continue;
+                
+                const wallScript = wall.getComponent('StoneWall') as any;
+                if (!wallScript || !wallScript.isAlive || !wallScript.isAlive()) continue;
+
+                const wallPos = wall.worldPosition;
+                const wallRadius = wallScript.collisionRadius || 40;
+                const distanceToWall = Vec3.distance(checkPos, wallPos);
+
+                // 如果检测点距离石墙太近，说明路径被阻挡
+                if (distanceToWall < wallRadius + 20) { // 20像素的缓冲距离
+                    const distanceFromEnemy = Vec3.distance(enemyPos, wallPos);
+                    blockingWalls.push({ wall, distance: distanceFromEnemy });
+                }
+            }
+        }
+
+        if (blockingWalls.length === 0) {
+            return null; // 没有阻挡的石墙
+        }
+
+        // 找到最近的石墙
+        blockingWalls.sort((a, b) => a.distance - b.distance);
+        const nearestWall = blockingWalls[0].wall;
+
+        // 尝试左右绕行检测
+        const perpendicular = new Vec3(-direction.y, direction.x, 0); // 垂直于路径的方向
+        const offsetDistance = 80; // 绕行偏移距离
+
+        // 检测左侧绕行
+        const leftOffset = new Vec3();
+        Vec3.scaleAndAdd(leftOffset, enemyPos, perpendicular, offsetDistance);
+        const leftPathClear = this.checkPathClear(leftOffset, crystalPos, stoneWalls);
+
+        // 检测右侧绕行
+        const rightOffset = new Vec3();
+        Vec3.scaleAndAdd(rightOffset, enemyPos, perpendicular, -offsetDistance);
+        const rightPathClear = this.checkPathClear(rightOffset, crystalPos, stoneWalls);
+
+        // 如果左右都无法绕行，返回最近的石墙
+        if (!leftPathClear && !rightPathClear) {
+            return nearestWall;
+        }
+
+        // 可以绕行，返回null
+        return null;
+    }
+
+    /**
+     * 检查从起点到终点的路径是否畅通（没有石墙阻挡）
+     */
+    private checkPathClear(startPos: Vec3, endPos: Vec3, stoneWalls: Node[]): boolean {
+        const direction = new Vec3();
+        Vec3.subtract(direction, endPos, startPos);
+        const distance = direction.length();
+        
+        if (distance < 0.1) {
+            return true;
+        }
+
+        direction.normalize();
+        const checkSteps = Math.ceil(distance / 50);
+        const stepSize = distance / checkSteps;
+
+        for (let i = 0; i <= checkSteps; i++) {
+            const checkPos = new Vec3();
+            Vec3.scaleAndAdd(checkPos, startPos, direction, stepSize * i);
+
+            for (const wall of stoneWalls) {
+                if (!wall || !wall.active || !wall.isValid) continue;
+                
+                const wallScript = wall.getComponent('StoneWall') as any;
+                if (!wallScript || !wallScript.isAlive || !wallScript.isAlive()) continue;
+
+                const wallPos = wall.worldPosition;
+                const wallRadius = wallScript.collisionRadius || 40;
+                const distanceToWall = Vec3.distance(checkPos, wallPos);
+
+                if (distanceToWall < wallRadius + 20) {
+                    return false; // 路径被阻挡
+                }
+            }
+        }
+
+        return true; // 路径畅通
+    }
+
     checkForTargetsOnPath() {
         // 检测范围：200像素
         const detectionRange = 200;
@@ -680,9 +1075,10 @@ export class OrcWarlord extends Component {
             return null;
         };
         
-        // 定义优先级：水晶>树木>角色>建筑物
+        // 定义优先级：水晶>石墙（阻挡路径时）>树木>角色>建筑物
         const PRIORITY = {
             CRYSTAL: 1,
+            STONEWALL: 1.5, // 石墙优先级介于水晶和树木之间
             TREE: 2,
             CHARACTER: 3,
             BUILDING: 4
@@ -700,7 +1096,34 @@ export class OrcWarlord extends Component {
             }
         }
         
-        // 2. 添加树木
+        // 2. 检查路径是否被石墙阻挡
+        const blockedStoneWall = this.checkPathBlockedByStoneWall();
+        if (blockedStoneWall) {
+            // 路径被石墙阻挡且无法绕开，优先攻击石墙
+            allPotentialTargets.push(blockedStoneWall);
+        }
+
+        // 3. 添加石墙（用于一般检测）
+        let stoneWallsNode = find('StoneWalls');
+        if (!stoneWallsNode && this.node.scene) {
+            stoneWallsNode = findNodeRecursive(this.node.scene, 'StoneWalls');
+        }
+        if (stoneWallsNode) {
+            const stoneWalls = stoneWallsNode.children || [];
+            for (const wall of stoneWalls) {
+                if (wall && wall.active && wall.isValid) {
+                    const wallScript = wall.getComponent('StoneWall') as any;
+                    if (wallScript && wallScript.isAlive && wallScript.isAlive()) {
+                        // 如果路径被阻挡，只添加阻挡路径的石墙
+                        if (!blockedStoneWall || wall === blockedStoneWall) {
+                            allPotentialTargets.push(wall);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. 添加树木
         let treesNode = find('Trees');
         if (!treesNode && this.node.scene) {
             treesNode = findNodeRecursive(this.node.scene, 'Trees');
@@ -717,7 +1140,7 @@ export class OrcWarlord extends Component {
             }
         }
         
-        // 3. 添加角色单位
+        // 5. 添加角色单位
         // 3.1) 弓箭手
         let towersNode = find('Towers');
         if (!towersNode && this.node.scene) {
@@ -769,7 +1192,7 @@ export class OrcWarlord extends Component {
             }
         }
         
-        // 4. 添加建筑物
+        // 6. 添加建筑物
         // 4.1) 战争古树
         let warAncientTrees = find('WarAncientTrees');
         if (!warAncientTrees && this.node.scene) {
@@ -849,6 +1272,8 @@ export class OrcWarlord extends Component {
             let targetPriority: number;
             if (target.getComponent('Crystal')) {
                 targetPriority = PRIORITY.CRYSTAL;
+            } else if (target.getComponent('StoneWall')) {
+                targetPriority = PRIORITY.STONEWALL;
             } else if (target.getComponent('Tree')) {
                 targetPriority = PRIORITY.TREE;
             } else if (target.getComponent('Arrower') || target.getComponent('Hunter') || target.getComponent('Wisp')) {
@@ -1168,7 +1593,8 @@ export class OrcWarlord extends Component {
         const crystalScript = this.currentTarget.getComponent('Crystal') as any;
         const wispScript = this.currentTarget.getComponent('Wisp') as any;
         const hunterScript = this.currentTarget.getComponent('Hunter') as any;
-        const targetScript = towerScript || warAncientTreeScript || normalTreeScript || wellScript || hallScript || crystalScript || wispScript || hunterScript;
+        const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
+        const targetScript = towerScript || warAncientTreeScript || normalTreeScript || wellScript || hallScript || crystalScript || wispScript || hunterScript || stoneWallScript;
         
         if (targetScript && targetScript.takeDamage) {
             targetScript.takeDamage(this.attackDamage);

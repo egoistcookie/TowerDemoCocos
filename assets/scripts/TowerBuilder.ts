@@ -7,6 +7,7 @@ import { WarAncientTree } from './WarAncientTree';
 import { MoonWell } from './MoonWell';
 import { Tree } from './Tree';
 import { HunterHall } from './HunterHall';
+import { StoneWall } from './StoneWall';
 import { UnitConfigManager } from './UnitConfigManager';
 import { BuildingGridPanel } from './BuildingGridPanel';
 const { ccclass, property } = _decorator;
@@ -37,6 +38,12 @@ export class TowerBuilder extends Component {
     @property(SpriteFrame)
     hunterHallIcon: SpriteFrame = null!; // 猎手大厅图标
 
+    @property(Prefab)
+    stoneWallPrefab: Prefab = null!; // 石墙预制体
+
+    @property(SpriteFrame)
+    stoneWallIcon: SpriteFrame = null!; // 石墙图标
+
     @property(Node)
     buildingSelectionPanel: Node = null!; // 建筑物选择面板节点
 
@@ -65,6 +72,9 @@ export class TowerBuilder extends Component {
     hunterHallContainer: Node = null!; // 猎手大厅容器
 
     @property(Node)
+    stoneWallContainer: Node = null!; // 石墙容器
+
+    @property(Node)
     buildingGridPanel: Node = null!; // 建筑物网格面板节点
 
     @property
@@ -78,6 +88,9 @@ export class TowerBuilder extends Component {
 
     @property
     hunterHallCost: number = 10; // 猎手大厅建造成本（10金币）
+
+    @property
+    stoneWallCost: number = 5; // 石墙建造成本（5金币）
 
     private isBuildingMode: boolean = false;
     private previewTower: Node = null!;
@@ -181,6 +194,22 @@ export class TowerBuilder extends Component {
                     this.hunterHallContainer.setParent(canvas);
                 } else if (this.node.scene) {
                     this.hunterHallContainer.setParent(this.node.scene);
+                }
+            }
+        }
+
+        // 创建石墙容器
+        if (!this.stoneWallContainer) {
+            const existingWalls = find('StoneWalls');
+            if (existingWalls) {
+                this.stoneWallContainer = existingWalls;
+            } else {
+                this.stoneWallContainer = new Node('StoneWalls');
+                const canvas = find('Canvas');
+                if (canvas) {
+                    this.stoneWallContainer.setParent(canvas);
+                } else if (this.node.scene) {
+                    this.stoneWallContainer.setParent(this.node.scene);
                 }
             }
         }
@@ -324,6 +353,15 @@ export class TowerBuilder extends Component {
                 cost: this.hunterHallCost,
                 icon: this.hunterHallIcon || null!,
                 description: '可以生产女猎手单位'
+            });
+        }
+        if (this.stoneWallPrefab) {
+            buildingTypes.push({
+                name: '石墙',
+                prefab: this.stoneWallPrefab,
+                cost: this.stoneWallCost,
+                icon: this.stoneWallIcon || null!,
+                description: '坚固的障碍物，阻挡敌人进攻路线'
             });
         }
         this.buildingPanel.setBuildingTypes(buildingTypes);
@@ -897,6 +935,17 @@ export class TowerBuilder extends Component {
             }
         }
 
+        // 检查是否与现有石墙重叠
+        const stoneWalls = this.stoneWallContainer?.children || [];
+        for (const wall of stoneWalls) {
+            if (wall.active) {
+                const wallDistance = Vec3.distance(position, wall.worldPosition);
+                if (wallDistance < 60) { // 石墙之间的最小距离
+                    return false;
+                }
+            }
+        }
+
         return true;
     }
 
@@ -941,6 +990,8 @@ export class TowerBuilder extends Component {
             this.buildTree(worldPosition);
         } else if (building.name === '猎手大厅' || building.prefab === this.hunterHallPrefab) {
             this.buildHunterHall(worldPosition);
+        } else if (building.name === '石墙' || building.prefab === this.stoneWallPrefab) {
+            this.buildStoneWall(worldPosition);
         } else {
             // 可以扩展其他建筑物类型
             console.warn('TowerBuilder.buildBuilding: Unknown building type:', building.name);
@@ -1212,6 +1263,68 @@ export class TowerBuilder extends Component {
         console.debug('TowerBuilder.buildHunterHall: Built at', worldPosition);
     }
 
+    /**
+     * 建造石墙
+     */
+    buildStoneWall(worldPosition: Vec3) {
+        if (!this.stoneWallPrefab) {
+            console.error('TowerBuilder.buildStoneWall: stoneWallPrefab is null!');
+            return;
+        }
+
+        // 消耗金币
+        if (this.gameManager) {
+            this.gameManager.spendGold(this.stoneWallCost);
+        }
+
+        // 创建石墙
+        const wall = instantiate(this.stoneWallPrefab);
+        
+        // 设置父节点
+        const parent = this.stoneWallContainer || this.node;
+        if (parent && !parent.active) {
+            parent.active = true;
+        }
+        
+        wall.setParent(parent);
+        wall.active = true;
+        wall.setPosition(0, 0, 0);
+        wall.setRotationFromEuler(0, 0, 0);
+        wall.setScale(1, 1, 1);
+        wall.setWorldPosition(worldPosition);
+
+        // 设置建造成本并检查首次出现
+        const wallScript = wall.getComponent(StoneWall);
+        if (wallScript) {
+            // 先应用配置（排除 buildCost）
+            const configManager = UnitConfigManager.getInstance();
+            if (configManager.isConfigLoaded()) {
+                configManager.applyConfigToUnit('StoneWall', wallScript, ['buildCost']);
+            }
+            
+            // 然后设置建造成本（覆盖配置中的值）
+            wallScript.buildCost = this.stoneWallCost;
+            
+            // 记录网格位置并标记占用
+            if (this.gridPanel) {
+                const grid = this.gridPanel.worldToGrid(worldPosition);
+                if (grid) {
+                    wallScript.gridX = grid.x;
+                    wallScript.gridY = grid.y;
+                    this.gridPanel.occupyGrid(grid.x, grid.y, wall);
+                }
+            }
+            
+            // 检查单位是否首次出现
+            if (this.gameManager) {
+                const unitType = wallScript.unitType || 'StoneWall';
+                this.gameManager.checkUnitFirstAppearance(unitType, wallScript);
+            }
+        }
+
+        console.debug('TowerBuilder.buildStoneWall: Built at', worldPosition);
+    }
+
     // 可以通过按钮调用
     onBuildButtonClick() {
         // 检查warAncientTreePrefab是否设置
@@ -1244,7 +1357,8 @@ export class TowerBuilder extends Component {
             this.warAncientTreeContainer,
             this.moonWellContainer,
             this.treeContainer,
-            this.hunterHallContainer
+            this.hunterHallContainer,
+            this.stoneWallContainer
         ];
 
         for (const container of containers) {
@@ -1382,6 +1496,13 @@ export class TowerBuilder extends Component {
         if (hunterHall && hunterHall.showSelectionPanel) {
             hunterHall.showSelectionPanel();
             console.info('[TowerBuilder] showBuildingInfoPanel - HunterHall面板已打开');
+            return;
+        }
+
+        const stoneWall = building.getComponent(StoneWall);
+        if (stoneWall && stoneWall.showSelectionPanel) {
+            stoneWall.showSelectionPanel();
+            console.info('[TowerBuilder] showBuildingInfoPanel - StoneWall面板已打开');
             return;
         }
 
