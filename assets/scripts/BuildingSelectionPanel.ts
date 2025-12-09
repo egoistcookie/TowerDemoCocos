@@ -2,6 +2,7 @@ import { _decorator, Component, Node, Prefab, Sprite, SpriteFrame, Label, Color,
 import { GameManager } from './GameManager';
 import { GamePopup } from './GamePopup';
 import { BuildingGridPanel } from './BuildingGridPanel';
+import { UnitSelectionManager } from './UnitSelectionManager';
 const { ccclass, property } = _decorator;
 
 // 建筑物类型定义
@@ -343,6 +344,9 @@ export class BuildingSelectionPanel extends Component {
                     if (this.gridPanel) {
                         this.gridPanel.clearHighlight();
                     }
+                    
+                    // 清除建筑物的选中状态（如果有）
+                    this.clearBuildingSelection();
                     
                     // 阻止事件传播
                     event.propagationStopped = true;
@@ -807,6 +811,10 @@ export class BuildingSelectionPanel extends Component {
                 this.clearDragPreview();
                 this.selectedBuilding = null;
                 this.isDragging = false;
+                
+                // 清除建筑物的选中状态（如果有）
+                this.clearBuildingSelection();
+                
                 event.propagationStopped = true;
                 return;
             }
@@ -952,6 +960,10 @@ export class BuildingSelectionPanel extends Component {
                     this.clearDragPreview();
                     this.selectedBuilding = null;
                     this.isDragging = false;
+                    
+                    // 清除建筑物的选中状态（如果有）
+                    this.clearBuildingSelection();
+                    
                     event.propagationStopped = true;
                     return;
                 }
@@ -1102,6 +1114,31 @@ export class BuildingSelectionPanel extends Component {
         // 清除网格高亮（但不隐藏网格面板，因为可能还在建造模式）
         if (this.gridPanel) {
             this.gridPanel.clearHighlight();
+        }
+    }
+    
+    /**
+     * 清除建筑物的选中状态
+     */
+    clearBuildingSelection() {
+        // 清除UnitSelectionManager的选择
+        const unitSelectionManagerNode = find('UnitSelectionManager');
+        if (unitSelectionManagerNode) {
+            const unitSelectionManager = unitSelectionManagerNode.getComponent(UnitSelectionManager);
+            if (unitSelectionManager) {
+                console.debug('BuildingSelectionPanel.clearBuildingSelection: 清除UnitSelectionManager的选中状态');
+                unitSelectionManager.clearSelection();
+            }
+        } else {
+            // 如果找不到UnitSelectionManager节点，尝试在场景中查找组件
+            const scene = this.node.scene;
+            if (scene) {
+                const unitSelectionManager = scene.getComponentInChildren(UnitSelectionManager);
+                if (unitSelectionManager) {
+                    console.debug('BuildingSelectionPanel.clearBuildingSelection: 在场景中找到UnitSelectionManager，清除选中状态');
+                    unitSelectionManager.clearSelection();
+                }
+            }
         }
     }
 

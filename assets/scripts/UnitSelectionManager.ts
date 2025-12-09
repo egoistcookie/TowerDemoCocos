@@ -192,6 +192,27 @@ export class UnitSelectionManager extends Component {
             if (hunterScript && hunterScript.setHighlight) {
                 hunterScript.setHighlight(false);
             }
+            
+            // 检查是否是建筑物类型
+            const warAncientTreeScript = selectedUnit.getComponent('WarAncientTree') as any;
+            if (warAncientTreeScript && warAncientTreeScript.setHighlight) {
+                warAncientTreeScript.setHighlight(false);
+            }
+            
+            const moonWellScript = selectedUnit.getComponent('MoonWell') as any;
+            if (moonWellScript && moonWellScript.setHighlight) {
+                moonWellScript.setHighlight(false);
+            }
+            
+            const treeScript = selectedUnit.getComponent('Tree') as any;
+            if (treeScript && treeScript.setHighlight) {
+                treeScript.setHighlight(false);
+            }
+            
+            const hunterHallScript = selectedUnit.getComponent('HunterHall') as any;
+            if (hunterHallScript && hunterHallScript.setHighlight) {
+                hunterHallScript.setHighlight(false);
+            }
         }
     }
 

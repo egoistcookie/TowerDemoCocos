@@ -34,6 +34,7 @@ export class BuildingGridPanel extends Component {
     private gridCells: GridCell[][] = []; // 网格占用状态
     private isHighlighted: boolean = false; // 是否正在高亮显示
     private highlightedCell: { x: number; y: number } | null = null; // 当前高亮的网格
+    private excludeBuildingForHighlight: Node | null = null; // 高亮时排除的建筑物（用于拖拽）
 
     start() {
         // 初始化网格占用状态
@@ -321,8 +322,10 @@ export class BuildingGridPanel extends Component {
 
     /**
      * 高亮显示网格（拖拽时）
+     * @param worldPos 世界坐标
+     * @param excludeBuilding 排除的建筑物（用于拖拽时排除自己）
      */
-    highlightGrid(worldPos: Vec3 | null) {
+    highlightGrid(worldPos: Vec3 | null, excludeBuilding?: Node | null) {
         if (!worldPos) {
             this.clearHighlight();
             return;
@@ -347,12 +350,16 @@ export class BuildingGridPanel extends Component {
             return;
         }
         
-        // 如果高亮的网格没有变化，不重复绘制
-        if (this.highlightedCell && this.highlightedCell.x === grid.x && this.highlightedCell.y === grid.y) {
+        // 如果高亮的网格没有变化，且排除的建筑物也没有变化，不重复绘制
+        if (this.highlightedCell && 
+            this.highlightedCell.x === grid.x && 
+            this.highlightedCell.y === grid.y &&
+            this.excludeBuildingForHighlight === excludeBuilding) {
             return;
         }
         
         this.highlightedCell = grid;
+        this.excludeBuildingForHighlight = excludeBuilding || null;
         this.isHighlighted = true;
         this.drawHighlight();
     }
@@ -393,8 +400,8 @@ export class BuildingGridPanel extends Component {
         const cellX = startX + gridX * (this.cellSize + this.cellSpacing);
         const cellY = startY + gridY * (this.cellSize + this.cellSpacing);
         
-        // 检查网格是否可用
-        const isAvailable = !this.isGridOccupied(gridX, gridY);
+        // 检查网格是否可用（排除指定的建筑物）
+        const isAvailable = !this.isGridOccupiedByOther(gridX, gridY, this.excludeBuildingForHighlight || null!);
         console.info(`[BuildingGridPanel] 绘制高亮 - 网格(${gridX}, ${gridY}), ${isAvailable ? '可用(绿色)' : '不可用(红色)'}`);
 
         // 绘制半透明填充（先绘制填充，再绘制边框，确保边框在最上层）
@@ -422,6 +429,7 @@ export class BuildingGridPanel extends Component {
         }
         this.isHighlighted = false;
         this.highlightedCell = null;
+        this.excludeBuildingForHighlight = null;
     }
 
     /**
@@ -495,6 +503,61 @@ export class BuildingGridPanel extends Component {
         
         // 如果找不到空网格，返回null
         return null;
+    }
+
+    /**
+     * 交换两个建筑物的位置
+     */
+    swapBuildings(building1: Node, building2: Node): boolean {
+        const grid1 = this.getBuildingGridPosition(building1);
+        const grid2 = this.getBuildingGridPosition(building2);
+        
+        if (!grid1 || !grid2) {
+            return false;
+        }
+        
+        // 临时释放两个网格
+        this.releaseGrid(grid1.x, grid1.y);
+        this.releaseGrid(grid2.x, grid2.y);
+        
+        // 交换占用
+        this.occupyGrid(grid2.x, grid2.y, building1);
+        this.occupyGrid(grid1.x, grid1.y, building2);
+        
+        return true;
+    }
+
+    /**
+     * 检查网格是否被指定建筑物占用（用于拖拽时排除自己）
+     */
+    isGridOccupiedByOther(gridX: number, gridY: number, excludeBuilding: Node): boolean {
+        if (gridX < 0 || gridX >= this.gridWidth || gridY < 0 || gridY >= this.gridHeight) {
+            return true;
+        }
+        
+        const cell = this.gridCells[gridY][gridX];
+        if (!cell.occupied) {
+            return false;
+        }
+        
+        // 如果被占用的建筑物是排除的建筑物，返回false（视为可用）
+        if (cell.buildingNode === excludeBuilding) {
+            return false;
+        }
+        
+        return true;
+    }
+
+    /**
+     * 获取指定网格位置的建筑物
+     */
+    getBuildingAtPosition(gridX: number, gridY: number): Node | null {
+        if (gridX < 0 || gridX >= this.gridWidth || gridY < 0 || gridY >= this.gridHeight) {
+            return null;
+        }
+        
+        const cell = this.gridCells[gridY][gridX];
+        return cell.buildingNode;
     }
 }
 

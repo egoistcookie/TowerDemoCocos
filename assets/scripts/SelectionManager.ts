@@ -146,7 +146,10 @@ export class SelectionManager extends Component {
         // 优先检查是否在建造模式下（如果是，完全不处理，让建造系统处理）
         const buildingMode = this.isBuildingMode();
         
-        if (buildingMode) {
+        // 检查是否正在拖拽建筑物（通过TowerBuilder）
+        const isDraggingBuilding = this.isDraggingBuilding();
+        
+        if (buildingMode || isDraggingBuilding) {
             // 如果正在选择，清除选择状态
             if (this.isSelecting) {
                 this.isSelecting = false;
@@ -155,7 +158,7 @@ export class SelectionManager extends Component {
                 }
                 this.clearSelection();
             }
-            return; // 建造模式下，不处理多选
+            return; // 建造模式或拖拽建筑物时，不处理多选
         }
 
         // 检查是否点击在UI元素上（如按钮、选择面板等）
@@ -192,7 +195,12 @@ export class SelectionManager extends Component {
      */
     onTouchMove(event: EventTouch) {
         // 优先检查是否在建造模式下（如果是，完全不处理）
-        if (this.isBuildingMode()) {
+        const buildingMode = this.isBuildingMode();
+        
+        // 检查是否正在拖拽建筑物（通过TowerBuilder）
+        const isDraggingBuilding = this.isDraggingBuilding();
+        
+        if (buildingMode || isDraggingBuilding) {
             // 如果正在选择，清除选择状态
             if (this.isSelecting) {
                 this.isSelecting = false;
@@ -1551,6 +1559,49 @@ export class SelectionManager extends Component {
             return false;
         } catch (error) {
             console.error('SelectionManager: Error checking building mode:', error);
+            return false;
+        }
+    }
+    
+    /**
+     * 检查是否正在拖拽建筑物
+     */
+    isDraggingBuilding(): boolean {
+        try {
+            // 查找TowerBuilder节点
+            let towerBuilderNode = find('TowerBuilder');
+            if (!towerBuilderNode && this.node.scene) {
+                const findNodeRecursive = (node: Node, name: string): Node | null => {
+                    if (node.name === name) {
+                        return node;
+                    }
+                    for (const child of node.children) {
+                        const found = findNodeRecursive(child, name);
+                        if (found) return found;
+                    }
+                    return null;
+                };
+                towerBuilderNode = findNodeRecursive(this.node.scene, 'TowerBuilder');
+            }
+            
+            if (!towerBuilderNode || !towerBuilderNode.isValid) {
+                return false;
+            }
+
+            // 获取TowerBuilder组件
+            const towerBuilder = towerBuilderNode.getComponent('TowerBuilder') as any;
+            if (!towerBuilder) {
+                return false;
+            }
+
+            // 检查是否正在拖拽建筑物
+            if (towerBuilder.isDraggingBuilding !== undefined) {
+                return towerBuilder.isDraggingBuilding === true;
+            }
+            
+            return false;
+        } catch (error) {
+            // 静默处理错误，避免影响正常流程
             return false;
         }
     }
