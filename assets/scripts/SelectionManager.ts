@@ -264,9 +264,11 @@ export class SelectionManager extends Component {
         
         // 优先检查是否在建造模式下（如果是，且没有选中单位，完全不处理，让建造系统处理）
         const buildingMode = this.isBuildingMode();
+        const draggingBuilding = this.isDraggingBuilding();
+        console.info('[SelectionManager] onTouchEnd - 触摸结束事件, buildingMode:', buildingMode, 'draggingBuilding:', draggingBuilding, 'hasSelectedUnits:', hasSelectedUnits);
         // console.debug('SelectionManager.onTouchEnd: Building mode:', buildingMode);
         
-        if (buildingMode && !hasSelectedUnits) {
+        if ((buildingMode || draggingBuilding) && !hasSelectedUnits) {
             // 如果正在选择，清除选择状态
             if (this.isSelecting) {
                 this.isSelecting = false;
@@ -276,6 +278,7 @@ export class SelectionManager extends Component {
                 this.clearSelection();
             }
             // 不阻止事件传播，让TowerBuilder可以处理
+            console.info('[SelectionManager] onTouchEnd - 在建造模式或拖拽建筑物模式下，且没有选中单位，不处理，让TowerBuilder处理');
             // console.debug('SelectionManager.onTouchEnd: In building mode and no selected units, returning without handling move');
             return;
         }
@@ -1124,13 +1127,14 @@ export class SelectionManager extends Component {
             console.debug('SelectionManager.registerMoveCommand.globalTouchHandler: Entering handler');
             // 优先检查是否在建造模式下（如果是，完全不处理，让建造系统处理）
             const buildingMode = this.isBuildingMode();
-            console.debug('SelectionManager.registerMoveCommand.globalTouchHandler: Building mode:', buildingMode);
-            if (buildingMode) {
+            const draggingBuilding = this.isDraggingBuilding();
+            console.debug('SelectionManager.registerMoveCommand.globalTouchHandler: Building mode:', buildingMode, 'Dragging building:', draggingBuilding);
+            if (buildingMode || draggingBuilding) {
                 // 移除移动命令监听
                 this.canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
                 this.globalTouchHandler = null!;
-                console.debug('SelectionManager.registerMoveCommand.globalTouchHandler: In building mode, returning');
-                return; // 建造模式下，不处理移动
+                console.debug('SelectionManager.registerMoveCommand.globalTouchHandler: In building mode or dragging building, returning');
+                return; // 建造模式或拖拽建筑物模式下，不处理移动
             }
             
             // 阻止事件传播，确保不会触发建筑物的点击事件

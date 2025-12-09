@@ -326,13 +326,17 @@ export class BuildingGridPanel extends Component {
      * @param excludeBuilding 排除的建筑物（用于拖拽时排除自己）
      */
     highlightGrid(worldPos: Vec3 | null, excludeBuilding?: Node | null) {
+        console.info('[BuildingGridPanel] highlightGrid - 调用高亮网格, worldPos:', worldPos ? `(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})` : 'null', 'excludeBuilding:', !!excludeBuilding);
+        
         if (!worldPos) {
+            console.info('[BuildingGridPanel] highlightGrid - worldPos为null，清除高亮');
             this.clearHighlight();
             return;
         }
         
         // 确保节点可见
         if (!this.node.active) {
+            console.info('[BuildingGridPanel] highlightGrid - 节点未激活，设置为激活');
             this.node.active = true;
         }
         
@@ -343,9 +347,10 @@ export class BuildingGridPanel extends Component {
         }
         
         const grid = this.worldToGrid(worldPos);
-        console.info('[BuildingGridPanel] 高亮网格 - 世界坐标:', `(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`, '网格坐标:', grid);
+        console.info('[BuildingGridPanel] highlightGrid - 世界坐标转换为网格坐标:', grid);
         
         if (!grid) {
+            console.info('[BuildingGridPanel] highlightGrid - 网格坐标无效，清除高亮');
             this.clearHighlight();
             return;
         }
@@ -355,9 +360,11 @@ export class BuildingGridPanel extends Component {
             this.highlightedCell.x === grid.x && 
             this.highlightedCell.y === grid.y &&
             this.excludeBuildingForHighlight === excludeBuilding) {
+            console.info('[BuildingGridPanel] highlightGrid - 网格位置未变化，跳过绘制, 当前高亮:', this.highlightedCell);
             return;
         }
         
+        console.info('[BuildingGridPanel] highlightGrid - 更新高亮状态, 从', this.highlightedCell, '到', grid);
         this.highlightedCell = grid;
         this.excludeBuildingForHighlight = excludeBuilding || null;
         this.isHighlighted = true;
@@ -368,24 +375,30 @@ export class BuildingGridPanel extends Component {
      * 绘制高亮
      */
     private drawHighlight() {
+        console.info('[BuildingGridPanel] drawHighlight - 开始绘制高亮, highlightedCell:', this.highlightedCell, 'highlightGraphics存在:', !!this.highlightGraphics);
+        
         if (!this.highlightGraphics || !this.highlightedCell) {
-            console.warn('[BuildingGridPanel] drawHighlight 失败: highlightGraphics=', !!this.highlightGraphics, 'highlightedCell=', !!this.highlightedCell);
+            console.warn('[BuildingGridPanel] drawHighlight - 条件不满足，无法绘制, highlightGraphics:', !!this.highlightGraphics, 'highlightedCell:', !!this.highlightedCell);
             return;
         }
         
         // 确保节点和Graphics组件都可见
         if (!this.node.active) {
+            console.info('[BuildingGridPanel] drawHighlight - 节点未激活，设置为激活');
             this.node.active = true;
         }
         if (!this.highlightGraphics.node.active) {
+            console.info('[BuildingGridPanel] drawHighlight - highlightGraphics节点未激活，设置为激活');
             this.highlightGraphics.node.active = true;
         }
         
         // 确保Graphics组件已启用
         if (!this.highlightGraphics.enabled) {
+            console.info('[BuildingGridPanel] drawHighlight - highlightGraphics组件未启用，设置为启用');
             this.highlightGraphics.enabled = true;
         }
         
+        console.info('[BuildingGridPanel] drawHighlight - 清除之前的绘制内容');
         this.highlightGraphics.clear();
         
         const gridTotalWidth = (this.cellSize + this.cellSpacing) * this.gridWidth - this.cellSpacing;
@@ -402,7 +415,6 @@ export class BuildingGridPanel extends Component {
         
         // 检查网格是否可用（排除指定的建筑物）
         const isAvailable = !this.isGridOccupiedByOther(gridX, gridY, this.excludeBuildingForHighlight || null!);
-        console.info(`[BuildingGridPanel] 绘制高亮 - 网格(${gridX}, ${gridY}), ${isAvailable ? '可用(绿色)' : '不可用(红色)'}`);
 
         // 绘制半透明填充（先绘制填充，再绘制边框，确保边框在最上层）
         const fillColor = isAvailable ? new Color(0, 255, 0, 150) : new Color(255, 0, 0, 150);
@@ -413,23 +425,37 @@ export class BuildingGridPanel extends Component {
         // 绘制高亮边框（可用为绿色，不可用为红色）- 使用更粗的边框和更鲜艳的颜色
         const strokeColor = isAvailable ? new Color(0, 255, 0, 255) : new Color(255, 0, 0, 255);
         this.highlightGraphics.strokeColor = strokeColor;
-        this.highlightGraphics.lineWidth = 8; // 进一步增加边框宽度
+        this.highlightGraphics.lineWidth = 8;
         this.highlightGraphics.rect(cellX, cellY, this.cellSize, this.cellSize);
         this.highlightGraphics.stroke();
+        
+        console.info('[BuildingGridPanel] drawHighlight - 高亮绘制完成, 网格位置:', `(${gridX}, ${gridY})`, '可用:', isAvailable, '颜色:', isAvailable ? '绿色' : '红色', 'cellX:', cellX.toFixed(1), 'cellY:', cellY.toFixed(1));
     }
 
     /**
      * 清除高亮
      */
     clearHighlight() {
+        console.info('[BuildingGridPanel] clearHighlight - 开始清除高亮, isHighlighted:', this.isHighlighted, 'highlightedCell:', this.highlightedCell, 'highlightGraphics存在:', !!this.highlightGraphics);
+        
         if (this.highlightGraphics) {
+            console.info('[BuildingGridPanel] clearHighlight - 调用 highlightGraphics.clear()');
             this.highlightGraphics.clear();
-            // 不清除节点active状态，保持可见以便下次高亮时能立即显示
-            // this.highlightGraphics.node.active = false;
+            
+            // 验证是否真的清除了
+            if (this.highlightGraphics && this.highlightGraphics['_paths'] && this.highlightGraphics['_paths'].length > 0) {
+                console.warn('[BuildingGridPanel] clearHighlight - 警告：clear()后仍有路径数据');
+            } else {
+                console.info('[BuildingGridPanel] clearHighlight - highlightGraphics已成功清除');
+            }
+        } else {
+            console.warn('[BuildingGridPanel] clearHighlight - highlightGraphics不存在，无法清除');
         }
+        
         this.isHighlighted = false;
         this.highlightedCell = null;
         this.excludeBuildingForHighlight = null;
+        console.info('[BuildingGridPanel] clearHighlight - 清除完成, isHighlighted:', this.isHighlighted, 'highlightedCell:', this.highlightedCell);
     }
 
     /**

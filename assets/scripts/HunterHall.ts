@@ -817,7 +817,70 @@ export class HunterHall extends Component {
      * 猎手大厅点击事件
      */
     onHunterHallClick(event: EventTouch) {
+        console.info('[HunterHall] onHunterHallClick - 节点点击事件触发, propagationStopped:', event.propagationStopped);
         console.debug('HunterHall.onHunterHallClick: Entering method');
+        
+        // 检查是否正在拖拽建筑物（通过TowerBuilder）
+        // 使用递归查找方法，更可靠
+        let towerBuilderNode = find('TowerBuilder');
+        if (!towerBuilderNode && this.node.scene) {
+            const findNodeRecursive = (node: Node, name: string): Node | null => {
+                if (node.name === name) {
+                    return node;
+                }
+                for (const child of node.children) {
+                    const found = findNodeRecursive(child, name);
+                    if (found) return found;
+                }
+                return null;
+            };
+            towerBuilderNode = findNodeRecursive(this.node.scene, 'TowerBuilder');
+        }
+        
+        // 如果还是找不到，尝试通过组件类型查找
+        let towerBuilder: any = null;
+        if (towerBuilderNode) {
+            towerBuilder = towerBuilderNode.getComponent('TowerBuilder') as any;
+        } else if (this.node.scene) {
+            // 从场景中查找TowerBuilder组件
+            const findComponentInScene = (node: Node, componentType: string): any => {
+                const comp = node.getComponent(componentType);
+                if (comp) return comp;
+                for (const child of node.children) {
+                    const found = findComponentInScene(child, componentType);
+                    if (found) return found;
+                }
+                return null;
+            };
+            towerBuilder = findComponentInScene(this.node.scene, 'TowerBuilder');
+        }
+        
+        console.info('[HunterHall] onHunterHallClick - 查找TowerBuilder, 节点找到:', !!towerBuilderNode, '组件找到:', !!towerBuilder, 'isDraggingBuilding:', towerBuilder?.isDraggingBuilding);
+        
+        // 检查是否正在长按检测（由TowerBuilder处理）
+        // 注意：不要阻止事件传播，让TowerBuilder的onTouchEnd也能处理
+        if (towerBuilder && (towerBuilder as any).isLongPressActive) {
+            console.info('[HunterHall] onHunterHallClick - 检测到正在长按检测，不处理点击事件，让TowerBuilder处理');
+            // 不阻止事件传播，让TowerBuilder的onTouchEnd也能处理
+            // event.propagationStopped = true; // 注释掉，让事件继续传播
+            return;
+        }
+        
+        // 检查是否正在显示信息面板（由TowerBuilder打开）
+        if ((this.node as any)._showingInfoPanel) {
+            console.debug('HunterHall.onHunterHallClick: 正在显示信息面板，不处理点击事件');
+            return;
+        }
+        
+        if (towerBuilder && towerBuilder.isDraggingBuilding) {
+            console.info('[HunterHall] onHunterHallClick - 检测到正在拖拽建筑物，直接调用TowerBuilder.endDraggingBuilding处理');
+            // 直接调用TowerBuilder的方法来处理拖拽结束，而不是依赖事件传播
+            if (towerBuilder.endDraggingBuilding && typeof towerBuilder.endDraggingBuilding === 'function') {
+                towerBuilder.endDraggingBuilding(event);
+            }
+            return;
+        }
+        
         // 检查是否有选中的小精灵，如果有则不处理点击事件（让小精灵移动到建筑物）
         const selectionManager = this.findSelectionManager();
         console.debug('HunterHall.onHunterHallClick: Found selectionManager:', selectionManager ? 'yes' : 'no');
