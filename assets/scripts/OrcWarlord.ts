@@ -590,6 +590,33 @@ export class OrcWarlord extends Component {
                 }
             }
         }
+        // 3.4) 精灵剑士
+        let swordsmen: Node[] = [];
+        let swordsmenNode = find('ElfSwordsmans');
+        if (!swordsmenNode && this.node.scene) {
+            swordsmenNode = findNodeRecursive(this.node.scene, 'ElfSwordsmans');
+        }
+        if (swordsmenNode) {
+            swordsmen = swordsmenNode.children;
+        }
+        for (const swordsman of swordsmen) {
+            if (swordsman && swordsman.active && swordsman.isValid) {
+                const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
+                // 检查精灵剑士是否存活
+                if (swordsmanScript && swordsmanScript.isAlive && swordsmanScript.isAlive()) {
+                    const distance = Vec3.distance(this.node.worldPosition, swordsman.worldPosition);
+                    // 如果精灵剑士在范围内，且优先级更高或距离更近
+                    if (distance <= detectionRange) {
+                        if (PRIORITY.CHARACTER < targetPriority || 
+                            (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
+                            minDistance = distance;
+                            nearestTarget = swordsman;
+                            targetPriority = PRIORITY.CHARACTER;
+                        }
+                    }
+                }
+            }
+        }
 
         // 如果找到目标，设置为当前目标
         if (nearestTarget) {
@@ -1192,6 +1219,23 @@ export class OrcWarlord extends Component {
             }
         }
         
+        // 3.4) 精灵剑士
+        let swordsmenNode = find('ElfSwordsmans');
+        if (!swordsmenNode && this.node.scene) {
+            swordsmenNode = findNodeRecursive(this.node.scene, 'ElfSwordsmans');
+        }
+        if (swordsmenNode) {
+            const swordsmen = swordsmenNode.children || [];
+            for (const swordsman of swordsmen) {
+                if (swordsman && swordsman.active && swordsman.isValid) {
+                    const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
+                    if (swordsmanScript && swordsmanScript.isAlive && swordsmanScript.isAlive()) {
+                        allPotentialTargets.push(swordsman);
+                    }
+                }
+            }
+        }
+        
         // 6. 添加建筑物
         // 4.1) 战争古树
         let warAncientTrees = find('WarAncientTrees');
@@ -1276,7 +1320,7 @@ export class OrcWarlord extends Component {
                 targetPriority = PRIORITY.STONEWALL;
             } else if (target.getComponent('Tree')) {
                 targetPriority = PRIORITY.TREE;
-            } else if (target.getComponent('Arrower') || target.getComponent('Hunter') || target.getComponent('Wisp')) {
+            } else if (target.getComponent('Arrower') || target.getComponent('Hunter') || target.getComponent('Wisp') || target.getComponent('ElfSwordsman')) {
                 targetPriority = PRIORITY.CHARACTER;
             } else if (target.getComponent('WarAncientTree') || target.getComponent('MoonWell') || target.getComponent('HunterHall')) {
                 targetPriority = PRIORITY.BUILDING;
@@ -1590,11 +1634,13 @@ export class OrcWarlord extends Component {
         const normalTreeScript = this.currentTarget.getComponent('Tree') as any;
         const wellScript = this.currentTarget.getComponent('MoonWell') as any;
         const hallScript = this.currentTarget.getComponent('HunterHall') as any;
+        const swordsmanHallScript = this.currentTarget.getComponent('SwordsmanHall') as any;
         const crystalScript = this.currentTarget.getComponent('Crystal') as any;
         const wispScript = this.currentTarget.getComponent('Wisp') as any;
         const hunterScript = this.currentTarget.getComponent('Hunter') as any;
+        const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-        const targetScript = towerScript || warAncientTreeScript || normalTreeScript || wellScript || hallScript || crystalScript || wispScript || hunterScript || stoneWallScript;
+        const targetScript = towerScript || warAncientTreeScript || normalTreeScript || wellScript || hallScript || swordsmanHallScript || crystalScript || wispScript || hunterScript || elfSwordsmanScript || stoneWallScript;
         
         if (targetScript && targetScript.takeDamage) {
             targetScript.takeDamage(this.attackDamage);

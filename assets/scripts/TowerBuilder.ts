@@ -8,6 +8,7 @@ import { MoonWell } from './MoonWell';
 import { Tree } from './Tree';
 import { HunterHall } from './HunterHall';
 import { StoneWall } from './StoneWall';
+import { SwordsmanHall } from './SwordsmanHall';
 import { UnitConfigManager } from './UnitConfigManager';
 import { BuildingGridPanel } from './BuildingGridPanel';
 const { ccclass, property } = _decorator;
@@ -44,6 +45,12 @@ export class TowerBuilder extends Component {
     @property(SpriteFrame)
     stoneWallIcon: SpriteFrame = null!; // 石墙图标
 
+    @property(Prefab)
+    swordsmanHallPrefab: Prefab = null!; // 剑士小屋预制体
+
+    @property(SpriteFrame)
+    swordsmanHallIcon: SpriteFrame = null!; // 剑士小屋图标
+
     @property(Node)
     buildingSelectionPanel: Node = null!; // 建筑物选择面板节点
 
@@ -75,6 +82,9 @@ export class TowerBuilder extends Component {
     stoneWallContainer: Node = null!; // 石墙容器
 
     @property(Node)
+    swordsmanHallContainer: Node = null!; // 剑士小屋容器
+
+    @property(Node)
     buildingGridPanel: Node = null!; // 建筑物网格面板节点
 
     @property
@@ -91,6 +101,9 @@ export class TowerBuilder extends Component {
 
     @property
     stoneWallCost: number = 5; // 石墙建造成本（5金币）
+
+    @property
+    swordsmanHallCost: number = 10; // 剑士小屋建造成本（10金币）
 
     private isBuildingMode: boolean = false;
     private previewTower: Node = null!;
@@ -195,6 +208,34 @@ export class TowerBuilder extends Component {
                 } else if (this.node.scene) {
                     this.hunterHallContainer.setParent(this.node.scene);
                 }
+            }
+        }
+
+        // 创建剑士小屋容器
+        if (!this.swordsmanHallContainer) {
+            const existingHalls = find('SwordsmanHalls');
+            if (existingHalls) {
+                this.swordsmanHallContainer = existingHalls;
+            } else {
+                this.swordsmanHallContainer = new Node('SwordsmanHalls');
+                const canvas = find('Canvas');
+                if (canvas) {
+                    this.swordsmanHallContainer.setParent(canvas);
+                } else if (this.node.scene) {
+                    this.swordsmanHallContainer.setParent(this.node.scene);
+                }
+            }
+        }
+
+        // 创建精灵剑士容器
+        const existingSwordsmen = find('ElfSwordsmans');
+        if (!existingSwordsmen) {
+            const swordsmenContainer = new Node('ElfSwordsmans');
+            const canvas = find('Canvas');
+            if (canvas) {
+                swordsmenContainer.setParent(canvas);
+            } else if (this.node.scene) {
+                swordsmenContainer.setParent(this.node.scene);
             }
         }
 
@@ -362,6 +403,15 @@ export class TowerBuilder extends Component {
                 cost: this.stoneWallCost,
                 icon: this.stoneWallIcon || null!,
                 description: '坚固的障碍物，阻挡敌人进攻路线'
+            });
+        }
+        if (this.swordsmanHallPrefab) {
+            buildingTypes.push({
+                name: '剑士小屋',
+                prefab: this.swordsmanHallPrefab,
+                cost: this.swordsmanHallCost,
+                icon: this.swordsmanHallIcon || null!,
+                description: '可以生产精灵剑士单位'
             });
         }
         this.buildingPanel.setBuildingTypes(buildingTypes);
@@ -761,6 +811,17 @@ export class TowerBuilder extends Component {
             return;
         }
         
+        // 判断是否是石墙（优先处理石墙的放置逻辑）
+        const isStoneWall = this.currentSelectedBuilding && (this.currentSelectedBuilding.name === '石墙' || this.currentSelectedBuilding.prefab === this.stoneWallPrefab);
+        
+        // 对于石墙，即使在其他系统可能拦截事件的情况下，也要确保能够放置
+        // 石墙是唯一可以放置在地图各处的建筑物，需要优先处理
+        if (isStoneWall) {
+            console.info('[TowerBuilder] onTouchEnd - 检测到石墙放置，优先处理并阻止事件传播');
+            // 立即阻止事件传播，确保石墙放置逻辑能够执行
+            event.propagationStopped = true;
+        }
+        
         // 检查是否点击在UI元素上（如按钮、面板），如果是则不处理
         if (targetNode) {
             const nodeName = targetNode.name.toLowerCase();
@@ -806,6 +867,7 @@ export class TowerBuilder extends Component {
         }
 
         // 阻止事件继续传播，避免SelectionManager处理
+        // 注意：石墙已经在上面提前阻止了事件传播，这里确保其他建筑物也能阻止事件传播
         event.propagationStopped = true;
 
         // 获取触摸位置
@@ -828,8 +890,8 @@ export class TowerBuilder extends Component {
         camera.screenToWorld(screenPos, worldPos);
         worldPos.z = 0;
 
-        // 判断是否是石墙
-        const isStoneWall = this.currentSelectedBuilding && (this.currentSelectedBuilding.name === '石墙' || this.currentSelectedBuilding.prefab === this.stoneWallPrefab);
+        // 判断是否是石墙（已在上面判断过，这里使用之前的值）
+        // isStoneWall 变量已在上面定义（第815行）
         
         // 如果有网格面板，对齐到网格中心
         let finalWorldPos = worldPos;
@@ -894,6 +956,25 @@ export class TowerBuilder extends Component {
             }
         }
 
+        // 石墙是唯一可以放置在地图各处的建筑物，碰撞检测更宽松
+        if (isStoneWall) {
+            // 石墙只检查与其他石墙的重叠（允许紧密连接）
+            const stoneWalls = this.stoneWallContainer?.children || [];
+            for (const wall of stoneWalls) {
+                if (wall.active) {
+                    const wallDistance = Vec3.distance(position, wall.worldPosition);
+                    // 石墙之间的最小距离减小，允许连接成墙（使用碰撞半径的2倍）
+                    const minWallDistance = 80; // 两个石墙碰撞半径之和（40*2）
+                    if (wallDistance < minWallDistance) {
+                        return false;
+                    }
+                }
+            }
+            // 石墙可以靠近其他建筑物，不检查与其他建筑物的碰撞
+            return true;
+        }
+
+        // 其他建筑物的碰撞检测（保持原有逻辑）
         // 检查是否与现有弓箭手重叠
         const towers = this.towerContainer?.children || [];
         for (const tower of towers) {
@@ -949,12 +1030,12 @@ export class TowerBuilder extends Component {
             }
         }
 
-        // 检查是否与现有石墙重叠
+        // 检查是否与现有石墙重叠（其他建筑物不能与石墙重叠）
         const stoneWalls = this.stoneWallContainer?.children || [];
         for (const wall of stoneWalls) {
             if (wall.active) {
                 const wallDistance = Vec3.distance(position, wall.worldPosition);
-                if (wallDistance < 60) { // 石墙之间的最小距离
+                if (wallDistance < 80) { // 其他建筑物与石墙的最小距离
                     return false;
                 }
             }
@@ -1006,6 +1087,8 @@ export class TowerBuilder extends Component {
             this.buildHunterHall(worldPosition);
         } else if (building.name === '石墙' || building.prefab === this.stoneWallPrefab) {
             this.buildStoneWall(worldPosition);
+        } else if (building.name === '剑士小屋' || building.prefab === this.swordsmanHallPrefab) {
+            this.buildSwordsmanHall(worldPosition);
         } else {
             // 可以扩展其他建筑物类型
             console.warn('TowerBuilder.buildBuilding: Unknown building type:', building.name);
@@ -1319,13 +1402,19 @@ export class TowerBuilder extends Component {
             // 然后设置建造成本（覆盖配置中的值）
             wallScript.buildCost = this.stoneWallCost;
             
-            // 记录网格位置并标记占用
+            // 石墙可以放置在地图各处，只有在网格内时才记录网格位置（但不占用网格）
             if (this.gridPanel) {
                 const grid = this.gridPanel.worldToGrid(worldPosition);
                 if (grid) {
+                    // 如果位置在网格内，记录网格位置（可选，不影响放置）
                     wallScript.gridX = grid.x;
                     wallScript.gridY = grid.y;
-                    this.gridPanel.occupyGrid(grid.x, grid.y, wall);
+                    // 石墙不占用网格（因为可以放在网格外，且是唯一可以放置在地图各处的建筑物）
+                    // this.gridPanel.occupyGrid(grid.x, grid.y, wall);
+                } else {
+                    // 石墙在网格外，不记录网格位置
+                    wallScript.gridX = -1;
+                    wallScript.gridY = -1;
                 }
             }
             
@@ -1337,6 +1426,61 @@ export class TowerBuilder extends Component {
         }
 
         console.debug('TowerBuilder.buildStoneWall: Built at', worldPosition);
+    }
+
+    /**
+     * 建造剑士小屋
+     */
+    buildSwordsmanHall(worldPosition: Vec3) {
+        if (!this.swordsmanHallPrefab) {
+            console.error('TowerBuilder.buildSwordsmanHall: swordsmanHallPrefab is null!');
+            return;
+        }
+
+        // 消耗金币
+        if (this.gameManager) {
+            this.gameManager.spendGold(this.swordsmanHallCost);
+        }
+
+        // 创建剑士小屋
+        const hall = instantiate(this.swordsmanHallPrefab);
+        
+        // 设置父节点
+        const parent = this.swordsmanHallContainer || this.node;
+        if (parent && !parent.active) {
+            parent.active = true;
+        }
+        
+        hall.setParent(parent);
+        hall.active = true;
+        hall.setPosition(0, 0, 0);
+        hall.setRotationFromEuler(0, 0, 0);
+        hall.setScale(1, 1, 1);
+        hall.setWorldPosition(worldPosition);
+
+        // 设置建造成本并检查首次出现
+        const hallScript = hall.getComponent(SwordsmanHall);
+        if (hallScript) {
+            hallScript.buildCost = this.swordsmanHallCost;
+            
+            // 记录网格位置并标记占用
+            if (this.gridPanel) {
+                const grid = this.gridPanel.worldToGrid(worldPosition);
+                if (grid) {
+                    hallScript.gridX = grid.x;
+                    hallScript.gridY = grid.y;
+                    this.gridPanel.occupyGrid(grid.x, grid.y, hall);
+                }
+            }
+            
+            // 检查单位是否首次出现
+            if (this.gameManager) {
+                const unitType = hallScript.unitType || 'SwordsmanHall';
+                this.gameManager.checkUnitFirstAppearance(unitType, hallScript);
+            }
+        }
+
+        console.debug('TowerBuilder.buildSwordsmanHall: Built at', worldPosition);
     }
 
     // 可以通过按钮调用

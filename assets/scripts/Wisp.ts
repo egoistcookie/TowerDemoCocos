@@ -661,6 +661,30 @@ export class Wisp extends Component {
             }
         }
         
+        // 检查剑士小屋
+        let swordsmanHallsNode = find('SwordsmanHalls');
+        if (!swordsmanHallsNode && this.node.scene) {
+            swordsmanHallsNode = findNodeRecursive(this.node.scene, 'SwordsmanHalls');
+        }
+        
+        if (swordsmanHallsNode) {
+            const swordsmanHalls = swordsmanHallsNode.children || [];
+            for (const hall of swordsmanHalls) {
+                if (hall && hall.isValid && hall.active) {
+                    const hallScript = hall.getComponent('SwordsmanHall') as any;
+                    if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
+                        const distance = Vec3.distance(targetPos, hall.worldPosition);
+                        // 如果距离建筑物很近（10像素以内），立即依附
+                        if (distance <= attachRange) {
+                            // 依附到建筑物
+                            this.attachToBuilding(hall);
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        
         return false;
     }
 
@@ -750,6 +774,28 @@ export class Wisp extends Component {
                         const distance = Vec3.distance(wispPos, hall.worldPosition);
                         if (distance <= attachRange) {
                             // 与猎手大厅重叠，自动依附
+                            this.attachToBuilding(hall);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 查找剑士小屋
+        let swordsmanHallsNode = find('SwordsmanHalls');
+        if (!swordsmanHallsNode && this.node.scene) {
+            swordsmanHallsNode = findNodeRecursive(this.node.scene, 'SwordsmanHalls');
+        }
+        if (swordsmanHallsNode) {
+            const swordsmanHalls = swordsmanHallsNode.children || [];
+            for (const hall of swordsmanHalls) {
+                if (hall && hall.isValid && hall.active) {
+                    const hallScript = hall.getComponent('SwordsmanHall') as any;
+                    if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
+                        const distance = Vec3.distance(wispPos, hall.worldPosition);
+                        if (distance <= attachRange) {
+                            // 与剑士小屋重叠，自动依附
                             this.attachToBuilding(hall);
                             return;
                         }
@@ -875,6 +921,46 @@ export class Wisp extends Component {
                         hunterHallScript.currentHealth = Math.min(maxHealth, currentHealth + this.healAmount);
                         if (hunterHallScript.healthBar) {
                             hunterHallScript.healthBar.setHealth(hunterHallScript.currentHealth);
+                        }
+                        healed = true;
+                    }
+                }
+            }
+            if (healed) {
+                this.showHealEffect();
+                this.showHealNumber();
+            }
+            return;
+        }
+
+        const swordsmanHallScript = this.attachedBuilding.getComponent('SwordsmanHall') as any;
+        if (swordsmanHallScript && swordsmanHallScript.isAlive && swordsmanHallScript.isAlive()) {
+            // 检查建筑物是否满血，避免不必要的治疗
+            if (swordsmanHallScript.getHealth && swordsmanHallScript.getMaxHealth) {
+                const currentHealth = swordsmanHallScript.getHealth();
+                const maxHealth = swordsmanHallScript.getMaxHealth();
+                if (currentHealth >= maxHealth) {
+                    return; // 满血，不治疗
+                }
+            }
+
+            let healed = false;
+            if (swordsmanHallScript.heal) {
+                // 保存治疗前的血量
+                const beforeHealth = swordsmanHallScript.getHealth ? swordsmanHallScript.getHealth() : swordsmanHallScript.currentHealth;
+                swordsmanHallScript.heal(this.healAmount);
+                // 检查治疗后是否真的恢复了血量
+                const afterHealth = swordsmanHallScript.getHealth ? swordsmanHallScript.getHealth() : swordsmanHallScript.currentHealth;
+                healed = afterHealth > beforeHealth;
+            } else if (swordsmanHallScript.getHealth && swordsmanHallScript.getMaxHealth) {
+                const currentHealth = swordsmanHallScript.getHealth();
+                const maxHealth = swordsmanHallScript.getMaxHealth();
+                if (currentHealth < maxHealth) {
+                    // 直接设置血量
+                    if (swordsmanHallScript.currentHealth !== undefined) {
+                        swordsmanHallScript.currentHealth = Math.min(maxHealth, currentHealth + this.healAmount);
+                        if (swordsmanHallScript.healthBar) {
+                            swordsmanHallScript.healthBar.setHealth(swordsmanHallScript.currentHealth);
                         }
                         healed = true;
                     }

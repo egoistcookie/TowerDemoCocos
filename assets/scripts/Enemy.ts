@@ -403,6 +403,28 @@ export class Enemy extends Component {
             findAllHunterHalls(this.node.scene);
         }
 
+        // 查找剑士小屋
+        let swordsmanHalls: Node[] = [];
+        let swordsmanHallsNode = find('SwordsmanHalls');
+        if (!swordsmanHallsNode && this.node.scene) {
+            swordsmanHallsNode = findNodeRecursive(this.node.scene, 'SwordsmanHalls');
+        }
+        if (swordsmanHallsNode) {
+            swordsmanHalls = swordsmanHallsNode.children;
+        } else if (this.node.scene) {
+            // 如果没有找到SwordsmanHalls容器，直接从场景中查找所有SwordsmanHall组件
+            const findAllSwordsmanHalls = (node: Node) => {
+                const hallScript = node.getComponent('SwordsmanHall') as any;
+                if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
+                    swordsmanHalls.push(node);
+                }
+                for (const child of node.children) {
+                    findAllSwordsmanHalls(child);
+                }
+            };
+            findAllSwordsmanHalls(this.node.scene);
+        }
+
         // 查找小精灵
         let wisps: Node[] = [];
         let wispsNode = find('Wisps');
@@ -545,6 +567,33 @@ export class Enemy extends Component {
                 }
             }
         }
+        // 3) 精灵剑士
+        let swordsmen: Node[] = [];
+        let swordsmenNode = find('ElfSwordsmans');
+        if (!swordsmenNode && this.node.scene) {
+            swordsmenNode = findNodeRecursive(this.node.scene, 'ElfSwordsmans');
+        }
+        if (swordsmenNode) {
+            swordsmen = swordsmenNode.children;
+        }
+        for (const swordsman of swordsmen) {
+            if (swordsman && swordsman.active && swordsman.isValid) {
+                const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
+                // 检查精灵剑士是否存活
+                if (swordsmanScript && swordsmanScript.isAlive && swordsmanScript.isAlive()) {
+                    const distance = Vec3.distance(this.node.worldPosition, swordsman.worldPosition);
+                    // 如果精灵剑士在范围内，且优先级更高或距离更近
+                    if (distance <= detectionRange) {
+                        if (PRIORITY.CHARACTER < targetPriority || 
+                            (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
+                            minDistance = distance;
+                            nearestTarget = swordsman;
+                            targetPriority = PRIORITY.CHARACTER;
+                        }
+                    }
+                }
+            }
+        }
 
         // 5. 查找范围内的建筑物（战争古树、月亮井和猎手大厅，优先级第五）
         // 战争古树
@@ -593,6 +642,25 @@ export class Enemy extends Component {
                 if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
                     const distance = Vec3.distance(this.node.worldPosition, hall.worldPosition);
                     // 如果猎手大厅在范围内，且优先级更高或距离更近
+                    if (distance <= detectionRange) {
+                        if (PRIORITY.BUILDING < targetPriority || 
+                            (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
+                            minDistance = distance;
+                            nearestTarget = hall;
+                            targetPriority = PRIORITY.BUILDING;
+                        }
+                    }
+                }
+            }
+        }
+        // 剑士小屋
+        for (const hall of swordsmanHalls) {
+            if (hall && hall.active && hall.isValid) {
+                const hallScript = hall.getComponent('SwordsmanHall') as any;
+                // 检查剑士小屋是否存活
+                if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
+                    const distance = Vec3.distance(this.node.worldPosition, hall.worldPosition);
+                    // 如果剑士小屋在范围内，且优先级更高或距离更近
                     if (distance <= detectionRange) {
                         if (PRIORITY.BUILDING < targetPriority || 
                             (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
@@ -1427,7 +1495,24 @@ export class Enemy extends Component {
             }
         }
         
-        // 3.3) 小精灵
+        // 3.3) 精灵剑士
+        let swordsmenNode = find('ElfSwordsmans');
+        if (!swordsmenNode && this.node.scene) {
+            swordsmenNode = findNodeRecursive(this.node.scene, 'ElfSwordsmans');
+        }
+        if (swordsmenNode) {
+            const swordsmen = swordsmenNode.children || [];
+            for (const swordsman of swordsmen) {
+                if (swordsman && swordsman.active && swordsman.isValid) {
+                    const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
+                    if (swordsmanScript && swordsmanScript.isAlive && swordsmanScript.isAlive()) {
+                        allPotentialTargets.push(swordsman);
+                    }
+                }
+            }
+        }
+        
+        // 3.4) 小精灵
         let wispsNode = find('Wisps');
         if (!wispsNode && this.node.scene) {
             wispsNode = findNodeRecursive(this.node.scene, 'Wisps');
@@ -1508,6 +1593,35 @@ export class Enemy extends Component {
             findAllHunterHalls(this.node.scene);
         }
         
+        // 4.4) 剑士小屋
+        let swordsmanHallsNode = find('SwordsmanHalls');
+        if (!swordsmanHallsNode && this.node.scene) {
+            swordsmanHallsNode = findNodeRecursive(this.node.scene, 'SwordsmanHalls');
+        }
+        if (swordsmanHallsNode) {
+            const swordsmanHalls = swordsmanHallsNode.children || [];
+            for (const hall of swordsmanHalls) {
+                if (hall && hall.active && hall.isValid) {
+                    const hallScript = hall.getComponent('SwordsmanHall') as any;
+                    if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
+                        allPotentialTargets.push(hall);
+                    }
+                }
+            }
+        } else if (this.node.scene) {
+            // 如果没有找到SwordsmanHalls容器，直接从场景中查找所有SwordsmanHall组件
+            const findAllSwordsmanHalls = (node: Node) => {
+                const hallScript = node.getComponent('SwordsmanHall') as any;
+                if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
+                    allPotentialTargets.push(node);
+                }
+                for (const child of node.children) {
+                    findAllSwordsmanHalls(child);
+                }
+            };
+            findAllSwordsmanHalls(this.node.scene);
+        }
+        
         // 过滤出在检测范围内的目标，并选择最佳目标
         let bestTarget: Node | null = null;
         let bestPriority = Infinity;
@@ -1528,9 +1642,9 @@ export class Enemy extends Component {
                 targetPriority = PRIORITY.STONEWALL;
             } else if (target.getComponent('Tree')) {
                 targetPriority = PRIORITY.TREE;
-            } else if (target.getComponent('Arrower') || target.getComponent('Hunter') || target.getComponent('Wisp')) {
+            } else if (target.getComponent('Arrower') || target.getComponent('Hunter') || target.getComponent('Wisp') || target.getComponent('ElfSwordsman')) {
                 targetPriority = PRIORITY.CHARACTER;
-            } else if (target.getComponent('WarAncientTree') || target.getComponent('MoonWell') || target.getComponent('HunterHall')) {
+            } else if (target.getComponent('WarAncientTree') || target.getComponent('MoonWell') || target.getComponent('HunterHall') || target.getComponent('SwordsmanHall')) {
                 targetPriority = PRIORITY.BUILDING;
             } else {
                 // 未知类型，跳过
@@ -1834,11 +1948,13 @@ export class Enemy extends Component {
                 const normalTreeScript = currentTarget.getComponent('Tree') as any;
                 const wellScript = currentTarget.getComponent('MoonWell') as any;
                 const hallScript = currentTarget.getComponent('HunterHall') as any;
+                const swordsmanHallScript = currentTarget.getComponent('SwordsmanHall') as any;
                 const crystalScript = currentTarget.getComponent('Crystal') as any;
                 const wispScript = currentTarget.getComponent('Wisp') as any;
                 const hunterScript = currentTarget.getComponent('Hunter') as any;
+                const elfSwordsmanScript = currentTarget.getComponent('ElfSwordsman') as any;
                 const stoneWallScript = currentTarget.getComponent('StoneWall') as any;
-                const targetScript = towerScript || warAncientTreeScript || normalTreeScript || wellScript || hallScript || crystalScript || wispScript || hunterScript || stoneWallScript;
+                const targetScript = towerScript || warAncientTreeScript || normalTreeScript || wellScript || hallScript || swordsmanHallScript || crystalScript || wispScript || hunterScript || elfSwordsmanScript || stoneWallScript;
                 
                 if (targetScript && targetScript.takeDamage) {
                     targetScript.takeDamage(this.attackDamage);
@@ -1853,12 +1969,16 @@ export class Enemy extends Component {
                         console.debug(`Enemy.attackCallback: Attacked moon well, dealt ${this.attackDamage} damage`);
                     } else if (hallScript) {
                         console.debug(`Enemy.attackCallback: Attacked hunter hall, dealt ${this.attackDamage} damage`);
+                    } else if (swordsmanHallScript) {
+                        console.debug(`Enemy.attackCallback: Attacked swordsman hall, dealt ${this.attackDamage} damage`);
                     } else if (crystalScript) {
                         console.debug(`Enemy.attackCallback: Attacked crystal, dealt ${this.attackDamage} damage`);
                     } else if (wispScript) {
                         console.debug(`Enemy.attackCallback: Attacked wisp, dealt ${this.attackDamage} damage`);
                     } else if (hunterScript) {
                         console.debug(`Enemy.attackCallback: Attacked hunter, dealt ${this.attackDamage} damage`);
+                    } else if (elfSwordsmanScript) {
+                        console.debug(`Enemy.attackCallback: Attacked elf swordsman, dealt ${this.attackDamage} damage`);
                     } else if (stoneWallScript) {
                         console.debug(`Enemy.attackCallback: Attacked stone wall, dealt ${this.attackDamage} damage`);
                     }
