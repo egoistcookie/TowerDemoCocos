@@ -856,6 +856,38 @@ export class Arrower extends Component {
             }
         }
 
+        // 检查与石墙的碰撞
+        const findAllStoneWalls = (node: Node): Node[] => {
+            const walls: Node[] = [];
+            const wallScript = node.getComponent('StoneWall') as any;
+            if (wallScript && node.active && node.isValid) {
+                walls.push(node);
+            }
+            for (const child of node.children) {
+                walls.push(...findAllStoneWalls(child));
+            }
+            return walls;
+        };
+
+        const scene = this.node.scene;
+        if (scene) {
+            const allStoneWalls = findAllStoneWalls(scene);
+            for (const wall of allStoneWalls) {
+                if (!wall || !wall.active || !wall.isValid) continue;
+                const wallScript = wall.getComponent('StoneWall') as any;
+                if (!wallScript || !wallScript.isAlive || !wallScript.isAlive()) continue;
+                
+                const wallPos = wall.worldPosition;
+                const wallRadius = wallScript.collisionRadius || 40;
+                const distanceToWall = Vec3.distance(position, wallPos);
+                const minDistance = this.collisionRadius + wallRadius;
+                
+                if (distanceToWall < minDistance) {
+                    return true;
+                }
+            }
+        }
+
         return false;
     }
 

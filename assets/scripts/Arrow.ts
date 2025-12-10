@@ -108,6 +108,21 @@ export class Arrow extends Component {
             return; // 已经命中过了
         }
 
+        // 检查目标是否是已死亡的兽人督军
+        if (this.targetNode && this.targetNode.isValid) {
+            const orcScript = this.targetNode.getComponent('OrcWarlord') as any;
+            if (orcScript) {
+                const isAlive = orcScript.isAlive && orcScript.isAlive();
+                if (!isAlive) {
+                    // 目标是已死亡的兽人督军，插在尸体上
+                    const startPos = this.lastPos.clone();
+                    const endPos = this.node.worldPosition.clone();
+                    this.attachToCorpse(this.targetNode, startPos, endPos);
+                    return;
+                }
+            }
+        }
+
         this.isFlying = false;
         // console.debug(`Arrow: Hit target at position (${this.node.worldPosition.x.toFixed(2)}, ${this.node.worldPosition.y.toFixed(2)})`);
 

@@ -334,10 +334,16 @@ export class Enemy extends Component {
                         }
                     }
                 } else {
-                    // 路径不再被阻挡（可以绕行），清除石墙目标，继续查找其他目标
-                    console.info(`[Enemy] findTarget: 路径可以绕行，清除石墙目标，继续查找其他目标`);
-                    this.currentTarget = null!;
-                    // 继续执行下面的逻辑，查找其他目标
+                    // 路径不再被阻挡（可以绕行），但如果石墙距离很近（在检测范围内），仍然保持石墙目标
+                    // 只有当石墙距离很远时，才清除石墙目标
+                    if (distance <= detectionRange) {
+                        console.info(`[Enemy] findTarget: 路径可以绕行，但石墙距离较近(${distance.toFixed(1)})，保持石墙目标`);
+                        return;
+                    } else {
+                        console.info(`[Enemy] findTarget: 路径可以绕行且石墙距离较远(${distance.toFixed(1)})，清除石墙目标，继续查找其他目标`);
+                        this.currentTarget = null!;
+                        // 继续执行下面的逻辑，查找其他目标
+                    }
                 }
             }
         }
@@ -439,18 +445,21 @@ export class Enemy extends Component {
         if (blockedStoneWall) {
             const distance = Vec3.distance(this.node.worldPosition, blockedStoneWall.worldPosition);
             // 如果路径被阻挡且无法绕行，无论距离多远都要攻击石墙
-            // 优先级高于其他目标（除了水晶），如果当前目标是水晶且距离很近，则优先攻击水晶
-            // 否则，如果路径被阻挡，强制攻击石墙
+            // 路径被完全阻挡时，石墙的优先级应该高于水晶（除非水晶已经在攻击范围内且敌人正在攻击）
             if (targetPriority === PRIORITY.CRYSTAL) {
                 const crystalDistance = Vec3.distance(this.node.worldPosition, this.targetCrystal.worldPosition);
-                // 如果水晶很近（在攻击范围内），优先攻击水晶；否则攻击阻挡路径的石墙
-                if (crystalDistance > this.attackRange) {
-                    // 水晶不在攻击范围内，优先攻击阻挡路径的石墙
+                // 如果水晶在攻击范围内且当前目标就是水晶，保持攻击水晶（可能正在攻击中）
+                // 否则，即使水晶在检测范围内，也要优先攻击阻挡路径的石墙
+                if (crystalDistance <= this.attackRange && this.currentTarget === this.targetCrystal) {
+                    // 水晶在攻击范围内且正在攻击，保持水晶为目标
+                    console.info(`[Enemy] findTarget: 水晶在攻击范围内且正在攻击，保持水晶为目标`);
+                } else {
+                    // 水晶不在攻击范围内，或当前目标不是水晶，优先攻击阻挡路径的石墙
+                    console.info(`[Enemy] findTarget: 路径被完全阻挡，优先攻击石墙（距离: ${distance.toFixed(1)}），而不是水晶（距离: ${crystalDistance.toFixed(1)}）`);
                     minDistance = distance;
                     nearestTarget = blockedStoneWall;
                     targetPriority = PRIORITY.STONEWALL;
                 }
-                // 如果水晶在攻击范围内，保持水晶为目标
             } else {
                 // 当前目标不是水晶，如果路径被阻挡，强制攻击石墙
                 minDistance = distance;
@@ -734,18 +743,26 @@ export class Enemy extends Component {
                     console.info(`[Enemy] moveTowardsTarget: 路径被其他石墙阻挡，开始尝试绕路`);
                     const detourPos = this.calculateDetourPosition(direction, deltaTime);
                     if (detourPos) {
-                        // 找到绕路位置，正常移动到该位置（不弹开）
-                        console.info(`[Enemy] moveTowardsTarget: 找到绕路位置(${detourPos.x.toFixed(1)}, ${detourPos.y.toFixed(1)})`);
-                        const clampedPos = this.clampPositionToScreen(detourPos);
-                        this.node.setWorldPosition(clampedPos);
-                        
-                        // 根据移动方向翻转
+                        // 找到绕路位置，平滑移动到该位置（避免闪现）
                         const detourDirection = new Vec3();
                         Vec3.subtract(detourDirection, detourPos, this.node.worldPosition);
-                        this.flipDirection(detourDirection);
+                        const detourDistance = detourDirection.length();
                         
-                        // 播放行走动画
-                        this.playWalkAnimation();
+                        if (detourDistance > 0.1) {
+                            detourDirection.normalize();
+                            // 计算平滑移动的距离，不超过移动速度
+                            const moveDist = Math.min(this.moveSpeed * deltaTime, detourDistance);
+                            const smoothDetourPos = new Vec3();
+                            Vec3.scaleAndAdd(smoothDetourPos, this.node.worldPosition, detourDirection, moveDist);
+                            const clampedPos = this.clampPositionToScreen(smoothDetourPos);
+                            this.node.setWorldPosition(clampedPos);
+                            
+                            // 根据移动方向翻转
+                            this.flipDirection(detourDirection);
+                            
+                            // 播放行走动画
+                            this.playWalkAnimation();
+                        }
                         return;
                     } else {
                         // 局部无法绕路，检查全局路径是否被阻挡且无法绕行
@@ -773,8 +790,16 @@ export class Enemy extends Component {
                                 this.playWalkAnimation();
                                 return;
                             }
-                            // 如果小偏移也不行，停止移动，让下一帧重新计算
-                            console.info(`[Enemy] moveTowardsTarget: 无法绕过局部阻挡，停止移动`);
+                            // 如果小偏移也不行，所有绕路尝试都失败，攻击最近的石墙
+                            console.info(`[Enemy] moveTowardsTarget: 所有绕路尝试都失败，查找最近的石墙作为攻击目标`);
+                            const nearestWall = this.findNearestStoneWall();
+                            if (nearestWall) {
+                                console.info(`[Enemy] moveTowardsTarget: 找到最近的石墙，设置为攻击目标，距离: ${Vec3.distance(this.node.worldPosition, nearestWall.worldPosition).toFixed(1)}`);
+                                this.currentTarget = nearestWall;
+                                return;
+                            }
+                            // 找不到石墙，停止移动
+                            console.info(`[Enemy] moveTowardsTarget: 无法绕过局部阻挡且找不到石墙，停止移动`);
                             return;
                         }
                     }
@@ -840,18 +865,26 @@ export class Enemy extends Component {
                 console.info(`[Enemy] moveTowardsCrystal: 检测到石墙阻挡，开始尝试绕路`);
                 const detourPos = this.calculateDetourPosition(direction, deltaTime);
                 if (detourPos) {
-                    // 找到绕路位置，正常移动到该位置（不弹开）
-                    console.info(`[Enemy] moveTowardsCrystal: 找到绕路位置(${detourPos.x.toFixed(1)}, ${detourPos.y.toFixed(1)})`);
-                    const clampedPos = this.clampPositionToScreen(detourPos);
-                    this.node.setWorldPosition(clampedPos);
-                    
-                    // 根据移动方向翻转
+                    // 找到绕路位置，平滑移动到该位置（避免闪现）
                     const detourDirection = new Vec3();
                     Vec3.subtract(detourDirection, detourPos, this.node.worldPosition);
-                    this.flipDirection(detourDirection);
+                    const detourDistance = detourDirection.length();
                     
-                    // 播放行走动画
-                    this.playWalkAnimation();
+                    if (detourDistance > 0.1) {
+                        detourDirection.normalize();
+                        // 计算平滑移动的距离，不超过移动速度
+                        const moveDist = Math.min(this.moveSpeed * deltaTime, detourDistance);
+                        const smoothDetourPos = new Vec3();
+                        Vec3.scaleAndAdd(smoothDetourPos, this.node.worldPosition, detourDirection, moveDist);
+                        const clampedPos = this.clampPositionToScreen(smoothDetourPos);
+                        this.node.setWorldPosition(clampedPos);
+                        
+                        // 根据移动方向翻转
+                        this.flipDirection(detourDirection);
+                        
+                        // 播放行走动画
+                        this.playWalkAnimation();
+                    }
                     return;
                 } else {
                     // 局部无法绕路，检查全局路径是否被阻挡且无法绕行
@@ -878,8 +911,16 @@ export class Enemy extends Component {
                             this.playWalkAnimation();
                             return;
                         }
-                        // 如果小偏移也不行，停止移动，让下一帧重新计算
-                        console.info(`[Enemy] moveTowardsCrystal: 无法绕过局部阻挡，停止移动`);
+                        // 如果小偏移也不行，所有绕路尝试都失败，攻击最近的石墙
+                        console.info(`[Enemy] moveTowardsCrystal: 所有绕路尝试都失败，查找最近的石墙作为攻击目标`);
+                        const nearestWall = this.findNearestStoneWall();
+                        if (nearestWall) {
+                            console.info(`[Enemy] moveTowardsCrystal: 找到最近的石墙，设置为攻击目标，距离: ${Vec3.distance(this.node.worldPosition, nearestWall.worldPosition).toFixed(1)}`);
+                            this.currentTarget = nearestWall;
+                            return;
+                        }
+                        // 找不到石墙，停止移动
+                        console.info(`[Enemy] moveTowardsCrystal: 无法绕过局部阻挡且找不到石墙，停止移动`);
                         return;
                     }
                 }

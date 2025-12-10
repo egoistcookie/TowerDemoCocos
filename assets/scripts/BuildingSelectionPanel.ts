@@ -332,23 +332,31 @@ export class BuildingSelectionPanel extends Component {
                     worldPos = this.getWorldPositionFromScreen(new Vec3(location.x, location.y, 0));
                 }
                 
+                // 判断是否是石墙
+                const isStoneWall = this.selectedBuilding && this.selectedBuilding.name === '石墙';
+                
                 // 如果有网格面板，确保对齐到网格中心
                 if (worldPos && this.gridPanel) {
                     const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
                     if (gridCenter) {
                         worldPos = gridCenter;
                     } else {
-                        // 如果不在网格内，建造失败，退出建造模式
-                        this.clearDragPreview();
-                        this.selectedBuilding = null;
-                        // 确保清除网格高亮
-                        if (this.gridPanel) {
-                            this.gridPanel.clearHighlight();
+                        // 石墙可以建造在网格外，其他建筑物必须在网格内
+                        if (!isStoneWall) {
+                            // 如果不在网格内，建造失败，退出建造模式
+                            this.clearDragPreview();
+                            this.selectedBuilding = null;
+                            // 确保清除网格高亮
+                            if (this.gridPanel) {
+                                this.gridPanel.clearHighlight();
+                            }
+                            if (this.onBuildCancelCallback) {
+                                this.onBuildCancelCallback();
+                            }
+                            return;
                         }
-                        if (this.onBuildCancelCallback) {
-                            this.onBuildCancelCallback();
-                        }
-                        return;
+                        // 石墙不在网格内，使用原始世界坐标
+                        // worldPos 保持不变
                     }
                 }
                 

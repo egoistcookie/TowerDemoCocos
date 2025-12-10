@@ -828,6 +828,9 @@ export class TowerBuilder extends Component {
         camera.screenToWorld(screenPos, worldPos);
         worldPos.z = 0;
 
+        // 判断是否是石墙
+        const isStoneWall = this.currentSelectedBuilding && (this.currentSelectedBuilding.name === '石墙' || this.currentSelectedBuilding.prefab === this.stoneWallPrefab);
+        
         // 如果有网格面板，对齐到网格中心
         let finalWorldPos = worldPos;
         if (this.gridPanel) {
@@ -835,9 +838,14 @@ export class TowerBuilder extends Component {
             if (gridCenter) {
                 finalWorldPos = gridCenter;
             } else {
-                // 不在网格内，清除高亮并返回
-                this.gridPanel.clearHighlight();
-                return;
+                // 石墙可以建造在网格外，其他建筑物必须在网格内
+                if (!isStoneWall) {
+                    // 不在网格内，清除高亮并返回
+                    this.gridPanel.clearHighlight();
+                    return;
+                }
+                // 石墙不在网格内，使用原始世界坐标
+                finalWorldPos = worldPos;
             }
         }
 
@@ -859,25 +867,31 @@ export class TowerBuilder extends Component {
             return false;
         }
 
-        // 如果有网格面板，检查位置是否在网格内
-        if (this.gridPanel) {
-            if (!this.gridPanel.isPositionInGrid(position)) {
-                return false;
-            }
-            
-            // 检查目标网格是否已被占用
-            const grid = this.gridPanel.worldToGrid(position);
-            if (grid && this.gridPanel.isGridOccupied(grid.x, grid.y)) {
-                return false;
-            }
-        }
+        // 判断是否是石墙
+        const isStoneWall = building.name === '石墙' || building.prefab === this.stoneWallPrefab;
 
-        // 检查距离水晶的距离（保留原有逻辑作为备用检查）
-        const crystalPos = this.targetCrystal.worldPosition;
-        const distance = Vec3.distance(position, crystalPos);
-        
-        if (distance < this.minBuildDistance || distance > this.buildRange) {
-            return false;
+        // 石墙可以建造在地图的任何位置，跳过网格和距离检查
+        if (!isStoneWall) {
+            // 如果有网格面板，检查位置是否在网格内
+            if (this.gridPanel) {
+                if (!this.gridPanel.isPositionInGrid(position)) {
+                    return false;
+                }
+                
+                // 检查目标网格是否已被占用
+                const grid = this.gridPanel.worldToGrid(position);
+                if (grid && this.gridPanel.isGridOccupied(grid.x, grid.y)) {
+                    return false;
+                }
+            }
+
+            // 检查距离水晶的距离（保留原有逻辑作为备用检查）
+            const crystalPos = this.targetCrystal.worldPosition;
+            const distance = Vec3.distance(position, crystalPos);
+            
+            if (distance < this.minBuildDistance || distance > this.buildRange) {
+                return false;
+            }
         }
 
         // 检查是否与现有弓箭手重叠
@@ -1700,11 +1714,30 @@ export class TowerBuilder extends Component {
         worldPos.z = 0;
         console.info('[TowerBuilder] endDraggingBuilding - 世界坐标:', `(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
 
+        // 判断是否是石墙
+        const isStoneWall = this.draggedBuilding && this.draggedBuilding.getComponent(StoneWall) !== null;
+        
         // 检查是否在网格内
-        if (!this.gridPanel.isPositionInGrid(worldPos)) {
-            // 不在网格内，取消拖拽，恢复原位置
-            console.info('[TowerBuilder] endDraggingBuilding - 拖拽结束位置不在网格内，恢复原位置');
-            this.cancelDraggingBuilding();
+        const isInGrid = this.gridPanel.isPositionInGrid(worldPos);
+        if (!isInGrid) {
+            // 石墙可以放置在网格外，其他建筑物必须在网格内
+            if (!isStoneWall) {
+                // 不在网格内，取消拖拽，恢复原位置
+                console.info('[TowerBuilder] endDraggingBuilding - 拖拽结束位置不在网格内，恢复原位置');
+                this.cancelDraggingBuilding();
+                return;
+            }
+            // 石墙不在网格内，直接使用世界坐标，不进行网格对齐
+            console.info('[TowerBuilder] endDraggingBuilding - 石墙拖拽结束位置不在网格内，允许放置');
+            // 对于石墙，直接移动到世界坐标位置
+            this.draggedBuilding.setWorldPosition(worldPos);
+            // 清除拖拽状态
+            this.isDraggingBuilding = false;
+            this.draggedBuilding = null!;
+            this.draggedBuildingOriginalGrid = null;
+            if (this.gridPanel) {
+                this.gridPanel.clearHighlight();
+            }
             return;
         }
         
@@ -1713,9 +1746,23 @@ export class TowerBuilder extends Component {
         // 获取最近的网格中心位置（确保对齐到格子中央）
         const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
         if (!gridCenter) {
-            // 无法获取网格中心，取消拖拽
-            console.warn('[TowerBuilder] endDraggingBuilding - 无法获取网格中心，取消拖拽');
-            this.cancelDraggingBuilding();
+            // 石墙可以放置在网格外，其他建筑物必须在网格内
+            if (!isStoneWall) {
+                // 无法获取网格中心，取消拖拽
+                console.warn('[TowerBuilder] endDraggingBuilding - 无法获取网格中心，取消拖拽');
+                this.cancelDraggingBuilding();
+                return;
+            }
+            // 石墙无法获取网格中心，直接使用世界坐标
+            console.info('[TowerBuilder] endDraggingBuilding - 石墙无法获取网格中心，使用世界坐标');
+            this.draggedBuilding.setWorldPosition(worldPos);
+            // 清除拖拽状态
+            this.isDraggingBuilding = false;
+            this.draggedBuilding = null!;
+            this.draggedBuildingOriginalGrid = null;
+            if (this.gridPanel) {
+                this.gridPanel.clearHighlight();
+            }
             return;
         }
         console.info('[TowerBuilder] endDraggingBuilding - 网格中心:', `(${gridCenter.x.toFixed(1)}, ${gridCenter.y.toFixed(1)})`);
@@ -1723,8 +1770,22 @@ export class TowerBuilder extends Component {
         // 获取目标网格（使用对齐后的位置）
         const targetGrid = this.gridPanel.worldToGrid(gridCenter);
         if (!targetGrid) {
-            console.warn('[TowerBuilder] endDraggingBuilding - 无法获取目标网格，取消拖拽');
-            this.cancelDraggingBuilding();
+            // 石墙可以放置在网格外，其他建筑物必须在网格内
+            if (!isStoneWall) {
+                console.warn('[TowerBuilder] endDraggingBuilding - 无法获取目标网格，取消拖拽');
+                this.cancelDraggingBuilding();
+                return;
+            }
+            // 石墙无法获取目标网格，直接使用世界坐标
+            console.info('[TowerBuilder] endDraggingBuilding - 石墙无法获取目标网格，使用世界坐标');
+            this.draggedBuilding.setWorldPosition(worldPos);
+            // 清除拖拽状态
+            this.isDraggingBuilding = false;
+            this.draggedBuilding = null!;
+            this.draggedBuildingOriginalGrid = null;
+            if (this.gridPanel) {
+                this.gridPanel.clearHighlight();
+            }
             return;
         }
         console.info('[TowerBuilder] endDraggingBuilding - 目标网格:', `(${targetGrid.x}, ${targetGrid.y})`);

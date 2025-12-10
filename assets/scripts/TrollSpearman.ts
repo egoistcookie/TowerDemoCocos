@@ -392,7 +392,10 @@ export class TrollSpearman extends Component {
                     minDistance = distance;
                     nearestTarget = blockedStoneWall;
                     targetPriority = PRIORITY.STONEWALL;
+                    console.info(`[TrollSpearman] findTarget: 检测到路径被石墙阻挡，设置石墙为目标，距离: ${distance.toFixed(1)}`);
                 }
+            } else {
+                console.info(`[TrollSpearman] findTarget: 检测到路径被石墙阻挡，但距离超出检测范围(${distance.toFixed(1)} > ${detectionRange})`);
             }
         }
 
@@ -593,17 +596,26 @@ export class TrollSpearman extends Component {
                     // 路径被石墙阻挡，尝试绕路
                     const detourPos = this.calculateDetourPosition(direction, deltaTime);
                     if (detourPos) {
-                        // 找到绕路位置，移动到该位置
-                        const clampedPos = this.clampPositionToScreen(detourPos);
-                        this.node.setWorldPosition(clampedPos);
-                        
-                        // 根据移动方向翻转
+                        // 找到绕路位置，平滑移动到该位置（避免闪现）
                         const detourDirection = new Vec3();
                         Vec3.subtract(detourDirection, detourPos, this.node.worldPosition);
-                        this.flipDirection(detourDirection);
+                        const detourDistance = detourDirection.length();
                         
-                        // 播放行走动画
-                        this.playWalkAnimation();
+                        if (detourDistance > 0.1) {
+                            detourDirection.normalize();
+                            // 计算平滑移动的距离，不超过移动速度
+                            const moveDist = Math.min(this.moveSpeed * deltaTime, detourDistance);
+                            const smoothDetourPos = new Vec3();
+                            Vec3.scaleAndAdd(smoothDetourPos, this.node.worldPosition, detourDirection, moveDist);
+                            const clampedPos = this.clampPositionToScreen(smoothDetourPos);
+                            this.node.setWorldPosition(clampedPos);
+                            
+                            // 根据移动方向翻转
+                            this.flipDirection(detourDirection);
+                            
+                            // 播放行走动画
+                            this.playWalkAnimation();
+                        }
                         return;
                     } else {
                         // 无法绕路，攻击最近的石墙
@@ -636,6 +648,16 @@ export class TrollSpearman extends Component {
             return;
         }
 
+        // 在移动前检查路径是否被石墙阻挡且无法绕行
+        // 如果路径被阻挡且无法绕行，立即攻击最近的石墙
+        const blockedStoneWall = this.checkPathBlockedByStoneWall();
+        if (blockedStoneWall) {
+            // 路径被石墙阻挡且无法绕行，立即设置为攻击目标
+            console.info(`[TrollSpearman] moveTowardsCrystal: 路径被石墙完全阻挡，设置石墙为攻击目标`);
+            this.currentTarget = blockedStoneWall;
+            return;
+        }
+
         // 在移动前检查路径上是否有战争古树或防御塔或石墙
         this.checkForTargetsOnPath();
 
@@ -662,21 +684,47 @@ export class TrollSpearman extends Component {
                 // 路径被石墙阻挡，尝试绕路
                 const detourPos = this.calculateDetourPosition(direction, deltaTime);
                 if (detourPos) {
-                    // 找到绕路位置，移动到该位置
-                    const clampedPos = this.clampPositionToScreen(detourPos);
-                    this.node.setWorldPosition(clampedPos);
-                    
-                    // 根据移动方向翻转
+                    // 找到绕路位置，平滑移动到该位置（避免闪现）
                     const detourDirection = new Vec3();
                     Vec3.subtract(detourDirection, detourPos, this.node.worldPosition);
-                    this.flipDirection(detourDirection);
+                    const detourDistance = detourDirection.length();
                     
-                    // 播放行走动画
-                    this.playWalkAnimation();
+                    if (detourDistance > 0.1) {
+                        detourDirection.normalize();
+                        // 计算平滑移动的距离，不超过移动速度
+                        const moveDist = Math.min(this.moveSpeed * deltaTime, detourDistance);
+                        const smoothDetourPos = new Vec3();
+                        Vec3.scaleAndAdd(smoothDetourPos, this.node.worldPosition, detourDirection, moveDist);
+                        const clampedPos = this.clampPositionToScreen(smoothDetourPos);
+                        this.node.setWorldPosition(clampedPos);
+                        
+                        // 根据移动方向翻转
+                        this.flipDirection(detourDirection);
+                        
+                        // 播放行走动画
+                        this.playWalkAnimation();
+                    }
                     return;
                 } else {
-                    // 无法绕路，停止移动
-                    return;
+                    // 无法绕路，检查路径是否被完全阻挡，如果是则攻击最近的石墙
+                    const blockedWall = this.checkPathBlockedByStoneWall();
+                    if (blockedWall) {
+                        // 路径被完全阻挡，设置最近的石墙为目标
+                        console.info(`[TrollSpearman] moveTowardsCrystal: 无法绕路且路径被完全阻挡，设置石墙为攻击目标`);
+                        this.currentTarget = blockedWall;
+                        return;
+                    } else {
+                        // 尝试查找最近的石墙作为目标
+                        const nearestWall = this.findNearestStoneWall();
+                        if (nearestWall) {
+                            console.info(`[TrollSpearman] moveTowardsCrystal: 无法绕路，设置最近的石墙为攻击目标`);
+                            this.currentTarget = nearestWall;
+                            return;
+                        }
+                        // 找不到石墙，停止移动
+                        console.info(`[TrollSpearman] moveTowardsCrystal: 无法绕路且找不到石墙，停止移动`);
+                        return;
+                    }
                 }
             }
             
@@ -1428,7 +1476,6 @@ export class TrollSpearman extends Component {
     // 播放攻击动画
     playAttackAnimation() {
         if (this.isPlayingDeathAnimation || this.isDestroyed) {
-            console.debug('TrollSpearman.playAttackAnimation: Is playing death animation or destroyed, returning');
             return;
         }
 
@@ -1442,15 +1489,11 @@ export class TrollSpearman extends Component {
         
         // 使用Animation组件播放攻击动画
         if (this.animationComponent) {
-            console.debug('TrollSpearman.playAttackAnimation: Using Animation component');
             // 清除之前的动画事件
             this.animationComponent.off(Animation.EventType.FINISHED);
             
             // 先停止当前可能正在播放的动画，确保每次都能重新开始
             this.animationComponent.stop();
-            
-            // 播放攻击动画
-            console.debug(`TrollSpearman.playAttackAnimation: Playing animation ${this.attackAnimationName}`);
             
             // 获取动画状态，设置动画速度与attackAnimationDuration保持同步
             const state = this.animationComponent.getState(this.attackAnimationName);
@@ -1459,7 +1502,6 @@ export class TrollSpearman extends Component {
                 state.time = 0;
                 // 设置动画时长与attackAnimationDuration参数保持一致
                 state.speed = state.duration / this.attackAnimationDuration;
-                console.debug(`TrollSpearman.playAttackAnimation: Animation state found, duration: ${state.duration}, speed: ${state.speed}`);
             }
             
             // 播放动画
@@ -1472,8 +1514,6 @@ export class TrollSpearman extends Component {
             // 攻击动画播放完成时调用攻击回调并结束动画
             this.scheduleOnce(() => {
                 if (this.isPlayingAttackAnimation) {
-                    console.debug('TrollSpearman.playAttackAnimation: Attack animation finished, calling attack callback and stopping animation');
-                    
                     // 调用攻击回调函数
                     if (this.attackCallback) {
                         this.attackCallback();
@@ -1482,7 +1522,6 @@ export class TrollSpearman extends Component {
                     
                     // 播放攻击音效
                     if (this.attackSound) {
-                        console.debug('TrollSpearman.playAttackAnimation: Playing attack sound');
                         AudioManager.Instance.playSFX(this.attackSound);
                     }
                     
@@ -1494,7 +1533,6 @@ export class TrollSpearman extends Component {
                 }
             }, finishTimer);
         } else {
-            console.debug('TrollSpearman.playAttackAnimation: No Animation component, using frame animation');
             // 如果没有Animation组件，使用序列帧动画
             if (this.attackAnimationFrames.length > 0) {
                 // 播放攻击音效
@@ -1549,13 +1587,11 @@ export class TrollSpearman extends Component {
 
     attack() {
         if (!this.currentTarget || this.isDestroyed) {
-            console.debug('TrollSpearman.attack: No target or destroyed, returning');
             return;
         }
 
         // 再次检查目标是否有效
         if (!this.currentTarget.isValid || !this.currentTarget.active) {
-            console.debug('TrollSpearman.attack: Target is invalid or inactive, returning');
             this.currentTarget = null!;
             return;
         }
@@ -1570,17 +1606,13 @@ export class TrollSpearman extends Component {
         
         // 设置攻击回调函数
         this.attackCallback = () => {
-            console.debug('TrollSpearman.attackCallback: Attack callback called');
             if (currentTarget && currentTarget.isValid && currentTarget.active) {
                 // 使用投掷长矛的方式攻击目标
                 this.createSpear(currentTarget);
-            } else {
-                console.debug('TrollSpearman.attackCallback: Current target is invalid or inactive');
             }
         };
 
         // 播放攻击动画
-        console.debug('TrollSpearman.attack: Playing attack animation:', this.attackAnimationName);
         this.playAttackAnimation();
     }
 
@@ -1709,27 +1741,14 @@ export class TrollSpearman extends Component {
                     
                     if (targetScript && targetScript.takeDamage) {
                         targetScript.takeDamage(damage);
-                        // 根据目标类型输出日志
-                        if (towerScript) {
-                            console.debug(`TrollSpearman.createSpear: Attacked arrower, dealt ${damage} damage`);
-                        } else if (warAncientTreeScript) {
-                            console.debug(`TrollSpearman.createSpear: Attacked war ancient tree, dealt ${damage} damage`);
-                        } else if (normalTreeScript) {
-                            console.debug(`TrollSpearman.createSpear: Attacked normal tree, dealt ${damage} damage`);
-                        } else if (wellScript) {
-                            console.debug(`TrollSpearman.createSpear: Attacked moon well, dealt ${damage} damage`);
-                        } else if (hallScript) {
-                            console.debug(`TrollSpearman.createSpear: Attacked hunter hall, dealt ${damage} damage`);
+                        // 根据目标类型输出关键日志
+                        if (stoneWallScript) {
+                            console.info(`[TrollSpearman] createSpear: 攻击石墙，造成 ${damage} 点伤害`);
                         } else if (crystalScript) {
-                            console.debug(`TrollSpearman.createSpear: Attacked crystal, dealt ${damage} damage`);
-                        } else if (wispScript) {
-                            console.debug(`TrollSpearman.createSpear: Attacked wisp, dealt ${damage} damage`);
-                        } else if (hunterScript) {
-                            console.debug(`TrollSpearman.createSpear: Attacked hunter, dealt ${damage} damage`);
+                            console.info(`[TrollSpearman] createSpear: 攻击水晶，造成 ${damage} 点伤害`);
                         }
                     } else {
                         // 目标无效，清除目标
-                        console.debug('TrollSpearman.createSpear: Target is invalid, clearing target');
                         this.currentTarget = null!;
                     }
                 }
@@ -1808,7 +1827,6 @@ export class TrollSpearman extends Component {
         }
         if (this.gameManager) {
             this.gameManager.addGold(this.goldReward);
-            console.debug(`TrollSpearman: Died, rewarded ${this.goldReward} gold`);
         }
 
         // 销毁血条节点

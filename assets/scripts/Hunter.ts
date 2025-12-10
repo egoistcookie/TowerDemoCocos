@@ -742,6 +742,9 @@ export class Hunter extends Component {
      * @returns 如果有碰撞返回true
      */
     checkCollisionAtPosition(position: Vec3): boolean {
+        // 获取场景引用（在整个方法中重用）
+        const scene = this.node.scene;
+        
         // 检查与水晶的碰撞
         const crystal = find('Crystal');
         if (!crystal) {
@@ -756,7 +759,6 @@ export class Hunter extends Component {
                 }
                 return null;
             };
-            const scene = this.node.scene;
             if (scene) {
                 const foundCrystal = findNodeRecursive(scene, 'Crystal');
                 if (foundCrystal && foundCrystal.isValid && foundCrystal.active) {
@@ -778,7 +780,6 @@ export class Hunter extends Component {
         }
 
         // 检查与所有友方单位的碰撞（包括女猎手、弓箭手等）
-        const scene = this.node.scene;
         if (scene) {
             // 递归查找所有友方单位节点
             const checkAllFriendlyUnits = (node: Node) => {
@@ -830,6 +831,37 @@ export class Hunter extends Component {
                             return true;
                         }
                     }
+                }
+            }
+        }
+
+        // 检查与石墙的碰撞
+        const findAllStoneWalls = (node: Node): Node[] => {
+            const walls: Node[] = [];
+            const wallScript = node.getComponent('StoneWall') as any;
+            if (wallScript && node.active && node.isValid) {
+                walls.push(node);
+            }
+            for (const child of node.children) {
+                walls.push(...findAllStoneWalls(child));
+            }
+            return walls;
+        };
+
+        if (scene) {
+            const allStoneWalls = findAllStoneWalls(scene);
+            for (const wall of allStoneWalls) {
+                if (!wall || !wall.active || !wall.isValid) continue;
+                const wallScript = wall.getComponent('StoneWall') as any;
+                if (!wallScript || !wallScript.isAlive || !wallScript.isAlive()) continue;
+                
+                const wallPos = wall.worldPosition;
+                const wallRadius = wallScript.collisionRadius || 40;
+                const distanceToWall = Vec3.distance(position, wallPos);
+                const minDistance = this.collisionRadius + wallRadius;
+                
+                if (distanceToWall < minDistance) {
+                    return true;
                 }
             }
         }
