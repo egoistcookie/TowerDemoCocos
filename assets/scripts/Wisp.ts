@@ -664,6 +664,16 @@ export class Wisp extends Component {
         // 检查剑士小屋
         let swordsmanHallsNode = find('SwordsmanHalls');
         if (!swordsmanHallsNode && this.node.scene) {
+            const findNodeRecursive = (node: Node, name: string): Node | null => {
+                if (node.name === name) {
+                    return node;
+                }
+                for (const child of node.children) {
+                    const found = findNodeRecursive(child, name);
+                    if (found) return found;
+                }
+                return null;
+            };
             swordsmanHallsNode = findNodeRecursive(this.node.scene, 'SwordsmanHalls');
         }
         

@@ -9,7 +9,7 @@
         {
           "prefabName": "Enemy",
           "count": 1,
-          "interval": 8
+          "interval": 1
         }
       ]
     },
