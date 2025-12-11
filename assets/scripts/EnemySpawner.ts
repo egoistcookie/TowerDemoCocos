@@ -60,6 +60,7 @@ export class EnemySpawner extends Component {
     private currentEnemyConfig: EnemyConfig | null = null;
     private enemiesSpawnedCount: number = 0;
     private enemySpawnTimer: number = 0;
+    private pauseAfterFirstEnemy: boolean = false; // 第一只怪刷新后暂停刷新
     
     // 敌人预制体映射表
     private enemyPrefabMap: Map<string, Prefab> = new Map();
@@ -274,6 +275,13 @@ export class EnemySpawner extends Component {
             this.enemySpawnTimer = 0;
             this.currentEnemyConfig = null;
             
+            // 第一波只刷新一个敌人，刷新后暂停
+            if (this.currentWave && this.currentWave.id === 1) {
+                this.pauseAfterFirstEnemy = true;
+            } else {
+                this.pauseAfterFirstEnemy = false;
+            }
+            
             return;
         }
         
@@ -305,6 +313,11 @@ export class EnemySpawner extends Component {
                 this.endCurrentWave();
                 return;
             }
+        }
+        
+        // 如果设置了第一只怪刷新后暂停，且已经刷新了第一只怪，则暂停刷新
+        if (this.pauseAfterFirstEnemy && this.enemiesSpawnedCount >= 1) {
+            return;
         }
         
         // 更新敌人生成计时器
@@ -577,6 +590,7 @@ export class EnemySpawner extends Component {
         this.currentEnemyIndex = 0;
         this.enemiesSpawnedCount = 0;
         this.enemySpawnTimer = 0;
+        this.pauseAfterFirstEnemy = false;
         this.currentWave = null;
         this.currentEnemyConfig = null;
         

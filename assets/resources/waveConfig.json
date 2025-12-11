@@ -8,7 +8,7 @@
       "enemies": [
         {
           "prefabName": "Enemy",
-          "count": 2,
+          "count": 1,
           "interval": 8
         }
       ]

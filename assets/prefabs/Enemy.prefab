@@ -256,7 +256,7 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "7f40ce9c-60fa-4c0e-8ca9-58b7cc145977@f9941",
+      "__uuid__": "e444a13f-8436-427e-993d-5420cb74b2fa@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 0,
@@ -341,7 +341,10 @@
         "__expectedType__": "cc.AnimationClip"
       }
     ],
-    "_defaultClip": null,
+    "_defaultClip": {
+      "__uuid__": "213b4134-dbdf-4bb4-a844-a6e4ae58efbd",
+      "__expectedType__": "cc.AnimationClip"
+    },
     "_id": ""
   },
   {
