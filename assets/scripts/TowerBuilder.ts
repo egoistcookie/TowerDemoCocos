@@ -264,7 +264,7 @@ export class TowerBuilder extends Component {
         // 监听触摸事件 - 使用capture阶段优先处理建筑物拖拽
         const canvasNode = find('Canvas');
         if (canvasNode) {
-            console.info('[TowerBuilder] start - 注册Canvas触摸事件监听器');
+            console.debug('[TowerBuilder] start - 注册Canvas触摸事件监听器');
             // 使用capture阶段，优先处理建筑物拖拽，避免SelectionManager干扰
             // 注意：capture阶段在Cocos Creator中需要使用不同的方式
             // 先移除可能存在的旧监听器，确保只注册一次
@@ -276,7 +276,7 @@ export class TowerBuilder extends Component {
             canvasNode.on(Node.EventType.TOUCH_START, this.onTouchStart, this);
             canvasNode.on(Node.EventType.TOUCH_END, this.onTouchEnd, this);
             canvasNode.on(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
-            console.info('[TowerBuilder] start - Canvas触摸事件监听器注册完成');
+            console.debug('[TowerBuilder] start - Canvas触摸事件监听器注册完成');
         } else {
             console.error('[TowerBuilder] start - Canvas节点未找到');
             // 如果没有Canvas，使用全局输入事件作为后备
@@ -572,7 +572,7 @@ export class TowerBuilder extends Component {
                 
                 if (moveDistance > this.longPressMoveThreshold) {
                     // 移动距离超过阈值，取消长按检测
-                    console.info('[TowerBuilder] onTouchMove - 移动距离超过阈值，取消长按检测');
+                    console.debug('[TowerBuilder] onTouchMove - 移动距离超过阈值，取消长按检测');
                     this.cancelLongPressDetection();
                 }
             } catch (error) {
@@ -737,17 +737,17 @@ export class TowerBuilder extends Component {
     onTouchEnd(event: EventTouch) {
         const location = event.getLocation();
         const targetNode = event.target as Node;
-        console.info('[TowerBuilder] onTouchEnd - 触摸结束事件触发, 位置:', `(${location.x.toFixed(1)}, ${location.y.toFixed(1)})`, 'targetNode:', targetNode?.name, 'isDraggingBuilding:', this.isDraggingBuilding, 'draggedBuilding存在:', !!this.draggedBuilding, 'isBuildingMode:', this.isBuildingMode, 'currentSelectedBuilding:', !!this.currentSelectedBuilding, 'propagationStopped:', event.propagationStopped);
+        console.debug('[TowerBuilder] onTouchEnd - 触摸结束事件触发, 位置:', `(${location.x.toFixed(1)}, ${location.y.toFixed(1)})`, 'targetNode:', targetNode?.name, 'isDraggingBuilding:', this.isDraggingBuilding, 'draggedBuilding存在:', !!this.draggedBuilding, 'isBuildingMode:', this.isBuildingMode, 'currentSelectedBuilding:', !!this.currentSelectedBuilding, 'propagationStopped:', event.propagationStopped);
         
         // 无论是否在拖拽状态，都先清除网格高亮（防止残留）
         if (this.gridPanel) {
-            console.info('[TowerBuilder] onTouchEnd - 清除网格高亮（防止残留）');
+            console.debug('[TowerBuilder] onTouchEnd - 清除网格高亮（防止残留）');
             this.gridPanel.clearHighlight();
         }
         
         // 处理建筑物拖拽结束 - 优先处理
         if (this.isDraggingBuilding && this.draggedBuilding) {
-            console.info('[TowerBuilder] onTouchEnd - 检测到建筑物拖拽，阻止事件传播并处理拖拽结束');
+            console.debug('[TowerBuilder] onTouchEnd - 检测到建筑物拖拽，阻止事件传播并处理拖拽结束');
             // 立即阻止事件传播，避免SelectionManager处理
             event.propagationStopped = true;
             // 处理拖拽结束并放置建筑物
@@ -775,7 +775,7 @@ export class TowerBuilder extends Component {
             
             // 如果触摸时间小于阈值，说明是单击，打开信息面板
             if (elapsedTime < this.longPressThreshold) {
-                console.info('[TowerBuilder] onTouchEnd - 检测到单击（触摸时间:', elapsedTime.toFixed(2), '秒），打开建筑物信息面板');
+                console.debug('[TowerBuilder] onTouchEnd - 检测到单击（触摸时间:', elapsedTime.toFixed(2), '秒），打开建筑物信息面板');
                 // 先清除长按检测状态，避免定时器继续运行
                 const building = this.longPressBuilding;
                 // 立即停止定时器并清除状态
@@ -806,7 +806,7 @@ export class TowerBuilder extends Component {
 
         // 只在建造模式下处理
         if (!this.isBuildingMode || !this.currentSelectedBuilding) {
-            console.info('[TowerBuilder] onTouchEnd - 不在建造模式或没有选中建筑物，不阻止事件传播, isBuildingMode:', this.isBuildingMode, 'currentSelectedBuilding:', !!this.currentSelectedBuilding);
+            console.debug('[TowerBuilder] onTouchEnd - 不在建造模式或没有选中建筑物，不阻止事件传播, isBuildingMode:', this.isBuildingMode, 'currentSelectedBuilding:', !!this.currentSelectedBuilding);
             // 不在建造模式或没有选中建筑物，不阻止事件传播
             return;
         }
@@ -817,7 +817,7 @@ export class TowerBuilder extends Component {
         // 对于石墙，即使在其他系统可能拦截事件的情况下，也要确保能够放置
         // 石墙是唯一可以放置在地图各处的建筑物，需要优先处理
         if (isStoneWall) {
-            console.info('[TowerBuilder] onTouchEnd - 检测到石墙放置，优先处理并阻止事件传播');
+            console.debug('[TowerBuilder] onTouchEnd - 检测到石墙放置，优先处理并阻止事件传播');
             // 立即阻止事件传播，确保石墙放置逻辑能够执行
             event.propagationStopped = true;
         }
@@ -825,7 +825,7 @@ export class TowerBuilder extends Component {
         // 检查是否点击在UI元素上（如按钮、面板），如果是则不处理
         if (targetNode) {
             const nodeName = targetNode.name.toLowerCase();
-            console.info('[TowerBuilder] onTouchEnd - 检查目标节点, nodeName:', nodeName);
+            console.debug('[TowerBuilder] onTouchEnd - 检查目标节点, nodeName:', nodeName);
             // 检查节点名称
             if (nodeName.includes('button') || 
                 nodeName.includes('panel') || 
@@ -833,7 +833,7 @@ export class TowerBuilder extends Component {
                 nodeName.includes('selection') ||
                 nodeName.includes('buildingitem') ||
                 nodeName.includes('buildingselection')) {
-                console.info('[TowerBuilder] onTouchEnd - 目标节点是UI元素，不处理，允许事件继续传播');
+                console.debug('[TowerBuilder] onTouchEnd - 目标节点是UI元素，不处理，允许事件继续传播');
                 return;
             }
             // 检查父节点
@@ -1555,7 +1555,7 @@ export class TowerBuilder extends Component {
         // 启动定时器检查长按时间（每0.05秒检查一次，持续检查直到达到阈值或取消）
         this.schedule(this.checkLongPress, 0.05);
         
-        console.info('[TowerBuilder] startLongPressDetection - 开始长按检测, building:', building.name);
+        console.debug('[TowerBuilder] startLongPressDetection - 开始长按检测, building:', building.name);
     }
 
     /**
@@ -1594,7 +1594,7 @@ export class TowerBuilder extends Component {
         // 如果进度达到1.0，停止定时器并进入拖拽模式
         if (progress >= 1.0) {
             // 长按时间达到阈值，进入拖拽模式
-            console.info('[TowerBuilder] checkLongPress - 长按时间达到阈值，进入拖拽模式');
+            console.debug('[TowerBuilder] checkLongPress - 长按时间达到阈值，进入拖拽模式');
             const building = this.longPressBuilding;
             // 先停止定时器，避免继续更新
             this.unschedule(this.checkLongPress);
@@ -1626,41 +1626,41 @@ export class TowerBuilder extends Component {
             this.cancelLongPressDetection();
         }
 
-        console.info('[TowerBuilder] showBuildingInfoPanel - 打开建筑物信息面板, building:', building.name);
+        console.debug('[TowerBuilder] showBuildingInfoPanel - 打开建筑物信息面板, building:', building.name);
 
         // 根据建筑物类型调用对应的showSelectionPanel方法
         const warAncientTree = building.getComponent(WarAncientTree);
         if (warAncientTree && warAncientTree.showSelectionPanel) {
             warAncientTree.showSelectionPanel();
-            console.info('[TowerBuilder] showBuildingInfoPanel - WarAncientTree面板已打开');
+            console.debug('[TowerBuilder] showBuildingInfoPanel - WarAncientTree面板已打开');
             return;
         }
 
         const moonWell = building.getComponent(MoonWell);
         if (moonWell && moonWell.showSelectionPanel) {
             moonWell.showSelectionPanel();
-            console.info('[TowerBuilder] showBuildingInfoPanel - MoonWell面板已打开');
+            console.debug('[TowerBuilder] showBuildingInfoPanel - MoonWell面板已打开');
             return;
         }
 
         const tree = building.getComponent(Tree);
         if (tree && tree.showSelectionPanel) {
             tree.showSelectionPanel();
-            console.info('[TowerBuilder] showBuildingInfoPanel - Tree面板已打开');
+            console.debug('[TowerBuilder] showBuildingInfoPanel - Tree面板已打开');
             return;
         }
 
         const hunterHall = building.getComponent(HunterHall);
         if (hunterHall && hunterHall.showSelectionPanel) {
             hunterHall.showSelectionPanel();
-            console.info('[TowerBuilder] showBuildingInfoPanel - HunterHall面板已打开');
+            console.debug('[TowerBuilder] showBuildingInfoPanel - HunterHall面板已打开');
             return;
         }
 
         const stoneWall = building.getComponent(StoneWall);
         if (stoneWall && stoneWall.showSelectionPanel) {
             stoneWall.showSelectionPanel();
-            console.info('[TowerBuilder] showBuildingInfoPanel - StoneWall面板已打开');
+            console.debug('[TowerBuilder] showBuildingInfoPanel - StoneWall面板已打开');
             return;
         }
 
@@ -1790,11 +1790,11 @@ export class TowerBuilder extends Component {
             return;
         }
 
-        console.info('[TowerBuilder] startDraggingBuilding - 开始拖拽建筑物, building:', building.name, '原始位置:', `(${originalGrid.x}, ${originalGrid.y})`);
+        console.debug('[TowerBuilder] startDraggingBuilding - 开始拖拽建筑物, building:', building.name, '原始位置:', `(${originalGrid.x}, ${originalGrid.y})`);
         this.isDraggingBuilding = true;
         this.draggedBuilding = building;
         this.draggedBuildingOriginalGrid = originalGrid;
-        console.info('[TowerBuilder] startDraggingBuilding - 设置 isDraggingBuilding = true, draggedBuilding存在:', !!this.draggedBuilding, 'draggedBuildingOriginalGrid存在:', !!this.draggedBuildingOriginalGrid);
+        console.debug('[TowerBuilder] startDraggingBuilding - 设置 isDraggingBuilding = true, draggedBuilding存在:', !!this.draggedBuilding, 'draggedBuildingOriginalGrid存在:', !!this.draggedBuildingOriginalGrid);
 
         // 临时释放网格占用（拖拽时）
         this.gridPanel.releaseGrid(originalGrid.x, originalGrid.y);
@@ -1805,18 +1805,18 @@ export class TowerBuilder extends Component {
         // 显示网格面板
         this.gridPanel.show();
 
-        console.info('[TowerBuilder] startDraggingBuilding - 拖拽状态设置完成');
+        console.debug('[TowerBuilder] startDraggingBuilding - 拖拽状态设置完成');
     }
 
     /**
      * 结束拖拽建筑物
      */
     endDraggingBuilding(event: EventTouch) {
-        console.info('[TowerBuilder] endDraggingBuilding - 开始处理拖拽结束, isDraggingBuilding:', this.isDraggingBuilding, 'draggedBuilding存在:', !!this.draggedBuilding, 'gridPanel存在:', !!this.gridPanel);
+        console.debug('[TowerBuilder] endDraggingBuilding - 开始处理拖拽结束, isDraggingBuilding:', this.isDraggingBuilding, 'draggedBuilding存在:', !!this.draggedBuilding, 'gridPanel存在:', !!this.gridPanel);
         
         // 如果不在拖拽状态，直接返回（避免重复处理）
         if (!this.isDraggingBuilding) {
-            console.info('[TowerBuilder] endDraggingBuilding - 已经不在拖拽状态，直接返回');
+            console.debug('[TowerBuilder] endDraggingBuilding - 已经不在拖拽状态，直接返回');
             return;
         }
         
@@ -1827,7 +1827,7 @@ export class TowerBuilder extends Component {
             this.draggedBuilding = null!;
             this.draggedBuildingOriginalGrid = null;
             if (this.gridPanel) {
-                console.info('[TowerBuilder] endDraggingBuilding - 状态不正确时清除网格高亮');
+                console.debug('[TowerBuilder] endDraggingBuilding - 状态不正确时清除网格高亮');
                 this.gridPanel.clearHighlight();
             }
             return;
@@ -1835,7 +1835,7 @@ export class TowerBuilder extends Component {
 
         // 获取触摸位置并转换为世界坐标
         const touchLocation = event.getLocation();
-        console.info('[TowerBuilder] endDraggingBuilding - 触摸位置:', `(${touchLocation.x.toFixed(1)}, ${touchLocation.y.toFixed(1)})`);
+        console.debug('[TowerBuilder] endDraggingBuilding - 触摸位置:', `(${touchLocation.x.toFixed(1)}, ${touchLocation.y.toFixed(1)})`);
         
         const cameraNode = find('Canvas/Camera') || this.node.scene?.getChildByName('Camera');
         if (!cameraNode) {
@@ -1856,7 +1856,7 @@ export class TowerBuilder extends Component {
         const worldPos = new Vec3();
         camera.screenToWorld(screenPos, worldPos);
         worldPos.z = 0;
-        console.info('[TowerBuilder] endDraggingBuilding - 世界坐标:', `(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
+        console.debug('[TowerBuilder] endDraggingBuilding - 世界坐标:', `(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
 
         // 判断是否是石墙
         const isStoneWall = this.draggedBuilding && this.draggedBuilding.getComponent(StoneWall) !== null;
@@ -1867,12 +1867,12 @@ export class TowerBuilder extends Component {
             // 石墙可以放置在网格外，其他建筑物必须在网格内
             if (!isStoneWall) {
                 // 不在网格内，取消拖拽，恢复原位置
-                console.info('[TowerBuilder] endDraggingBuilding - 拖拽结束位置不在网格内，恢复原位置');
+                console.debug('[TowerBuilder] endDraggingBuilding - 拖拽结束位置不在网格内，恢复原位置');
                 this.cancelDraggingBuilding();
                 return;
             }
             // 石墙不在网格内，直接使用世界坐标，不进行网格对齐
-            console.info('[TowerBuilder] endDraggingBuilding - 石墙拖拽结束位置不在网格内，允许放置');
+            console.debug('[TowerBuilder] endDraggingBuilding - 石墙拖拽结束位置不在网格内，允许放置');
             // 对于石墙，直接移动到世界坐标位置
             this.draggedBuilding.setWorldPosition(worldPos);
             // 清除拖拽状态
@@ -1885,7 +1885,7 @@ export class TowerBuilder extends Component {
             return;
         }
         
-        console.info('[TowerBuilder] endDraggingBuilding - 位置在网格内，继续处理');
+        console.debug('[TowerBuilder] endDraggingBuilding - 位置在网格内，继续处理');
 
         // 获取最近的网格中心位置（确保对齐到格子中央）
         const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
@@ -1898,7 +1898,7 @@ export class TowerBuilder extends Component {
                 return;
             }
             // 石墙无法获取网格中心，直接使用世界坐标
-            console.info('[TowerBuilder] endDraggingBuilding - 石墙无法获取网格中心，使用世界坐标');
+            console.debug('[TowerBuilder] endDraggingBuilding - 石墙无法获取网格中心，使用世界坐标');
             this.draggedBuilding.setWorldPosition(worldPos);
             // 清除拖拽状态
             this.isDraggingBuilding = false;
@@ -1909,7 +1909,7 @@ export class TowerBuilder extends Component {
             }
             return;
         }
-        console.info('[TowerBuilder] endDraggingBuilding - 网格中心:', `(${gridCenter.x.toFixed(1)}, ${gridCenter.y.toFixed(1)})`);
+        console.debug('[TowerBuilder] endDraggingBuilding - 网格中心:', `(${gridCenter.x.toFixed(1)}, ${gridCenter.y.toFixed(1)})`);
 
         // 获取目标网格（使用对齐后的位置）
         const targetGrid = this.gridPanel.worldToGrid(gridCenter);
@@ -1921,7 +1921,7 @@ export class TowerBuilder extends Component {
                 return;
             }
             // 石墙无法获取目标网格，直接使用世界坐标
-            console.info('[TowerBuilder] endDraggingBuilding - 石墙无法获取目标网格，使用世界坐标');
+            console.debug('[TowerBuilder] endDraggingBuilding - 石墙无法获取目标网格，使用世界坐标');
             this.draggedBuilding.setWorldPosition(worldPos);
             // 清除拖拽状态
             this.isDraggingBuilding = false;
@@ -1932,7 +1932,7 @@ export class TowerBuilder extends Component {
             }
             return;
         }
-        console.info('[TowerBuilder] endDraggingBuilding - 目标网格:', `(${targetGrid.x}, ${targetGrid.y})`);
+        console.debug('[TowerBuilder] endDraggingBuilding - 目标网格:', `(${targetGrid.x}, ${targetGrid.y})`);
 
         // 检查目标网格是否被其他建筑物占用
         const isOccupiedByOther = this.gridPanel.isGridOccupiedByOther(
@@ -1981,15 +1981,15 @@ export class TowerBuilder extends Component {
         const buildingToDeselect = this.draggedBuilding;
         
         // 清除拖拽状态
-        console.info('[TowerBuilder] endDraggingBuilding - 清除拖拽状态');
+        console.debug('[TowerBuilder] endDraggingBuilding - 清除拖拽状态');
         this.isDraggingBuilding = false;
         this.draggedBuilding = null!;
         this.draggedBuildingOriginalGrid = null;
 
         // 清除高亮
-        console.info('[TowerBuilder] endDraggingBuilding - 清除网格高亮');
+        console.debug('[TowerBuilder] endDraggingBuilding - 清除网格高亮');
         this.gridPanel.clearHighlight();
-        console.info('[TowerBuilder] endDraggingBuilding - 拖拽结束处理完成');
+        console.debug('[TowerBuilder] endDraggingBuilding - 拖拽结束处理完成');
         
         // 清除建筑物的选中状态
         this.clearCurrentSelection();
@@ -2017,11 +2017,11 @@ export class TowerBuilder extends Component {
      * 取消拖拽建筑物（恢复原位置）
      */
     cancelDraggingBuilding() {
-        console.info('[TowerBuilder] cancelDraggingBuilding - 开始取消拖拽, isDraggingBuilding:', this.isDraggingBuilding, 'draggedBuilding存在:', !!this.draggedBuilding, 'gridPanel存在:', !!this.gridPanel, 'draggedBuildingOriginalGrid存在:', !!this.draggedBuildingOriginalGrid);
+        console.debug('[TowerBuilder] cancelDraggingBuilding - 开始取消拖拽, isDraggingBuilding:', this.isDraggingBuilding, 'draggedBuilding存在:', !!this.draggedBuilding, 'gridPanel存在:', !!this.gridPanel, 'draggedBuildingOriginalGrid存在:', !!this.draggedBuildingOriginalGrid);
         
         // 无论状态如何，都要清除拖拽状态，避免状态残留
         if (!this.isDraggingBuilding) {
-            console.info('[TowerBuilder] cancelDraggingBuilding - 已经不在拖拽状态，直接清除相关状态');
+            console.debug('[TowerBuilder] cancelDraggingBuilding - 已经不在拖拽状态，直接清除相关状态');
             this.draggedBuilding = null!;
             this.draggedBuildingOriginalGrid = null;
             if (this.gridPanel) {
@@ -2037,7 +2037,7 @@ export class TowerBuilder extends Component {
             this.draggedBuilding = null!;
             this.draggedBuildingOriginalGrid = null;
             if (this.gridPanel) {
-                console.info('[TowerBuilder] cancelDraggingBuilding - 状态不正确时清除网格高亮');
+                console.debug('[TowerBuilder] cancelDraggingBuilding - 状态不正确时清除网格高亮');
                 this.gridPanel.clearHighlight();
             }
             return;
@@ -2047,7 +2047,7 @@ export class TowerBuilder extends Component {
         const buildingToDeselect = this.draggedBuilding;
 
         // 恢复原网格位置
-        console.info('[TowerBuilder] cancelDraggingBuilding - 恢复原网格位置:', `(${this.draggedBuildingOriginalGrid.x}, ${this.draggedBuildingOriginalGrid.y})`);
+        console.debug('[TowerBuilder] cancelDraggingBuilding - 恢复原网格位置:', `(${this.draggedBuildingOriginalGrid.x}, ${this.draggedBuildingOriginalGrid.y})`);
         this.moveBuildingToGrid(
             this.draggedBuilding,
             this.draggedBuildingOriginalGrid.x,
@@ -2055,15 +2055,15 @@ export class TowerBuilder extends Component {
         );
 
         // 清除拖拽状态
-        console.info('[TowerBuilder] cancelDraggingBuilding - 清除拖拽状态');
+        console.debug('[TowerBuilder] cancelDraggingBuilding - 清除拖拽状态');
         this.isDraggingBuilding = false;
         this.draggedBuilding = null!;
         this.draggedBuildingOriginalGrid = null;
 
         // 清除高亮
-        console.info('[TowerBuilder] cancelDraggingBuilding - 清除网格高亮');
+        console.debug('[TowerBuilder] cancelDraggingBuilding - 清除网格高亮');
         this.gridPanel.clearHighlight();
-        console.info('[TowerBuilder] cancelDraggingBuilding - 取消拖拽处理完成');
+        console.debug('[TowerBuilder] cancelDraggingBuilding - 取消拖拽处理完成');
         
         // 清除建筑物的选中状态
         this.clearCurrentSelection();

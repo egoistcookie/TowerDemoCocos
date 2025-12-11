@@ -392,10 +392,10 @@ export class TrollSpearman extends Component {
                     minDistance = distance;
                     nearestTarget = blockedStoneWall;
                     targetPriority = PRIORITY.STONEWALL;
-                    console.info(`[TrollSpearman] findTarget: 检测到路径被石墙阻挡，设置石墙为目标，距离: ${distance.toFixed(1)}`);
+                    console.debug(`[TrollSpearman] findTarget: 检测到路径被石墙阻挡，设置石墙为目标，距离: ${distance.toFixed(1)}`);
                 }
             } else {
-                console.info(`[TrollSpearman] findTarget: 检测到路径被石墙阻挡，但距离超出检测范围(${distance.toFixed(1)} > ${detectionRange})`);
+                console.debug(`[TrollSpearman] findTarget: 检测到路径被石墙阻挡，但距离超出检测范围(${distance.toFixed(1)} > ${detectionRange})`);
             }
         }
 
@@ -680,7 +680,7 @@ export class TrollSpearman extends Component {
         const blockedStoneWall = this.checkPathBlockedByStoneWall();
         if (blockedStoneWall) {
             // 路径被石墙阻挡且无法绕行，立即设置为攻击目标
-            console.info(`[TrollSpearman] moveTowardsCrystal: 路径被石墙完全阻挡，设置石墙为攻击目标`);
+            console.debug(`[TrollSpearman] moveTowardsCrystal: 路径被石墙完全阻挡，设置石墙为攻击目标`);
             this.currentTarget = blockedStoneWall;
             return;
         }
@@ -737,19 +737,19 @@ export class TrollSpearman extends Component {
                     const blockedWall = this.checkPathBlockedByStoneWall();
                     if (blockedWall) {
                         // 路径被完全阻挡，设置最近的石墙为目标
-                        console.info(`[TrollSpearman] moveTowardsCrystal: 无法绕路且路径被完全阻挡，设置石墙为攻击目标`);
+                        console.debug(`[TrollSpearman] moveTowardsCrystal: 无法绕路且路径被完全阻挡，设置石墙为攻击目标`);
                         this.currentTarget = blockedWall;
                         return;
                     } else {
                         // 尝试查找最近的石墙作为目标
                         const nearestWall = this.findNearestStoneWall();
                         if (nearestWall) {
-                            console.info(`[TrollSpearman] moveTowardsCrystal: 无法绕路，设置最近的石墙为攻击目标`);
+                            console.debug(`[TrollSpearman] moveTowardsCrystal: 无法绕路，设置最近的石墙为攻击目标`);
                             this.currentTarget = nearestWall;
                             return;
                         }
                         // 找不到石墙，停止移动
-                        console.info(`[TrollSpearman] moveTowardsCrystal: 无法绕路且找不到石墙，停止移动`);
+                        console.debug(`[TrollSpearman] moveTowardsCrystal: 无法绕路且找不到石墙，停止移动`);
                         return;
                     }
                 }
@@ -1789,9 +1789,9 @@ export class TrollSpearman extends Component {
                         targetScript.takeDamage(damage);
                         // 根据目标类型输出关键日志
                         if (stoneWallScript) {
-                            console.info(`[TrollSpearman] createSpear: 攻击石墙，造成 ${damage} 点伤害`);
+                            console.debug(`[TrollSpearman] createSpear: 攻击石墙，造成 ${damage} 点伤害`);
                         } else if (crystalScript) {
-                            console.info(`[TrollSpearman] createSpear: 攻击水晶，造成 ${damage} 点伤害`);
+                            console.debug(`[TrollSpearman] createSpear: 攻击水晶，造成 ${damage} 点伤害`);
                         }
                     } else {
                         // 目标无效，清除目标

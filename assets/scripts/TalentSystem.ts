@@ -887,7 +887,7 @@ export class TalentSystem extends Component {
         // 2. 通过 UUID 加载 prefab
         const uuid = prefabUuidMap[unitId];
         if (!uuid) {
-            console.info(`TalentSystem: No UUID mapping found for ${unitId}`);
+            console.debug(`TalentSystem: No UUID mapping found for ${unitId}`);
             return;
         }
         
@@ -906,17 +906,17 @@ export class TalentSystem extends Component {
                     if (validSprite) {
                         console.log(`TalentSystem: Found sprite by unitId ${unitIdRef}`);
                     } else {
-                        console.info(`TalentSystem: Could not find sprite by unitId ${unitIdRef}`);
+                        console.debug(`TalentSystem: Could not find sprite by unitId ${unitIdRef}`);
                     }
                 }
                 if (validSprite && validSprite.node && validSprite.node.isValid) {
                     // 确保 sprite 节点仍然有效
                     this.loadIconFromPrefabInstance(loadedPrefab as Prefab, unitIdRef, validSprite);
                 } else {
-                    console.info(`TalentSystem: Sprite reference is invalid in UUID load callback for ${unitIdRef}`);
+                    console.debug(`TalentSystem: Sprite reference is invalid in UUID load callback for ${unitIdRef}`);
                 }
             } else {
-                console.info(`TalentSystem: Failed to load ${unitIdRef} prefab by UUID, err: ${err ? err.message : 'unknown error'}`);
+                console.debug(`TalentSystem: Failed to load ${unitIdRef} prefab by UUID, err: ${err ? err.message : 'unknown error'}`);
             }
         });
     }
@@ -939,7 +939,7 @@ export class TalentSystem extends Component {
         }
         // 检查 sprite 节点是否仍然有效
         if (!sprite.node || !sprite.node.isValid) {
-            console.info(`TalentSystem: Sprite node is invalid for ${unitId}, cannot set icon`);
+            console.debug(`TalentSystem: Sprite node is invalid for ${unitId}, cannot set icon`);
             return;
         }
         
@@ -965,7 +965,7 @@ export class TalentSystem extends Component {
                 this.scheduleOnce(() => {
                     // 检查 sprite 节点是否仍然有效
                     if (!sprite.node || !sprite.node.isValid) {
-                        console.info(`TalentSystem: Sprite node is invalid when checking prefab data refresh for ${unitId}`);
+                        console.debug(`TalentSystem: Sprite node is invalid when checking prefab data refresh for ${unitId}`);
                         return;
                     }
                     if (prefabSprite.spriteFrame) {
@@ -1051,7 +1051,7 @@ export class TalentSystem extends Component {
                 this.scheduleOnce(() => {
                     // 检查 sprite 节点是否仍然有效
                     if (!spriteRef.node || !spriteRef.node.isValid) {
-                        console.info(`TalentSystem: Sprite node is invalid when checking root Sprite for ${unitId}`);
+                        console.debug(`TalentSystem: Sprite node is invalid when checking root Sprite for ${unitId}`);
                         prefabRef.destroy();
                         return;
                     }
@@ -1071,7 +1071,7 @@ export class TalentSystem extends Component {
                         this.scheduleOnce(() => {
                             // 再次检查 sprite 节点是否仍然有效
                             if (!spriteRef.node || !spriteRef.node.isValid) {
-                                console.info(`TalentSystem: Sprite node is invalid when checking root Sprite second wait for ${unitId}`);
+                                console.debug(`TalentSystem: Sprite node is invalid when checking root Sprite second wait for ${unitId}`);
                                 prefabRef.destroy();
                                 return;
                             }
@@ -1083,7 +1083,7 @@ export class TalentSystem extends Component {
                                 spriteRef.spriteFrame = spriteFrame;
                                 console.log(`TalentSystem: Icon set successfully for ${unitId}, spriteFrame: ${spriteRef.spriteFrame ? 'set' : 'not set'}`);
                             } else {
-                                console.info(`TalentSystem: Root Sprite spriteFrame is still null after second wait for ${unitId}, rootSprite enabled: ${rootSpriteRef.enabled}. 没有获取到预制体的SpriteFrame`);
+                                console.debug(`TalentSystem: Root Sprite spriteFrame is still null after second wait for ${unitId}, rootSprite enabled: ${rootSpriteRef.enabled}. 没有获取到预制体的SpriteFrame`);
                             }
                             prefabRef.destroy();
                         }, 0.05); // 等待 0.05 秒
@@ -1114,7 +1114,7 @@ export class TalentSystem extends Component {
                     this.scheduleOnce(() => {
                         // 检查 sprite 节点是否仍然有效
                         if (!spriteRef.node || !spriteRef.node.isValid) {
-                            console.info(`TalentSystem: Sprite node is invalid when checking child Sprite for ${unitId}`);
+                            console.debug(`TalentSystem: Sprite node is invalid when checking child Sprite for ${unitId}`);
                             prefabRef.destroy();
                             return;
                         }
@@ -1130,7 +1130,7 @@ export class TalentSystem extends Component {
                             spriteRef.spriteFrame = spriteFrame;
                             console.log(`TalentSystem: Icon set successfully from child Sprite after waiting for ${unitId}, spriteFrame: ${spriteRef.spriteFrame ? 'set' : 'not set'}`);
                         } else {
-                            console.info(`TalentSystem: Still no child spriteFrame after waiting for ${unitId}. 没有获取到预制体的SpriteFrame`);
+                            console.debug(`TalentSystem: Still no child spriteFrame after waiting for ${unitId}. 没有获取到预制体的SpriteFrame`);
                         }
                         prefabRef.destroy();
                     }, 0.1);
@@ -1141,7 +1141,7 @@ export class TalentSystem extends Component {
             }
             
             // 6. 如果还是没有找到，输出警告
-            console.info(`TalentSystem: Could not find spriteFrame in prefab for ${unitId}, tried: cardIcon, unitIcon, defaultSpriteFrame, root Sprite, child Sprite. 没有获取到预制体的SpriteFrame`);
+            console.debug(`TalentSystem: Could not find spriteFrame in prefab for ${unitId}, tried: cardIcon, unitIcon, defaultSpriteFrame, root Sprite, child Sprite. 没有获取到预制体的SpriteFrame`);
             
             prefabInstance.destroy();
         } else {
@@ -1151,7 +1151,7 @@ export class TalentSystem extends Component {
         // 如果都获取不到，保持Sprite组件为空（不显示图标）
         // 最后检查一次 spriteFrame 是否已设置
         if (!sprite.spriteFrame) {
-            console.info(`TalentSystem: Could not get icon for ${unitId}, sprite will remain empty. 没有获取到预制体的SpriteFrame`);
+            console.debug(`TalentSystem: Could not get icon for ${unitId}, sprite will remain empty. 没有获取到预制体的SpriteFrame`);
         }
     }
     

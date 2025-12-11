@@ -1109,7 +1109,7 @@ export class WarAncientTree extends Component {
      * 战争古树点击事件
      */
     onWarAncientTreeClick(event: EventTouch) {
-        console.info('[WarAncientTree] onWarAncientTreeClick - 节点点击事件触发, propagationStopped:', event.propagationStopped);
+        console.debug('[WarAncientTree] onWarAncientTreeClick - 节点点击事件触发, propagationStopped:', event.propagationStopped);
         console.debug('WarAncientTree.onWarAncientTreeClick: Entering method');
         
         // 检查是否正在拖拽建筑物（通过TowerBuilder）
@@ -1147,12 +1147,12 @@ export class WarAncientTree extends Component {
             towerBuilder = findComponentInScene(this.node.scene, 'TowerBuilder');
         }
         
-        console.info('[WarAncientTree] onWarAncientTreeClick - 查找TowerBuilder, 节点找到:', !!towerBuilderNode, '组件找到:', !!towerBuilder, 'isDraggingBuilding:', towerBuilder?.isDraggingBuilding);
+        console.debug('[WarAncientTree] onWarAncientTreeClick - 查找TowerBuilder, 节点找到:', !!towerBuilderNode, '组件找到:', !!towerBuilder, 'isDraggingBuilding:', towerBuilder?.isDraggingBuilding);
         
         // 检查是否正在长按检测（由TowerBuilder处理）
         // 注意：不要阻止事件传播，让TowerBuilder的onTouchEnd也能处理
         if (towerBuilder && (towerBuilder as any).isLongPressActive) {
-            console.info('[WarAncientTree] onWarAncientTreeClick - 检测到正在长按检测，不处理点击事件，让TowerBuilder处理');
+            console.debug('[WarAncientTree] onWarAncientTreeClick - 检测到正在长按检测，不处理点击事件，让TowerBuilder处理');
             // 不阻止事件传播，让TowerBuilder的onTouchEnd也能处理
             // event.propagationStopped = true; // 注释掉，让事件继续传播
             return;
@@ -1165,7 +1165,7 @@ export class WarAncientTree extends Component {
         }
         
         if (towerBuilder && towerBuilder.isDraggingBuilding) {
-            console.info('[WarAncientTree] onWarAncientTreeClick - 检测到正在拖拽建筑物，直接调用TowerBuilder.endDraggingBuilding处理');
+            console.debug('[WarAncientTree] onWarAncientTreeClick - 检测到正在拖拽建筑物，直接调用TowerBuilder.endDraggingBuilding处理');
             // 直接调用TowerBuilder的方法来处理拖拽结束，而不是依赖事件传播
             // 因为节点级别的事件不会自动传播到Canvas级别
             if (towerBuilder.endDraggingBuilding && typeof towerBuilder.endDraggingBuilding === 'function') {
@@ -1176,7 +1176,7 @@ export class WarAncientTree extends Component {
         }
         
         // 如果不在拖拽状态，继续正常处理点击事件
-        console.info('[WarAncientTree] onWarAncientTreeClick - 不在拖拽状态，继续处理点击事件, isDraggingBuilding:', towerBuilder?.isDraggingBuilding);
+        console.debug('[WarAncientTree] onWarAncientTreeClick - 不在拖拽状态，继续处理点击事件, isDraggingBuilding:', towerBuilder?.isDraggingBuilding);
         
         // 检查是否有选中的小精灵，如果有则不处理点击事件（让小精灵移动到建筑物）
         const selectionManager = this.findSelectionManager();
@@ -1280,9 +1280,9 @@ export class WarAncientTree extends Component {
      * 移动时的触摸结束事件
      */
     onMoveTouchEnd(event: EventTouch) {
-        console.info('[WarAncientTree] onMoveTouchEnd - 触摸结束事件, isMoving:', this.isMoving, 'gridPanel存在:', !!this.gridPanel, 'propagationStopped:', event.propagationStopped);
+        console.debug('[WarAncientTree] onMoveTouchEnd - 触摸结束事件, isMoving:', this.isMoving, 'gridPanel存在:', !!this.gridPanel, 'propagationStopped:', event.propagationStopped);
         if (!this.isMoving || !this.gridPanel) {
-            console.info('[WarAncientTree] onMoveTouchEnd - 不在移动状态或gridPanel不存在，直接返回');
+            console.debug('[WarAncientTree] onMoveTouchEnd - 不在移动状态或gridPanel不存在，直接返回');
             return;
         }
 

@@ -835,7 +835,7 @@ export class GameManager extends Component {
     }
 
     restartGame() {
-        console.info('GameManager: restartGame called');
+        console.debug('GameManager: restartGame called');
         
         // 清理所有敌人和防御塔
         this.cleanupAllUnits();
@@ -843,16 +843,16 @@ export class GameManager extends Component {
         const scene = director.getScene();
         let sceneName = scene?.name;
         
-        console.info('GameManager: Current scene name:', sceneName);
+        console.debug('GameManager: Current scene name:', sceneName);
         
         // 如果场景名称为空，尝试使用默认名称
         if (!sceneName || sceneName === '') {
             sceneName = 'scene';
-            console.info('GameManager: Scene name is empty, using default name "scene"');
+            console.debug('GameManager: Scene name is empty, using default name "scene"');
         }
         
         if (sceneName) {
-            console.info('GameManager: Attempting to reload scene:', sceneName);
+            console.debug('GameManager: Attempting to reload scene:', sceneName);
             
             // 使用更可靠的方式重新加载场景
             director.loadScene(sceneName, (error: Error | null) => {
@@ -862,7 +862,7 @@ export class GameManager extends Component {
                     // 场景加载失败时，手动重置游戏状态
                     this.manualResetGame();
                 } else {
-                    console.info('GameManager: Scene reloaded successfully');
+                    console.debug('GameManager: Scene reloaded successfully');
                 }
             });
         } else {
@@ -877,7 +877,7 @@ export class GameManager extends Component {
      * 手动重置游戏状态（当场景重载失败时使用）
      */
     manualResetGame() {
-        console.info('GameManager: Performing manual game reset');
+        console.debug('GameManager: Performing manual game reset');
         
         // 重置游戏状态
         this.gameState = GameState.Ready;
@@ -897,7 +897,7 @@ export class GameManager extends Component {
         // 更新UI
         this.updateUI();
         
-        console.info('GameManager: Manual game reset completed');
+        console.debug('GameManager: Manual game reset completed');
     }
 
     cleanupAllUnits() {

@@ -174,7 +174,7 @@ export class BuildingGridPanel extends Component {
         this.highlightGraphics.node.active = true; // 改为可见，drawHighlight时会绘制
         this.highlightGraphics.enabled = true; // 确保组件启用
         
-        console.info('[BuildingGridPanel] 高亮Graphics节点已创建 - active:', this.highlightGraphics.node.active, 'enabled:', this.highlightGraphics.enabled, 'siblingIndex:', highlightNode.getSiblingIndex());
+        console.debug('[BuildingGridPanel] 高亮Graphics节点已创建 - active:', this.highlightGraphics.node.active, 'enabled:', this.highlightGraphics.enabled, 'siblingIndex:', highlightNode.getSiblingIndex());
     }
 
     /**
@@ -326,17 +326,17 @@ export class BuildingGridPanel extends Component {
      * @param excludeBuilding 排除的建筑物（用于拖拽时排除自己）
      */
     highlightGrid(worldPos: Vec3 | null, excludeBuilding?: Node | null) {
-        console.info('[BuildingGridPanel] highlightGrid - 调用高亮网格, worldPos:', worldPos ? `(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})` : 'null', 'excludeBuilding:', !!excludeBuilding);
+        console.debug('[BuildingGridPanel] highlightGrid - 调用高亮网格, worldPos:', worldPos ? `(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})` : 'null', 'excludeBuilding:', !!excludeBuilding);
         
         if (!worldPos) {
-            console.info('[BuildingGridPanel] highlightGrid - worldPos为null，清除高亮');
+            console.debug('[BuildingGridPanel] highlightGrid - worldPos为null，清除高亮');
             this.clearHighlight();
             return;
         }
         
         // 确保节点可见
         if (!this.node.active) {
-            console.info('[BuildingGridPanel] highlightGrid - 节点未激活，设置为激活');
+            console.debug('[BuildingGridPanel] highlightGrid - 节点未激活，设置为激活');
             this.node.active = true;
         }
         
@@ -347,10 +347,10 @@ export class BuildingGridPanel extends Component {
         }
         
         const grid = this.worldToGrid(worldPos);
-        console.info('[BuildingGridPanel] highlightGrid - 世界坐标转换为网格坐标:', grid);
+        console.debug('[BuildingGridPanel] highlightGrid - 世界坐标转换为网格坐标:', grid);
         
         if (!grid) {
-            console.info('[BuildingGridPanel] highlightGrid - 网格坐标无效，清除高亮');
+            console.debug('[BuildingGridPanel] highlightGrid - 网格坐标无效，清除高亮');
             this.clearHighlight();
             return;
         }
@@ -360,11 +360,11 @@ export class BuildingGridPanel extends Component {
             this.highlightedCell.x === grid.x && 
             this.highlightedCell.y === grid.y &&
             this.excludeBuildingForHighlight === excludeBuilding) {
-            console.info('[BuildingGridPanel] highlightGrid - 网格位置未变化，跳过绘制, 当前高亮:', this.highlightedCell);
+            console.debug('[BuildingGridPanel] highlightGrid - 网格位置未变化，跳过绘制, 当前高亮:', this.highlightedCell);
             return;
         }
         
-        console.info('[BuildingGridPanel] highlightGrid - 更新高亮状态, 从', this.highlightedCell, '到', grid);
+        console.debug('[BuildingGridPanel] highlightGrid - 更新高亮状态, 从', this.highlightedCell, '到', grid);
         this.highlightedCell = grid;
         this.excludeBuildingForHighlight = excludeBuilding || null;
         this.isHighlighted = true;
@@ -375,7 +375,7 @@ export class BuildingGridPanel extends Component {
      * 绘制高亮
      */
     private drawHighlight() {
-        console.info('[BuildingGridPanel] drawHighlight - 开始绘制高亮, highlightedCell:', this.highlightedCell, 'highlightGraphics存在:', !!this.highlightGraphics);
+        console.debug('[BuildingGridPanel] drawHighlight - 开始绘制高亮, highlightedCell:', this.highlightedCell, 'highlightGraphics存在:', !!this.highlightGraphics);
         
         if (!this.highlightGraphics || !this.highlightedCell) {
             console.warn('[BuildingGridPanel] drawHighlight - 条件不满足，无法绘制, highlightGraphics:', !!this.highlightGraphics, 'highlightedCell:', !!this.highlightedCell);
@@ -384,21 +384,21 @@ export class BuildingGridPanel extends Component {
         
         // 确保节点和Graphics组件都可见
         if (!this.node.active) {
-            console.info('[BuildingGridPanel] drawHighlight - 节点未激活，设置为激活');
+            console.debug('[BuildingGridPanel] drawHighlight - 节点未激活，设置为激活');
             this.node.active = true;
         }
         if (!this.highlightGraphics.node.active) {
-            console.info('[BuildingGridPanel] drawHighlight - highlightGraphics节点未激活，设置为激活');
+            console.debug('[BuildingGridPanel] drawHighlight - highlightGraphics节点未激活，设置为激活');
             this.highlightGraphics.node.active = true;
         }
         
         // 确保Graphics组件已启用
         if (!this.highlightGraphics.enabled) {
-            console.info('[BuildingGridPanel] drawHighlight - highlightGraphics组件未启用，设置为启用');
+            console.debug('[BuildingGridPanel] drawHighlight - highlightGraphics组件未启用，设置为启用');
             this.highlightGraphics.enabled = true;
         }
         
-        console.info('[BuildingGridPanel] drawHighlight - 清除之前的绘制内容');
+        console.debug('[BuildingGridPanel] drawHighlight - 清除之前的绘制内容');
         this.highlightGraphics.clear();
         
         const gridTotalWidth = (this.cellSize + this.cellSpacing) * this.gridWidth - this.cellSpacing;
@@ -429,24 +429,24 @@ export class BuildingGridPanel extends Component {
         this.highlightGraphics.rect(cellX, cellY, this.cellSize, this.cellSize);
         this.highlightGraphics.stroke();
         
-        console.info('[BuildingGridPanel] drawHighlight - 高亮绘制完成, 网格位置:', `(${gridX}, ${gridY})`, '可用:', isAvailable, '颜色:', isAvailable ? '绿色' : '红色', 'cellX:', cellX.toFixed(1), 'cellY:', cellY.toFixed(1));
+        console.debug('[BuildingGridPanel] drawHighlight - 高亮绘制完成, 网格位置:', `(${gridX}, ${gridY})`, '可用:', isAvailable, '颜色:', isAvailable ? '绿色' : '红色', 'cellX:', cellX.toFixed(1), 'cellY:', cellY.toFixed(1));
     }
 
     /**
      * 清除高亮
      */
     clearHighlight() {
-        console.info('[BuildingGridPanel] clearHighlight - 开始清除高亮, isHighlighted:', this.isHighlighted, 'highlightedCell:', this.highlightedCell, 'highlightGraphics存在:', !!this.highlightGraphics);
+        console.debug('[BuildingGridPanel] clearHighlight - 开始清除高亮, isHighlighted:', this.isHighlighted, 'highlightedCell:', this.highlightedCell, 'highlightGraphics存在:', !!this.highlightGraphics);
         
         if (this.highlightGraphics) {
-            console.info('[BuildingGridPanel] clearHighlight - 调用 highlightGraphics.clear()');
+            console.debug('[BuildingGridPanel] clearHighlight - 调用 highlightGraphics.clear()');
             this.highlightGraphics.clear();
             
             // 验证是否真的清除了
             if (this.highlightGraphics && this.highlightGraphics['_paths'] && this.highlightGraphics['_paths'].length > 0) {
                 console.warn('[BuildingGridPanel] clearHighlight - 警告：clear()后仍有路径数据');
             } else {
-                console.info('[BuildingGridPanel] clearHighlight - highlightGraphics已成功清除');
+                console.debug('[BuildingGridPanel] clearHighlight - highlightGraphics已成功清除');
             }
         } else {
             console.warn('[BuildingGridPanel] clearHighlight - highlightGraphics不存在，无法清除');
@@ -455,7 +455,7 @@ export class BuildingGridPanel extends Component {
         this.isHighlighted = false;
         this.highlightedCell = null;
         this.excludeBuildingForHighlight = null;
-        console.info('[BuildingGridPanel] clearHighlight - 清除完成, isHighlighted:', this.isHighlighted, 'highlightedCell:', this.highlightedCell);
+        console.debug('[BuildingGridPanel] clearHighlight - 清除完成, isHighlighted:', this.isHighlighted, 'highlightedCell:', this.highlightedCell);
     }
 
     /**

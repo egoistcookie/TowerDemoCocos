@@ -817,7 +817,7 @@ export class SwordsmanHall extends Component {
      * 剑士小屋点击事件
      */
     onSwordsmanHallClick(event: EventTouch) {
-        console.info('[SwordsmanHall] onSwordsmanHallClick - 节点点击事件触发, propagationStopped:', event.propagationStopped);
+        console.debug('[SwordsmanHall] onSwordsmanHallClick - 节点点击事件触发, propagationStopped:', event.propagationStopped);
         console.debug('SwordsmanHall.onSwordsmanHallClick: Entering method');
         
         // 检查是否正在拖拽建筑物（通过TowerBuilder）
@@ -855,12 +855,12 @@ export class SwordsmanHall extends Component {
             towerBuilder = findComponentInScene(this.node.scene, 'TowerBuilder');
         }
         
-        console.info('[SwordsmanHall] onSwordsmanHallClick - 查找TowerBuilder, 节点找到:', !!towerBuilderNode, '组件找到:', !!towerBuilder, 'isDraggingBuilding:', towerBuilder?.isDraggingBuilding);
+        console.debug('[SwordsmanHall] onSwordsmanHallClick - 查找TowerBuilder, 节点找到:', !!towerBuilderNode, '组件找到:', !!towerBuilder, 'isDraggingBuilding:', towerBuilder?.isDraggingBuilding);
         
         // 检查是否正在长按检测（由TowerBuilder处理）
         // 注意：不要阻止事件传播，让TowerBuilder的onTouchEnd也能处理
         if (towerBuilder && (towerBuilder as any).isLongPressActive) {
-            console.info('[SwordsmanHall] onSwordsmanHallClick - 检测到正在长按检测，不处理点击事件，让TowerBuilder处理');
+            console.debug('[SwordsmanHall] onSwordsmanHallClick - 检测到正在长按检测，不处理点击事件，让TowerBuilder处理');
             // 不阻止事件传播，让TowerBuilder的onTouchEnd也能处理
             // event.propagationStopped = true; // 注释掉，让事件继续传播
             return;
@@ -873,7 +873,7 @@ export class SwordsmanHall extends Component {
         }
         
         if (towerBuilder && towerBuilder.isDraggingBuilding) {
-            console.info('[SwordsmanHall] onSwordsmanHallClick - 检测到正在拖拽建筑物，直接调用TowerBuilder.endDraggingBuilding处理');
+            console.debug('[SwordsmanHall] onSwordsmanHallClick - 检测到正在拖拽建筑物，直接调用TowerBuilder.endDraggingBuilding处理');
             // 直接调用TowerBuilder的方法来处理拖拽结束，而不是依赖事件传播
             if (towerBuilder.endDraggingBuilding && typeof towerBuilder.endDraggingBuilding === 'function') {
                 towerBuilder.endDraggingBuilding(event);

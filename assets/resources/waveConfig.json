@@ -8,13 +8,8 @@
       "enemies": [
         {
           "prefabName": "Enemy",
-          "count": 8,
-          "interval": 0.8
-        },
-        {
-          "prefabName": "TrollSpearman",
-          "count": 5,
-          "interval": 1.2
+          "count": 2,
+          "interval": 8
         }
       ]
     },

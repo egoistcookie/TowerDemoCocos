@@ -267,7 +267,7 @@ export class SelectionManager extends Component {
         // 优先检查是否在建造模式下（如果是，且没有选中单位，完全不处理，让建造系统处理）
         const buildingMode = this.isBuildingMode();
         const draggingBuilding = this.isDraggingBuilding();
-        console.info('[SelectionManager] onTouchEnd - 触摸结束事件, buildingMode:', buildingMode, 'draggingBuilding:', draggingBuilding, 'hasSelectedUnits:', hasSelectedUnits);
+        console.debug('[SelectionManager] onTouchEnd - 触摸结束事件, buildingMode:', buildingMode, 'draggingBuilding:', draggingBuilding, 'hasSelectedUnits:', hasSelectedUnits);
         // console.debug('SelectionManager.onTouchEnd: Building mode:', buildingMode);
         
         if ((buildingMode || draggingBuilding) && !hasSelectedUnits) {
@@ -280,7 +280,7 @@ export class SelectionManager extends Component {
                 this.clearSelection();
             }
             // 不阻止事件传播，让TowerBuilder可以处理
-            console.info('[SelectionManager] onTouchEnd - 在建造模式或拖拽建筑物模式下，且没有选中单位，不处理，让TowerBuilder处理');
+            console.debug('[SelectionManager] onTouchEnd - 在建造模式或拖拽建筑物模式下，且没有选中单位，不处理，让TowerBuilder处理');
             // console.debug('SelectionManager.onTouchEnd: In building mode and no selected units, returning without handling move');
             return;
         }

@@ -524,7 +524,7 @@ export class MoonWell extends Component {
      * 点击月亮井事件
      */
     onMoonWellClick(event: EventTouch) {
-        console.info('[MoonWell] onMoonWellClick - 节点点击事件触发, propagationStopped:', event.propagationStopped);
+        console.debug('[MoonWell] onMoonWellClick - 节点点击事件触发, propagationStopped:', event.propagationStopped);
         console.debug('MoonWell.onMoonWellClick: Entering method');
         
         // 检查是否正在拖拽建筑物（通过TowerBuilder）
@@ -562,11 +562,11 @@ export class MoonWell extends Component {
             towerBuilder = findComponentInScene(this.node.scene, 'TowerBuilder');
         }
         
-        console.info('[MoonWell] onMoonWellClick - 查找TowerBuilder, 节点找到:', !!towerBuilderNode, '组件找到:', !!towerBuilder, 'isDraggingBuilding:', towerBuilder?.isDraggingBuilding);
+        console.debug('[MoonWell] onMoonWellClick - 查找TowerBuilder, 节点找到:', !!towerBuilderNode, '组件找到:', !!towerBuilder, 'isDraggingBuilding:', towerBuilder?.isDraggingBuilding);
         
         // 检查是否正在长按检测（由TowerBuilder处理）
         if (towerBuilder && (towerBuilder as any).isLongPressActive) {
-            console.info('[MoonWell] onMoonWellClick - 检测到正在长按检测，不处理点击事件，让TowerBuilder处理');
+            console.debug('[MoonWell] onMoonWellClick - 检测到正在长按检测，不处理点击事件，让TowerBuilder处理');
             // 阻止事件传播，让TowerBuilder处理
             event.propagationStopped = true;
             return;
@@ -579,7 +579,7 @@ export class MoonWell extends Component {
         }
         
         if (towerBuilder && towerBuilder.isDraggingBuilding) {
-            console.info('[MoonWell] onMoonWellClick - 检测到正在拖拽建筑物，直接调用TowerBuilder.endDraggingBuilding处理');
+            console.debug('[MoonWell] onMoonWellClick - 检测到正在拖拽建筑物，直接调用TowerBuilder.endDraggingBuilding处理');
             // 直接调用TowerBuilder的方法来处理拖拽结束，而不是依赖事件传播
             if (towerBuilder.endDraggingBuilding && typeof towerBuilder.endDraggingBuilding === 'function') {
                 towerBuilder.endDraggingBuilding(event);
@@ -695,9 +695,9 @@ export class MoonWell extends Component {
      * 移动时的触摸结束事件
      */
     onMoveTouchEnd(event: EventTouch) {
-        console.info('[MoonWell] onMoveTouchEnd - 触摸结束事件, isMoving:', this.isMoving, 'gridPanel存在:', !!this.gridPanel, 'propagationStopped:', event.propagationStopped);
+        console.debug('[MoonWell] onMoveTouchEnd - 触摸结束事件, isMoving:', this.isMoving, 'gridPanel存在:', !!this.gridPanel, 'propagationStopped:', event.propagationStopped);
         if (!this.isMoving || !this.gridPanel) {
-            console.info('[MoonWell] onMoveTouchEnd - 不在移动状态或gridPanel不存在，直接返回');
+            console.debug('[MoonWell] onMoveTouchEnd - 不在移动状态或gridPanel不存在，直接返回');
             return;
         }
 

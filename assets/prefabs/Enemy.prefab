@@ -175,7 +175,7 @@
     },
     "_type": 0,
     "_fillType": 0,
-    "_sizeMode": 1,
+    "_sizeMode": 0,
     "_fillCenter": {
       "__type__": "cc.Vec2",
       "x": 0,
@@ -256,7 +256,7 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "15544a19-ca37-4bc0-a4bb-3f6891d6973c@f9941",
+      "__uuid__": "7f40ce9c-60fa-4c0e-8ca9-58b7cc145977@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 0,
@@ -300,103 +300,13 @@
       "__uuid__": "af17709f-82d8-43eb-bc51-d67f9a836193",
       "__expectedType__": "cc.Prefab"
     },
-    "idleAnimationFrames": [
-      {
-        "__uuid__": "e444a13f-8436-427e-993d-5420cb74b2fa@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      },
-      {
-        "__uuid__": "fd638832-3544-4c46-b8cd-754424627d78@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      },
-      {
-        "__uuid__": "6addf82c-0542-46cf-a668-34cf3e34000d@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      },
-      {
-        "__uuid__": "3f85f2ed-8d3e-456e-9526-d16368185d6f@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      },
-      {
-        "__uuid__": "e4febd61-13ea-4cc4-aa4e-67f194ec4fe3@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      },
-      {
-        "__uuid__": "541e26ec-2a9d-4192-933a-8a0a5d01554d@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      }
-    ],
-    "walkAnimationFrames": [
-      {
-        "__uuid__": "e63bf309-b852-4ecf-862b-950f15802b84@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      },
-      {
-        "__uuid__": "e16893f1-efb0-4419-b810-1df21d0626ac@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      },
-      {
-        "__uuid__": "c2614d73-8dd5-4e80-aca0-8d9d6645e9a5@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      },
-      {
-        "__uuid__": "5ff32dfe-96c8-4157-b9aa-0e3489d27dc9@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      },
-      {
-        "__uuid__": "f763e227-4ff7-4ced-8a93-14ad947ed7fd@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      },
-      {
-        "__uuid__": "169fa19b-8314-4ff8-8963-0aceb2210291@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      },
-      {
-        "__uuid__": "5bd0409e-becd-4987-8ac6-a152bbdbc16a@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      },
-      {
-        "__uuid__": "012caf89-f81b-4be4-bdab-820cc8184910@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      }
-    ],
-    "attackAnimationFrames": [],
-    "hitAnimationFrames": [
-      {
-        "__uuid__": "577901a7-1364-4e9a-b865-1f8a7bf33f7d@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      },
-      {
-        "__uuid__": "7454fa21-93ad-4091-86f5-8dda82c120cd@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      },
-      {
-        "__uuid__": "ea30b108-abd0-482b-9a92-07058bc3a988@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      },
-      {
-        "__uuid__": "c5b69489-9e1e-47c1-81cc-a4f50528f580@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      }
-    ],
-    "deathAnimationFrames": [
-      {
-        "__uuid__": "85b39c87-6ab5-4d7d-b2fc-96ccf2511b63@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      },
-      {
-        "__uuid__": "71543cbe-a1f6-4cc0-acb1-a12139c2b36c@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      },
-      {
-        "__uuid__": "04a90421-6fc6-4b97-97fc-edca5c57f3e5@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      },
-      {
-        "__uuid__": "bfb169ad-3ef4-4ddb-aebd-8f26a69b9632@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      }
-    ],
+    "unitName": "兽人",
+    "unitDescription": "普通的兽人，攻击力和生命值较低，但数量众多。",
+    "unitIcon": null,
+    "idleAnimationFrames": [],
+    "walkAnimationFrames": [],
+    "hitAnimationFrames": [],
+    "deathAnimationFrames": [],
     "attackAnimationName": "orc-attck",
     "idleAnimationDuration": 1,
     "walkAnimationDuration": 1,
@@ -404,14 +314,8 @@
     "hitAnimationDuration": 0.3,
     "deathAnimationDuration": 0.5,
     "goldReward": 2,
-    "deathSound": {
-      "__uuid__": "5f5040ec-9e12-4968-82e9-045a7c661a24",
-      "__expectedType__": "cc.AudioClip"
-    },
-    "attackSound": {
-      "__uuid__": "829e6c64-7280-4b02-a024-949a87475736",
-      "__expectedType__": "cc.AudioClip"
-    },
+    "deathSound": null,
+    "attackSound": null,
     "_id": ""
   },
   {
@@ -437,10 +341,7 @@
         "__expectedType__": "cc.AnimationClip"
       }
     ],
-    "_defaultClip": {
-      "__uuid__": "213b4134-dbdf-4bb4-a844-a6e4ae58efbd",
-      "__expectedType__": "cc.AnimationClip"
-    },
+    "_defaultClip": null,
     "_id": ""
   },
   {

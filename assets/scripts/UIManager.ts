@@ -41,21 +41,21 @@ export class UIManager extends Component {
         // 绑定按钮事件
         if (this.buildButton) {
             this.buildButton.node.on(Button.EventType.CLICK, this.onBuildButtonClick, this);
-            console.info('UIManager: BuildButton event bound');
+            console.debug('UIManager: BuildButton event bound');
         } else {
             console.error('UIManager: BuildButton is null!');
         }
 
         if (this.restartButton) {
             this.restartButton.node.on(Button.EventType.CLICK, this.onRestartButtonClick, this);
-            console.info('UIManager: RestartButton event bound');
+            console.debug('UIManager: RestartButton event bound');
         } else {
             console.error('UIManager: RestartButton is null!');
         }
 
         // 检查TowerBuilder
         if (this.towerBuilder) {
-            console.info('UIManager: TowerBuilder node set:', this.towerBuilder.name);
+            console.debug('UIManager: TowerBuilder node set:', this.towerBuilder.name);
         } else {
             console.warn('UIManager: TowerBuilder node not set!');
         }
@@ -72,7 +72,7 @@ export class UIManager extends Component {
      */
     createBottomSelectionUI() {
         // 直接创建底部选区，不使用UIBuilder，确保它能立即显示
-        console.info('UIManager: Creating BottomSelection directly');
+        console.debug('UIManager: Creating BottomSelection directly');
         
         // 获取Canvas节点
         let canvasNode = find('Canvas');
@@ -197,7 +197,7 @@ export class UIManager extends Component {
         
         if (this.talentPanelPrefab) {
             // 使用预制体实例化
-            console.info('UIManager: Creating TalentPanel from prefab');
+            console.debug('UIManager: Creating TalentPanel from prefab');
             talentPanel = instantiate(this.talentPanelPrefab);
             talentPanel.name = 'TalentPanel';
             talentPanel.setParent(bottomSelectionNode);
@@ -230,16 +230,16 @@ export class UIManager extends Component {
             
             if (talentSystem) {
                 talentSystem.talentPanel = talentPanel;
-                console.info('UIManager: TalentSystem component found in prefab, talentPanel property set to:', talentPanel.name);
+                console.debug('UIManager: TalentSystem component found in prefab, talentPanel property set to:', talentPanel.name);
             } else {
                 console.warn('UIManager: TalentSystem component not found in prefab, adding it dynamically');
                 const newTalentSystem = talentPanel.addComponent(TalentSystem);
                 newTalentSystem.talentPanel = talentPanel;
-                console.info('UIManager: TalentSystem component added dynamically, talentPanel property set');
+                console.debug('UIManager: TalentSystem component added dynamically, talentPanel property set');
             }
         } else {
             // 降级方案：动态创建（保持向后兼容）
-            console.info('UIManager: Creating TalentPanel dynamically (prefab not set)');
+            console.debug('UIManager: Creating TalentPanel dynamically (prefab not set)');
             talentPanel = new Node('TalentPanel');
             talentPanel.setParent(bottomSelectionNode);
             
@@ -369,7 +369,7 @@ export class UIManager extends Component {
             const talentItemButton = talentItem.addComponent(Button);
             // 绑定点击事件
             talentItemButton.node.on(Button.EventType.CLICK, () => {
-                console.info(`天赋条目点击: ${talent.name}`);
+                console.debug(`天赋条目点击: ${talent.name}`);
                 // 这里可以添加天赋选择的逻辑
                 this.showAnnouncement(`已选择天赋: ${talent.name}`);
             }, this);
@@ -588,7 +588,7 @@ export class UIManager extends Component {
             }
         }, this);
         
-        console.info('UIManager: BottomSelection created directly with new layout');
+        console.debug('UIManager: BottomSelection created directly with new layout');
     }
     
     /**
@@ -636,14 +636,14 @@ export class UIManager extends Component {
         
         // 绑定点击事件
         button.node.on(Button.EventType.CLICK, () => {
-            console.info(`${text} button clicked, panels: ${panels.length}`);
+            console.debug(`${text} button clicked, panels: ${panels.length}`);
             
             // 直接获取面板引用，确保正确切换
             const gamePanel = panels[0];
             const talentPanel = panels[1];
             const settingsPanel = panels[2];
             
-            console.info(`UIManager: Panel references - Game: ${gamePanel?.name}, Talent: ${talentPanel?.name}, Settings: ${settingsPanel?.name}`);
+            console.debug(`UIManager: Panel references - Game: ${gamePanel?.name}, Talent: ${talentPanel?.name}, Settings: ${settingsPanel?.name}`);
             
             // 获取底部选区背景组件，用于更新整个区域的背景颜色
             let bottomSelectionBackground = bottomSelectionNode.getComponent(Graphics);
@@ -662,47 +662,47 @@ export class UIManager extends Component {
                     gamePanel.active = true; 
                     // 确保激活的面板位于最前面（在按钮容器之下）
                     gamePanel.setSiblingIndex(bottomSelectionNode.children.length - 2);
-                    console.info('UIManager: Showing Game panel'); 
+                    console.debug('UIManager: Showing Game panel'); 
                 }
-                if (talentPanel) { talentPanel.active = false; console.info('UIManager: Hiding Talent panel'); }
-                if (settingsPanel) { settingsPanel.active = false; console.info('UIManager: Hiding Settings panel'); }
+                if (talentPanel) { talentPanel.active = false; console.debug('UIManager: Hiding Talent panel'); }
+                if (settingsPanel) { settingsPanel.active = false; console.debug('UIManager: Hiding Settings panel'); }
                 
                 // 切换到底部选区默认背景颜色
                 bottomSelectionBackground.fillColor = new Color(0, 0, 0, 150); // 半透明黑色背景
                 bottomSelectionBackground.rect(-width / 2, -height / 2, width, height);
                 bottomSelectionBackground.fill();
             } else if (text === '天赋') {
-                if (gamePanel) { gamePanel.active = false; console.info('UIManager: Hiding Game panel'); }
+                if (gamePanel) { gamePanel.active = false; console.debug('UIManager: Hiding Game panel'); }
                 if (talentPanel) { 
                     talentPanel.active = true; 
                     // 确保激活的面板位于最前面（在按钮容器之下）
                     talentPanel.setSiblingIndex(bottomSelectionNode.children.length - 2);
-                    console.info('UIManager: Showing Talent panel'); 
+                    console.debug('UIManager: Showing Talent panel'); 
                     
                     // 获取 TalentSystem 组件（应该在创建 TalentPanel 时已经添加）
                     const talentSystem = talentPanel.getComponent(TalentSystem);
                     if (talentSystem) {
                         // 调用createTalentPanelUI方法确保UI被正确创建
-                        console.info('UIManager: Calling createTalentPanelUI on TalentSystem');
+                        console.debug('UIManager: Calling createTalentPanelUI on TalentSystem');
                         talentSystem.createTalentPanelUI();
                     } else {
                         console.error('UIManager: TalentSystem component not found on TalentPanel!');
                     }
                 }
-                if (settingsPanel) { settingsPanel.active = false; console.info('UIManager: Hiding Settings panel'); }
+                if (settingsPanel) { settingsPanel.active = false; console.debug('UIManager: Hiding Settings panel'); }
                 
                 // 切换到底部选区天赋面板背景颜色
                 bottomSelectionBackground.fillColor = new Color(0, 0, 40, 220); // 天赋面板蓝色背景
                 bottomSelectionBackground.rect(-width / 2, -height / 2, width, height);
                 bottomSelectionBackground.fill();
             } else if (text === '设置') {
-                if (gamePanel) { gamePanel.active = false; console.info('UIManager: Hiding Game panel'); }
-                if (talentPanel) { talentPanel.active = false; console.info('UIManager: Hiding Talent panel'); }
+                if (gamePanel) { gamePanel.active = false; console.debug('UIManager: Hiding Game panel'); }
+                if (talentPanel) { talentPanel.active = false; console.debug('UIManager: Hiding Talent panel'); }
                 if (settingsPanel) { 
                     settingsPanel.active = true; 
                     // 确保激活的面板位于最前面（在按钮容器之下）
                     settingsPanel.setSiblingIndex(bottomSelectionNode.children.length - 2);
-                    console.info('UIManager: Showing Settings panel'); 
+                    console.debug('UIManager: Showing Settings panel'); 
                 }
                 
                 // 切换到底部选区设置面板背景颜色
@@ -721,11 +721,11 @@ export class UIManager extends Component {
     private autoCreateCountdownPopup() {
         // 如果countdownPopup已经存在，不需要创建
         if (this.countdownPopup) {
-            console.info('UIManager: CountdownPopup already exists');
+            console.debug('UIManager: CountdownPopup already exists');
             return;
         }
         
-        console.info('UIManager: Auto-creating CountdownPopup');
+        console.debug('UIManager: Auto-creating CountdownPopup');
         
         // 获取Canvas或屏幕尺寸
         const canvas = find('Canvas');
@@ -765,7 +765,7 @@ export class UIManager extends Component {
         }
         uiTransform.setContentSize(popupSize, popupSize);
         
-        console.info(`UIManager: CountdownPopup created automatically at position (${posX}, ${posY}) with size ${popupSize}x${popupSize}`);
+        console.debug(`UIManager: CountdownPopup created automatically at position (${posX}, ${posY}) with size ${popupSize}x${popupSize}`);
     }
 
     createEffects() {
@@ -883,7 +883,7 @@ export class UIManager extends Component {
         if (gmNode) {
             this.gameManager = gmNode.getComponent(GameManagerClass);
             if (this.gameManager) {
-                console.info('UIManager: Found GameManager by name');
+                console.debug('UIManager: Found GameManager by name');
                 return;
             }
         }
@@ -902,7 +902,7 @@ export class UIManager extends Component {
             };
             this.gameManager = findInScene(scene, GameManagerClass);
             if (this.gameManager) {
-                console.info('UIManager: Found GameManager by recursive search');
+                console.debug('UIManager: Found GameManager by recursive search');
                 return;
             }
         }
@@ -911,12 +911,12 @@ export class UIManager extends Component {
     }
 
     onBuildButtonClick() {
-        console.info('UIManager: BuildButton clicked!');
+        console.debug('UIManager: BuildButton clicked!');
         if (this.towerBuilder) {
             const builderScript = this.towerBuilder.getComponent('TowerBuilder') as any;
             if (builderScript) {
                 if (builderScript.onBuildButtonClick) {
-                    console.info('UIManager: Calling TowerBuilder.onBuildButtonClick');
+                    console.debug('UIManager: Calling TowerBuilder.onBuildButtonClick');
                     builderScript.onBuildButtonClick();
                 } else {
                     console.error('UIManager: TowerBuilder script has no onBuildButtonClick method!');
@@ -930,24 +930,24 @@ export class UIManager extends Component {
     }
 
     onRestartButtonClick() {
-        console.info('UIManager: RestartButton clicked!');
+        console.debug('UIManager: RestartButton clicked!');
         
         // 重新查找GameManager
         this.findGameManager();
         
         if (this.gameManager) {
-            console.info('UIManager: Calling GameManager.restartGame');
+            console.debug('UIManager: Calling GameManager.restartGame');
             this.gameManager.restartGame();
         } else {
             console.warn('UIManager: GameManager is null! Trying to reload scene directly.');
             // 如果还是找不到，尝试直接重新加载场景
             const scene = director.getScene();
             if (scene && scene.name) {
-                console.info('UIManager: Reloading scene:', scene.name);
+                console.debug('UIManager: Reloading scene:', scene.name);
                 director.loadScene(scene.name);
             } else {
                 // 如果场景名称为空，尝试使用默认场景名称
-                console.info('UIManager: Scene name is empty, trying default name "scene"');
+                console.debug('UIManager: Scene name is empty, trying default name "scene"');
                 director.loadScene('scene');
             }
         }
@@ -959,7 +959,7 @@ export class UIManager extends Component {
      * @param onManualClose 手动关闭回调
      */
     showCountdownPopup(onComplete: () => void, onManualClose: () => void) {
-        console.info('UIManager: Showing countdown popup');
+        console.debug('UIManager: Showing countdown popup');
         
         this.onCountdownComplete = onComplete;
         this.onCountdownManualClose = onManualClose;
@@ -968,7 +968,7 @@ export class UIManager extends Component {
         this.autoCreateCountdownPopup();
         
         if (this.countdownPopup) {
-            console.info('UIManager: CountdownPopup exists, calling show()');
+            console.debug('UIManager: CountdownPopup exists, calling show()');
             this.countdownPopup.show(
                 this.onCountdownCompleteHandler.bind(this),
                 this.onCountdownManualCloseHandler.bind(this)
@@ -984,7 +984,7 @@ export class UIManager extends Component {
      * 隐藏倒计时弹窗
      */
     hideCountdownPopup() {
-        console.info('UIManager: Hiding countdown popup');
+        console.debug('UIManager: Hiding countdown popup');
         
         if (this.countdownPopup) {
             this.countdownPopup.hide();
@@ -995,7 +995,7 @@ export class UIManager extends Component {
      * 倒计时完成回调处理
      */
     private onCountdownCompleteHandler() {
-        console.info('UIManager: Countdown completed');
+        console.debug('UIManager: Countdown completed');
         
         if (this.onCountdownComplete) {
             this.onCountdownComplete();
@@ -1009,7 +1009,7 @@ export class UIManager extends Component {
      * 手动关闭倒计时弹窗回调处理
      */
     private onCountdownManualCloseHandler() {
-        console.info('UIManager: Countdown manually closed');
+        console.debug('UIManager: Countdown manually closed');
         
         if (this.onCountdownManualClose) {
             this.onCountdownManualClose();
@@ -1153,7 +1153,7 @@ export class UIManager extends Component {
         confirmLabelTransform.setAnchorPoint(0.5, 0.5);
         
         confirmButtonComp.node.on(Button.EventType.CLICK, () => {
-            console.info('UIManager: Confirm button clicked');
+            console.debug('UIManager: Confirm button clicked');
             onConfirm();
             // 销毁确认框
             if (this.confirmDialogNode && this.confirmDialogNode.isValid) {
@@ -1208,7 +1208,7 @@ export class UIManager extends Component {
         cancelLabelTransform.setAnchorPoint(0.5, 0.5);
         
         cancelButtonComp.node.on(Button.EventType.CLICK, () => {
-            console.info('UIManager: Cancel button clicked');
+            console.debug('UIManager: Cancel button clicked');
             onCancel();
             // 销毁确认框
             if (this.confirmDialogNode && this.confirmDialogNode.isValid) {
@@ -1217,30 +1217,30 @@ export class UIManager extends Component {
             }
         }, this);
         
-        console.info('UIManager: Confirm dialog created');
+        console.debug('UIManager: Confirm dialog created');
     }
     
     /**
      * 返回按钮事件方法，从游戏主体页面返回到三页签首页
      */
     onBackToHome() {
-        console.info('UIManager: onBackToHome called');
+        console.debug('UIManager: onBackToHome called');
         
         // 显示确认框
         this.createConfirmDialog(
             '确定要退出游戏并返回首页吗？',
             () => {
                 // 确认退出
-                console.info('UIManager: User confirmed exit to home');
+                console.debug('UIManager: User confirmed exit to home');
                 
                 // 1. 使用已有的gameManager属性，如果不存在则查找
                 if (!this.gameManager) {
-                    console.info('UIManager: GameManager not found, trying to find it');
+                    console.debug('UIManager: GameManager not found, trying to find it');
                     this.findGameManager();
                 }
                 
                 if (this.gameManager) {
-                    console.info('UIManager: Using existing GameManager, restarting game');
+                    console.debug('UIManager: Using existing GameManager, restarting game');
                     this.gameManager.restartGame();
                 } else {
                     console.warn('UIManager: GameManager not found, cannot restart game');
@@ -1250,14 +1250,14 @@ export class UIManager extends Component {
                 // 查找或创建底部三页签UI
                 let bottomSelectionNode = find('Canvas/BottomSelection');
                 if (!bottomSelectionNode) {
-                    console.info('UIManager: BottomSelection not found, creating it');
+                    console.debug('UIManager: BottomSelection not found, creating it');
                     this.createBottomSelectionUI();
                     bottomSelectionNode = find('Canvas/BottomSelection');
                 }
                 
                 // 确保底部三页签显示
                 if (bottomSelectionNode) {
-                    console.info('UIManager: Showing BottomSelection');
+                    console.debug('UIManager: Showing BottomSelection');
                     bottomSelectionNode.active = true;
                     
                     // 确保切换到游戏主体面板
@@ -1268,15 +1268,15 @@ export class UIManager extends Component {
                     if (gamePanel) {
                         gamePanel.active = true;
                         gamePanel.setSiblingIndex(bottomSelectionNode.children.length - 2);
-                        console.info('UIManager: GameMainPanel shown');
+                        console.debug('UIManager: GameMainPanel shown');
                     }
                     if (talentPanel) {
                         talentPanel.active = false;
-                        console.info('UIManager: TalentPanel hidden');
+                        console.debug('UIManager: TalentPanel hidden');
                     }
                     if (settingsPanel) {
                         settingsPanel.active = false;
-                        console.info('UIManager: SettingsPanel hidden');
+                        console.debug('UIManager: SettingsPanel hidden');
                     }
                 }
                 
@@ -1292,13 +1292,13 @@ export class UIManager extends Component {
                     const node = find(nodePath);
                     if (node) {
                         node.active = false;
-                        console.info(`UIManager: ${nodePath} hidden`);
+                        console.debug(`UIManager: ${nodePath} hidden`);
                     }
                 }
             },
             () => {
                 // 取消退出
-                console.info('UIManager: User canceled exit to home');
+                console.debug('UIManager: User canceled exit to home');
             }
         );
     }
@@ -1307,19 +1307,19 @@ export class UIManager extends Component {
      * 手动重置UI状态
      */
     manualResetUI() {
-        console.info('UIManager: manualResetUI called');
+        console.debug('UIManager: manualResetUI called');
         
         // 查找或创建底部三页签UI
         let bottomSelectionNode = find('Canvas/BottomSelection');
         if (!bottomSelectionNode) {
-            console.info('UIManager: BottomSelection not found, creating it');
+            console.debug('UIManager: BottomSelection not found, creating it');
             this.createBottomSelectionUI();
             bottomSelectionNode = find('Canvas/BottomSelection');
         }
         
         // 确保底部三页签显示
         if (bottomSelectionNode) {
-            console.info('UIManager: Showing BottomSelection');
+            console.debug('UIManager: Showing BottomSelection');
             bottomSelectionNode.active = true;
             
             // 确保切换到游戏主体面板
@@ -1330,15 +1330,15 @@ export class UIManager extends Component {
             if (gamePanel) {
                 gamePanel.active = true;
                 gamePanel.setSiblingIndex(bottomSelectionNode.children.length - 2);
-                console.info('UIManager: GameMainPanel shown');
+                console.debug('UIManager: GameMainPanel shown');
             }
             if (talentPanel) {
                 talentPanel.active = false;
-                console.info('UIManager: TalentPanel hidden');
+                console.debug('UIManager: TalentPanel hidden');
             }
             if (settingsPanel) {
                 settingsPanel.active = false;
-                console.info('UIManager: SettingsPanel hidden');
+                console.debug('UIManager: SettingsPanel hidden');
             }
         }
         
@@ -1354,10 +1354,10 @@ export class UIManager extends Component {
             const node = find(nodePath);
             if (node) {
                 node.active = false;
-                console.info(`UIManager: ${nodePath} hidden`);
+                console.debug(`UIManager: ${nodePath} hidden`);
             }
         }
         
-        console.info('UIManager: UI reset completed');
+        console.debug('UIManager: UI reset completed');
     }
 }
