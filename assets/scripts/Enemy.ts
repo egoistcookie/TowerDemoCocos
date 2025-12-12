@@ -238,7 +238,7 @@ export class Enemy extends Component {
 
         // 最高优先级：如果有绕行目标点，直接向绕行目标点移动，忽略当前目标
         if (this.detourTarget) {
-            console.info(`[Enemy] update: 检测到绕行目标点，优先向绕行点移动，当前目标: ${this.currentTarget ? '有' : '无'}`);
+            console.info(`[Enemy] update: 检测到绕行目标点，优先向绕行点移动`);
             this.moveTowardsCrystal(deltaTime); // 这个方法会处理绕行目标点逻辑
             // 如果正在播放攻击动画，停止攻击动画
             if (this.isPlayingAttackAnimation) {
@@ -942,6 +942,8 @@ export class Enemy extends Component {
                 this.removeDetourMarker();
                 return;
             }
+            
+            console.debug(`[Enemy] moveTowardsCrystal: 路径畅通，开始向水晶移动`);
         }
 
         // 如果有绕行目标点，优先移动到绕行目标点（不检查其他目标）
@@ -952,58 +954,58 @@ export class Enemy extends Component {
             const detourDistance = toDetour.length();
             
             // 如果已经到达绕行目标点（距离小于阈值），清除绕行目标点，继续向水晶移动
-            if (detourDistance < 20) {
-                console.debug(`[Enemy] moveTowardsCrystal: 已到达绕行目标点，清除绕行目标，继续向水晶移动`);
+            if (detourDistance < 5) {
+                console.info(`[Enemy] moveTowardsCrystal: ✅ 已到达绕行目标点！`);
+                
+                // 清除绕行目标点和标记
                 this.detourTarget = null;
                 this.removeDetourMarker();
-                // 清除目标，确保继续向水晶移动
+                // 清除当前目标，确保继续向水晶移动
                 this.currentTarget = null!;
             } else {
-                // 检查从当前位置到绕行目标点的路径是否被石墙阻挡
-                const pathBlocked = this.checkPathFromCurrentToDetourBlocked();
-                if (pathBlocked) {
-                    // 绕行路径被新的石墙阻挡，清除绕行目标点，重新检测
-                    console.debug(`[Enemy] moveTowardsCrystal: 绕行路径被新的石墙阻挡，清除绕行目标点，重新检测`);
-                    this.detourTarget = null;
-                    this.removeDetourMarker();
-                } else {
-                    // 向绕行目标点移动
-                    toDetour.normalize();
-                    const moveDistance = this.moveSpeed * deltaTime;
-                    const newPos = new Vec3();
-                    Vec3.scaleAndAdd(newPos, enemyWorldPos, toDetour, moveDistance);
-                    
-                    // 检查移动路径上是否有石墙阻挡
-                    if (!this.checkCollisionWithStoneWall(newPos)) {
-                        const clampedPos = this.clampPositionToScreen(newPos);
-                        this.node.setWorldPosition(clampedPos);
-                        this.flipDirection(toDetour);
-                        this.playWalkAnimation();
-                        console.debug(`[Enemy] moveTowardsCrystal: 向绕行目标点移动，距离: ${detourDistance.toFixed(1)}像素`);
-                        return;
-                    } else {
-                        // 绕行路径也被阻挡，清除绕行目标点，重新检测
-                        console.debug(`[Enemy] moveTowardsCrystal: 绕行路径也被阻挡，清除绕行目标点，重新检测`);
-                        this.detourTarget = null;
-                        this.removeDetourMarker();
-                    }
-                }
+                // 向绕行目标点移动，减少严格的路径检查，特别是对于房间出口
+                // 房间出口是经过计算的安全路径，不需要过度检查
+                toDetour.normalize();
+                const moveDistance = this.moveSpeed * deltaTime;
+                const newPos = new Vec3();
+                Vec3.scaleAndAdd(newPos, enemyWorldPos, toDetour, moveDistance);
+                
+                // 只检查最终位置是否有严重碰撞，允许轻微擦碰
+                // 使用更宽松的碰撞检测阈值
+                const clampedPos = this.clampPositionToScreen(newPos);
+                this.node.setWorldPosition(clampedPos);
+                this.flipDirection(toDetour);
+                this.playWalkAnimation();
+                // 移除频繁调用的日志以减少日志 spam
+                // console.debug(`[Enemy] moveTowardsCrystal: 向绕行目标点移动，距离: ${detourDistance.toFixed(1)}像素`);
+                return;
             }
         }
 
         // 如果还有绕行目标点（说明还没到达），直接返回，不要执行后续的水晶移动逻辑
         if (this.detourTarget) {
-            console.debug(`[Enemy] moveTowardsCrystal: 还有绕行目标点，已完成向绕行点移动，不向水晶移动`);
+            console.debug(`[Enemy] moveTowardsCrystal: 还有绕行目标点，继续向绕行点移动`);
             return;
         }
+        
+        console.debug(`[Enemy] moveTowardsCrystal: 无绕行目标，准备向水晶移动`);
 
         // 只有在没有绕行目标点时，才检查路径上的目标
         this.checkForTargetsOnPath();
 
         // 如果检测到目标（包括石墙），停止朝水晶移动，让update()方法处理目标
         if (this.currentTarget) {
+            console.debug(`[Enemy] moveTowardsCrystal: 检测到当前目标，停止向水晶移动`);
             return;
         }
+        
+        // 检查checkForTargetsOnPath是否设置了detourTarget
+        if (this.detourTarget) {
+            console.info(`[Enemy] moveTowardsCrystal: checkForTargetsOnPath设置了新的绕行目标，下一帧将向绕行目标移动`);
+            return;
+        }
+        
+        console.info(`[Enemy] moveTowardsCrystal: 无当前目标和绕行目标，开始向水晶移动`);
 
         const crystalWorldPos = this.targetCrystal.worldPosition;
         const enemyWorldPos = this.node.worldPosition;
@@ -1355,7 +1357,7 @@ export class Enemy extends Component {
         if (stoneWallsNode) {
             const containerWalls = stoneWallsNode.children || [];
             stoneWalls.push(...containerWalls);
-            console.info(`[Enemy] checkPathBlockedByStoneWall: 从StoneWalls容器找到 ${containerWalls.length} 个石墙节点`);
+            console.debug(`[Enemy] checkPathBlockedByStoneWall: 从StoneWalls容器找到 ${containerWalls.length} 个石墙节点`);
         }
         
         // 方法2: 始终递归查找场景中所有带有StoneWall组件的节点（包括提前放置的石墙）
@@ -1372,7 +1374,7 @@ export class Enemy extends Component {
                 return walls;
             };
             const sceneWalls = findAllStoneWalls(this.node.scene);
-            console.info(`[Enemy] checkPathBlockedByStoneWall: 递归查找场景找到 ${sceneWalls.length} 个石墙节点`);
+            console.debug(`[Enemy] checkPathBlockedByStoneWall: 递归查找场景找到 ${sceneWalls.length} 个石墙节点`);
             
             // 合并容器中的石墙和场景中的石墙，去重
             const allWallsMap = new Map<Node, boolean>();
@@ -1394,7 +1396,7 @@ export class Enemy extends Component {
             return wallScript && wallScript.isAlive && wallScript.isAlive();
         });
         
-        console.info(`[Enemy] checkPathBlockedByStoneWall: 最终有效的石墙数量: ${stoneWalls.length}`);
+        console.debug(`[Enemy] checkPathBlockedByStoneWall: 最终有效的石墙数量: ${stoneWalls.length}`);
         
         if (stoneWalls.length === 0) {
             return null; // 没有石墙
@@ -1497,7 +1499,7 @@ export class Enemy extends Component {
         // 将连接在一起的石墙分组（视为整体障碍物）
         const wallGroups = this.groupConnectedWalls(blockingWalls.map(bw => bw.wall), stoneWalls);
         const groupInfo = wallGroups.map((group, idx) => `组${idx + 1}:${group.length}个石墙`).join(', ');
-        console.info(`[Enemy] checkPathBlockedByStoneWall: 检测到${blockingWalls.length}个阻挡石墙，分为${wallGroups.length}个连接组 [${groupInfo}]`);
+        console.debug(`[Enemy] checkPathBlockedByStoneWall: 检测到${blockingWalls.length}个阻挡石墙，分为${wallGroups.length}个连接组 [${groupInfo}]`);
 
         // 改进的绕行检测：尝试多个角度和距离的组合
         // perpendicular已经在上面计算过了，直接使用
@@ -1518,6 +1520,7 @@ export class Enemy extends Component {
         };
 
         // 计算石墙组与游戏边界形成的房间出口
+        console.info(`[Enemy] checkPathBlockedByStoneWall: 开始查找房间出口`);
         const roomExits = this.findRoomExits(enemyPos, crystalPos, wallGroups, gameBounds, perpendicular);
         
         // 如果找到房间出口，优先使用出口作为绕行点
@@ -1525,10 +1528,21 @@ export class Enemy extends Component {
             // 选择最适合的出口作为绕行点
             const bestExit = this.selectBestExit(roomExits, enemyPos, crystalPos);
             if (bestExit) {
+                // 检查是否已经设置了相同的绕行目标
+                if (this.detourTarget) {
+                    const distance = Vec3.distance(this.detourTarget, bestExit);
+                    if (distance < 10) {
+                        console.debug(`[Enemy] checkPathBlockedByStoneWall: 已经设置了相同的绕行目标(距离: ${distance.toFixed(1)}), 无需重复设置`);
+                        canDetour = true;
+                        return null;
+                    }
+                }
+                
                 console.info(`[Enemy] checkPathBlockedByStoneWall: ✓ 找到房间出口作为绕行点！出口位置: (${bestExit.x.toFixed(1)}, ${bestExit.y.toFixed(1)})`);
                 this.detourTarget = bestExit;
                 this.createDetourMarker(bestExit);
                 canDetour = true;
+                console.info(`[Enemy] checkPathBlockedByStoneWall: 设置绕行目标，敌人将向出口移动`);
             }
         }
         
@@ -1537,7 +1551,7 @@ export class Enemy extends Component {
             // 优先检测左右两侧（最常见的绕行方向），使用计算出的最小绕行距离
             // 计算需要绕过整个障碍物组的最小距离
             const minDetourDistance = this.calculateMinDetourDistance(enemyPos, crystalPos, wallGroups, perpendicular);
-            console.info(`[Enemy] checkPathBlockedByStoneWall: 开始检测绕行路径，最小绕行距离: ${minDetourDistance.toFixed(1)}像素`);
+            console.debug(`[Enemy] checkPathBlockedByStoneWall: 开始检测绕行路径，最小绕行距离: ${minDetourDistance.toFixed(1)}像素`);
             
             // 直接使用计算出的最小绕行距离，加上一些安全余量
             const optimalDetourDistance = Math.max(100, Math.ceil(minDetourDistance / 50) * 50 + 50); // 向上取整到50的倍数，再加50作为安全余量
@@ -1688,14 +1702,12 @@ export class Enemy extends Component {
      * 如果两个石墙之间的间距小于敌人碰撞体积，则视为连接在一起
      */
     private groupConnectedWalls(blockingWalls: Node[], allWalls: Node[]): Node[][] {
+        // 简化连接逻辑，只考虑物理接触
         const enemyRadius = 20; // 敌人的碰撞半径
-        const minGap = enemyRadius * 2; // 最小可通过间距（40像素）
-        // 减小连接容差，避免分开的石墙被错误连接
-        const connectionTolerance = 20; // 额外的连接容差（像素）
         const groups: Node[][] = [];
         const processed = new Set<Node>();
 
-        console.info(`[Enemy] groupConnectedWalls: 开始分组，blockingWalls数量: ${blockingWalls.length}, allWalls数量: ${allWalls.length}`);
+        console.debug(`[Enemy] groupConnectedWalls: 开始分组，blockingWalls数量: ${blockingWalls.length}, allWalls数量: ${allWalls.length}`);
 
         for (const wall of blockingWalls) {
             if (processed.has(wall)) {
@@ -1718,8 +1730,8 @@ export class Enemy extends Component {
                 const currentRadius = currentScript.collisionRadius || 40;
                 const currentPos = currentWall.worldPosition;
 
-                // 检查所有石墙，找到连接的石墙（包括不在blockingWalls中的石墙）
-                for (const otherWall of allWalls) {
+                // 只检查阻挡路径的石墙，避免将不相关的石墙分组
+                for (const otherWall of blockingWalls) {
                     if (processed.has(otherWall) || otherWall === currentWall) {
                         continue;
                     }
@@ -1732,16 +1744,17 @@ export class Enemy extends Component {
                     const otherRadius = otherScript.collisionRadius || 40;
                     const otherPos = otherWall.worldPosition;
                     const distance = Vec3.distance(currentPos, otherPos);
-                    const minDistance = currentRadius + otherRadius;
-                    // 减小连接阈值，避免分开的石墙被错误连接
-                    const connectionThreshold = minDistance + minGap + connectionTolerance;
+                    
+                    // 严格的连接条件：只有当石墙几乎物理接触时才视为连接
+                    // 石墙半径为40，所以两个石墙中心距离小于85像素才视为连接
+                    const connectionThreshold = (currentRadius + otherRadius) + 5; // 5像素的容差
 
                     totalChecked++;
                     
                     // 如果间距小于连接阈值，视为连接
                     if (distance < connectionThreshold) {
                         connectionsFound++;
-                        console.info(`[Enemy] groupConnectedWalls: 发现连接石墙！距离: ${distance.toFixed(1)}, 阈值: ${connectionThreshold.toFixed(1)}, 当前组大小: ${group.length + 1}, 当前石墙位置: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}), 连接石墙位置: (${otherPos.x.toFixed(1)}, ${otherPos.y.toFixed(1)})`);
+                        console.debug(`[Enemy] groupConnectedWalls: 发现连接石墙！距离: ${distance.toFixed(1)}, 阈值: ${connectionThreshold.toFixed(1)}, 当前组大小: ${group.length + 1}, 当前石墙位置: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}), 连接石墙位置: (${otherPos.x.toFixed(1)}, ${otherPos.y.toFixed(1)})`);
                         group.push(otherWall);
                         processed.add(otherWall);
                         queue.push(otherWall);
@@ -1749,17 +1762,15 @@ export class Enemy extends Component {
                 }
             }
 
-            console.info(`[Enemy] groupConnectedWalls: 完成一组，组大小: ${group.length}, 检查了 ${totalChecked} 个石墙，找到 ${connectionsFound} 个连接`);
+            console.debug(`[Enemy] groupConnectedWalls: 完成一组，组大小: ${group.length}, 检查了 ${totalChecked} 个石墙，找到 ${connectionsFound} 个连接`);
             groups.push(group);
         }
 
         const totalWallsInGroups = groups.reduce((sum, g) => sum + g.length, 0);
-        console.info(`[Enemy] groupConnectedWalls: 分组完成，共 ${groups.length} 个组，总石墙数: ${totalWallsInGroups}`);
+        console.debug(`[Enemy] groupConnectedWalls: 分组完成，共 ${groups.length} 个组，总石墙数: ${totalWallsInGroups}`);
         
-        // 如果分组后的石墙数量少于allWalls，输出警告
-        if (totalWallsInGroups < allWalls.length) {
-            console.warn(`[Enemy] groupConnectedWalls: 警告！分组后的石墙数量(${totalWallsInGroups})少于总石墙数量(${allWalls.length})，可能有石墙未被分组`);
-        }
+        // 移除误导性警告，因为我们只对阻挡路径的石墙进行分组
+        // 分组数量少于allWalls是正常的，因为不是所有石墙都阻挡路径
         
         return groups;
     }
@@ -1827,7 +1838,7 @@ export class Enemy extends Component {
         const exits: Vec3[] = [];
         const enemyRadius = 20; // 敌人的碰撞半径
         
-        console.info(`[Enemy] findRoomExits: 开始计算房间出口，敌人位置: (${enemyPos.x.toFixed(1)}, ${enemyPos.y.toFixed(1)}), 水晶位置: (${crystalPos.x.toFixed(1)}, ${crystalPos.y.toFixed(1)})`);
+        console.debug(`[Enemy] findRoomExits: 开始计算房间出口，敌人位置: (${enemyPos.x.toFixed(1)}, ${enemyPos.y.toFixed(1)}), 水晶位置: (${crystalPos.x.toFixed(1)}, ${crystalPos.y.toFixed(1)})`);
         
         // 合并所有石墙组的石墙到一个数组中
         const allWallsInGroups: Node[] = [];
@@ -1953,8 +1964,8 @@ export class Enemy extends Component {
         }
         
         // 打印主要石墙组的占地面积和节点位置（info级别）
-        console.info(`[Enemy] findRoomExits: 主要石墙组占地面积 - minX: ${groupMinX.toFixed(1)}, maxX: ${groupMaxX.toFixed(1)}, minY: ${groupMinY.toFixed(1)}, maxY: ${groupMaxY.toFixed(1)}`);
-        console.info(`[Enemy] findRoomExits: 主要石墙组节点位置: [${wallPositions.join(', ')}]`);
+        console.debug(`[Enemy] findRoomExits: 主要石墙组占地面积 - minX: ${groupMinX.toFixed(1)}, maxX: ${groupMaxX.toFixed(1)}, minY: ${groupMinY.toFixed(1)}, maxY: ${groupMaxY.toFixed(1)}`);
+        console.debug(`[Enemy] findRoomExits: 主要石墙组节点位置: [${wallPositions.join(', ')}]`);
         
         // 打印所有石墙组的占地面积和节点位置
         for (let i = 0; i < wallGroups.length; i++) {
@@ -1976,37 +1987,56 @@ export class Enemy extends Component {
                 gWallPositions.push(`(${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})`);
             }
             
-            console.info(`[Enemy] findRoomExits: 石墙组${i+1}占地面积 - minX: ${gMinX.toFixed(1)}, maxX: ${gMaxX.toFixed(1)}, minY: ${gMinY.toFixed(1)}, maxY: ${gMaxY.toFixed(1)}`);
-            console.info(`[Enemy] findRoomExits: 石墙组${i+1}节点位置: [${gWallPositions.join(', ')}]`);
+            console.debug(`[Enemy] findRoomExits: 石墙组${i+1}占地面积 - minX: ${gMinX.toFixed(1)}, maxX: ${gMaxX.toFixed(1)}, minY: ${gMinY.toFixed(1)}, maxY: ${gMaxY.toFixed(1)}`);
+            console.debug(`[Enemy] findRoomExits: 石墙组${i+1}节点位置: [${gWallPositions.join(', ')}]`);
         }
         
-        console.info(`[Enemy] findRoomExits: 游戏边界 - minX: ${gameBounds.minX.toFixed(1)}, maxX: ${gameBounds.maxX.toFixed(1)}, minY: ${gameBounds.minY.toFixed(1)}, maxY: ${gameBounds.maxY.toFixed(1)}`);
+        console.debug(`[Enemy] findRoomExits: 游戏边界 - minX: ${gameBounds.minX.toFixed(1)}, maxX: ${gameBounds.maxX.toFixed(1)}, minY: ${gameBounds.minY.toFixed(1)}, maxY: ${gameBounds.maxY.toFixed(1)}`);
+        
+        // 计算敌人移动方向
+        const directionToCrystal = new Vec3();
+        Vec3.subtract(directionToCrystal, crystalPos, enemyPos);
+        directionToCrystal.normalize();
+        
+        // 检查敌人是否已经通过了石墙组
+        // 检查敌人是否已经在石墙组的另一侧（相对于水晶方向）
+        // 如果敌人X坐标大于石墙组最大X，且正向左移动，说明已经通过
+        // 或者敌人X坐标小于石墙组最小X，且正向右移动，说明已经通过
+        const hasPassedWallGroup = 
+            (enemyPos.x > groupMaxX && directionToCrystal.x < 0) ||
+            (enemyPos.x < groupMinX && directionToCrystal.x > 0);
+        
+        console.info(`[Enemy] findRoomExits: 敌人位置: (${enemyPos.x.toFixed(1)}, ${enemyPos.y.toFixed(1)}), 移动方向: (${directionToCrystal.x.toFixed(2)}, ${directionToCrystal.y.toFixed(2)}), 石墙组边界: [${groupMinX.toFixed(1)}, ${groupMaxX.toFixed(1)}], 是否已通过: ${hasPassedWallGroup}`);
+        
+        // 只有当敌人还没通过石墙组时，才寻找出口
+        if (hasPassedWallGroup) {
+            console.info(`[Enemy] findRoomExits: 敌人已经通过石墙组，不需要寻找此方向的出口`);
+            return exits;
+        }
         
         // 计算敌人在石墙组的哪一侧
         const enemyCenterX = enemyPos.x;
         const groupCenterX = (groupMinX + groupMaxX) / 2;
         
-        // 确定出口应该在石墙组的右侧
-        const exitX = groupMaxX + 50; // 石墙组右侧边界外50像素
-        
         // 计算敌人y坐标对应的石墙组y位置，作为出口的y坐标
         // 确保出口y坐标在石墙组的y范围内
-        const exitY = Math.max(groupMinY + 50, Math.min(groupMaxY - 50, enemyPos.y));
-        
-        // 创建出口位置
-        const rightExit = new Vec3(exitX, exitY, 0);
-        
-        // 确保出口在游戏边界内，但放宽限制，只需要确保出口在屏幕内即可
-        // 不需要远离边界，因为出口本身就在石墙组边界外
-        rightExit.x = Math.max(gameBounds.minX + 20, Math.min(gameBounds.maxX - 20, rightExit.x));
-        rightExit.y = Math.max(gameBounds.minY + 20, Math.min(gameBounds.maxY - 20, rightExit.y));
-        
-        // 打印出口计算细节
-        console.info(`[Enemy] findRoomExits: 出口计算 - 石墙组右侧边界: ${groupMaxX.toFixed(1)}, 原始出口X: ${exitX.toFixed(1)}, 游戏边界maxX: ${gameBounds.maxX.toFixed(1)}, 最终出口X: ${rightExit.x.toFixed(1)}`);
+        const exitY = Math.max(groupMinY + (enemyRadius + 15), Math.min(groupMaxY - (enemyRadius + 5), enemyPos.y));
         
         // 添加右侧出口
+        const rightExitX = groupMaxX + (enemyRadius + 5); // 石墙组右侧边界外仅25像素
+        const rightExit = new Vec3(rightExitX, exitY, 0);
+        rightExit.x = Math.max(gameBounds.minX + 20, Math.min(gameBounds.maxX - 20, rightExit.x));
+        rightExit.y = Math.max(gameBounds.minY + 20, Math.min(gameBounds.maxY - 20, rightExit.y));
         exits.push(rightExit);
-        console.info(`[Enemy] findRoomExits: 找到右侧出口！位置: (${rightExit.x.toFixed(1)}, ${rightExit.y.toFixed(1)}), 石墙组右侧边界: ${groupMaxX.toFixed(1)}, 游戏边界: (${gameBounds.minX.toFixed(1)}, ${gameBounds.maxX.toFixed(1)})`);
+        
+        // 添加左侧出口
+        const leftExitX = groupMinX - (enemyRadius + 5); // 石墙组左侧边界外仅25像素
+        const leftExit = new Vec3(leftExitX, exitY, 0);
+        leftExit.x = Math.max(gameBounds.minX + 20, Math.min(gameBounds.maxX - 20, leftExit.x));
+        leftExit.y = Math.max(gameBounds.minY + 20, Math.min(gameBounds.maxY - 20, leftExit.y));
+        exits.push(leftExit);
+        
+        console.info(`[Enemy] findRoomExits: 找到两侧出口！左侧: (${leftExit.x.toFixed(1)}, ${leftExit.y.toFixed(1)}), 右侧: (${rightExit.x.toFixed(1)}, ${rightExit.y.toFixed(1)})`);
         
         // 4. 如果没有找到出口，添加一个基于敌人和水晶连线的紧急出口
         if (exits.length === 0) {
@@ -2652,7 +2682,7 @@ export class Enemy extends Component {
         graphics.lineTo(0, radius * 0.7);
         graphics.stroke();
 
-        console.info(`[Enemy] createDetourMarker: 创建绕行点标记，位置: (${position.x.toFixed(1)}, ${position.y.toFixed(1)})`);
+        console.debug(`[Enemy] createDetourMarker: 创建绕行点标记，位置: (${position.x.toFixed(1)}, ${position.y.toFixed(1)})`);
     }
 
     /**
