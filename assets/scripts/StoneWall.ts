@@ -5,6 +5,7 @@ import { DamageNumber } from './DamageNumber';
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
 import { BuildingGridPanel } from './BuildingGridPanel';
+import { StoneWallGridPanel } from './StoneWallGridPanel';
 const { ccclass, property } = _decorator;
 
 @ccclass('StoneWall')
@@ -60,7 +61,7 @@ export class StoneWall extends Component {
     public gridY: number = -1; // 网格Y坐标
     private isMoving: boolean = false; // 是否正在移动
     private moveStartPos: Vec3 = new Vec3(); // 移动起始位置
-    private gridPanel: BuildingGridPanel = null!; // 网格面板组件
+    private gridPanel: BuildingGridPanel | StoneWallGridPanel = null!; // 网格面板组件（支持普通网格和石墙网格）
     
     start() {
         this.currentHealth = this.maxHealth;
@@ -119,14 +120,34 @@ export class StoneWall extends Component {
             this.gameManager = findInScene(scene, GameManager);
         }
     }
+
+    /**
+     * 构造石墙的单位信息（包含回收回调，供九宫格面板使用）
+     */
+    private buildUnitInfo(): UnitInfo {
+        return {
+            name: '石墙',
+            level: 1,
+            currentHealth: this.currentHealth,
+            maxHealth: this.maxHealth,
+            attackDamage: 0,
+            populationCost: 0,
+            icon: this.cardIcon || this.defaultSpriteFrame,
+            collisionRadius: this.collisionRadius,
+            onSellClick: () => {
+                this.onSellClick();
+            }
+        };
+    }
     
     /**
      * 查找网格面板
      */
     findGridPanel() {
-        const gridPanelNode = find('BuildingGridPanel');
-        if (gridPanelNode) {
-            this.gridPanel = gridPanelNode.getComponent(BuildingGridPanel);
+        // 查找石墙网格面板
+        const stoneWallGridPanelNode = find('StoneWallGridPanel');
+        if (stoneWallGridPanelNode) {
+            this.gridPanel = stoneWallGridPanelNode.getComponent(StoneWallGridPanel);
         }
     }
 
@@ -403,12 +424,20 @@ export class StoneWall extends Component {
         // 阻止事件传播
         event.propagationStopped = true;
 
-        // 如果正在移动，不处理点击
+        // 点击时显示九宫格信息面板（包含回收按钮）
+        if (!this.unitSelectionManager) {
+            this.findUnitSelectionManager();
+        }
+        if (this.unitSelectionManager) {
+            this.unitSelectionManager.selectUnit(this.node, this.buildUnitInfo());
+        }
+
+        // 如果正在移动，不重复处理
         if (this.isMoving) {
             return;
         }
 
-        // 如果已经显示选择面板，先隐藏
+        // 如果已经显示自带选择面板，先隐藏
         if (this.selectionPanel && this.selectionPanel.isValid) {
             this.hideSelectionPanel();
             return;
@@ -432,17 +461,7 @@ export class StoneWall extends Component {
                 this.findUnitSelectionManager();
             }
             if (this.unitSelectionManager) {
-                const unitInfo: UnitInfo = {
-                    name: '石墙',
-                    level: 1,
-                    currentHealth: this.currentHealth,
-                    maxHealth: this.maxHealth,
-                    attackDamage: 0,
-                    populationCost: 0,
-                    icon: this.cardIcon || this.defaultSpriteFrame,
-                    collisionRadius: this.collisionRadius
-                };
-                this.unitSelectionManager.selectUnit(this.node, unitInfo);
+                this.unitSelectionManager.selectUnit(this.node, this.buildUnitInfo());
             }
             return;
         }
@@ -538,17 +557,7 @@ export class StoneWall extends Component {
                     this.findUnitSelectionManager();
                 }
                 if (this.unitSelectionManager) {
-                    const unitInfo: UnitInfo = {
-                        name: '石墙',
-                        level: 1,
-                        currentHealth: this.currentHealth,
-                        maxHealth: this.maxHealth,
-                        attackDamage: 0,
-                        populationCost: 0,
-                        icon: this.cardIcon || this.defaultSpriteFrame,
-                        collisionRadius: this.collisionRadius
-                    };
-                    this.unitSelectionManager.selectUnit(this.node, unitInfo);
+                    this.unitSelectionManager.selectUnit(this.node, this.buildUnitInfo());
                 }
             }
         } else {
@@ -557,20 +566,7 @@ export class StoneWall extends Component {
                 this.findUnitSelectionManager();
             }
             if (this.unitSelectionManager) {
-                const unitInfo: UnitInfo = {
-                    name: '石墙',
-                    level: 1,
-                    currentHealth: this.currentHealth,
-                    maxHealth: this.maxHealth,
-                    attackDamage: 0, // 石墙没有攻击能力
-                    populationCost: 0, // 不占用人口
-                    icon: this.cardIcon || this.defaultSpriteFrame,
-                    collisionRadius: this.collisionRadius,
-                    onSellClick: () => {
-                        this.onSellClick();
-                    }
-                };
-                this.unitSelectionManager.selectUnit(this.node, unitInfo);
+                this.unitSelectionManager.selectUnit(this.node, this.buildUnitInfo());
             }
         }
 

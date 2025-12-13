@@ -2,6 +2,7 @@ import { _decorator, Component, Node, Prefab, Sprite, SpriteFrame, Label, Color,
 import { GameManager } from './GameManager';
 import { GamePopup } from './GamePopup';
 import { BuildingGridPanel } from './BuildingGridPanel';
+import { StoneWallGridPanel } from './StoneWallGridPanel';
 import { UnitSelectionManager } from './UnitSelectionManager';
 const { ccclass, property } = _decorator;
 
@@ -33,6 +34,7 @@ export class BuildingSelectionPanel extends Component {
     private canvasNode: Node = null!;
     private touchEndHandled: boolean = false; // 标记触摸结束事件是否已处理
     private gridPanel: BuildingGridPanel = null!; // 网格面板组件
+    private stoneWallGridPanel: StoneWallGridPanel = null!; // 石墙网格面板组件
     private lastIsDragging: boolean = false; // 上一帧的拖拽状态，用于检测状态变化
 
     start() {
@@ -71,8 +73,9 @@ export class BuildingSelectionPanel extends Component {
      * 清除网格高亮的辅助方法
      */
     private clearGridHighlight() {
-        console.debug('[BuildingSelectionPanel] clearGridHighlight - 开始清除网格高亮, gridPanel存在:', !!this.gridPanel, '调用堆栈:', new Error().stack?.split('\n').slice(1, 4).join(' -> '));
+        console.debug('[BuildingSelectionPanel] clearGridHighlight - 开始清除网格高亮, gridPanel存在:', !!this.gridPanel, 'stoneWallGridPanel存在:', !!this.stoneWallGridPanel, '调用堆栈:', new Error().stack?.split('\n').slice(1, 4).join(' -> '));
         
+        // 清除普通网格高亮
         if (!this.gridPanel) {
             console.debug('[BuildingSelectionPanel] clearGridHighlight - gridPanel不存在，尝试查找');
             this.findGridPanel();
@@ -80,9 +83,22 @@ export class BuildingSelectionPanel extends Component {
         if (this.gridPanel) {
             console.debug('[BuildingSelectionPanel] clearGridHighlight - 调用 gridPanel.clearHighlight()');
             this.gridPanel.clearHighlight();
-            console.debug('[BuildingSelectionPanel] clearGridHighlight - clearHighlight调用完成');
+            console.debug('[BuildingSelectionPanel] clearGridHighlight - gridPanel.clearHighlight调用完成');
         } else {
             console.error('[BuildingSelectionPanel] clearGridHighlight - gridPanel 不存在，无法清除高亮');
+        }
+        
+        // 清除石墙网格高亮
+        if (!this.stoneWallGridPanel) {
+            console.debug('[BuildingSelectionPanel] clearGridHighlight - stoneWallGridPanel不存在，尝试查找');
+            this.findStoneWallGridPanel();
+        }
+        if (this.stoneWallGridPanel) {
+            console.debug('[BuildingSelectionPanel] clearGridHighlight - 调用 stoneWallGridPanel.clearHighlight()');
+            this.stoneWallGridPanel.clearHighlight();
+            console.debug('[BuildingSelectionPanel] clearGridHighlight - stoneWallGridPanel.clearHighlight调用完成');
+        } else {
+            console.error('[BuildingSelectionPanel] clearGridHighlight - stoneWallGridPanel 不存在，无法清除高亮');
         }
     }
 
@@ -116,6 +132,39 @@ export class BuildingSelectionPanel extends Component {
             gridPanelNode = new Node('BuildingGridPanel');
             gridPanelNode.setParent(canvas);
             this.gridPanel = gridPanelNode.addComponent(BuildingGridPanel);
+        }
+    }
+
+    /**
+     * 查找石墙网格面板
+     */
+    findStoneWallGridPanel() {
+        // 先尝试查找场景中的石墙网格面板
+        let stoneWallGridPanelNode = find('StoneWallGridPanel');
+        
+        if (stoneWallGridPanelNode) {
+            this.stoneWallGridPanel = stoneWallGridPanelNode.getComponent(StoneWallGridPanel);
+            if (this.stoneWallGridPanel) {
+                return; // 成功找到，直接返回
+            }
+        }
+        
+        // 如果找不到节点或组件，尝试从TowerBuilder获取
+        const towerBuilderNode = find('TowerBuilder');
+        if (towerBuilderNode) {
+            const towerBuilder = towerBuilderNode.getComponent('TowerBuilder') as any;
+            if (towerBuilder && towerBuilder.stoneWallGridPanelComponent) {
+                this.stoneWallGridPanel = towerBuilder.stoneWallGridPanelComponent;
+                return;
+            }
+        }
+        
+        // 如果还是找不到，创建一个新的
+        const canvas = find('Canvas');
+        if (canvas) {
+            stoneWallGridPanelNode = new Node('StoneWallGridPanel');
+            stoneWallGridPanelNode.setParent(canvas);
+            this.stoneWallGridPanel = stoneWallGridPanelNode.addComponent(StoneWallGridPanel);
         }
     }
 
@@ -181,9 +230,7 @@ export class BuildingSelectionPanel extends Component {
         // 如果不在拖拽状态，确保清除高亮并返回
         if (!this.isDragging) {
             console.debug('[BuildingSelectionPanel] onCanvasTouchMove - 不在拖拽状态，清除高亮, isDragging:', this.isDragging);
-            if (this.gridPanel) {
-                this.gridPanel.clearHighlight();
-            }
+            this.clearGridHighlight();
             return;
         }
         
@@ -196,59 +243,94 @@ export class BuildingSelectionPanel extends Component {
                 return;
             }
             
-            // 使用 getLocation() 获取屏幕坐标（用于转换为世界坐标）
+            // 使用 getLocation() 获取屏幕坐标
             const location = event.getLocation();
             const screenPos = new Vec3(location.x, location.y, 0);
             
-            // 转换为世界坐标
-            const worldPos = this.getWorldPositionFromScreen(screenPos);
-            if (!worldPos) {
-                return;
-            }
-            
-            // 确保网格面板可见
-            if (!this.gridPanel) {
-                this.findGridPanel();
-            }
-            if (this.gridPanel) {
-                this.gridPanel.show();
-            }
-            
-            // 更新拖拽预览位置跟随鼠标
-            this.dragPreview.setWorldPosition(worldPos);
-            
             // 判断是否是石墙
-            const isStoneWall = this.selectedBuilding && this.selectedBuilding.name === '石墙';
+            const isStoneWall = this.selectedBuilding.name === '石墙';
             
-            // 如果有网格面板，处理网格高亮和对齐
-            if (this.gridPanel) {
-                console.debug('[BuildingSelectionPanel] onCanvasTouchMove - 处理网格高亮, worldPos:', `(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`, 'isStoneWall:', isStoneWall);
+            // 根据建筑类型选择对应的网格面板
+            if (isStoneWall) {
+                // 石墙使用石墙网格面板（现在使用世界坐标，与BuildingGridPanel一致）
+                if (!this.stoneWallGridPanel) {
+                    this.findStoneWallGridPanel();
+                }
+                if (this.stoneWallGridPanel) {
+                    this.stoneWallGridPanel.show();
+                }
                 
-                // 尝试高亮网格（如果位置在网格内）
-                this.gridPanel.highlightGrid(worldPos);
+                // 将屏幕坐标转换为世界坐标（与普通建筑物一致）
+                const worldPos = this.getWorldPositionFromScreen(screenPos);
+                if (!worldPos) {
+                    console.warn('[BuildingSelectionPanel] onCanvasTouchMove - 无法获取世界坐标');
+                    return;
+                }
                 
-                // 如果位置在网格内，对齐拖拽预览到网格中心
-                const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
-                if (gridCenter) {
-                    // 更新预览位置到网格中心（对齐到网格）
-                    console.debug('[BuildingSelectionPanel] onCanvasTouchMove - 对齐到网格中心:', `(${gridCenter.x.toFixed(1)}, ${gridCenter.y.toFixed(1)})`);
-                    this.dragPreview.setWorldPosition(gridCenter);
-                } else {
-                    // 如果不在网格内
-                    if (isStoneWall) {
-                        // 石墙可以放置在网格外，保持预览位置不变
-                        console.debug('[BuildingSelectionPanel] onCanvasTouchMove - 石墙不在网格内，保持预览位置');
-                        this.dragPreview.setWorldPosition(worldPos);
-                        // 清除网格高亮（因为不在网格内）
-                        this.gridPanel.clearHighlight();
+                // 更新拖拽预览位置跟随鼠标
+                this.dragPreview.setWorldPosition(worldPos);
+                
+                // 如果有石墙网格面板，处理网格高亮和对齐
+                if (this.stoneWallGridPanel) {
+                    console.debug('[BuildingSelectionPanel] onCanvasTouchMove - 处理石墙网格高亮, worldPos:', `(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
+                    
+                    // 尝试高亮石墙网格（如果位置在网格内）
+                    this.stoneWallGridPanel.highlightGrid(worldPos);
+                    
+                    // 如果位置在石墙网格内，对齐拖拽预览到网格中心
+                    const gridCenter = this.stoneWallGridPanel.getNearestGridCenter(worldPos);
+                    if (gridCenter) {
+                        // 更新预览位置到网格中心（对齐到网格）
+                        console.debug('[BuildingSelectionPanel] onCanvasTouchMove - 石墙对齐到网格中心:', `(${gridCenter.x.toFixed(1)}, ${gridCenter.y.toFixed(1)})`);
+                        this.dragPreview.setWorldPosition(gridCenter);
                     } else {
-                        // 其他建筑物不在网格内，清除高亮
-                        console.debug('[BuildingSelectionPanel] onCanvasTouchMove - 不在网格内，清除高亮');
-                        this.gridPanel.clearHighlight();
+                        // 如果不在石墙网格内，清除高亮
+                        console.debug('[BuildingSelectionPanel] onCanvasTouchMove - 石墙不在网格内，清除高亮');
+                        this.stoneWallGridPanel.clearHighlight();
                     }
+                } else {
+                    console.warn('[BuildingSelectionPanel] onCanvasTouchMove - stoneWallGridPanel不存在');
                 }
             } else {
-                console.warn('[BuildingSelectionPanel] onCanvasTouchMove - gridPanel不存在');
+                // 其他建筑使用普通网格面板
+                if (!this.gridPanel) {
+                    this.findGridPanel();
+                }
+                if (this.gridPanel) {
+                    this.gridPanel.show();
+                }
+                
+                // 将屏幕坐标转换为世界坐标
+                const worldPos = this.getWorldPositionFromScreen(screenPos);
+                if (!worldPos) {
+                    console.warn('[BuildingSelectionPanel] onCanvasTouchMove - 无法获取世界坐标');
+                    return;
+                }
+                
+                // 更新拖拽预览位置跟随鼠标
+                this.dragPreview.setWorldPosition(worldPos);
+                
+                // 如果有普通网格面板，处理网格高亮和对齐
+                if (this.gridPanel) {
+                    console.debug('[BuildingSelectionPanel] onCanvasTouchMove - 处理普通网格高亮, worldPos:', `(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
+                    
+                    // 尝试高亮普通网格（如果位置在网格内）
+                    this.gridPanel.highlightGrid(worldPos);
+                    
+                    // 如果位置在普通网格内，对齐拖拽预览到网格中心
+                    const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
+                    if (gridCenter) {
+                        // 更新预览位置到网格中心（对齐到网格）
+                        console.debug('[BuildingSelectionPanel] onCanvasTouchMove - 对齐到普通网格中心:', `(${gridCenter.x.toFixed(1)}, ${gridCenter.y.toFixed(1)})`);
+                        this.dragPreview.setWorldPosition(gridCenter);
+                    } else {
+                        // 如果不在普通网格内，清除高亮
+                        console.debug('[BuildingSelectionPanel] onCanvasTouchMove - 不在普通网格内，清除高亮');
+                        this.gridPanel.clearHighlight();
+                    }
+                } else {
+                    console.warn('[BuildingSelectionPanel] onCanvasTouchMove - gridPanel不存在');
+                }
             }
         }
     }
@@ -346,63 +428,118 @@ export class BuildingSelectionPanel extends Component {
                 }
                 
                 // 判断是否是石墙
-                const isStoneWall = this.selectedBuilding && this.selectedBuilding.name === '石墙';
+                const isStoneWall = this.selectedBuilding.name === '石墙';
                 
-                // 如果有网格面板，确保对齐到网格中心
-                if (worldPos && this.gridPanel) {
-                    const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
-                    if (gridCenter) {
-                        worldPos = gridCenter;
-                    } else {
-                        // 石墙可以建造在网格外，其他建筑物必须在网格内
-                        if (!isStoneWall) {
-                            // 如果不在网格内，建造失败，退出建造模式
+                // 根据建筑类型选择对应的网格面板进行对齐
+                if (worldPos) {
+                    if (isStoneWall) {
+                        // 石墙使用石墙网格面板
+                        if (!this.stoneWallGridPanel) {
+                            this.findStoneWallGridPanel();
+                        }
+                        
+                        if (this.stoneWallGridPanel) {
+                            const gridCenter = this.stoneWallGridPanel.getNearestGridCenter(worldPos);
+                            if (gridCenter) {
+                                // 检查目标网格是否被占用
+                                const grid = this.stoneWallGridPanel.worldToGrid(gridCenter);
+                                if (grid && !this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y)) {
+                                    worldPos = gridCenter;
+                                } else {
+                                    // 网格被占用，建造失败
+                                    this.clearDragPreview();
+                                    this.selectedBuilding = null;
+                                    this.clearGridHighlight();
+                                    if (this.onBuildCancelCallback) {
+                                        this.onBuildCancelCallback();
+                                    }
+                                    return;
+                                }
+                            } else {
+                                // 石墙必须建造在石墙网格内，否则建造失败
+                                this.clearDragPreview();
+                                this.selectedBuilding = null;
+                                // 确保清除网格高亮
+                                this.clearGridHighlight();
+                                if (this.onBuildCancelCallback) {
+                                    this.onBuildCancelCallback();
+                                }
+                                return;
+                            }
+                        } else {
+                            // 没有石墙网格面板，建造失败
                             this.clearDragPreview();
                             this.selectedBuilding = null;
-                            // 确保清除网格高亮
-                            if (this.gridPanel) {
-                                this.gridPanel.clearHighlight();
-                            }
                             if (this.onBuildCancelCallback) {
                                 this.onBuildCancelCallback();
                             }
                             return;
                         }
-                        // 石墙不在网格内，使用原始世界坐标
-                        // worldPos 保持不变
+                    } else {
+                        // 其他建筑使用普通网格面板
+                        if (this.gridPanel) {
+                            const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
+                            if (gridCenter) {
+                                worldPos = gridCenter;
+                            } else {
+                                // 其他建筑物必须在普通网格内，否则建造失败
+                                this.clearDragPreview();
+                                this.selectedBuilding = null;
+                                // 确保清除网格高亮
+                                this.clearGridHighlight();
+                                if (this.onBuildCancelCallback) {
+                                    this.onBuildCancelCallback();
+                                }
+                                return;
+                            }
+                        } else {
+                            // 没有普通网格面板，建造失败
+                            this.clearDragPreview();
+                            this.selectedBuilding = null;
+                            if (this.onBuildCancelCallback) {
+                                this.onBuildCancelCallback();
+                            }
+                            return;
+                        }
                     }
                 }
                 
                 if (worldPos && this.onBuildCallback) {
-                    console.debug('[BuildingSelectionPanel] onCanvasTouchEnd - 开始建造建筑物, 位置:', `(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
-                    this.onBuildCallback(this.selectedBuilding, worldPos);
-                    
-                    // 清除拖拽预览和状态
-                    this.clearDragPreview();
-                    this.selectedBuilding = null;
-                    
-                    // 再次确保清除网格高亮
-                    console.debug('[BuildingSelectionPanel] onCanvasTouchEnd - 建造成功后，再次清除网格高亮');
+                console.debug('[BuildingSelectionPanel] onCanvasTouchEnd - 开始建造建筑物, 位置:', `(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
+                this.onBuildCallback(this.selectedBuilding, worldPos);
+                
+                // 清除拖拽预览和状态
+                this.clearDragPreview();
+                this.selectedBuilding = null;
+                
+                // 再次确保清除网格高亮
+                console.debug('[BuildingSelectionPanel] onCanvasTouchEnd - 建造成功后，再次清除网格高亮');
+                if (this.gridPanel) {
+                    this.gridPanel.clearHighlight();
+                }
+                if (this.stoneWallGridPanel) {
+                    this.stoneWallGridPanel.clearHighlight();
+                }
+                
+                // 立即清除建筑物的选中状态（如果有）
+                this.clearBuildingSelection();
+                
+                // 延迟一帧再次清除选中状态和网格高亮，确保建筑物创建完成后清除
+                this.scheduleOnce(() => {
+                    console.debug('[BuildingSelectionPanel] onCanvasTouchEnd - 延迟一帧后再次清除选中状态和网格高亮');
+                    this.clearBuildingSelection();
                     if (this.gridPanel) {
                         this.gridPanel.clearHighlight();
                     }
-                    
-                    // 立即清除建筑物的选中状态（如果有）
-                    this.clearBuildingSelection();
-                    
-                    // 延迟一帧再次清除选中状态和网格高亮，确保建筑物创建完成后清除
-                    this.scheduleOnce(() => {
-                        console.debug('[BuildingSelectionPanel] onCanvasTouchEnd - 延迟一帧后再次清除选中状态和网格高亮');
-                        this.clearBuildingSelection();
-                        if (this.gridPanel) {
-                            this.gridPanel.clearHighlight();
-                        }
-                    }, 0);
-                    
-                    // 阻止事件传播
-                    event.propagationStopped = true;
-                    return;
-                }
+                    if (this.stoneWallGridPanel) {
+                        this.stoneWallGridPanel.clearHighlight();
+                    }
+                }, 0);
+                
+                // 阻止事件传播
+                event.propagationStopped = true;
+                return;
+            }
             } else {
                 // 拖拽距离不够，清除状态
                 this.clearDragPreview();
@@ -814,50 +951,94 @@ export class BuildingSelectionPanel extends Component {
         // 尝试建造
         if (this.dragPreview && this.selectedBuilding) {
             // 优先使用拖拽预览的当前位置（已经对齐到网格中心）
-            let worldPos: Vec3 | null = null;
-            if (this.dragPreview) {
-                worldPos = this.dragPreview.worldPosition.clone();
-            }
-            
-            // 如果没有拖拽预览位置，使用触摸结束位置并对齐到网格中心
-            if (!worldPos) {
-                worldPos = this.getWorldPositionFromScreen(new Vec3(location.x, location.y, 0));
-            }
+            let buildPos: Vec3 | null = null;
             
             // 判断是否是石墙
             const isStoneWall = this.selectedBuilding && this.selectedBuilding.name === '石墙';
             
-            // 如果有网格面板，确保对齐到网格中心
-            if (worldPos && this.gridPanel) {
-                const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
-                if (gridCenter) {
-                    worldPos = gridCenter;
-                } else {
-                    // 石墙可以建造在网格外，其他建筑物必须在网格内
-                    if (!isStoneWall) {
-                        // 如果不在网格内，建造失败，退出建造模式
+            // 对于所有建筑（包括石墙），统一使用世界坐标
+            if (this.dragPreview) {
+                buildPos = this.dragPreview.worldPosition.clone();
+            } else {
+                buildPos = this.getWorldPositionFromScreen(new Vec3(location.x, location.y, 0));
+            }
+            
+            // 根据建筑类型选择对应的网格面板进行对齐
+            if (buildPos) {
+                if (isStoneWall) {
+                    // 石墙使用石墙网格面板
+                    if (!this.stoneWallGridPanel) {
+                        this.findStoneWallGridPanel();
+                    }
+                    
+                    if (this.stoneWallGridPanel) {
+                        const gridCenter = this.stoneWallGridPanel.getNearestGridCenter(buildPos);
+                        if (gridCenter) {
+                            // 检查目标网格是否被占用
+                            const grid = this.stoneWallGridPanel.worldToGrid(gridCenter);
+                            if (grid && !this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y)) {
+                                buildPos = gridCenter;
+                            } else {
+                                // 网格被占用，建造失败
+                                this.clearDragPreview();
+                                this.selectedBuilding = null;
+                                this.clearGridHighlight();
+                                if (this.onBuildCancelCallback) {
+                                    this.onBuildCancelCallback();
+                                }
+                                event.propagationStopped = true;
+                                return;
+                            }
+                        } else {
+                            // 石墙必须建造在石墙网格内，否则建造失败
+                            this.clearDragPreview();
+                            this.selectedBuilding = null;
+                            this.clearGridHighlight();
+                            if (this.onBuildCancelCallback) {
+                                this.onBuildCancelCallback();
+                            }
+                            event.propagationStopped = true;
+                            return;
+                        }
+                    } else {
+                        // 没有石墙网格面板，建造失败
                         this.clearDragPreview();
                         this.selectedBuilding = null;
-                        // 确保清除网格高亮
-                        if (this.gridPanel) {
-                            this.gridPanel.clearHighlight();
-                        }
                         if (this.onBuildCancelCallback) {
                             this.onBuildCancelCallback();
                         }
                         event.propagationStopped = true;
                         return;
                     }
-                    // 石墙不在网格内，使用原始世界坐标
-                    // worldPos 保持不变
+                } else {
+                    // 其他建筑使用普通网格面板
+                    if (this.gridPanel) {
+                        const gridCenter = this.gridPanel.getNearestGridCenter(buildPos);
+                        if (gridCenter) {
+                            buildPos = gridCenter;
+                        } else {
+                            // 如果不在网格内，建造失败，退出建造模式
+                            this.clearDragPreview();
+                            this.selectedBuilding = null;
+                            // 确保清除网格高亮
+                            if (this.gridPanel) {
+                                this.gridPanel.clearHighlight();
+                            }
+                            if (this.onBuildCancelCallback) {
+                                this.onBuildCancelCallback();
+                            }
+                            event.propagationStopped = true;
+                            return;
+                        }
+                    }
                 }
             }
             
-            if (worldPos && this.onBuildCallback) {
+            if (buildPos && this.onBuildCallback) {
                 // 标记触摸结束事件已处理（成功建造）
                 this.touchEndHandled = true;
-                console.debug('[BuildingSelectionPanel] onBuildingItemTouchEnd - 开始建造建筑物, 位置:', `(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
-                this.onBuildCallback(building, worldPos);
+                console.debug('[BuildingSelectionPanel] onBuildingItemTouchEnd - 开始建造建筑物, 位置:', `(${buildPos.x.toFixed(1)}, ${buildPos.y.toFixed(1)})`);
+                this.onBuildCallback(building, buildPos);
                 
                 // 清除拖拽预览和状态
                 this.clearDragPreview();
@@ -867,6 +1048,9 @@ export class BuildingSelectionPanel extends Component {
                 console.debug('[BuildingSelectionPanel] onBuildingItemTouchEnd - 建造成功后，再次清除网格高亮');
                 if (this.gridPanel) {
                     this.gridPanel.clearHighlight();
+                }
+                if (this.stoneWallGridPanel) {
+                    this.stoneWallGridPanel.clearHighlight();
                 }
                 
                 // 立即清除建筑物的选中状态（如果有）
@@ -878,6 +1062,9 @@ export class BuildingSelectionPanel extends Component {
                     this.clearBuildingSelection();
                     if (this.gridPanel) {
                         this.gridPanel.clearHighlight();
+                    }
+                    if (this.stoneWallGridPanel) {
+                        this.stoneWallGridPanel.clearHighlight();
                     }
                 }, 0);
                 
@@ -983,18 +1170,59 @@ export class BuildingSelectionPanel extends Component {
                 // 判断是否是石墙
                 const isStoneWall = this.selectedBuilding && this.selectedBuilding.name === '石墙';
                 
-                // 如果有网格面板，确保对齐到网格中心
-                if (worldPos && this.gridPanel) {
-                    const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
-                    if (gridCenter) {
-                        worldPos = gridCenter;
-                    } else {
-                        // 石墙可以建造在网格外，其他建筑物必须在网格内
-                        if (!isStoneWall) {
-                            // 如果不在网格内，建造失败，退出建造模式
+                // 根据建筑类型选择对应的网格面板进行对齐
+                if (worldPos) {
+                    if (isStoneWall) {
+                        if (!this.stoneWallGridPanel) {
+                            this.findStoneWallGridPanel();
+                        }
+
+                        if (this.stoneWallGridPanel) {
+                            const gridCenter = this.stoneWallGridPanel.getNearestGridCenter(worldPos);
+                            if (gridCenter) {
+                                // 检查目标网格是否被占用
+                                const grid = this.stoneWallGridPanel.worldToGrid(gridCenter);
+                                if (grid && !this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y)) {
+                                    worldPos = gridCenter;
+                                } else {
+                                    this.clearDragPreview();
+                                    this.selectedBuilding = null;
+                                    this.clearGridHighlight();
+                                    if (this.onBuildCancelCallback) {
+                                        this.onBuildCancelCallback();
+                                    }
+                                    event.propagationStopped = true;
+                                    return;
+                                }
+                            } else {
+                                // 石墙必须建造在石墙网格内
+                                this.clearDragPreview();
+                                this.selectedBuilding = null;
+                                this.clearGridHighlight();
+                                if (this.onBuildCancelCallback) {
+                                    this.onBuildCancelCallback();
+                                }
+                                event.propagationStopped = true;
+                                return;
+                            }
+                        } else {
+                            // 没有石墙网格面板
                             this.clearDragPreview();
                             this.selectedBuilding = null;
-                            // 确保清除网格高亮
+                            if (this.onBuildCancelCallback) {
+                                this.onBuildCancelCallback();
+                            }
+                            event.propagationStopped = true;
+                            return;
+                        }
+                    } else if (this.gridPanel) {
+                        const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
+                        if (gridCenter) {
+                            worldPos = gridCenter;
+                        } else {
+                            // 不在普通网格内，建造失败
+                            this.clearDragPreview();
+                            this.selectedBuilding = null;
                             if (this.gridPanel) {
                                 this.gridPanel.clearHighlight();
                             }
@@ -1004,8 +1232,6 @@ export class BuildingSelectionPanel extends Component {
                             event.propagationStopped = true;
                             return;
                         }
-                        // 石墙不在网格内，使用原始世界坐标
-                        // worldPos 保持不变
                     }
                 }
                 
@@ -1132,11 +1358,14 @@ export class BuildingSelectionPanel extends Component {
             if (this.gridPanel) {
                 this.gridPanel.clearHighlight();
             }
+            if (this.stoneWallGridPanel) {
+                this.stoneWallGridPanel.clearHighlight();
+            }
             return;
         }
         
-        if (!this.dragPreview) {
-            console.warn('[BuildingSelectionPanel] updateDragPreview - dragPreview不存在');
+        if (!this.dragPreview || !this.selectedBuilding) {
+            console.warn('[BuildingSelectionPanel] updateDragPreview - dragPreview或selectedBuilding不存在');
             return;
         }
 
@@ -1150,42 +1379,78 @@ export class BuildingSelectionPanel extends Component {
         if (!this.gridPanel) {
             this.findGridPanel();
         }
-        
-        // 首先更新拖拽预览位置，让它始终跟随鼠标（无论是否有网格面板）
-        const worldPos = this.getWorldPositionFromScreen(screenPos);
-        if (!worldPos) {
-            console.warn('[BuildingSelectionPanel] updateDragPreview - 无法获取世界坐标');
-            return;
+        if (!this.stoneWallGridPanel) {
+            this.findStoneWallGridPanel();
         }
         
-        // 记录更新前的位置
-        const oldPos = this.dragPreview.worldPosition.clone();
+        // 判断是否是石墙
+        const isStoneWall = this.selectedBuilding.name === '石墙';
         
-        // 无论是否在网格内，都要更新拖拽预览的位置，让它始终跟随鼠标
-        this.dragPreview.setWorldPosition(worldPos);
-        
-        // 验证位置是否真的更新了
-        const newPos = this.dragPreview.worldPosition.clone();
-        const posChanged = Math.abs(oldPos.x - newPos.x) > 0.1 || Math.abs(oldPos.y - newPos.y) > 0.1;
-        if (posChanged) {
-            console.debug('[BuildingSelectionPanel] updateDragPreview - 预览位置已更新: 从', `(${oldPos.x.toFixed(1)}, ${oldPos.y.toFixed(1)})`, '到', `(${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)})`);
-        }
-        
-        // 处理网格高亮（如果有网格面板）
-        if (this.gridPanel) {
-            this.gridPanel.show();
+        if (isStoneWall) {
+            // 对于石墙，使用世界坐标（与普通建筑物一致）
+            const worldPos = this.getWorldPositionFromScreen(screenPos);
+            if (!worldPos) {
+                console.warn('[BuildingSelectionPanel] updateDragPreview - 无法获取世界坐标');
+                return;
+            }
             
-            // 尝试高亮网格（如果位置在网格内）
-            this.gridPanel.highlightGrid(worldPos);
+            // 更新拖拽预览位置跟随鼠标
+            this.dragPreview.setWorldPosition(worldPos);
             
-            // 如果位置在网格内，对齐到网格中心
-            const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
-            if (gridCenter) {
-                this.dragPreview.setWorldPosition(gridCenter);
-                console.debug('[BuildingSelectionPanel] updateDragPreview - 对齐到网格中心:', `(${gridCenter.x.toFixed(1)}, ${gridCenter.y.toFixed(1)})`);
-            } else {
-                // 如果不在网格内，清除高亮
-                this.gridPanel.clearHighlight();
+            // 处理石墙网格高亮
+            if (this.stoneWallGridPanel) {
+                this.stoneWallGridPanel.show();
+                
+                // 尝试高亮石墙网格（如果位置在网格内）
+                this.stoneWallGridPanel.highlightGrid(worldPos);
+                
+                // 如果位置在石墙网格内，对齐到网格中心
+                const gridCenter = this.stoneWallGridPanel.getNearestGridCenter(worldPos);
+                if (gridCenter) {
+                    this.dragPreview.setWorldPosition(gridCenter);
+                    console.debug('[BuildingSelectionPanel] updateDragPreview - 石墙对齐到网格中心:', `(${gridCenter.x.toFixed(1)}, ${gridCenter.y.toFixed(1)})`);
+                } else {
+                    // 如果不在石墙网格内，清除高亮
+                    this.stoneWallGridPanel.clearHighlight();
+                }
+            }
+        } else {
+            // 对于其他建筑，使用世界坐标
+            const worldPos = this.getWorldPositionFromScreen(screenPos);
+            if (!worldPos) {
+                console.warn('[BuildingSelectionPanel] updateDragPreview - 无法获取世界坐标');
+                return;
+            }
+            
+            // 记录更新前的位置
+            const oldPos = this.dragPreview.worldPosition.clone();
+            
+            // 无论是否在网格内，都要更新拖拽预览的位置，让它始终跟随鼠标
+            this.dragPreview.setWorldPosition(worldPos);
+            
+            // 验证位置是否真的更新了
+            const newPos = this.dragPreview.worldPosition.clone();
+            const posChanged = Math.abs(oldPos.x - newPos.x) > 0.1 || Math.abs(oldPos.y - newPos.y) > 0.1;
+            if (posChanged) {
+                console.debug('[BuildingSelectionPanel] updateDragPreview - 预览位置已更新: 从', `(${oldPos.x.toFixed(1)}, ${oldPos.y.toFixed(1)})`, '到', `(${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)})`);
+            }
+            
+            // 处理普通网格高亮
+            if (this.gridPanel) {
+                this.gridPanel.show();
+                
+                // 尝试高亮普通网格（如果位置在网格内）
+                this.gridPanel.highlightGrid(worldPos);
+                
+                // 如果位置在普通网格内，对齐到网格中心
+                const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
+                if (gridCenter) {
+                    this.dragPreview.setWorldPosition(gridCenter);
+                    console.debug('[BuildingSelectionPanel] updateDragPreview - 对齐到网格中心:', `(${gridCenter.x.toFixed(1)}, ${gridCenter.y.toFixed(1)})`);
+                } else {
+                    // 如果不在普通网格内，清除高亮
+                    this.gridPanel.clearHighlight();
+                }
             }
         }
     }

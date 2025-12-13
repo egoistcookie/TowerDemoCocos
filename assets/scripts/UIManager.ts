@@ -567,24 +567,14 @@ export class UIManager extends Component {
                 console.error('StartGameButton: Crystal not found at Canvas/Crystal!');
             }
             
-            // 3. 调用GameManager的startGame方法
-            const gameManagerNode = find('GameManager');
-            if (gameManagerNode) {
-                console.log('StartGameButton: Found GameManager node');
-                const gameManager = gameManagerNode.getComponent('GameManager') as any;
-                if (gameManager) {
-                    console.log('StartGameButton: Found GameManager component');
-                    if (gameManager.startGame) {
-                        console.log('StartGameButton: Calling gameManager.startGame()');
-                        gameManager.startGame();
-                    } else {
-                        console.error('StartGameButton: gameManager.startGame() method not found');
-                    }
-                } else {
-                    console.error('StartGameButton: GameManager component not found');
-                }
+            // 3. 调用GameManager的startGame方法（递归查找以防节点命名/层级变化）
+            console.log('StartGameButton: Locating GameManager...');
+            const gmComp = this.findComponentInScene('GameManager') as any;
+            if (gmComp && gmComp.startGame) {
+                console.log('StartGameButton: Calling gameManager.startGame()');
+                gmComp.startGame();
             } else {
-                console.error('StartGameButton: GameManager node not found');
+                console.error('StartGameButton: GameManager component or startGame not found');
             }
         }, this);
         
@@ -1359,5 +1349,23 @@ export class UIManager extends Component {
         }
         
         console.debug('UIManager: UI reset completed');
+    }
+
+    /**
+     * 从场景递归查找指定组件（按组件名字符串）
+     */
+    private findComponentInScene(componentName: string): any {
+        const scene = this.node.scene || (director.getScene && director.getScene());
+        if (!scene) return null;
+        const dfs = (node: Node): any => {
+            const comp = node.getComponent(componentName);
+            if (comp) return comp;
+            for (const child of node.children) {
+                const found = dfs(child);
+                if (found) return found;
+            }
+            return null;
+        };
+        return dfs(scene);
     }
 }

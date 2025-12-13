@@ -11,6 +11,7 @@ import { StoneWall } from './StoneWall';
 import { SwordsmanHall } from './SwordsmanHall';
 import { UnitConfigManager } from './UnitConfigManager';
 import { BuildingGridPanel } from './BuildingGridPanel';
+import { StoneWallGridPanel } from './StoneWallGridPanel';
 const { ccclass, property } = _decorator;
 
 @ccclass('TowerBuilder')
@@ -87,6 +88,9 @@ export class TowerBuilder extends Component {
     @property(Node)
     buildingGridPanel: Node = null!; // 建筑物网格面板节点
 
+    @property(Node)
+    stoneWallGridPanel: Node = null!; // 石墙网格面板节点
+
     @property
     towerCost: number = 10; // 战争古树建造成本（10金币）
 
@@ -111,6 +115,8 @@ export class TowerBuilder extends Component {
     private buildingPanel: BuildingSelectionPanel = null!;
     private currentSelectedBuilding: BuildingType | null = null;
     private gridPanel: BuildingGridPanel = null!; // 网格面板组件
+    private stoneWallGridPanelComponent: StoneWallGridPanel = null!; // 石墙网格面板组件
+    private initialStoneWallsPlaced: boolean = false; // 是否已生成初始石墙
     
     // 建筑物拖拽相关
     private isDraggingBuilding: boolean = false; // 是否正在拖拽建筑物
@@ -463,6 +469,37 @@ export class TowerBuilder extends Component {
     }
 
     /**
+     * 查找石墙网格面板
+     */
+    findStoneWallGridPanel() {
+        if (this.stoneWallGridPanel) {
+            this.stoneWallGridPanelComponent = this.stoneWallGridPanel.getComponent(StoneWallGridPanel);
+            if (this.stoneWallGridPanelComponent) {
+                return;
+            }
+        }
+        
+        // 尝试查找场景中的石墙网格面板
+        const stoneWallGridPanelNode = find('StoneWallGridPanel');
+        if (stoneWallGridPanelNode) {
+            this.stoneWallGridPanelComponent = stoneWallGridPanelNode.getComponent(StoneWallGridPanel);
+            if (this.stoneWallGridPanelComponent) {
+                this.stoneWallGridPanel = stoneWallGridPanelNode;
+                return;
+            }
+        }
+        
+        // 如果找不到，创建一个
+        const canvas = find('Canvas');
+        if (canvas) {
+            const stoneWallGridNode = new Node('StoneWallGridPanel');
+            stoneWallGridNode.setParent(canvas);
+            this.stoneWallGridPanelComponent = stoneWallGridNode.addComponent(StoneWallGridPanel);
+            this.stoneWallGridPanel = stoneWallGridNode;
+        }
+    }
+
+    /**
      * 触摸开始事件（检测建筑物点击，开始长按检测）
      */
     onTouchStart(event: EventTouch) {
@@ -588,6 +625,9 @@ export class TowerBuilder extends Component {
             if (this.gridPanel) {
                 this.gridPanel.clearHighlight();
             }
+            if (this.stoneWallGridPanelComponent) {
+                this.stoneWallGridPanelComponent.clearHighlight();
+            }
             return;
         }
 
@@ -607,7 +647,7 @@ export class TowerBuilder extends Component {
         // 获取触摸位置并转换为世界坐标
         const touchLocation = event.getLocation();
         const cameraNode = find('Canvas/Camera') || this.node.scene?.getChildByName('Camera');
-        if (!cameraNode || !this.gridPanel) {
+        if (!cameraNode) {
             return;
         }
         
@@ -622,8 +662,33 @@ export class TowerBuilder extends Component {
         camera.screenToWorld(screenPos, worldPos);
         worldPos.z = 0;
 
-        // 高亮显示网格
-        this.gridPanel.highlightGrid(worldPos);
+        // 判断是否是石墙（优先处理石墙的高亮）
+        const isStoneWall = this.currentSelectedBuilding && (this.currentSelectedBuilding.name === '石墙' || this.currentSelectedBuilding.prefab === this.stoneWallPrefab);
+        
+        if (isStoneWall) {
+            // 石墙使用石墙网格面板
+            if (!this.stoneWallGridPanelComponent) {
+                this.findStoneWallGridPanel();
+            }
+            if (this.stoneWallGridPanelComponent) {
+                // 清除普通网格高亮
+                if (this.gridPanel) {
+                    this.gridPanel.clearHighlight();
+                }
+                // 高亮显示石墙网格
+                this.stoneWallGridPanelComponent.highlightGrid(worldPos);
+            }
+        } else {
+            // 普通建筑物使用普通网格面板
+            if (this.gridPanel) {
+                // 清除石墙网格高亮
+                if (this.stoneWallGridPanelComponent) {
+                    this.stoneWallGridPanelComponent.clearHighlight();
+                }
+                // 高亮显示网格
+                this.gridPanel.highlightGrid(worldPos);
+            }
+        }
     }
 
     findGameManager() {
@@ -696,12 +761,23 @@ export class TowerBuilder extends Component {
             this.buildingPanel.show();
         }
         
-        // 显示网格面板
-        if (!this.gridPanel) {
-            this.findGridPanel();
-        }
-        if (this.gridPanel) {
-            this.gridPanel.show();
+        // 根据当前选中的建筑类型显示相应的网格面板
+        if (this.currentSelectedBuilding && this.currentSelectedBuilding.name === '石墙') {
+            // 显示石墙网格面板
+            if (!this.stoneWallGridPanelComponent) {
+                this.findStoneWallGridPanel();
+            }
+            if (this.stoneWallGridPanelComponent) {
+                this.stoneWallGridPanelComponent.show();
+            }
+        } else {
+            // 显示普通建筑网格面板
+            if (!this.gridPanel) {
+                this.findGridPanel();
+            }
+            if (this.gridPanel) {
+                this.gridPanel.show();
+            }
         }
     }
 
@@ -719,11 +795,14 @@ export class TowerBuilder extends Component {
             this.previewTower = null!;
         }
         
-        // 清除网格高亮（可以选择隐藏网格面板或保持可见）
+        // 清除普通建筑网格高亮
         if (this.gridPanel) {
             this.gridPanel.clearHighlight();
-            // 可选：隐藏网格面板
-            // this.gridPanel.hide();
+        }
+        
+        // 清除石墙网格高亮
+        if (this.stoneWallGridPanelComponent) {
+            this.stoneWallGridPanelComponent.clearHighlight();
         }
     }
 
@@ -893,21 +972,39 @@ export class TowerBuilder extends Component {
         // 判断是否是石墙（已在上面判断过，这里使用之前的值）
         // isStoneWall 变量已在上面定义（第815行）
         
-        // 如果有网格面板，对齐到网格中心
         let finalWorldPos = worldPos;
-        if (this.gridPanel) {
+        if (isStoneWall) {
+            if (!this.stoneWallGridPanelComponent) {
+                this.findStoneWallGridPanel();
+            }
+
+            const stonePanel = this.stoneWallGridPanelComponent;
+            if (!stonePanel) {
+                console.warn('[TowerBuilder] onTouchEnd - 无法找到石墙网格面板，取消建造');
+                return;
+            }
+
+            const gridCenter = stonePanel.getNearestGridCenter(worldPos);
+            if (!gridCenter) {
+                stonePanel.clearHighlight();
+                return;
+            }
+
+            const grid = stonePanel.worldToGrid(gridCenter);
+            if (!grid || stonePanel.isGridOccupied(grid.x, grid.y)) {
+                stonePanel.clearHighlight();
+                return;
+            }
+
+            finalWorldPos = gridCenter;
+        } else if (this.gridPanel) {
             const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
             if (gridCenter) {
                 finalWorldPos = gridCenter;
             } else {
-                // 石墙可以建造在网格外，其他建筑物必须在网格内
-                if (!isStoneWall) {
-                    // 不在网格内，清除高亮并返回
-                    this.gridPanel.clearHighlight();
-                    return;
-                }
-                // 石墙不在网格内，使用原始世界坐标
-                finalWorldPos = worldPos;
+                // 非石墙必须在普通网格内
+                this.gridPanel.clearHighlight();
+                return;
             }
         }
 
@@ -922,6 +1019,9 @@ export class TowerBuilder extends Component {
         if (this.gridPanel) {
             this.gridPanel.clearHighlight();
         }
+        if (this.stoneWallGridPanelComponent) {
+            this.stoneWallGridPanelComponent.clearHighlight();
+        }
     }
 
     canBuildAt(position: Vec3, building: BuildingType): boolean {
@@ -932,46 +1032,47 @@ export class TowerBuilder extends Component {
         // 判断是否是石墙
         const isStoneWall = building.name === '石墙' || building.prefab === this.stoneWallPrefab;
 
-        // 石墙可以建造在地图的任何位置，跳过网格和距离检查
-        if (!isStoneWall) {
-            // 如果有网格面板，检查位置是否在网格内
-            if (this.gridPanel) {
-                if (!this.gridPanel.isPositionInGrid(position)) {
-                    return false;
-                }
-                
-                // 检查目标网格是否已被占用
-                const grid = this.gridPanel.worldToGrid(position);
-                if (grid && this.gridPanel.isGridOccupied(grid.x, grid.y)) {
-                    return false;
-                }
+        // 石墙必须放置在石墙网格内
+        if (isStoneWall) {
+            if (!this.stoneWallGridPanelComponent) {
+                this.findStoneWallGridPanel();
+            }
+            const stonePanel = this.stoneWallGridPanelComponent;
+            if (!stonePanel) {
+                return false;
             }
 
-            // 检查距离水晶的距离（保留原有逻辑作为备用检查）
-            const crystalPos = this.targetCrystal.worldPosition;
-            const distance = Vec3.distance(position, crystalPos);
+            if (!stonePanel.isPositionInGrid(position)) {
+                return false;
+            }
+
+            const grid = stonePanel.worldToGrid(position);
+            if (!grid || stonePanel.isGridOccupied(grid.x, grid.y)) {
+                return false;
+            }
+
+            return true;
+        }
+
+        // 非石墙：需要在普通网格内并满足距离
+        if (this.gridPanel) {
+            if (!this.gridPanel.isPositionInGrid(position)) {
+                return false;
+            }
             
-            if (distance < this.minBuildDistance || distance > this.buildRange) {
+            // 检查目标网格是否已被占用
+            const grid = this.gridPanel.worldToGrid(position);
+            if (grid && this.gridPanel.isGridOccupied(grid.x, grid.y)) {
                 return false;
             }
         }
 
-        // 石墙是唯一可以放置在地图各处的建筑物，碰撞检测更宽松
-        if (isStoneWall) {
-            // 石墙只检查与其他石墙的重叠（允许紧密连接）
-            const stoneWalls = this.stoneWallContainer?.children || [];
-            for (const wall of stoneWalls) {
-                if (wall.active) {
-                    const wallDistance = Vec3.distance(position, wall.worldPosition);
-                    // 石墙之间的最小距离减小，允许连接成墙（使用碰撞半径的2倍）
-                    const minWallDistance = 80; // 两个石墙碰撞半径之和（40*2）
-                    if (wallDistance < minWallDistance) {
-                        return false;
-                    }
-                }
-            }
-            // 石墙可以靠近其他建筑物，不检查与其他建筑物的碰撞
-            return true;
+        // 检查距离水晶的距离（保留原有逻辑作为备用检查）
+        const crystalPos = this.targetCrystal.worldPosition;
+        const distance = Vec3.distance(position, crystalPos);
+        
+        if (distance < this.minBuildDistance || distance > this.buildRange) {
+            return false;
         }
 
         // 其他建筑物的碰撞检测（保持原有逻辑）
@@ -1363,14 +1464,14 @@ export class TowerBuilder extends Component {
     /**
      * 建造石墙
      */
-    buildStoneWall(worldPosition: Vec3) {
+    buildStoneWall(worldPosition: Vec3, skipCost: boolean = false) {
         if (!this.stoneWallPrefab) {
             console.error('TowerBuilder.buildStoneWall: stoneWallPrefab is null!');
             return;
         }
 
         // 消耗金币
-        if (this.gameManager) {
+        if (this.gameManager && !skipCost) {
             this.gameManager.spendGold(this.stoneWallCost);
         }
 
@@ -1388,6 +1489,8 @@ export class TowerBuilder extends Component {
         wall.setPosition(0, 0, 0);
         wall.setRotationFromEuler(0, 0, 0);
         wall.setScale(1, 1, 1);
+        // 使用setWorldPosition确保位置正确（gridToWorld返回的坐标是相对于Canvas中心的Canvas坐标）
+        // 对于UI节点，如果父节点是Canvas，setWorldPosition会将坐标正确设置
         wall.setWorldPosition(worldPosition);
 
         // 设置建造成本并检查首次出现
@@ -1402,20 +1505,40 @@ export class TowerBuilder extends Component {
             // 然后设置建造成本（覆盖配置中的值）
             wallScript.buildCost = this.stoneWallCost;
             
-            // 石墙可以放置在地图各处，只有在网格内时才记录网格位置（但不占用网格）
-            if (this.gridPanel) {
-                const grid = this.gridPanel.worldToGrid(worldPosition);
+            // 石墙只能放置在石墙网格内，占用网格
+            if (!this.stoneWallGridPanelComponent) {
+                this.findStoneWallGridPanel();
+            }
+            
+            if (this.stoneWallGridPanelComponent) {
+                const grid = this.stoneWallGridPanelComponent.worldToGrid(worldPosition);
                 if (grid) {
-                    // 如果位置在网格内，记录网格位置（可选，不影响放置）
-                    wallScript.gridX = grid.x;
-                    wallScript.gridY = grid.y;
-                    // 石墙不占用网格（因为可以放在网格外，且是唯一可以放置在地图各处的建筑物）
-                    // this.gridPanel.occupyGrid(grid.x, grid.y, wall);
+                    // 检查网格是否被占用
+                    if (this.stoneWallGridPanelComponent.isGridOccupied(grid.x, grid.y)) {
+                        // 网格已被占用，不应该发生这种情况（应该在放置前检查）
+                        console.warn(`TowerBuilder.buildStoneWall: 网格(${grid.x}, ${grid.y})已被占用，但仍然创建了石墙`);
+                    } else {
+                        // 占用网格
+                        if (this.stoneWallGridPanelComponent.occupyGrid(grid.x, grid.y, wall)) {
+                            wallScript.gridX = grid.x;
+                            wallScript.gridY = grid.y;
+                            console.debug(`TowerBuilder.buildStoneWall: 石墙占用网格(${grid.x}, ${grid.y})`);
+                        } else {
+                            console.error(`TowerBuilder.buildStoneWall: 无法占用网格(${grid.x}, ${grid.y})`);
+                            wallScript.gridX = -1;
+                            wallScript.gridY = -1;
+                        }
+                    }
                 } else {
-                    // 石墙在网格外，不记录网格位置
+                    // 石墙不在石墙网格内，不应该发生这种情况（应该在放置前检查）
+                    console.error(`TowerBuilder.buildStoneWall: 石墙位置(${worldPosition.x.toFixed(1)}, ${worldPosition.y.toFixed(1)})不在石墙网格内`);
                     wallScript.gridX = -1;
                     wallScript.gridY = -1;
                 }
+            } else {
+                console.error('TowerBuilder.buildStoneWall: 找不到石墙网格面板组件');
+                wallScript.gridX = -1;
+                wallScript.gridY = -1;
             }
             
             // 检查单位是否首次出现
@@ -1426,6 +1549,60 @@ export class TowerBuilder extends Component {
         }
 
         console.debug('TowerBuilder.buildStoneWall: Built at', worldPosition);
+    }
+
+    /**
+     * 在石墙网格最上方一行随机生成指定数量的石墙（仅在游戏开始时调用一次）
+     */
+    spawnInitialStoneWalls(count: number = 14) {
+        console.log('[TowerBuilder] spawnInitialStoneWalls - start, requested:', count, 'alreadyPlaced:', this.initialStoneWallsPlaced);
+        if (this.initialStoneWallsPlaced) {
+            console.log('[TowerBuilder] spawnInitialStoneWalls - already placed, skip');
+            return;
+        }
+        if (!this.stoneWallGridPanelComponent) {
+            this.findStoneWallGridPanel();
+        }
+        const panel = this.stoneWallGridPanelComponent;
+        if (!panel) {
+            console.warn('TowerBuilder.spawnInitialStoneWalls: stoneWallGridPanelComponent not found');
+            return;
+        }
+
+        const maxCount = Math.min(count, panel.gridWidth);
+        // 最上方一行（StoneWallGridPanel 以左上为0,0，向下为递增）
+        const y = 9;
+
+        // 生成并打乱x坐标
+        const xs: number[] = [];
+        for (let i = 0; i < panel.gridWidth; i++) {
+            xs.push(i);
+        }
+        for (let i = xs.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [xs[i], xs[j]] = [xs[j], xs[i]];
+        }
+
+        let placed = 0;
+        for (const x of xs) {
+            if (placed >= maxCount) break;
+            // 跳过已占用格子
+            if (panel.isGridOccupied(x, y)) {
+                console.log(`[TowerBuilder] spawnInitialStoneWalls - grid (${x},${y}) occupied, skip`);
+                continue;
+            }
+            const worldPos = panel.gridToWorld(x, y);
+            if (!worldPos) {
+                console.log(`[TowerBuilder] spawnInitialStoneWalls - grid (${x},${y}) worldPos null, skip`);
+                continue;
+            }
+            this.buildStoneWall(worldPos, true);
+            console.log(`[TowerBuilder] spawnInitialStoneWalls - placed at (${x},${y}) worldPos=(${worldPos.x.toFixed(1)},${worldPos.y.toFixed(1)})`);
+            placed++;
+        }
+
+        this.initialStoneWallsPlaced = true;
+        console.log(`[TowerBuilder] spawnInitialStoneWalls - done, placed ${placed}/${maxCount} on top row y=${y}`);
     }
 
     /**

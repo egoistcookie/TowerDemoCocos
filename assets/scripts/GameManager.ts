@@ -193,7 +193,7 @@ export class GameManager extends Component {
         // 加载单位配置
         const configManager = UnitConfigManager.getInstance();
         configManager.loadConfig().then(() => {
-            console.log('GameManager: Unit config loaded successfully');
+            console.debug('GameManager: Unit config loaded successfully');
         }).catch((err) => {
             console.error('GameManager: Failed to load unit config', err);
         });
@@ -209,7 +209,7 @@ export class GameManager extends Component {
         
         // 增强水晶节点查找逻辑
         if (!this.crystal) {
-            console.log('GameManager: Crystal property not set, trying to find automatically');
+            console.debug('GameManager: Crystal property not set, trying to find automatically');
             // 尝试多种路径查找水晶节点
             const crystalPaths = [
                 'Crystal',
@@ -224,7 +224,7 @@ export class GameManager extends Component {
                 const foundCrystal = find(path);
                 if (foundCrystal) {
                     this.crystal = foundCrystal;
-                    console.log('GameManager: Crystal found at path:', path);
+                    console.debug('GameManager: Crystal found at path:', path);
                     break;
                 }
             }
@@ -235,15 +235,15 @@ export class GameManager extends Component {
             }
         }
         
-        console.log('GameManager: Crystal node:', this.crystal.name);
-        console.log('GameManager: Crystal parent:', this.crystal.parent?.name);
-        console.log('GameManager: Crystal current active state:', this.crystal.active);
+        console.debug('GameManager: Crystal node:', this.crystal.name);
+        console.debug('GameManager: Crystal parent:', this.crystal.parent?.name);
+        console.debug('GameManager: Crystal current active state:', this.crystal.active);
         
         this.crystalScript = this.crystal.getComponent(Crystal);
         // 监听水晶销毁事件
         if (this.crystalScript) {
             Crystal.getEventTarget().on('crystal-destroyed', this.onCrystalDestroyed, this);
-            console.log('GameManager: Crystal script found and event bound');
+            console.debug('GameManager: Crystal script found and event bound');
         } else {
             console.error('GameManager: Crystal script not found!');
         }
@@ -328,7 +328,7 @@ export class GameManager extends Component {
         let current = node;
         while (current) {
             if (!current.active) {
-                console.log(`GameManager: Activating parent node: ${current.name}`);
+                console.debug(`GameManager: Activating parent node: ${current.name}`);
                 current.active = true;
             }
             current = current.parent;
@@ -339,30 +339,30 @@ export class GameManager extends Component {
      * 在游戏开始后显示所有游戏主体相关内容
      */
     showGameElements() {
-        console.log('GameManager: Showing game elements - Enhanced version');
+        console.debug('GameManager: Showing game elements - Enhanced version');
         
         // 显示所有游戏元素
         const enemies = find('Enemies');
         if (enemies) {
             enemies.active = true;
-            console.log('GameManager: Enemies shown');
+            console.debug('GameManager: Enemies shown');
         }
         
         const towers = find('Towers');
         if (towers) {
             towers.active = true;
-            console.log('GameManager: Towers shown');
+            console.debug('GameManager: Towers shown');
         }
         
         // 显示水晶 - 基于用户提供的资源位置，水晶位于Canvas/Crystal
         if (!this.crystal) {
-            console.log('GameManager: Crystal property not set, trying direct path Canvas/Crystal');
+            console.debug('GameManager: Crystal property not set, trying direct path Canvas/Crystal');
             
             // 直接使用用户提供的路径查找水晶
             this.crystal = find('Canvas/Crystal');
             
             if (this.crystal) {
-                console.log('GameManager: Crystal found at Canvas/Crystal');
+                console.debug('GameManager: Crystal found at Canvas/Crystal');
                 this.crystalScript = this.crystal.getComponent(Crystal);
                 if (this.crystalScript) {
                     Crystal.getEventTarget().on('crystal-destroyed', this.onCrystalDestroyed, this);
@@ -374,8 +374,8 @@ export class GameManager extends Component {
                 if (scene) {
                     this.crystal = this.findCrystalRecursive(scene);
                     if (this.crystal) {
-                        console.log('GameManager: Crystal found recursively:', this.crystal.name);
-                        console.log('GameManager: Crystal parent path:', this.getNodePath(this.crystal));
+                        console.debug('GameManager: Crystal found recursively:', this.crystal.name);
+                        console.debug('GameManager: Crystal parent path:', this.getNodePath(this.crystal));
                         this.crystalScript = this.crystal.getComponent(Crystal);
                         if (this.crystalScript) {
                             Crystal.getEventTarget().on('crystal-destroyed', this.onCrystalDestroyed, this);
@@ -387,21 +387,21 @@ export class GameManager extends Component {
         
         // 强制显示水晶节点
         if (this.crystal) {
-            console.log('GameManager: Forcing crystal to show');
-            console.log('GameManager: Crystal current active:', this.crystal.active);
+            console.debug('GameManager: Forcing crystal to show');
+            console.debug('GameManager: Crystal current active:', this.crystal.active);
             
             // 确保水晶节点及其所有父节点都处于激活状态
             this.ensureNodeAndParentsActive(this.crystal);
             
             // 直接设置水晶节点为激活状态
             this.crystal.active = true;
-            console.log('GameManager: Crystal shown successfully, final active state:', this.crystal.active);
+            console.debug('GameManager: Crystal shown successfully, final active state:', this.crystal.active);
         } else {
             console.error('GameManager: Crystal node not found!');
             // 最后尝试直接查找并显示，不保存引用
             const directCrystal = find('Canvas/Crystal');
             if (directCrystal) {
-                console.log('GameManager: Found crystal directly, showing without saving reference');
+                console.debug('GameManager: Found crystal directly, showing without saving reference');
                 directCrystal.active = true;
             }
         }
@@ -409,31 +409,31 @@ export class GameManager extends Component {
         // 显示游戏主体相关的标签和按钮
         if (this.healthLabel) {
             this.healthLabel.node.active = true;
-            console.log('GameManager: HealthLabel shown');
+            console.debug('GameManager: HealthLabel shown');
         }
         
         if (this.timerLabel) {
             this.timerLabel.node.active = true;
-            console.log('GameManager: TimerLabel shown');
+            console.debug('GameManager: TimerLabel shown');
         }
         
         if (this.goldLabel) {
             this.goldLabel.node.active = true;
-            console.log('GameManager: GoldLabel shown');
+            console.debug('GameManager: GoldLabel shown');
         }
         
         if (this.populationLabel) {
             this.populationLabel.node.active = true;
-            console.log('GameManager: PopulationLabel shown');
+            console.debug('GameManager: PopulationLabel shown');
         }
         
         // 显示建造按钮（尝试多种路径）
         const buildButton = find('UI/BuildButton') || find('Canvas/UI/BuildButton') || find('BuildButton');
         if (buildButton) {
             buildButton.active = true;
-            console.log('GameManager: BuildButton shown');
+            console.debug('GameManager: BuildButton shown');
         } else {
-            console.log('GameManager: BuildButton not found for showing');
+            console.debug('GameManager: BuildButton not found for showing');
         }
         
         // 查找UIManager并显示建造按钮
@@ -442,7 +442,7 @@ export class GameManager extends Component {
             const uiManager = uiManagerNode.getComponent('UIManager') as any;
             if (uiManager && uiManager.buildButton) {
                 uiManager.buildButton.node.active = true;
-                console.log('GameManager: UIManager BuildButton shown');
+                console.debug('GameManager: UIManager BuildButton shown');
             }
         }
         
@@ -453,11 +453,11 @@ export class GameManager extends Component {
                 // 显示所有UI元素，除了特定的隐藏元素
                 if (child.name !== 'container' && child.name !== 'GameOverPanel') {
                     child.active = true;
-                    console.log(`GameManager: UI element ${child.name} shown`);
+                    console.debug(`GameManager: UI element ${child.name} shown`);
                 }
             }
         } else {
-            console.log('GameManager: UI node not found for showing elements');
+            console.debug('GameManager: UI node not found for showing elements');
         }
         
         console.debug('GameManager: Game elements shown after game start');
@@ -635,20 +635,37 @@ export class GameManager extends Component {
      * 开始游戏
      */
     startGame() {
+        console.debug('[GameManager] startGame invoked, state:', this.gameState);
         if (this.gameState === GameState.Paused) {
             // 如果游戏已暂停，恢复游戏
             this.resumeGame();
+            console.debug('[GameManager] startGame: was Paused -> resumed');
         } else if (this.gameState === GameState.Ready) {
             // 如果游戏准备就绪，开始游戏
             this.gameState = GameState.Playing;
+            console.debug('[GameManager] startGame: state Ready -> Playing');
             
             // 显示所有游戏元素
             this.showGameElements();
+
+            // 开局在石墙网格顶行生成初始石墙
+            const towerBuilder = this.findComponentInScene('TowerBuilder') as any;
+            if (towerBuilder && towerBuilder.spawnInitialStoneWalls) {
+                // 等待一帧，确保网格面板初始化完成
+                console.debug('[GameManager] startGame - scheduling spawnInitialStoneWalls(14)');
+                this.scheduleOnce(() => {
+                    console.debug('[GameManager] startGame - calling spawnInitialStoneWalls(14)');
+                    towerBuilder.spawnInitialStoneWalls(14);
+                }, 0);
+            } else {
+                console.warn('GameManager.startGame: TowerBuilder or spawnInitialStoneWalls not found');
+            }
             
             console.debug('GameManager: Game started from Ready state');
         } else if (this.gameState !== GameState.Playing) {
             // 如果游戏已结束，重新开始游戏
             this.restartGame();
+            console.debug('[GameManager] startGame: not Playing -> restartGame');
         }
         
         console.debug('GameManager: Game started');
@@ -709,6 +726,28 @@ export class GameManager extends Component {
         };
         
         findAllUnits(scene);
+    }
+
+    /**
+     * 从场景递归查找指定组件（按组件名字符串）
+     */
+    private findComponentInScene(componentName: string): Component | null {
+        const scene = director.getScene();
+        if (!scene) return null;
+
+        const dfs = (node: Node): Component | null => {
+            const comp = node.getComponent(componentName);
+            if (comp) {
+                return comp;
+            }
+            for (const child of node.children) {
+                const found = dfs(child);
+                if (found) return found;
+            }
+            return null;
+        };
+
+        return dfs(scene);
     }
     
     /**
