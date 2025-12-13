@@ -136,14 +136,17 @@ export class EnemySpawner extends Component {
             console.debug(`EnemySpawner: Prefab data name: ${prefabName}, Prefab name: ${prefab.name}`);
             
             // 特殊处理，确保名称匹配
-            if (prefabName.toLowerCase().includes('enemy')) {
-                prefabName = 'Enemy';
-            } else if (prefabName.toLowerCase().includes('orcwarlord') || prefabName.toLowerCase().includes('warlord')) {
+            if (prefabName.toLowerCase().includes('orcwarlord') || prefabName.toLowerCase().includes('warlord')) {
                 prefabName = 'OrcWarlord';
-            } else if (prefabName.toLowerCase().includes('orc') || prefabName.toLowerCase().includes('warrior')) {
+            } else if (prefabName.toLowerCase() === 'orc' || (prefabName.toLowerCase().includes('orc') && !prefabName.toLowerCase().includes('warrior') && !prefabName.toLowerCase().includes('warlord'))) {
+                prefabName = 'Orc';
+            } else if (prefabName.toLowerCase().includes('orcwarrior') || (prefabName.toLowerCase().includes('orc') && prefabName.toLowerCase().includes('warrior'))) {
                 prefabName = 'OrcWarrior';
             } else if (prefabName.toLowerCase().includes('troll') || prefabName.toLowerCase().includes('spearman')) {
                 prefabName = 'TrollSpearman';
+            } else if (prefabName.toLowerCase().includes('enemy')) {
+                // 兼容旧的 Enemy 名称，映射到 Orc
+                prefabName = 'Orc';
             }
             
             this.enemyPrefabMap.set(prefabName, prefab);

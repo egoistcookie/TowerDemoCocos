@@ -20,6 +20,7 @@ export class UnitIntroPopup extends Component {
     closeButton: Button = null!;
     
     private gameManager: GameManager = null!;
+    private buildButton: Button = null!; // 建造按钮引用
     
     start() {
         // 尝试多种方式查找GameManager
@@ -49,6 +50,9 @@ export class UnitIntroPopup extends Component {
             }
         }
         
+        // 查找建造按钮
+        this.findBuildButton();
+        
         // 初始隐藏
         if (this.container) {
             this.container.active = false;
@@ -66,16 +70,171 @@ export class UnitIntroPopup extends Component {
     }
     
     /**
+     * 查找建造按钮
+     */
+    private findBuildButton() {
+        // 方法1: 通过UIManager查找
+        const uiManagerNode = find('UIManager') || find('UI/UIManager') || find('Canvas/UI/UIManager');
+        if (uiManagerNode) {
+            const uiManager = uiManagerNode.getComponent('UIManager') as any;
+            if (uiManager && uiManager.buildButton) {
+                this.buildButton = uiManager.buildButton;
+                console.debug('UnitIntroPopup: Found BuildButton through UIManager');
+                return;
+            }
+        }
+        
+        // 方法2: 直接通过节点名称查找
+        const buildButtonNode = find('UI/BuildButton') || find('Canvas/UI/BuildButton') || find('BuildButton');
+        if (buildButtonNode) {
+            this.buildButton = buildButtonNode.getComponent(Button);
+            if (this.buildButton) {
+                console.debug('UnitIntroPopup: Found BuildButton by node name');
+                return;
+            }
+        }
+        
+        // 方法3: 从场景中递归查找
+        const scene = this.node.scene;
+        if (scene) {
+            const findInScene = (node: Node, name: string): Node | null => {
+                if (node.name === name) {
+                    return node;
+                }
+                for (const child of node.children) {
+                    const found = findInScene(child, name);
+                    if (found) return found;
+                }
+                return null;
+            };
+            
+            const buttonNode = findInScene(scene, 'BuildButton');
+            if (buttonNode) {
+                this.buildButton = buttonNode.getComponent(Button);
+                if (this.buildButton) {
+                    console.debug('UnitIntroPopup: Found BuildButton recursively');
+                    return;
+                }
+            }
+        }
+        
+        console.warn('UnitIntroPopup: BuildButton not found!');
+    }
+    
+    /**
+     * 禁用建造按钮
+     */
+    private disableBuildButton() {
+        if (this.buildButton) {
+            this.buildButton.interactable = false;
+            console.debug('UnitIntroPopup: BuildButton disabled');
+        }
+    }
+    
+    /**
+     * 启用建造按钮
+     */
+    private enableBuildButton() {
+        if (this.buildButton) {
+            this.buildButton.interactable = true;
+            console.debug('UnitIntroPopup: BuildButton enabled');
+        }
+    }
+    
+    /**
+     * 退出建造模式并关闭建造面板
+     */
+    private exitBuildingMode() {
+        // 查找 TowerBuilder 节点
+        const towerBuilderNode = find('TowerBuilder');
+        if (towerBuilderNode) {
+            const towerBuilder = towerBuilderNode.getComponent('TowerBuilder') as any;
+            if (towerBuilder) {
+                // 先直接关闭建筑物选择面板（立即隐藏，不等待动画）
+                this.hideBuildingPanelImmediately();
+                
+                // 调用 disableBuildingMode 退出建造模式并关闭建造面板
+                if (towerBuilder.disableBuildingMode && typeof towerBuilder.disableBuildingMode === 'function') {
+                    towerBuilder.disableBuildingMode();
+                    console.debug('UnitIntroPopup: Building mode disabled');
+                }
+                // 确保建造模式状态被设置为 false
+                if (towerBuilder.isBuildingMode !== undefined) {
+                    towerBuilder.isBuildingMode = false;
+                }
+            }
+        }
+    }
+    
+    /**
+     * 立即隐藏建筑物选择面板
+     */
+    private hideBuildingPanelImmediately() {
+        // 方法1: 通过节点名称查找 BuildingSelectionPanel
+        const panelNode = find('BuildingSelectionPanel') || find('Canvas/UI/BuildingSelectionPanel') || find('UI/BuildingSelectionPanel');
+        if (panelNode) {
+            panelNode.active = false;
+            console.debug('UnitIntroPopup: BuildingSelectionPanel hidden immediately by node name');
+            return;
+        }
+        
+        // 方法2: 通过 TowerBuilder 查找
+        const towerBuilderNode = find('TowerBuilder');
+        if (towerBuilderNode) {
+            const towerBuilder = towerBuilderNode.getComponent('TowerBuilder') as any;
+            if (towerBuilder && towerBuilder.buildingPanel) {
+                // 直接设置节点为不可见
+                if (towerBuilder.buildingPanel.node) {
+                    towerBuilder.buildingPanel.node.active = false;
+                    console.debug('UnitIntroPopup: BuildingSelectionPanel hidden immediately through TowerBuilder');
+                    return;
+                }
+                // 如果 panelContent 存在，也隐藏它
+                if (towerBuilder.buildingPanel.panelContent) {
+                    towerBuilder.buildingPanel.panelContent.active = false;
+                }
+            }
+        }
+        
+        // 方法3: 从场景中递归查找
+        const scene = this.node.scene;
+        if (scene) {
+            const findInScene = (node: Node, name: string): Node | null => {
+                if (node.name === name) {
+                    return node;
+                }
+                for (const child of node.children) {
+                    const found = findInScene(child, name);
+                    if (found) return found;
+                }
+                return null;
+            };
+            
+            const foundPanel = findInScene(scene, 'BuildingSelectionPanel');
+            if (foundPanel) {
+                foundPanel.active = false;
+                console.debug('UnitIntroPopup: BuildingSelectionPanel hidden immediately recursively');
+            }
+        }
+    }
+    
+    /**
      * 显示单位介绍弹窗
      * @param unitInfo 单位信息对象
      */
     show(unitInfo: any) {
         if (!this.container) return;
         
+        // 退出建造模式并关闭建造面板
+        this.exitBuildingMode();
+        
         // 暂停游戏
         if (this.gameManager) {
             this.gameManager.pauseGame();
         }
+        
+        // 禁用建造按钮
+        this.disableBuildButton();
         
         // 设置单位信息
         if (unitInfo.unitIcon && this.unitIcon) {
@@ -126,6 +285,9 @@ export class UnitIntroPopup extends Component {
         this.container.off(Node.EventType.TOUCH_START, this.onTouchStart, this);
         this.container.off(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
         this.container.off(Node.EventType.TOUCH_END, this.onClose, this);
+        
+        // 启用建造按钮
+        this.enableBuildButton();
         
         // 继续游戏
         if (this.gameManager) {

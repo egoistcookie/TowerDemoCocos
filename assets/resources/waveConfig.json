@@ -7,7 +7,7 @@
       "preWaveDelay": 2,
       "enemies": [
         {
-          "prefabName": "Enemy",
+          "prefabName": "TrollSpearman",
           "count": 15,
           "interval": 1
         }
@@ -20,7 +20,7 @@
       "preWaveDelay": 3,
       "enemies": [
         {
-          "prefabName": "Enemy",
+          "prefabName": "Orc",
           "count": 10,
           "interval": 0.7
         },
@@ -43,7 +43,7 @@
       "preWaveDelay": 3,
       "enemies": [
         {
-          "prefabName": "Enemy",
+          "prefabName": "Orc",
           "count": 12,
           "interval": 0.7
         },
@@ -66,7 +66,7 @@
       "preWaveDelay": 4,
       "enemies": [
         {
-          "prefabName": "Enemy",
+          "prefabName": "Orc",
           "count": 15,
           "interval": 0.6
         },
@@ -94,7 +94,7 @@
       "preWaveDelay": 4,
       "enemies": [
         {
-          "prefabName": "Enemy",
+          "prefabName": "Orc",
           "count": 12,
           "interval": 0.6
         },
@@ -122,7 +122,7 @@
       "preWaveDelay": 5,
       "enemies": [
         {
-          "prefabName": "Enemy",
+          "prefabName": "Orc",
           "count": 18,
           "interval": 0.5
         },
@@ -173,7 +173,7 @@
       "preWaveDelay": 5,
       "enemies": [
         {
-          "prefabName": "Enemy",
+          "prefabName": "Orc",
           "count": 20,
           "interval": 0.5
         },
@@ -224,7 +224,7 @@
       "preWaveDelay": 6,
       "enemies": [
         {
-          "prefabName": "Enemy",
+          "prefabName": "Orc",
           "count": 15,
           "interval": 0.6
         },
@@ -298,7 +298,7 @@
       "preWaveDelay": 7,
       "enemies": [
         {
-          "prefabName": "Enemy",
+          "prefabName": "Orc",
           "count": 25,
           "interval": 0.4
         },
@@ -349,7 +349,7 @@
       "preWaveDelay": 7,
       "enemies": [
         {
-          "prefabName": "Enemy",
+          "prefabName": "Orc",
           "count": 25,
           "interval": 0.5
         },
@@ -400,7 +400,7 @@
       "preWaveDelay": 8,
       "enemies": [
         {
-          "prefabName": "Enemy",
+          "prefabName": "Orc",
           "count": 30,
           "interval": 0.4
         },
