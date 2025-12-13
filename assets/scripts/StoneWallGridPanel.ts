@@ -32,6 +32,7 @@ export class StoneWallGridPanel extends Component {
     private isHighlighted: boolean = false; // 是否正在高亮显示
     private highlightedCell: { x: number; y: number } | null = null; // 当前高亮的网格
     private excludeBuildingForHighlight: Node | null = null; // 高亮时排除的建筑物（用于拖拽）
+    private showGridBorder: boolean = false; // 是否显示网格边框（默认不显示）
 
     onLoad() {
         // 确保网格在任何生命周期调用前初始化
@@ -48,7 +49,8 @@ export class StoneWallGridPanel extends Component {
         // 创建网格绘制组件
         this.createGridGraphics();
         
-        // 绘制网格
+        // 默认不绘制网格（边框透明）
+        this.showGridBorder = false;
         this.drawGrid();
         
         // 确保网格面板默认可见
@@ -201,6 +203,11 @@ export class StoneWallGridPanel extends Component {
         // 清空之前的绘制
         this.gridGraphics.clear();
         
+        // 如果不需要显示边框，直接返回（不绘制任何内容）
+        if (!this.showGridBorder) {
+            return;
+        }
+        
         // 计算网格总尺寸
         const gridTotalWidth = (this.cellSize + this.cellSpacing) * this.gridWidth - this.cellSpacing;
         const gridTotalHeight = (this.cellSize + this.cellSpacing) * this.gridHeight - this.cellSpacing;
@@ -312,6 +319,10 @@ export class StoneWallGridPanel extends Component {
             this.node.active = true;
         }
         
+        // 显示网格边框（拖动时显示）
+        this.showGridBorder = true;
+        this.drawGrid();
+        
         // 确保高亮Graphics存在
         if (!this.highlightGraphics) {
             return;
@@ -396,6 +407,10 @@ export class StoneWallGridPanel extends Component {
         if (this.highlightGraphics) {
             this.highlightGraphics.clear();
         }
+        
+        // 隐藏网格边框（拖动结束时隐藏）
+        this.showGridBorder = false;
+        this.drawGrid();
         
         this.isHighlighted = false;
         this.highlightedCell = null;

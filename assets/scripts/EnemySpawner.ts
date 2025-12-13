@@ -276,11 +276,11 @@ export class EnemySpawner extends Component {
             this.currentEnemyConfig = null;
             
             // 第一波只刷新一个敌人，刷新后暂停
-            if (this.currentWave && this.currentWave.id === 1) {
-                this.pauseAfterFirstEnemy = true;
-            } else {
-                this.pauseAfterFirstEnemy = false;
-            }
+            // if (this.currentWave && this.currentWave.id === 1) {
+            //     this.pauseAfterFirstEnemy = true;
+            // } else {
+            //     this.pauseAfterFirstEnemy = false;
+            // }
             
             return;
         }

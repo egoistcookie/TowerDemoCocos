@@ -84,16 +84,14 @@ export class Enemy extends Component {
     private currentTarget: Node = null!;
     private gameManager: GameManager = null!;
     private detourTarget: Vec3 | null = null; // 绕行目标点，当找到绕行路径时设置
-    private detourMarkerNode: Node | null = null; // 绕行点高亮标记节点
     
     // 石墙网格寻路相关属性
     private stoneWallGridPanelComponent: StoneWallGridPanel | null = null; // 石墙网格面板组件引用
     private gridPath: Vec3[] = []; // 存储路径上的所有点
     private currentPathIndex: number = 0; // 当前路径点索引
-    private pathMarkerNodes: Node[] = []; // 存储所有路径点标记节点
+    private lastPathCheckTime: number = 0; // 上次路径检查时间（秒）
     private isInStoneWallGrid: boolean = false; // 标记是否在网格中寻路
     private topLayerGapTarget: Vec3 | null = null; // 网格最上层缺口目标点
-    private topLayerGapMarker: Node | null = null; // 缺口标记节点
     
     @property
     goldReward: number = 2; // 消灭敌人获得的金币
@@ -131,11 +129,9 @@ export class Enemy extends Component {
         // 初始化网格寻路相关属性
         this.gridPath = [];
         this.currentPathIndex = 0;
-        this.pathMarkerNodes = [];
         this.isInStoneWallGrid = false;
         this.stoneWallGridPanelComponent = null;
         this.topLayerGapTarget = null;
-        this.topLayerGapMarker = null;
         
         // 保存默认缩放比例
         this.defaultScale = this.node.scale.clone();
@@ -267,31 +263,30 @@ export class Enemy extends Component {
         }
 
         // 检查敌人是否在网格上方，如果是，先移动到缺口（但前提是还没有到达最底层）
+        // 优先级：如果有缺口目标，优先移动到缺口；如果没有，检查是否在网格上方并查找缺口
         if (!this.currentTarget && !this.isInStoneWallGrid) {
             // 先检查是否已经在最底层，如果是，清除所有网格相关状态，直接向水晶移动
             const currentGrid = this.stoneWallGridPanelComponent?.worldToGrid(this.node.worldPosition);
             if (currentGrid && currentGrid.y <= 0) {
                 // 已在最底层，清除所有网格相关状态，直接向水晶移动
                 console.info(`[Enemy] update: 敌人已在最底层（gridY=${currentGrid.y}），清除网格相关状态，直接向水晶移动`);
-                this.removeTopLayerGapMarker();
                 this.topLayerGapTarget = null;
                 this.detourTarget = null;
-                this.removeDetourMarker();
                 // 直接跳过后续的网格和绕行逻辑，进入向水晶移动的逻辑
-            } else if (this.checkEnemyAboveGrid()) {
+            } else if (this.topLayerGapTarget || this.checkEnemyAboveGrid()) {
+                // 如果已经有缺口目标，或者敌人在网格上方，处理缺口移动逻辑
                 // 如果还没有找到缺口目标，寻找缺口
                 if (!this.topLayerGapTarget) {
                     const gapPos = this.findGapInTopLayer();
                     if (gapPos) {
                         this.topLayerGapTarget = gapPos;
-                        this.createTopLayerGapMarker(gapPos);
-                        console.debug(`[Enemy] update: 在网格上方，找到缺口位置: (${gapPos.x.toFixed(1)}, ${gapPos.y.toFixed(1)})`);
+                        console.info(`[Enemy] update: ✅ 在网格上方，找到缺口位置: (${gapPos.x.toFixed(1)}, ${gapPos.y.toFixed(1)})`);
                     } else {
                         // 找不到缺口，攻击最近的石墙
                         const nearestWall = this.findNearestStoneWall();
                         if (nearestWall) {
                             this.currentTarget = nearestWall;
-                            console.debug(`[Enemy] update: 网格最上层没有缺口，设置为攻击最近的石墙`);
+                            console.warn(`[Enemy] update: 网格最上层没有缺口，设置为攻击最近的石墙`);
                         }
                         // 如果正在播放攻击动画，停止攻击动画
                         if (this.isPlayingAttackAnimation) {
@@ -307,10 +302,15 @@ export class Enemy extends Component {
                 Vec3.subtract(toGap, this.topLayerGapTarget, enemyPos);
                 const gapDistance = toGap.length();
 
-                if (gapDistance < 10) {
+                if (gapDistance < 15) {
                     // 已到达缺口，清除缺口标记，进入网格寻路模式
-                    console.debug(`[Enemy] update: 已到达缺口，进入网格寻路模式`);
-                    this.removeTopLayerGapMarker();
+                    console.info(`[Enemy] update: ✅ 已到达缺口位置(${this.topLayerGapTarget.x.toFixed(1)}, ${this.topLayerGapTarget.y.toFixed(1)})，距离=${gapDistance.toFixed(1)}，进入网格寻路模式`);
+                    
+                    // 确保敌人位置精确对齐到缺口位置
+                    const clampedPos = this.clampPositionToScreen(this.topLayerGapTarget);
+                    this.node.setWorldPosition(clampedPos);
+                    
+                    const gapTarget = this.topLayerGapTarget;
                     this.topLayerGapTarget = null;
                     
                     // 进入网格寻路模式
@@ -319,19 +319,31 @@ export class Enemy extends Component {
                     if (path && path.length > 0) {
                         this.gridPath = path;
                         this.currentPathIndex = 0;
-                        this.createPathMarkers();
+                        console.info(`[Enemy] update: 找到网格路径，路径点数量=${path.length}，开始网格内移动`);
                         this.moveInStoneWallGrid(deltaTime);
+                        return;
                     } else {
-                        // 无路可走，攻击最近的石墙
+                        // 无路可走，攻击最近的石墙（最高优先级）
                         this.isInStoneWallGrid = false;
                         const nearestWall = this.findNearestStoneWall();
                         if (nearestWall) {
                             this.currentTarget = nearestWall;
-                            console.debug(`[Enemy] update: 网格中无路可走，设置为攻击最近的石墙`);
+                            // 清除绕行目标点，因为A*寻路失败后的石墙攻击优先级更高
+                            if (this.detourTarget) {
+                                console.info(`[Enemy] update: A*寻路失败后的石墙目标（最高优先级），清除绕行目标点`);
+                                this.detourTarget = null;
+                            }
+                            console.warn(`[Enemy] update: ❌ A*寻路失败，设置为攻击最近的石墙（最高优先级）`);
+                            // 不立即return，让后续逻辑处理移动和攻击
+                        } else {
+                            console.warn(`[Enemy] update: ❌ A*寻路失败且找不到石墙，停止移动`);
+                            return;
                         }
                     }
+                    // 继续执行，让后续逻辑处理石墙攻击
                 } else {
                     // 向缺口移动
+                    console.info(`[Enemy] update: 🎯 向缺口移动，当前位置(${enemyPos.x.toFixed(1)}, ${enemyPos.y.toFixed(1)})，目标(${this.topLayerGapTarget.x.toFixed(1)}, ${this.topLayerGapTarget.y.toFixed(1)})，距离=${gapDistance.toFixed(1)}`);
                     toGap.normalize();
                     const moveDistance = this.moveSpeed * deltaTime;
                     const newPos = new Vec3();
@@ -345,27 +357,26 @@ export class Enemy extends Component {
                     
                     // 播放行走动画
                     this.playWalkAnimation();
+                    
+                    // 如果正在播放攻击动画，停止攻击动画
+                    if (this.isPlayingAttackAnimation) {
+                        this.isPlayingAttackAnimation = false;
+                    }
                 }
-                
-                // 如果正在播放攻击动画，停止攻击动画
-                if (this.isPlayingAttackAnimation) {
-                    this.isPlayingAttackAnimation = false;
-                }
-                return;
+                return; // 优先处理缺口移动，不继续执行后续逻辑
             }
         }
 
-        // 检查是否需要进入网格寻路模式（但前提是还没有到达最底层）
-        if (!this.currentTarget && !this.isInStoneWallGrid) {
+        // 检查是否需要进入网格寻路模式（但前提是还没有到达最底层，且没有缺口目标）
+        // 如果正在移动到缺口，不应该进入网格寻路模式
+        if (!this.currentTarget && !this.isInStoneWallGrid && !this.topLayerGapTarget) {
             // 先检查是否已经在最底层，如果是，清除网格相关状态，直接向水晶移动
             const currentGrid = this.stoneWallGridPanelComponent?.worldToGrid(this.node.worldPosition);
             if (currentGrid && currentGrid.y <= 0) {
                 // 已在最底层，清除所有网格相关状态，直接向水晶移动
                 console.info(`[Enemy] update: 敌人已在最底层（gridY=${currentGrid.y}），清除网格相关状态，直接向水晶移动`);
-                this.removeTopLayerGapMarker();
                 this.topLayerGapTarget = null;
                 this.detourTarget = null;
-                this.removeDetourMarker();
                 // 直接跳过后续的网格和绕行逻辑，进入向水晶移动的逻辑
             } else if (this.checkStoneWallGridBelowEnemy()) {
                 // checkStoneWallGridBelowEnemy() 已经检查了是否到达最底层，所以这里直接进入网格寻路模式
@@ -375,34 +386,56 @@ export class Enemy extends Component {
                 if (path && path.length > 0) {
                     this.gridPath = path;
                     this.currentPathIndex = 0;
-                    this.createPathMarkers();
                     this.moveInStoneWallGrid(deltaTime);
+                    // 如果正在播放攻击动画，停止攻击动画
+                    if (this.isPlayingAttackAnimation) {
+                        this.isPlayingAttackAnimation = false;
+                    }
+                    return;
                 } else {
-                    // 无路可走，攻击最近的石墙
+                    // 无路可走，攻击最近的石墙（最高优先级）
                     this.isInStoneWallGrid = false;
                     const nearestWall = this.findNearestStoneWall();
                     if (nearestWall) {
                         this.currentTarget = nearestWall;
-                        console.info(`[Enemy] update: 网格中无路可走，设置为攻击最近的石墙`);
+                        // 清除绕行目标点，因为A*寻路失败后的石墙攻击优先级更高
+                        if (this.detourTarget) {
+                            console.info(`[Enemy] update: A*寻路失败后的石墙目标（最高优先级），清除绕行目标点`);
+                            this.detourTarget = null;
+                        }
+                        console.warn(`[Enemy] update: ❌ A*寻路失败，设置为攻击最近的石墙（最高优先级）`);
+                        // 不立即return，让后续逻辑处理移动和攻击
+                    } else {
+                        console.warn(`[Enemy] update: ❌ A*寻路失败且找不到石墙，停止移动`);
+                        return;
                     }
                 }
-                // 如果正在播放攻击动画，停止攻击动画
-                if (this.isPlayingAttackAnimation) {
-                    this.isPlayingAttackAnimation = false;
-                }
-                return;
+                // 继续执行，让后续逻辑处理石墙攻击
             }
         }
 
-        // 最高优先级：如果有绕行目标点，直接向绕行目标点移动，忽略当前目标
-        // 但前提是敌人还没有到达最底层
+        // 最高优先级：如果当前目标是石墙且不在网格寻路模式（A*寻路失败后设置的），优先攻击石墙
+        // 这种情况下应该清除绕行目标点，专注于攻击石墙
+        if (this.currentTarget && !this.isInStoneWallGrid) {
+            const currentWallScript = this.currentTarget.getComponent('StoneWall') as any;
+            if (currentWallScript && currentWallScript.isAlive && currentWallScript.isAlive()) {
+                // A*寻路失败后设置的石墙目标具有最高优先级，清除绕行目标点
+                if (this.detourTarget) {
+                    console.info(`[Enemy] update: A*寻路失败后的石墙目标（最高优先级），清除绕行目标点`);
+                    this.detourTarget = null;
+                }
+                // 继续执行，让后续逻辑处理石墙攻击
+            }
+        }
+
+        // 如果有绕行目标点，直接向绕行目标点移动，忽略当前目标
+        // 但前提是敌人还没有到达最底层，且当前目标不是A*寻路失败后的石墙
         if (this.detourTarget) {
             const currentGrid = this.stoneWallGridPanelComponent?.worldToGrid(this.node.worldPosition);
             if (currentGrid && currentGrid.y <= 0) {
                 // 已在最底层，清除绕行目标点，直接向水晶移动
                 console.info(`[Enemy] update: 敌人已在最底层（gridY=${currentGrid.y}），清除绕行目标点，直接向水晶移动`);
                 this.detourTarget = null;
-                this.removeDetourMarker();
                 // 继续执行，进入向水晶移动的逻辑
             } else {
                 console.info(`[Enemy] update: 检测到绕行目标点，优先向绕行点移动`);
@@ -415,7 +448,7 @@ export class Enemy extends Component {
             }
         }
 
-        // 只有在没有绕行目标点时，才处理当前目标
+        // 处理当前目标
         if (this.currentTarget) {
             const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
             const targetType = this.currentTarget.getComponent('StoneWall') ? '石墙' : 
@@ -473,6 +506,18 @@ export class Enemy extends Component {
         if (this.detourTarget) {
             console.debug(`[Enemy] findTarget: 已有绕行目标点，跳过目标查找`);
             return;
+        }
+        
+        // 如果当前目标是石墙且敌人不在网格寻路模式（说明可能是A*寻路失败后设置的），保持这个目标作为最高优先级
+        if (this.currentTarget && !this.isInStoneWallGrid) {
+            const currentWallScript = this.currentTarget.getComponent('StoneWall') as any;
+            if (currentWallScript && currentWallScript.isAlive && currentWallScript.isAlive()) {
+                // 检查这个石墙是否仍然有效且存活
+                const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
+                console.debug(`[Enemy] findTarget: 当前目标是石墙（A*寻路失败后设置），保持目标（最高优先级），距离: ${distance.toFixed(1)}`);
+                // 保持这个目标，不执行后续的目标查找逻辑
+                return;
+            }
         }
         
         // 使用递归查找Towers容器（更可靠）
@@ -912,7 +957,7 @@ export class Enemy extends Component {
         }
     }
 
-    moveTowardsTarget(deltaTime: number) {
+    private moveTowardsTarget(deltaTime: number) {
         if (!this.currentTarget) {
             return;
         }
@@ -1090,7 +1135,7 @@ export class Enemy extends Component {
         }
     }
 
-    moveTowardsCrystal(deltaTime: number) {
+    private moveTowardsCrystal(deltaTime: number) {
         if (!this.targetCrystal || !this.targetCrystal.isValid) {
             return;
         }
@@ -1104,18 +1149,27 @@ export class Enemy extends Component {
             if (path && path.length > 0) {
                 this.gridPath = path;
                 this.currentPathIndex = 0;
-                this.createPathMarkers();
                 this.moveInStoneWallGrid(deltaTime);
+                return;
             } else {
-                // 无路可走，攻击最近的石墙
+                // 无路可走，攻击最近的石墙（最高优先级）
                 this.isInStoneWallGrid = false;
                 const nearestWall = this.findNearestStoneWall();
                 if (nearestWall) {
                     this.currentTarget = nearestWall;
-                    console.debug(`[Enemy] moveTowardsCrystal: 网格中无路可走，设置为攻击最近的石墙`);
+                    // 清除绕行目标点，因为A*寻路失败后的石墙攻击优先级更高
+                    if (this.detourTarget) {
+                        console.info(`[Enemy] moveTowardsCrystal: A*寻路失败后的石墙目标（最高优先级），清除绕行目标点`);
+                        this.detourTarget = null;
+                    }
+                    console.warn(`[Enemy] moveTowardsCrystal: ❌ A*寻路失败，设置为攻击最近的石墙（最高优先级）`);
+                    // 不立即return，让调用者知道需要处理石墙攻击
+                    return;
+                } else {
+                    console.warn(`[Enemy] moveTowardsCrystal: ❌ A*寻路失败且找不到石墙`);
+                    return;
                 }
             }
-            return;
         }
 
         // 如果已经在网格寻路模式中，不需要执行后续逻辑
@@ -1135,7 +1189,6 @@ export class Enemy extends Component {
                 this.currentTarget = blockedStoneWall;
                 // 清除绕行目标点
                 this.detourTarget = null;
-                this.removeDetourMarker();
                 return;
             }
             
@@ -1143,38 +1196,46 @@ export class Enemy extends Component {
         }
 
         // 如果有绕行目标点，优先移动到绕行目标点（不检查其他目标）
+        // 但如果敌人已在最底层，清除绕行目标点，直接向水晶移动
         if (this.detourTarget) {
-            const enemyWorldPos = this.node.worldPosition;
-            const toDetour = new Vec3();
-            Vec3.subtract(toDetour, this.detourTarget, enemyWorldPos);
-            const detourDistance = toDetour.length();
-            
-            // 如果已经到达绕行目标点（距离小于阈值），清除绕行目标点，继续向水晶移动
-            if (detourDistance < 5) {
-                console.info(`[Enemy] moveTowardsCrystal: ✅ 已到达绕行目标点！`);
-                
-                // 清除绕行目标点和标记
+            const currentGrid = this.stoneWallGridPanelComponent?.worldToGrid(this.node.worldPosition);
+            if (currentGrid && currentGrid.y <= 0) {
+                // 已在最底层，清除绕行目标点，直接向水晶移动
+                console.info(`[Enemy] moveTowardsCrystal: 敌人已在最底层（gridY=${currentGrid.y}），清除绕行目标点，直接向水晶移动`);
                 this.detourTarget = null;
-                this.removeDetourMarker();
-                // 清除当前目标，确保继续向水晶移动
-                this.currentTarget = null!;
+                // 继续执行，进入向水晶移动的逻辑
             } else {
-                // 向绕行目标点移动，减少严格的路径检查，特别是对于房间出口
-                // 房间出口是经过计算的安全路径，不需要过度检查
-                toDetour.normalize();
-                const moveDistance = this.moveSpeed * deltaTime;
-                const newPos = new Vec3();
-                Vec3.scaleAndAdd(newPos, enemyWorldPos, toDetour, moveDistance);
+                const enemyWorldPos = this.node.worldPosition;
+                const toDetour = new Vec3();
+                Vec3.subtract(toDetour, this.detourTarget, enemyWorldPos);
+                const detourDistance = toDetour.length();
                 
-                // 只检查最终位置是否有严重碰撞，允许轻微擦碰
-                // 使用更宽松的碰撞检测阈值
-                const clampedPos = this.clampPositionToScreen(newPos);
-                this.node.setWorldPosition(clampedPos);
-                this.flipDirection(toDetour);
-                this.playWalkAnimation();
-                // 移除频繁调用的日志以减少日志 spam
-                // console.debug(`[Enemy] moveTowardsCrystal: 向绕行目标点移动，距离: ${detourDistance.toFixed(1)}像素`);
-                return;
+                // 如果已经到达绕行目标点（距离小于阈值），清除绕行目标点，继续向水晶移动
+                if (detourDistance < 5) {
+                    console.info(`[Enemy] moveTowardsCrystal: ✅ 已到达绕行目标点！`);
+                    
+                    // 清除绕行目标点和标记
+                    this.detourTarget = null;
+                    // 清除当前目标，确保继续向水晶移动
+                    this.currentTarget = null!;
+                } else {
+                    // 向绕行目标点移动，减少严格的路径检查，特别是对于房间出口
+                    // 房间出口是经过计算的安全路径，不需要过度检查
+                    toDetour.normalize();
+                    const moveDistance = this.moveSpeed * deltaTime;
+                    const newPos = new Vec3();
+                    Vec3.scaleAndAdd(newPos, enemyWorldPos, toDetour, moveDistance);
+                    
+                    // 只检查最终位置是否有严重碰撞，允许轻微擦碰
+                    // 使用更宽松的碰撞检测阈值
+                    const clampedPos = this.clampPositionToScreen(newPos);
+                    this.node.setWorldPosition(clampedPos);
+                    this.flipDirection(toDetour);
+                    this.playWalkAnimation();
+                    // 移除频繁调用的日志以减少日志 spam
+                    // console.debug(`[Enemy] moveTowardsCrystal: 向绕行目标点移动，距离: ${detourDistance.toFixed(1)}像素`);
+                    return;
+                }
             }
         }
 
@@ -1303,7 +1364,7 @@ export class Enemy extends Component {
      * @param deltaTime 时间间隔
      * @returns 如果找到可行的绕路位置返回该位置，否则返回null
      */
-    calculateDetourPosition(direction: Vec3, deltaTime: number): Vec3 | null {
+    private calculateDetourPosition(direction: Vec3, deltaTime: number): Vec3 | null {
         // 如果已经有全局绕行目标点，就不执行局部绕路逻辑
         if (this.detourTarget) {
             console.debug(`[Enemy] calculateDetourPosition: 已有全局绕行目标点，跳过局部绕路计算`);
@@ -1351,15 +1412,10 @@ export class Enemy extends Component {
     }
 
     /**
-     * 检查位置是否与石墙碰撞
-     * @param position 要检查的位置
-     * @returns 如果与石墙碰撞返回true，否则返回false
-     */
-    /**
      * 查找最近的石墙
      * @returns 最近的石墙节点，如果没有找到返回null
      */
-    findNearestStoneWall(): Node | null {
+    private findNearestStoneWall(): Node | null {
         // 递归查找所有带有StoneWall组件的节点
         const findAllStoneWalls = (node: Node): Node[] => {
             const walls: Node[] = [];
@@ -1404,6 +1460,59 @@ export class Enemy extends Component {
         }
 
         return nearestWall;
+    }
+
+    /**
+     * 检查指定位置是否有石墙节点
+     * @param position 要检查的世界坐标位置
+     * @returns 如果该位置有石墙节点返回true，否则返回false
+     */
+    private checkStoneWallAtPosition(position: Vec3): boolean {
+        // 递归查找所有带有StoneWall组件的节点
+        const findAllStoneWalls = (node: Node): Node[] => {
+            const walls: Node[] = [];
+            
+            // 检查当前节点是否有StoneWall组件
+            const wallScript = node.getComponent('StoneWall') as any;
+            if (wallScript && node.active && node.isValid) {
+                walls.push(node);
+            }
+            
+            // 递归检查子节点
+            for (const child of node.children) {
+                walls.push(...findAllStoneWalls(child));
+            }
+            
+            return walls;
+        };
+
+        // 从场景根节点开始查找所有石墙
+        const scene = this.node.scene;
+        if (!scene) {
+            return false;
+        }
+
+        const allStoneWalls = findAllStoneWalls(scene);
+        const checkRadius = 25; // 检查半径，约半个格子大小（50/2）
+
+        for (const wall of allStoneWalls) {
+            if (!wall || !wall.active || !wall.isValid) continue;
+            
+            const wallScript = wall.getComponent('StoneWall') as any;
+            // 检查石墙是否被摧毁（如果有isDestroyed属性）
+            if (wallScript && wallScript.isDestroyed === true) continue;
+
+            const wallPos = wall.worldPosition;
+            const distance = Vec3.distance(position, wallPos);
+
+            // 如果距离小于检查半径，说明该位置有石墙
+            if (distance < checkRadius) {
+                console.debug(`[Enemy] checkStoneWallAtPosition: 位置(${position.x.toFixed(1)}, ${position.y.toFixed(1)}) 检测到石墙，距离=${distance.toFixed(1)}`);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -1465,7 +1574,7 @@ export class Enemy extends Component {
         return null;
     }
 
-    checkCollisionWithStoneWall(position: Vec3): boolean {
+    private checkCollisionWithStoneWall(position: Vec3): boolean {
         const blockingWall = this.getBlockingStoneWall(position);
         if (blockingWall) {
             const wallPos = blockingWall.worldPosition;
@@ -1526,6 +1635,17 @@ export class Enemy extends Component {
      * @returns 如果路径被阻挡且无法绕开，返回最近的石墙节点；否则返回null
      */
     private checkPathBlockedByStoneWall(): Node | null {
+        // 如果敌人已在最底层，直接返回null，不执行绕行逻辑，直接向水晶移动
+        const currentGrid = this.stoneWallGridPanelComponent?.worldToGrid(this.node.worldPosition);
+        if (currentGrid && currentGrid.y <= 0) {
+            console.info(`[Enemy] checkPathBlockedByStoneWall: 敌人已在最底层（gridY=${currentGrid.y}），跳过绕行逻辑，直接向水晶移动`);
+            // 清除可能存在的绕行目标点
+            if (this.detourTarget) {
+                this.detourTarget = null;
+            }
+            return null;
+        }
+
         if (!this.targetCrystal || !this.targetCrystal.isValid) {
             return null;
         }
@@ -1736,7 +1856,6 @@ export class Enemy extends Component {
                 
                 console.info(`[Enemy] checkPathBlockedByStoneWall: ✓ 找到房间出口作为绕行点！出口位置: (${bestExit.x.toFixed(1)}, ${bestExit.y.toFixed(1)})`);
                 this.detourTarget = bestExit;
-                this.createDetourMarker(bestExit);
                 canDetour = true;
                 console.info(`[Enemy] checkPathBlockedByStoneWall: 设置绕行目标，敌人将向出口移动`);
             }
@@ -1785,24 +1904,20 @@ export class Enemy extends Component {
                     // 障碍物在右侧，优先选择右侧绕行
                     console.info(`[Enemy] checkPathBlockedByStoneWall: ✓ 找到右侧绕行路径！偏移距离: ${optimalDetourDistance}像素`);
                     this.detourTarget = clampedRightOffset.clone();
-                    this.createDetourMarker(clampedRightOffset);
                     canDetour = true;
                 } else {
                     // 障碍物在左侧或中间，优先选择左侧绕行
                     console.info(`[Enemy] checkPathBlockedByStoneWall: ✓ 找到左侧绕行路径！偏移距离: ${optimalDetourDistance}像素`);
                     this.detourTarget = clampedLeftOffset.clone();
-                    this.createDetourMarker(clampedLeftOffset);
                     canDetour = true;
                 }
             } else if (leftCanDetour) {
                 console.info(`[Enemy] checkPathBlockedByStoneWall: ✓ 找到左侧绕行路径！偏移距离: ${optimalDetourDistance}像素`);
                 this.detourTarget = clampedLeftOffset.clone();
-                this.createDetourMarker(clampedLeftOffset);
                 canDetour = true;
             } else if (rightCanDetour) {
                 console.info(`[Enemy] checkPathBlockedByStoneWall: ✓ 找到右侧绕行路径！偏移距离: ${optimalDetourDistance}像素`);
                 this.detourTarget = clampedRightOffset.clone();
-                this.createDetourMarker(clampedRightOffset);
                 canDetour = true;
             } else {
                 // 使用最优距离无法绕行，尝试更大的距离
@@ -1815,7 +1930,6 @@ export class Enemy extends Component {
                         console.info(`[Enemy] checkPathBlockedByStoneWall: ✓ 找到左侧绕行路径（备用距离）！偏移距离: ${offsetDistance}像素`);
                         const clampedLeftOffsetFallback = this.clampPositionToScreen(leftOffsetFallback);
                         this.detourTarget = clampedLeftOffsetFallback.clone();
-                        this.createDetourMarker(clampedLeftOffsetFallback);
                         canDetour = true;
                         break;
                     }
@@ -1827,7 +1941,6 @@ export class Enemy extends Component {
                         console.info(`[Enemy] checkPathBlockedByStoneWall: ✓ 找到右侧绕行路径（备用距离）！偏移距离: ${offsetDistance}像素`);
                         const clampedRightOffsetFallback = this.clampPositionToScreen(rightOffsetFallback);
                         this.detourTarget = clampedRightOffsetFallback.clone();
-                        this.createDetourMarker(clampedRightOffsetFallback);
                         canDetour = true;
                         break;
                     }
@@ -1867,7 +1980,6 @@ export class Enemy extends Component {
                         // 保存绕行目标点，限制在地图范围内
                         const clampedOffsetPos = this.clampPositionToScreen(offsetPos);
                         this.detourTarget = clampedOffsetPos.clone();
-                        this.createDetourMarker(clampedOffsetPos);
                         canDetour = true;
                         break;
                     }
@@ -1884,7 +1996,6 @@ export class Enemy extends Component {
             console.info(`[Enemy] checkPathBlockedByStoneWall: ✗ 所有绕行尝试都失败，路径被石墙完全阻挡，需要攻击石墙`);
             // 清除绕行目标点
             this.detourTarget = null;
-            this.removeDetourMarker();
             return nearestWall;
         }
 
@@ -2005,8 +2116,6 @@ export class Enemy extends Component {
                 maxY = Math.max(maxY, pos.y + radius);
             }
 
-            // 调试：绘制石墙组的占地面积
-            this.debugDrawWallGroupArea(minX, maxX, minY, maxY, group);
 
             // 计算从敌人到障碍物组边界的距离
             const centerX = (minX + maxX) / 2;
@@ -2062,8 +2171,6 @@ export class Enemy extends Component {
             groupMinY = isFinite(groupMinY) ? groupMinY : enemyPos.y;
             groupMaxY = isFinite(groupMaxY) ? groupMaxY : enemyPos.y;
             
-            // 绘制石墙组标注
-            this.debugDrawWallGroupArea(groupMinX, groupMaxX, groupMinY, groupMaxY, group);
         }
         
         // 1. 暂时禁用组内和组间间隙出口，因为它们生成了错误的出口
@@ -2681,59 +2788,6 @@ export class Enemy extends Component {
     /**
      * 调试：绘制石墙组的占地面积
      */
-    private debugDrawWallGroupArea(minX: number, maxX: number, minY: number, maxY: number, group: Node[]) {
-        // 为每个石墙组创建一个唯一的调试节点
-        const debugNodeName = `WallGroupDebug_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-        const debugNode = new Node(debugNodeName);
-        
-        // 将调试节点添加到敌人节点的父节点，确保使用相同的坐标系统
-        debugNode.setParent(this.node.parent);
-        
-        // 设置调试节点的位置为世界原点，确保绘制的坐标是世界坐标
-        debugNode.setWorldPosition(0, 0, 0);
-
-        // 添加Graphics组件
-        const graphics = debugNode.addComponent(Graphics);
-
-        // 设置绘制样式
-        graphics.strokeColor = new Color(255, 255, 0, 150); // 黄色半透明边框
-        graphics.fillColor = new Color(255, 255, 0, 50); // 黄色半透明填充
-        graphics.lineWidth = 2;
-
-        // 绘制矩形边界
-        graphics.rect(minX, minY, maxX - minX, maxY - minY);
-        graphics.fill();
-        graphics.stroke();
-
-        // 绘制组中心标记
-        const centerX = (minX + maxX) / 2;
-        const centerY = (minY + maxY) / 2;
-        graphics.fillColor = new Color(0, 0, 255, 200); // 蓝色中心点
-        graphics.circle(centerX, centerY, 5);
-        graphics.fill();
-
-        // 绘制每个石墙的碰撞范围
-        for (const wall of group) {
-            const wallScript = wall.getComponent('StoneWall') as any;
-            if (!wallScript) continue;
-            const radius = wallScript.collisionRadius || 40;
-            const pos = wall.worldPosition;
-            
-            // 绘制石墙碰撞范围
-            graphics.strokeColor = new Color(255, 0, 0, 100); // 红色半透明边框
-            graphics.fillColor = new Color(255, 0, 0, 30); // 红色半透明填充
-            graphics.circle(pos.x, pos.y, radius);
-            graphics.fill();
-            graphics.stroke();
-        }
-
-        // 输出调试信息，包括每个石墙的位置
-        const wallPositions = group.map(wall => {
-            const pos = wall.worldPosition;
-            return `(${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})`;
-        }).join(', ');
-        console.debug(`[Enemy] debugDrawWallGroupArea: 绘制石墙组占地面积，边界: X[${minX.toFixed(1)}, ${maxX.toFixed(1)}], Y[${minY.toFixed(1)}, ${maxY.toFixed(1)}], 石墙数量: ${group.length}, 石墙位置: [${wallPositions}]`);
-    }
 
     /**
      * 检查从当前位置到绕行目标点的路径是否被石墙阻挡
@@ -2832,65 +2886,6 @@ export class Enemy extends Component {
         return true; // 路径畅通
     }
 
-    /**
-     * 创建绕行点高亮标记
-     */
-    private createDetourMarker(position: Vec3) {
-        // 先移除旧的标记
-        this.removeDetourMarker();
-
-        // 创建标记节点
-        this.detourMarkerNode = new Node('DetourMarker');
-        
-        // 将标记节点添加到场景根节点或Canvas
-        const canvas = find('Canvas');
-        if (canvas) {
-            this.detourMarkerNode.setParent(canvas);
-        } else if (this.node.scene) {
-            this.detourMarkerNode.setParent(this.node.scene);
-        } else {
-            console.warn('[Enemy] createDetourMarker: 无法找到Canvas或场景根节点，无法创建标记');
-            return;
-        }
-
-        // 设置位置
-        this.detourMarkerNode.setWorldPosition(position);
-
-        // 添加Graphics组件绘制高亮标记
-        const graphics = this.detourMarkerNode.addComponent(Graphics);
-        graphics.strokeColor = new Color(255, 0, 0, 255); // 红色边框
-        graphics.fillColor = new Color(255, 0, 0, 100); // 半透明红色填充
-        graphics.lineWidth = 4;
-
-        // 绘制圆形标记
-        const radius = 30; // 标记半径
-        graphics.circle(0, 0, radius);
-        graphics.fill();
-        graphics.stroke();
-
-        // 绘制内部十字标记
-        graphics.strokeColor = new Color(255, 255, 255, 255); // 白色十字
-        graphics.lineWidth = 3;
-        graphics.moveTo(-radius * 0.7, 0);
-        graphics.lineTo(radius * 0.7, 0);
-        graphics.stroke();
-        graphics.moveTo(0, -radius * 0.7);
-        graphics.lineTo(0, radius * 0.7);
-        graphics.stroke();
-
-        console.debug(`[Enemy] createDetourMarker: 创建绕行点标记，位置: (${position.x.toFixed(1)}, ${position.y.toFixed(1)})`);
-    }
-
-    /**
-     * 移除绕行点高亮标记
-     */
-    private removeDetourMarker() {
-        if (this.detourMarkerNode && this.detourMarkerNode.isValid) {
-            this.detourMarkerNode.destroy();
-            this.detourMarkerNode = null;
-            console.debug('[Enemy] removeDetourMarker: 移除绕行点标记');
-        }
-    }
 
     /**
      * 检查位置是否与障碍物组碰撞（将组作为整体障碍物处理）
@@ -3607,22 +3602,22 @@ export class Enemy extends Component {
                         this.currentTarget = null!;
                         // 清除绕行目标点，重新计算路径
                         this.detourTarget = null;
-                        this.removeDetourMarker();
                         
                         // 清除缺口标记
-                        this.removeTopLayerGapMarker();
                         this.topLayerGapTarget = null;
                         
                         // 如果摧毁的是石墙，检查是否需要重新进入网格寻路模式
                         if (wasStoneWall) {
-                            console.debug(`Enemy.attackCallback: 石墙被摧毁，检查是否需要重新寻路`);
-                            // 清除网格寻路状态，重新检查
-                            this.isInStoneWallGrid = false;
-                            this.removePathMarkers();
-                            this.gridPath = [];
-                            this.currentPathIndex = 0;
-                            
-                            // 下一帧会重新检查是否需要进入网格寻路模式
+                            console.info(`Enemy.attackCallback: 石墙被摧毁，重新规划路径`);
+                            // 如果正在网格内寻路，重新规划路径
+                            if (this.isInStoneWallGrid) {
+                                this.replanGridPath();
+                            } else {
+                                // 清除网格寻路状态，下一帧会重新检查是否需要进入网格寻路模式
+                                this.isInStoneWallGrid = false;
+                                this.gridPath = [];
+                                this.currentPathIndex = 0;
+                            }
                         }
                     }
                 } else {
@@ -3766,13 +3761,7 @@ export class Enemy extends Component {
         this.stopAllAnimations();
         
         // 移除绕行点标记
-        this.removeDetourMarker();
         
-        // 清除网格路径标记
-        this.removePathMarkers();
-        
-        // 清除缺口标记
-        this.removeTopLayerGapMarker();
         
         // 奖励金币
         if (!this.gameManager) {
@@ -3971,126 +3960,168 @@ export class Enemy extends Component {
     }
 
     /**
-     * 找到网格最上层（gridY=9）的缺口
+     * 找到网格最上层的缺口
      */
     private findGapInTopLayer(): Vec3 | null {
         this.findStoneWallGridPanel();
         
         if (!this.stoneWallGridPanelComponent) {
-            console.info(`[Enemy] findGapInTopLayer: 石墙网格面板组件不存在`);
+            console.warn(`[Enemy] findGapInTopLayer: 石墙网格面板组件不存在`);
             return null;
         }
 
         const enemyPos = this.node.worldPosition;
-        const gridWidth = 15;
-        const topLayerY = 9; // 最上层
+        const gridWidth = this.stoneWallGridPanelComponent.gridWidth;
+        const gridHeight = this.stoneWallGridPanelComponent.gridHeight;
+        const topLayerY = gridHeight - 1; // 最上层（gridY从0开始，所以是gridHeight-1）
 
-        // 计算敌人下方的世界坐标（在网格最上层的位置）
-        const gridTopWorldY = 1000; // 网格最上层的世界y坐标
-        const testWorldPos = new Vec3(enemyPos.x, gridTopWorldY, 0);
+        console.info(`[Enemy] findGapInTopLayer: 开始在网格最上层(gridY=${topLayerY})查找缺口，敌人位置(${enemyPos.x.toFixed(1)}, ${enemyPos.y.toFixed(1)})，网格尺寸=${gridWidth}x${gridHeight}`);
+
+        // 将敌人的x坐标转换为网格坐标（使用网格最上层对应的y坐标）
+        // 先尝试使用敌人的x坐标找到对应的网格列
+        let startX = 0;
+        let bestGap: Vec3 | null = null;
+        let minDistance = Infinity;
+
+        // 创建一个测试位置，y坐标使用网格最上层的y坐标
+        // 我们需要知道网格最上层的世界y坐标，可以通过将gridY=topLayerY转换为世界坐标来获取
+        const testGridPos = this.stoneWallGridPanelComponent.gridToWorld(0, topLayerY);
+        if (!testGridPos) {
+            console.warn(`[Enemy] findGapInTopLayer: 无法获取网格最上层世界坐标`);
+            return null;
+        }
+        
+        // 使用敌人的x坐标找到对应的网格列
+        const testWorldPos = new Vec3(enemyPos.x, testGridPos.y, 0);
         const enemyGrid = this.stoneWallGridPanelComponent.worldToGrid(testWorldPos);
         
-        // 从敌人x坐标对应的网格位置开始查找
-        let startX = 0;
-        if (enemyGrid) {
+        if (enemyGrid && enemyGrid.y === topLayerY) {
             startX = enemyGrid.x;
+            console.info(`[Enemy] findGapInTopLayer: 敌人对应的网格列x=${startX}`);
         } else {
-            // 如果无法转换，使用粗略计算
-            startX = Math.max(0, Math.min(gridWidth - 1, Math.floor((enemyPos.x - 0) / 50)));
-        }
-
-        console.info(`[Enemy] findGapInTopLayer: 敌人位置(${enemyPos.x.toFixed(1)}, ${enemyPos.y.toFixed(1)}), 开始搜索网格x=${startX}, 最上层gridY=${topLayerY}`);
-
-        // 先检查敌人正下方的格子
-        if (!this.stoneWallGridPanelComponent.isGridOccupied(startX, topLayerY)) {
-            const worldPos = this.stoneWallGridPanelComponent.gridToWorld(startX, topLayerY);
-            if (worldPos) {
-                console.info(`[Enemy] findGapInTopLayer: ✅ 在敌人正下方找到缺口 (gridX=${startX}, gridY=${topLayerY}) -> 世界坐标(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
-                return worldPos;
-            }
-        } else {
-            console.info(`[Enemy] findGapInTopLayer: 敌人正下方 (gridX=${startX}, gridY=${topLayerY}) 被占用`);
+            // 如果无法转换，使用粗略计算（假设网格从x=0开始，每格50像素）
+            startX = Math.max(0, Math.min(gridWidth - 1, Math.floor((enemyPos.x - this.stoneWallGridPanelComponent.node.worldPosition.x + (gridWidth * 50) / 2) / 50)));
+            console.info(`[Enemy] findGapInTopLayer: 使用粗略计算得到网格列x=${startX}`);
         }
 
         // 从敌人位置向左右两侧搜索最近的缺口
-        for (let offset = 1; offset < gridWidth; offset++) {
-            // 先检查右侧
-            const rightX = startX + offset;
-            if (rightX < gridWidth && !this.stoneWallGridPanelComponent.isGridOccupied(rightX, topLayerY)) {
-                const worldPos = this.stoneWallGridPanelComponent.gridToWorld(rightX, topLayerY);
-                if (worldPos) {
-                    console.info(`[Enemy] findGapInTopLayer: ✅ 在右侧找到缺口 (gridX=${rightX}, gridY=${topLayerY}, 偏移=${offset}) -> 世界坐标(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
-                    return worldPos;
+        // 优先选择距离敌人最近的缺口
+        for (let offset = 0; offset < gridWidth; offset++) {
+            // 同时检查右侧和左侧，选择距离更近的
+            const checkXs = [];
+            if (offset === 0) {
+                // 先检查正下方
+                checkXs.push(startX);
+            } else {
+                // 检查左右两侧
+                checkXs.push(startX + offset); // 右侧
+                checkXs.push(startX - offset); // 左侧
+            }
+
+            for (const x of checkXs) {
+                if (x >= 0 && x < gridWidth) {
+                    // 检查网格是否被占用
+                    if (!this.stoneWallGridPanelComponent.isGridOccupied(x, topLayerY)) {
+                        // 进一步验证：检查该位置是否真的有石墙节点（即使占用状态可能不正确）
+                        const worldPos = this.stoneWallGridPanelComponent.gridToWorld(x, topLayerY);
+                        if (worldPos) {
+                            // 检查该位置附近是否有石墙节点（通过搜索场景中的石墙节点）
+                            const hasStoneWallAtPosition = this.checkStoneWallAtPosition(worldPos);
+                            if (!hasStoneWallAtPosition) {
+                                // 计算到敌人的距离（仅考虑x方向，因为敌人是在上方）
+                                const distanceX = Math.abs(worldPos.x - enemyPos.x);
+                                if (distanceX < minDistance) {
+                                    minDistance = distanceX;
+                                    bestGap = worldPos;
+                                    console.info(`[Enemy] findGapInTopLayer: 找到潜在缺口 (gridX=${x}, gridY=${topLayerY})，世界坐标(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})，x方向距离=${distanceX.toFixed(1)}`);
+                                }
+                            } else {
+                                console.info(`[Enemy] findGapInTopLayer: (gridX=${x}, gridY=${topLayerY}) 位置检测到实际存在石墙，跳过`);
+                            }
+                        }
+                    } else {
+                        console.debug(`[Enemy] findGapInTopLayer: (gridX=${x}, gridY=${topLayerY}) 网格状态显示被占用`);
+                    }
                 }
             }
 
-            // 再检查左侧
-            const leftX = startX - offset;
-            if (leftX >= 0 && !this.stoneWallGridPanelComponent.isGridOccupied(leftX, topLayerY)) {
-                const worldPos = this.stoneWallGridPanelComponent.gridToWorld(leftX, topLayerY);
-                if (worldPos) {
-                    console.info(`[Enemy] findGapInTopLayer: ✅ 在左侧找到缺口 (gridX=${leftX}, gridY=${topLayerY}, 偏移=${offset}) -> 世界坐标(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
-                    return worldPos;
+            // 如果已经找到正下方的缺口，直接返回
+            if (offset === 0 && bestGap) {
+                console.info(`[Enemy] findGapInTopLayer: ✅ 在敌人正下方找到缺口 (gridX=${startX}, gridY=${topLayerY}) -> 世界坐标(${bestGap.x.toFixed(1)}, ${bestGap.y.toFixed(1)})`);
+                return bestGap;
+            }
+        }
+
+        if (bestGap) {
+            console.info(`[Enemy] findGapInTopLayer: ✅ 找到最佳缺口：世界坐标(${bestGap.x.toFixed(1)}, ${bestGap.y.toFixed(1)})，x方向距离=${minDistance.toFixed(1)}`);
+        } else {
+            console.info(`[Enemy] findGapInTopLayer: ❌ 未找到缺口，最上层所有格子都被占用`);
+        }
+        
+        return bestGap;
+    }
+
+
+    /**
+     * 检查当前网格路径是否仍然有效（路径上的点是否被石墙占用）
+     */
+    private checkGridPathValid(): boolean {
+        if (!this.gridPath || this.gridPath.length === 0 || !this.stoneWallGridPanelComponent) {
+            return false;
+        }
+
+        // 检查当前路径点和未来路径点是否被石墙占用
+        for (let i = this.currentPathIndex; i < this.gridPath.length; i++) {
+            const pathPoint = this.gridPath[i];
+            const grid = this.stoneWallGridPanelComponent.worldToGrid(pathPoint);
+            if (grid) {
+                // 检查网格是否被占用
+                if (this.stoneWallGridPanelComponent.isGridOccupied(grid.x, grid.y)) {
+                    console.info(`[Enemy] checkGridPathValid: 路径点[${i}] (gridX=${grid.x}, gridY=${grid.y}) 被占用，路径无效`);
+                    return false;
+                }
+                
+                // 进一步验证实际是否有石墙节点
+                if (this.checkStoneWallAtPosition(pathPoint)) {
+                    console.info(`[Enemy] checkGridPathValid: 路径点[${i}] (gridX=${grid.x}, gridY=${grid.y}) 检测到实际石墙，路径无效`);
+                    return false;
                 }
             }
         }
 
-        // 如果找不到缺口，返回null
-        console.info(`[Enemy] findGapInTopLayer: ❌ 未找到缺口，最上层所有格子都被占用`);
-        return null;
+        return true;
     }
 
     /**
-     * 创建缺口标记
+     * 重新规划网格路径（当石墙被摧毁或放置时调用）
      */
-    private createTopLayerGapMarker(position: Vec3) {
-        this.removeTopLayerGapMarker();
-
-        const canvas = find('Canvas');
-        const parent = canvas || this.node.scene;
-
-        if (!parent) {
-            console.warn('[Enemy] createTopLayerGapMarker: 无法找到Canvas或场景根节点，无法创建标记');
+    private replanGridPath() {
+        if (!this.isInStoneWallGrid) {
+            console.debug('[Enemy] replanGridPath: 敌人不在网格寻路模式，无需重新规划');
             return;
         }
 
-        this.topLayerGapMarker = new Node('TopLayerGapMarker');
-        this.topLayerGapMarker.setParent(parent);
-        this.topLayerGapMarker.setWorldPosition(position);
-
-        const graphics = this.topLayerGapMarker.addComponent(Graphics);
-        // 使用蓝色标记缺口，区别于绿色路径点和红色绕行点
-        graphics.strokeColor = new Color(0, 0, 255, 255); // 蓝色边框
-        graphics.fillColor = new Color(0, 0, 255, 100); // 半透明蓝色填充
-        graphics.lineWidth = 4;
-
-        const radius = 25;
-        graphics.circle(0, 0, radius);
-        graphics.fill();
-        graphics.stroke();
-
-        // 绘制内部箭头标记（向下）
-        graphics.strokeColor = new Color(255, 255, 255, 255); // 白色箭头
-        graphics.lineWidth = 3;
-        graphics.moveTo(0, -radius * 0.5);
-        graphics.lineTo(0, radius * 0.5);
-        graphics.stroke();
-        graphics.moveTo(-radius * 0.3, radius * 0.2);
-        graphics.lineTo(0, radius * 0.5);
-        graphics.lineTo(radius * 0.3, radius * 0.2);
-        graphics.stroke();
-
-        console.debug(`[Enemy] createTopLayerGapMarker: 创建缺口标记，位置: (${position.x.toFixed(1)}, ${position.y.toFixed(1)})`);
-    }
-
-    /**
-     * 移除缺口标记
-     */
-    private removeTopLayerGapMarker() {
-        if (this.topLayerGapMarker && this.topLayerGapMarker.isValid) {
-            this.topLayerGapMarker.destroy();
-            this.topLayerGapMarker = null;
-            console.debug('[Enemy] removeTopLayerGapMarker: 移除缺口标记');
+        console.info('[Enemy] replanGridPath: 开始重新规划网格路径');
+        
+        // 重新计算路径
+        const path = this.findPathInStoneWallGrid();
+        if (path && path.length > 0) {
+            this.gridPath = path;
+            this.currentPathIndex = 0;
+            console.info(`[Enemy] replanGridPath: ✅ 重新规划成功，新路径包含 ${path.length} 个路径点`);
+        } else {
+            // 无路可走，退出网格寻路模式
+            console.warn('[Enemy] replanGridPath: ❌ 重新规划失败，无路可走，退出网格寻路模式');
+            this.isInStoneWallGrid = false;
+            this.gridPath = [];
+            this.currentPathIndex = 0;
+            
+            // 尝试攻击最近的石墙
+            const nearestWall = this.findNearestStoneWall();
+            if (nearestWall) {
+                this.currentTarget = nearestWall;
+                console.info('[Enemy] replanGridPath: 设置为攻击最近的石墙');
+            }
         }
     }
 
@@ -4185,9 +4216,12 @@ export class Enemy extends Component {
             return null;
         }
 
-        const gridWidth = 15;
-        const gridHeight = 10;
+        // 从组件获取网格尺寸，而不是硬编码
+        const gridWidth = this.stoneWallGridPanelComponent.gridWidth;
+        const gridHeight = this.stoneWallGridPanelComponent.gridHeight;
         const targetY = 0; // 最底层
+        
+        console.info(`[Enemy] findPathToBottomLayerAStar: 开始A*寻路，网格尺寸=${gridWidth}x${gridHeight}，起点(${startX}, ${startY}) -> 目标层(gridY=${targetY})`);
 
         // 如果起点已经在最底层，直接返回
         if (startY <= targetY) {
@@ -4253,8 +4287,18 @@ export class Enemy extends Component {
                     continue;
                 }
 
-                // 检查该格子是否被石墙占用
-                if (this.stoneWallGridPanelComponent.isGridOccupied(newX, newY)) {
+                // 检查该格子是否被石墙占用（同时检查网格状态和实际石墙节点）
+                const isOccupied = this.stoneWallGridPanelComponent.isGridOccupied(newX, newY);
+                if (isOccupied) {
+                    // 网格状态显示被占用，跳过
+                    continue;
+                }
+                
+                // 进一步验证：检查该位置是否真的有石墙节点（即使占用状态可能不正确）
+                const worldPos = this.stoneWallGridPanelComponent.gridToWorld(newX, newY);
+                if (worldPos && this.checkStoneWallAtPosition(worldPos)) {
+                    // 实际检测到石墙节点，跳过该格子
+                    console.debug(`[Enemy] findPathToBottomLayerAStar: 格子(gridX=${newX}, gridY=${newY})检测到实际石墙，跳过`);
                     continue;
                 }
 
@@ -4290,105 +4334,38 @@ export class Enemy extends Component {
         return null;
     }
 
-    /**
-     * 创建路径点标记
-     */
-    private createPathMarkers() {
-        this.removePathMarkers();
-
-        if (!this.gridPath || this.gridPath.length === 0) {
-            return;
-        }
-
-        const canvas = find('Canvas');
-        const parent = canvas || this.node.scene;
-
-        if (!parent) {
-            console.warn('[Enemy] createPathMarkers: 无法找到Canvas或场景根节点，无法创建标记');
-            return;
-        }
-
-        for (let i = 0; i < this.gridPath.length; i++) {
-            const pathPoint = this.gridPath[i];
-            const markerNode = new Node(`PathMarker_${i}`);
-            markerNode.setParent(parent);
-            markerNode.setWorldPosition(pathPoint);
-
-            const graphics = markerNode.addComponent(Graphics);
-            // 使用绿色标记路径点，区别于红色绕行点
-            graphics.strokeColor = new Color(0, 255, 0, 255); // 绿色边框
-            graphics.fillColor = new Color(0, 255, 0, 100); // 半透明绿色填充
-            graphics.lineWidth = 3;
-
-            const radius = 20; // 标记半径稍小一些
-            graphics.circle(0, 0, radius);
-            graphics.fill();
-            graphics.stroke();
-
-            // 绘制内部数字标记
-            graphics.strokeColor = new Color(255, 255, 255, 255); // 白色数字
-            graphics.lineWidth = 2;
-            // 绘制简单的点标记
-            graphics.circle(0, 0, 5);
-            graphics.fill();
-
-            this.pathMarkerNodes.push(markerNode);
-        }
-
-        console.debug(`[Enemy] createPathMarkers: 创建了 ${this.pathMarkerNodes.length} 个路径点标记`);
-    }
-
-    /**
-     * 移除所有路径点标记
-     */
-    private removePathMarkers() {
-        for (const marker of this.pathMarkerNodes) {
-            if (marker && marker.isValid) {
-                marker.destroy();
-            }
-        }
-        this.pathMarkerNodes = [];
-        console.debug('[Enemy] removePathMarkers: 移除所有路径点标记');
-    }
-
-    /**
-     * 更新路径点标记（到达的点可以改变颜色或移除）
-     */
-    private updatePathMarkers() {
-        // 将已通过的路径点标记改为灰色或移除
-        for (let i = 0; i < this.currentPathIndex && i < this.pathMarkerNodes.length; i++) {
-            const marker = this.pathMarkerNodes[i];
-            if (marker && marker.isValid) {
-                const graphics = marker.getComponent(Graphics);
-                if (graphics) {
-                    // 改为灰色表示已通过
-                    graphics.strokeColor = new Color(128, 128, 128, 255);
-                    graphics.fillColor = new Color(128, 128, 128, 50);
-                    graphics.clear();
-                    const radius = 20;
-                    graphics.circle(0, 0, radius);
-                    graphics.fill();
-                    graphics.stroke();
-                }
-            }
-        }
-    }
 
     /**
      * 在网格内移动
      */
     private moveInStoneWallGrid(deltaTime: number) {
+        // 定期检查路径是否仍然有效（每0.5秒检查一次，避免频繁检查）
+        const checkInterval = 0.5;
+        const now = Date.now() / 1000;
+        if (!this.lastPathCheckTime) {
+            this.lastPathCheckTime = now;
+        }
+        if (this.gridPath && this.gridPath.length > 0 && now - this.lastPathCheckTime >= checkInterval) {
+            this.lastPathCheckTime = now;
+            if (!this.checkGridPathValid()) {
+                console.info('[Enemy] moveInStoneWallGrid: 路径无效，重新规划路径');
+                this.replanGridPath();
+                // 如果重新规划后没有路径，继续执行后续逻辑
+                if (!this.gridPath || this.gridPath.length === 0) {
+                    return;
+                }
+            }
+        }
+
         if (!this.gridPath || this.gridPath.length === 0) {
             // 没有路径，尝试重新寻路
             const newPath = this.findPathInStoneWallGrid();
             if (newPath && newPath.length > 0) {
                 this.gridPath = newPath;
                 this.currentPathIndex = 0;
-                this.createPathMarkers();
             } else {
                 // 无路可走，清除网格寻路状态，尝试攻击石墙
                 this.isInStoneWallGrid = false;
-                this.removePathMarkers();
                 const nearestWall = this.findNearestStoneWall();
                 if (nearestWall) {
                     this.currentTarget = nearestWall;
@@ -4402,7 +4379,6 @@ export class Enemy extends Component {
         if (this.currentPathIndex >= this.gridPath.length) {
             // 已到达最底层，清除网格寻路状态
             this.isInStoneWallGrid = false;
-            this.removePathMarkers();
             this.gridPath = [];
             this.currentPathIndex = 0;
             
@@ -4433,14 +4409,12 @@ export class Enemy extends Component {
                 // 已到达最底层，直接退出网格寻路模式
                 console.info(`[Enemy] moveInStoneWallGrid: ✅ 已到达最底层（gridY=${currentGrid.y}），退出网格寻路模式`);
                 this.isInStoneWallGrid = false;
-                this.removePathMarkers();
                 this.gridPath = [];
                 this.currentPathIndex = 0;
                 return;
             }
             
             this.currentPathIndex++;
-            this.updatePathMarkers();
             
             // 如果还有下一个路径点，继续移动
             if (this.currentPathIndex < this.gridPath.length) {
@@ -4453,7 +4427,6 @@ export class Enemy extends Component {
             } else {
                 // 已到达最后一个路径点，检查是否真的在最底层
                 this.isInStoneWallGrid = false;
-                this.removePathMarkers();
                 this.gridPath = [];
                 this.currentPathIndex = 0;
                 
@@ -4487,5 +4460,6 @@ export class Enemy extends Component {
         }
     }
 }
+
 
 
