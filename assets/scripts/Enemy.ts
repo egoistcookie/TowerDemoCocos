@@ -254,12 +254,19 @@ export class Enemy extends Component {
         // 最高优先级：如果在网格中寻路，优先执行网格寻路逻辑
         if (this.isInStoneWallGrid) {
             console.debug(`[Enemy] update: 在网格中寻路，执行网格移动逻辑`);
+            const hadTargetBefore = !!this.currentTarget;
             this.moveInStoneWallGrid(deltaTime);
-            // 如果正在播放攻击动画，停止攻击动画
-            if (this.isPlayingAttackAnimation) {
-                this.isPlayingAttackAnimation = false;
+            // 如果moveInStoneWallGrid检测到我方单位并设置了currentTarget，且退出了网格寻路模式，不直接return，让后续逻辑处理目标
+            if (!this.isInStoneWallGrid && this.currentTarget && !hadTargetBefore) {
+                console.info(`[Enemy] update: moveInStoneWallGrid检测到我方单位，已退出网格寻路模式，继续处理目标移动`);
+                // 不return，继续执行后续逻辑处理移动和攻击
+            } else {
+                // 如果正在播放攻击动画，停止攻击动画
+                if (this.isPlayingAttackAnimation) {
+                    this.isPlayingAttackAnimation = false;
+                }
+                return;
             }
-            return;
         }
 
         // 检查敌人是否在网格上方，如果是，先移动到缺口（但前提是还没有到达最底层）
@@ -342,6 +349,21 @@ export class Enemy extends Component {
                     }
                     // 继续执行，让后续逻辑处理石墙攻击
                 } else {
+                    // 向缺口移动前，优先检测我方单位
+                    const friendlyUnit = this.checkForFriendlyUnitInGrid();
+                    if (friendlyUnit) {
+                        // 检测到我方单位且路径畅通，优先攻击我方单位
+                        console.info(`[Enemy] update: 在网格上方检测到我方单位且路径畅通，优先攻击`);
+                        this.topLayerGapTarget = null;
+                        this.currentTarget = friendlyUnit;
+                        // 清除绕行目标点
+                        if (this.detourTarget) {
+                            this.detourTarget = null;
+                        }
+                        // 继续执行后续逻辑处理移动和攻击
+                        return;
+                    }
+
                     // 向缺口移动
                     console.info(`[Enemy] update: 🎯 向缺口移动，当前位置(${enemyPos.x.toFixed(1)}, ${enemyPos.y.toFixed(1)})，目标(${this.topLayerGapTarget.x.toFixed(1)}, ${this.topLayerGapTarget.y.toFixed(1)})，距离=${gapDistance.toFixed(1)}`);
                     toGap.normalize();
@@ -508,6 +530,26 @@ export class Enemy extends Component {
             return;
         }
         
+        // 如果当前目标是我方单位（弓箭手、女猎手、剑士），保持这个目标作为最高优先级
+        if (this.currentTarget && !this.isInStoneWallGrid) {
+            const arrowerScript = this.currentTarget.getComponent('Arrower') as any;
+            const hunterScript = this.currentTarget.getComponent('Hunter') as any;
+            const swordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
+            
+            if ((arrowerScript || hunterScript || swordsmanScript) && 
+                this.currentTarget.active && this.currentTarget.isValid) {
+                // 检查这个单位是否仍然有效且存活
+                if ((arrowerScript && arrowerScript.isAlive && arrowerScript.isAlive()) ||
+                    (hunterScript && hunterScript.isAlive && hunterScript.isAlive()) ||
+                    (swordsmanScript && swordsmanScript.isAlive && swordsmanScript.isAlive())) {
+                    const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
+                    console.debug(`[Enemy] findTarget: 当前目标是我方单位，保持目标（最高优先级），距离: ${distance.toFixed(1)}`);
+                    // 保持这个目标，不执行后续的目标查找逻辑
+                    return;
+                }
+            }
+        }
+
         // 如果当前目标是石墙且敌人不在网格寻路模式（说明可能是A*寻路失败后设置的），保持这个目标作为最高优先级
         if (this.currentTarget && !this.isInStoneWallGrid) {
             const currentWallScript = this.currentTarget.getComponent('StoneWall') as any;
@@ -4336,9 +4378,212 @@ export class Enemy extends Component {
 
 
     /**
+     * 在网格内或网格上方检测我方单位（弓箭手、女猎手、剑士），如果路径畅通则返回单位
+     * @returns 如果找到可攻击的我方单位且路径畅通，返回单位节点；否则返回null
+     */
+    private checkForFriendlyUnitInGrid(): Node | null {
+        const enemyPos = this.node.worldPosition;
+        const detectionRange = 200; // 索敌范围：200像素
+
+        // 使用递归查找容器节点
+        const findNodeRecursive = (node: Node, name: string): Node | null => {
+            if (node.name === name) {
+                return node;
+            }
+            for (const child of node.children) {
+                const found = findNodeRecursive(child, name);
+                if (found) return found;
+            }
+            return null;
+        };
+
+        let nearestUnit: Node | null = null;
+        let minDistance = Infinity;
+
+        // 1. 查找弓箭手
+        let towersNode = find('Towers');
+        if (!towersNode && this.node.scene) {
+            towersNode = findNodeRecursive(this.node.scene, 'Towers');
+        }
+        if (towersNode) {
+            const towers = towersNode.children;
+            for (const tower of towers) {
+                if (tower && tower.active && tower.isValid) {
+                    const towerScript = tower.getComponent('Arrower') as any;
+                    if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
+                        const distance = Vec3.distance(enemyPos, tower.worldPosition);
+                        if (distance <= detectionRange && distance < minDistance) {
+                            // 检查路径是否被石墙阻挡
+                            if (!this.isPathBlockedByStoneWall(enemyPos, tower.worldPosition)) {
+                                nearestUnit = tower;
+                                minDistance = distance;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. 查找女猎手
+        let huntersNode = find('Hunters');
+        if (!huntersNode && this.node.scene) {
+            huntersNode = findNodeRecursive(this.node.scene, 'Hunters');
+        }
+        if (huntersNode) {
+            const hunters = huntersNode.children;
+            for (const hunter of hunters) {
+                if (hunter && hunter.active && hunter.isValid) {
+                    const hunterScript = hunter.getComponent('Hunter') as any;
+                    if (hunterScript && hunterScript.isAlive && hunterScript.isAlive()) {
+                        const distance = Vec3.distance(enemyPos, hunter.worldPosition);
+                        if (distance <= detectionRange && distance < minDistance) {
+                            // 检查路径是否被石墙阻挡
+                            if (!this.isPathBlockedByStoneWall(enemyPos, hunter.worldPosition)) {
+                                nearestUnit = hunter;
+                                minDistance = distance;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. 查找精灵剑士
+        let swordsmenNode = find('ElfSwordsmans');
+        if (!swordsmenNode && this.node.scene) {
+            swordsmenNode = findNodeRecursive(this.node.scene, 'ElfSwordsmans');
+        }
+        if (swordsmenNode) {
+            const swordsmen = swordsmenNode.children;
+            for (const swordsman of swordsmen) {
+                if (swordsman && swordsman.active && swordsman.isValid) {
+                    const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
+                    if (swordsmanScript && swordsmanScript.isAlive && swordsmanScript.isAlive()) {
+                        const distance = Vec3.distance(enemyPos, swordsman.worldPosition);
+                        if (distance <= detectionRange && distance < minDistance) {
+                            // 检查路径是否被石墙阻挡
+                            if (!this.isPathBlockedByStoneWall(enemyPos, swordsman.worldPosition)) {
+                                nearestUnit = swordsman;
+                                minDistance = distance;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (nearestUnit) {
+            console.info(`[Enemy] checkForFriendlyUnitInGrid: 找到我方单位且路径畅通，距离: ${minDistance.toFixed(1)}`);
+        }
+
+        return nearestUnit;
+    }
+
+    /**
+     * 检查从起点到终点的路径是否被石墙阻挡
+     * @param startPos 起点位置
+     * @param endPos 终点位置
+     * @returns 如果路径被石墙阻挡返回true，否则返回false
+     */
+    private isPathBlockedByStoneWall(startPos: Vec3, endPos: Vec3): boolean {
+        const direction = new Vec3();
+        Vec3.subtract(direction, endPos, startPos);
+        const distance = direction.length();
+
+        if (distance < 0.1) {
+            return false; // 距离太近，认为路径畅通
+        }
+
+        direction.normalize();
+
+        // 使用递归查找所有石墙
+        const findNodeRecursive = (node: Node, name: string): Node | null => {
+            if (node.name === name) {
+                return node;
+            }
+            for (const child of node.children) {
+                const found = findNodeRecursive(child, name);
+                if (found) return found;
+            }
+            return null;
+        };
+
+        // 查找所有石墙
+        let stoneWalls: Node[] = [];
+        let stoneWallsNode = find('StoneWalls');
+        if (!stoneWallsNode && this.node.scene) {
+            stoneWallsNode = findNodeRecursive(this.node.scene, 'StoneWalls');
+        }
+
+        if (this.node.scene) {
+            const findAllStoneWalls = (node: Node): Node[] => {
+                const walls: Node[] = [];
+                const wallScript = node.getComponent('StoneWall') as any;
+                if (wallScript && node.active && node.isValid) {
+                    walls.push(node);
+                }
+                for (const child of node.children) {
+                    walls.push(...findAllStoneWalls(child));
+                }
+                return walls;
+            };
+            stoneWalls = findAllStoneWalls(this.node.scene);
+        }
+
+        // 过滤出有效的石墙
+        stoneWalls = stoneWalls.filter(wall => {
+            if (!wall || !wall.active || !wall.isValid) return false;
+            const wallScript = wall.getComponent('StoneWall') as any;
+            return wallScript && wallScript.isAlive && wallScript.isAlive();
+        });
+
+        // 检查路径上是否有石墙阻挡
+        const checkSteps = Math.ceil(distance / 20); // 每20像素检查一次
+        const enemyRadius = 20; // 敌人的碰撞半径
+
+        for (let i = 0; i <= checkSteps; i++) {
+            const t = i / checkSteps;
+            const checkPos = new Vec3();
+            Vec3.lerp(checkPos, startPos, endPos, t);
+
+            // 检查这个位置附近是否有石墙
+            for (const wall of stoneWalls) {
+                const wallPos = wall.worldPosition;
+                const wallScript = wall.getComponent('StoneWall') as any;
+                const wallRadius = wallScript?.collisionRadius || 40;
+                const distanceToWall = Vec3.distance(checkPos, wallPos);
+                const minDistance = enemyRadius + wallRadius + 10; // 增加10像素的安全距离
+
+                if (distanceToWall < minDistance) {
+                    return true; // 路径被阻挡
+                }
+            }
+        }
+
+        return false; // 路径畅通
+    }
+
+    /**
      * 在网格内移动
      */
     private moveInStoneWallGrid(deltaTime: number) {
+        // 优先检测我方单位（弓箭手、女猎手、剑士），如果路径畅通则优先攻击
+        const friendlyUnit = this.checkForFriendlyUnitInGrid();
+        if (friendlyUnit) {
+            // 检测到我方单位且路径畅通，退出网格寻路模式，优先攻击我方单位
+            console.info(`[Enemy] moveInStoneWallGrid: 检测到我方单位且路径畅通，退出网格寻路模式，优先攻击`);
+            this.isInStoneWallGrid = false;
+            this.currentTarget = friendlyUnit;
+            this.gridPath = [];
+            this.currentPathIndex = 0;
+            // 清除绕行目标点
+            if (this.detourTarget) {
+                this.detourTarget = null;
+            }
+            // 继续执行后续逻辑处理移动和攻击
+            return;
+        }
+
         // 定期检查路径是否仍然有效（每0.5秒检查一次，避免频繁检查）
         const checkInterval = 0.5;
         const now = Date.now() / 1000;
