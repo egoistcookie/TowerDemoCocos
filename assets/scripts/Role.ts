@@ -1869,8 +1869,10 @@ export class Role extends Component {
         if (!this.gameManager) {
             this.findGameManager();
         }
-        if (this.gameManager && this.buildCost !== 0) {
+        console.log('destroyTower this.gameManager', this.gameManager);
+        if (this.gameManager) {
             // 这是手动建造的Tower（如果有），减少人口
+            console.log('destroyTower this.gameManager.removePopulation(1)');
             this.gameManager.removePopulation(1);
         }
         // 如果buildCost为0，人口会在WarAncientTree.cleanupDeadTowers中处理，这里不需要处理

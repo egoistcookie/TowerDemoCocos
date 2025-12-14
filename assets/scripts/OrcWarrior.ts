@@ -11,6 +11,7 @@ export class OrcWarrior extends Enemy {
     attackDamage: number = 8;
     attackInterval: number = 1.5;
     attackRange: number = 60;
+    collisionRadius: number = 20; // 碰撞半径（像素）
     unitName: string = "兽人战士";
     unitDescription: string = "强大的兽人战士，拥有较高的攻击力和生命值。";
     goldReward: number = 3;

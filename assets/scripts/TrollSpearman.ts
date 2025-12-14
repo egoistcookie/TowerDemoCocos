@@ -12,6 +12,7 @@ export class TrollSpearman extends Enemy {
     attackDamage: number = 6;
     attackInterval: number = 1.8;
     attackRange: number = 200;
+    collisionRadius: number = 20; // 碰撞半径（像素）
     unitName: string = "巨魔投矛手";
     unitDescription: string = "远程攻击的巨魔投矛手，拥有较远的攻击距离，但血量较低。";
     goldReward: number = 3;
@@ -28,16 +29,16 @@ export class TrollSpearman extends Enemy {
      * 重写攻击方法，使用远程攻击（投掷长矛）
      */
     attack() {
-        console.info(`[TrollSpearman] attack: 开始攻击，currentTarget=${this.currentTarget ? '存在' : 'null'}, isDestroyed=${this.isDestroyed}`);
+        console.debug(`[TrollSpearman] attack: 开始攻击，currentTarget=${this.currentTarget ? '存在' : 'null'}, isDestroyed=${this.isDestroyed}`);
         
         if (!this.currentTarget || this.isDestroyed) {
-            console.info(`[TrollSpearman] attack: 无目标或已销毁，退出`);
+            console.debug(`[TrollSpearman] attack: 无目标或已销毁，退出`);
             return;
         }
 
         // 再次检查目标是否有效
         if (!this.currentTarget.isValid || !this.currentTarget.active) {
-            console.info(`[TrollSpearman] attack: 目标无效，清除目标`);
+            console.debug(`[TrollSpearman] attack: 目标无效，清除目标`);
             this.currentTarget = null!;
             return;
         }
@@ -45,7 +46,7 @@ export class TrollSpearman extends Enemy {
         const targetPos = this.currentTarget.worldPosition;
         const enemyPos = this.node.worldPosition;
         const distance = Vec3.distance(enemyPos, targetPos);
-        console.info(`[TrollSpearman] attack: 目标有效，位置=(${targetPos.x.toFixed(1)}, ${targetPos.y.toFixed(1)}), 距离=${distance.toFixed(1)}, 攻击范围=${this.attackRange}`);
+        console.debug(`[TrollSpearman] attack: 目标有效，位置=(${targetPos.x.toFixed(1)}, ${targetPos.y.toFixed(1)}), 距离=${distance.toFixed(1)}, 攻击范围=${this.attackRange}`);
 
         // 攻击时朝向目标方向
         const direction = new Vec3();
@@ -57,17 +58,17 @@ export class TrollSpearman extends Enemy {
         
         // 设置攻击回调函数，在动画播放中途（约50%处）投掷长矛
         this.attackCallback = () => {
-            console.info(`[TrollSpearman] attackCallback: 攻击回调被调用，准备投掷长矛`);
+            console.debug(`[TrollSpearman] attackCallback: 攻击回调被调用，准备投掷长矛`);
             if (currentTarget && currentTarget.isValid && currentTarget.active) {
                 // 使用投掷长矛的方式攻击目标
                 this.createSpear(currentTarget);
             } else {
-                console.info(`[TrollSpearman] attackCallback: 目标已无效，取消投掷`);
+                console.debug(`[TrollSpearman] attackCallback: 目标已无效，取消投掷`);
             }
         };
 
         // 播放攻击动画（使用重写的方法）
-        console.info(`[TrollSpearman] attack: 调用playAttackAnimation`);
+        console.debug(`[TrollSpearman] attack: 调用playAttackAnimation`);
         this.playAttackAnimation();
     }
     
@@ -75,7 +76,7 @@ export class TrollSpearman extends Enemy {
      * 重写播放攻击动画方法，使用动画帧方式，在动画中途调用createSpear
      */
     playAttackAnimation() {
-        console.info(`[TrollSpearman] playAttackAnimation: 开始，isPlayingDeathAnimation=${this.isPlayingDeathAnimation}, isDestroyed=${this.isDestroyed}`);
+        console.debug(`[TrollSpearman] playAttackAnimation: 开始，isPlayingDeathAnimation=${this.isPlayingDeathAnimation}, isDestroyed=${this.isDestroyed}`);
         
         if (this.isPlayingDeathAnimation || this.isDestroyed) {
             return;
@@ -88,20 +89,20 @@ export class TrollSpearman extends Enemy {
 
         // 如果没有Sprite组件或没有动画帧，直接返回
         if (!this.sprite) {
-            console.info(`[TrollSpearman] playAttackAnimation: 错误！没有Sprite组件`);
+            console.debug(`[TrollSpearman] playAttackAnimation: 错误！没有Sprite组件`);
             return;
         }
 
         // 如果没有设置动画帧，直接返回
         if (!this.attackAnimationFrames || this.attackAnimationFrames.length === 0) {
-            console.info(`[TrollSpearman] playAttackAnimation: 错误！没有配置攻击动画帧`);
+            console.debug(`[TrollSpearman] playAttackAnimation: 错误！没有配置攻击动画帧`);
             return;
         }
 
         // 检查帧是否有效
         const validFrames = this.attackAnimationFrames.filter(frame => frame != null);
         if (validFrames.length === 0) {
-            console.info(`[TrollSpearman] playAttackAnimation: 错误！所有动画帧都无效`);
+            console.debug(`[TrollSpearman] playAttackAnimation: 错误！所有动画帧都无效`);
             return;
         }
 
@@ -111,7 +112,7 @@ export class TrollSpearman extends Enemy {
         // 标记正在播放动画
         this.isPlayingAttackAnimation = true;
         
-        console.info(`[TrollSpearman] playAttackAnimation: 开始播放动画帧，帧数=${validFrames.length}, 动画时长=${this.attackAnimationDuration}`);
+        console.debug(`[TrollSpearman] playAttackAnimation: 开始播放动画帧，帧数=${validFrames.length}, 动画时长=${this.attackAnimationDuration}`);
 
         const frames = validFrames;
         const frameCount = frames.length;
@@ -144,7 +145,7 @@ export class TrollSpearman extends Enemy {
             // 在动画播放到约50%时投掷长矛（只执行一次）
             if (!hasThrownSpear && animationTimer >= this.attackAnimationDuration * 0.5) {
                 hasThrownSpear = true;
-                console.info(`[TrollSpearman] playAttackAnimation: 动画播放到50%，触发投掷长矛，attackCallback=${this.attackCallback ? '存在' : 'null'}`);
+                console.debug(`[TrollSpearman] playAttackAnimation: 动画播放到50%，触发投掷长矛，attackCallback=${this.attackCallback ? '存在' : 'null'}`);
                 if (this.attackCallback) {
                     // 调用攻击回调函数（投掷长矛）
                     this.attackCallback();
@@ -184,26 +185,26 @@ export class TrollSpearman extends Enemy {
      * 创建并投掷长矛
      */
     createSpear(targetNode: Node) {
-        console.info(`[TrollSpearman] createSpear: 开始创建长矛，spearPrefab=${this.spearPrefab ? '存在' : 'null'}, targetNode=${targetNode ? '存在' : 'null'}`);
+        console.debug(`[TrollSpearman] createSpear: 开始创建长矛，spearPrefab=${this.spearPrefab ? '存在' : 'null'}, targetNode=${targetNode ? '存在' : 'null'}`);
         
         if (!this.spearPrefab) {
-            console.info(`[TrollSpearman] createSpear: 错误！长矛预制体未配置`);
+            console.debug(`[TrollSpearman] createSpear: 错误！长矛预制体未配置`);
             return;
         }
 
         // 检查目标是否有效
         if (!targetNode.isValid || !targetNode.active) {
-            console.info(`[TrollSpearman] createSpear: 目标无效，取消创建`);
+            console.debug(`[TrollSpearman] createSpear: 目标无效，取消创建`);
             return;
         }
         
         const targetPos = targetNode.worldPosition;
         const enemyPos = this.node.worldPosition;
-        console.info(`[TrollSpearman] createSpear: 目标有效，目标位置=(${targetPos.x.toFixed(1)}, ${targetPos.y.toFixed(1)}), 敌人位置=(${enemyPos.x.toFixed(1)}, ${enemyPos.y.toFixed(1)}), 伤害=${this.attackDamage}`);
+        console.debug(`[TrollSpearman] createSpear: 目标有效，目标位置=(${targetPos.x.toFixed(1)}, ${targetPos.y.toFixed(1)}), 敌人位置=(${enemyPos.x.toFixed(1)}, ${enemyPos.y.toFixed(1)}), 伤害=${this.attackDamage}`);
 
         // 创建长矛节点
         const spear = instantiate(this.spearPrefab);
-        console.info(`[TrollSpearman] createSpear: 长矛节点已创建`);
+        console.debug(`[TrollSpearman] createSpear: 长矛节点已创建`);
         
         // 设置父节点（添加到场景或Canvas）
         const canvas = find('Canvas');
@@ -218,7 +219,7 @@ export class TrollSpearman extends Enemy {
         // 设置初始位置（投矛手位置）
         const startPos = this.node.worldPosition.clone();
         spear.setWorldPosition(startPos);
-        console.info(`[TrollSpearman] createSpear: 长矛位置设置完成，位置=(${startPos.x.toFixed(1)}, ${startPos.y.toFixed(1)})`);
+        console.debug(`[TrollSpearman] createSpear: 长矛位置设置完成，位置=(${startPos.x.toFixed(1)}, ${startPos.y.toFixed(1)})`);
 
         // 确保节点激活
         spear.active = true;
@@ -230,11 +231,11 @@ export class TrollSpearman extends Enemy {
             // 在Cocos Creator中，直接使用组件名称添加
             spearScript = spear.addComponent('Arrow');
             if (!spearScript) {
-                console.info(`[TrollSpearman] createSpear: 错误！无法添加Arrow组件`);
+                console.debug(`[TrollSpearman] createSpear: 错误！无法添加Arrow组件`);
                 return;
             }
         }
-        console.info(`[TrollSpearman] createSpear: Arrow组件已获取，准备初始化`);
+        console.debug(`[TrollSpearman] createSpear: Arrow组件已获取，准备初始化`);
 
         // 播放攻击音效
         if (this.attackSound) {
@@ -242,7 +243,7 @@ export class TrollSpearman extends Enemy {
         }
 
         // 初始化长矛，设置命中回调
-        console.info(`[TrollSpearman] createSpear: 调用spearScript.init`);
+        console.debug(`[TrollSpearman] createSpear: 调用spearScript.init`);
         spearScript.init(
             startPos,
             targetNode,

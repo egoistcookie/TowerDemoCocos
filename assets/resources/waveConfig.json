@@ -7,7 +7,7 @@
       "preWaveDelay": 2,
       "enemies": [
         {
-          "prefabName": "TrollSpearman",
+          "prefabName": "Orc",
           "count": 15,
           "interval": 1
         }

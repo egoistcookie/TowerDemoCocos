@@ -44,6 +44,18 @@ export class EnemySpawner extends Component {
     })
     enemyPrefabs: Prefab[] = [];
 
+    // 测试模式：只刷新一个敌人用于测试攻击距离
+    @property({
+        tooltip: "测试模式：启用后只刷新一个敌人，用于测试攻击距离"
+    })
+    testMode: boolean = false;
+
+    @property({
+        tooltip: "测试模式下的敌人类型（Orc, OrcWarrior, OrcWarlord, TrollSpearman）",
+        visible: function() { return this.testMode; }
+    })
+    testEnemyType: string = "Orc";
+
     private gameManager: GameManager = null!;
     private uiManager: any = null!;
     
@@ -62,6 +74,9 @@ export class EnemySpawner extends Component {
     private enemySpawnTimer: number = 0;
     private pauseAfterFirstEnemy: boolean = false; // 第一只怪刷新后暂停刷新
     
+    // 测试模式相关
+    private testEnemySpawned: boolean = false; // 测试模式下是否已刷新敌人
+    
     // 敌人预制体映射表
     private enemyPrefabMap: Map<string, Prefab> = new Map();
 
@@ -73,6 +88,12 @@ export class EnemySpawner extends Component {
         this.currentEnemyIndex = 0;
         this.enemiesSpawnedCount = 0;
         this.enemySpawnTimer = 0;
+        this.testEnemySpawned = false;
+        
+        // 测试模式日志
+        if (this.testMode) {
+            console.info(`[EnemySpawner] 测试模式已启用，将只刷新一个${this.testEnemyType}敌人用于测试攻击距离`);
+        }
         
         // 查找游戏管理器（使用递归查找，更可靠）
         this.findGameManager();
@@ -246,6 +267,20 @@ export class EnemySpawner extends Component {
                 console.debug('EnemySpawner: Game not in Playing state, skipping wave updates entirely');
                 return;
             }
+        }
+        
+        // 测试模式：只刷新一个敌人
+        if (this.testMode) {
+            if (!this.testEnemySpawned) {
+                // 延迟一小段时间后刷新测试敌人
+                this.enemySpawnTimer += deltaTime;
+                if (this.enemySpawnTimer >= 1.0) { // 1秒后刷新
+                    this.spawnTestEnemy();
+                    this.testEnemySpawned = true;
+                    this.enemySpawnTimer = 0;
+                }
+            }
+            return; // 测试模式下不执行正常的波次逻辑
         }
         
         // 检查是否所有波次都已完成
@@ -502,6 +537,68 @@ export class EnemySpawner extends Component {
         return true;
     }
 
+    /**
+     * 测试模式：刷新测试敌人
+     */
+    private spawnTestEnemy() {
+        console.info(`[EnemySpawner] 测试模式：刷新测试敌人 ${this.testEnemyType}`);
+        
+        // 再次检查游戏状态，确保游戏仍在进行
+        if (this.gameManager) {
+            const gameState = this.gameManager.getGameState();
+            if (gameState !== GameState.Playing) {
+                console.debug(`EnemySpawner: Game ended (state: ${gameState === GameState.Victory ? 'Victory' : 'Defeat'}), canceling test enemy spawn`);
+                return;
+            }
+        }
+        
+        if (!this.targetCrystal) {
+            console.error(`[EnemySpawner] 测试模式：targetCrystal未设置，无法刷新测试敌人`);
+            return;
+        }
+        
+        // 获取测试敌人预制体
+        const enemyPrefab = this.enemyPrefabMap.get(this.testEnemyType);
+        
+        if (!enemyPrefab) {
+            console.error(`[EnemySpawner] 测试模式：敌人预制体 ${this.testEnemyType} 未找到，可用预制体: ${Array.from(this.enemyPrefabMap.keys())}`);
+            return;
+        }
+
+        // 从画面最上方生成敌人
+        const visibleSize = view.getVisibleSize();
+        const visibleOrigin = view.getVisibleOrigin();
+        
+        // 计算画面最上方的位置，敌人从屏幕顶部边缘生成
+        const spawnPos = new Vec3(
+            visibleOrigin.x + Math.random() * visibleSize.width, // x轴在屏幕宽度范围内随机
+            visibleOrigin.y + visibleSize.height - 10, // y轴固定在画面最上方边缘
+            0
+        );
+
+        // 实例化敌人
+        const enemy = instantiate(enemyPrefab);
+        enemy.setParent(this.enemyContainer || this.node);
+        enemy.setWorldPosition(spawnPos);
+
+        // 设置敌人的目标水晶
+        const enemyScript = enemy.getComponent(Enemy) as any || enemy.getComponent(OrcWarrior) as any || enemy.getComponent(OrcWarlord) as any || enemy.getComponent(TrollSpearman) as any;
+        if (enemyScript) {
+            if (this.targetCrystal) {
+                enemyScript.targetCrystal = this.targetCrystal;
+            }
+            console.info(`[EnemySpawner] 测试模式：已刷新 ${this.testEnemyType} 敌人，位置: (${spawnPos.x.toFixed(1)}, ${spawnPos.y.toFixed(1)})`);
+            
+            // 检查单位是否首次出现
+            if (this.gameManager) {
+                const unitType = enemyScript.unitType || this.testEnemyType;
+                this.gameManager.checkUnitFirstAppearance(unitType, enemyScript);
+            }
+        } else {
+            console.error(`[EnemySpawner] 测试模式：敌人脚本未找到在 ${this.testEnemyType} 预制体上`);
+        }
+    }
+
     spawnEnemy() {
         // 再次检查游戏状态，确保游戏仍在进行
         if (this.gameManager) {
@@ -596,6 +693,7 @@ export class EnemySpawner extends Component {
         this.pauseAfterFirstEnemy = false;
         this.currentWave = null;
         this.currentEnemyConfig = null;
+        this.testEnemySpawned = false; // 重置测试模式标志
         
         // 重新初始化敌人预制体映射表
         this.initEnemyPrefabMap();
