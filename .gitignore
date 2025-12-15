@@ -32,3 +32,4 @@ scene.scene
 assets/anim/orc-attck.anim
 assets/prefabs/Arrow.prefab
 assets/prefabs/Enemy.prefab
+build/*

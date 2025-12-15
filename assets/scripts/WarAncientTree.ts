@@ -349,7 +349,7 @@ export class WarAncientTree extends Component {
         }
 
         // 清理已死亡的Tower
-        this.cleanupDeadTowers();
+        // this.cleanupDeadTowers();
 
         // 生产Tower逻辑
         const aliveTowerCount = this.producedTowers.length;

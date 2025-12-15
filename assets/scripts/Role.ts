@@ -1869,13 +1869,10 @@ export class Role extends Component {
         if (!this.gameManager) {
             this.findGameManager();
         }
-        if (this.gameManager && this.buildCost !== 0) {
-            // 这是手动建造的（如果有），减少人口
+        if (this.gameManager) {
+            // 减少人口
             console.debug(`Role.destroyTower: buildCost=${this.buildCost}, reducing population`);
             this.gameManager.removePopulation(1);
-        } else {
-            // buildCost为0，人口会在对应的cleanupDead方法中处理，这里不需要处理
-            console.debug(`Role.destroyTower: buildCost=${this.buildCost}, population will be handled by building cleanup method`);
         }
 
         // 移除点击事件监听
