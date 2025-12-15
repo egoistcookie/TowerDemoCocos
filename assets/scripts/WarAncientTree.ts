@@ -950,34 +950,39 @@ export class WarAncientTree extends Component {
     cleanupDeadTowers() {
         // 清理已死亡的Tower
         const beforeCount = this.producedTowers.length;
+        let removedCount = 0;
+        
         this.producedTowers = this.producedTowers.filter(tower => {
+            // 检查节点是否有效
             if (!tower || !tower.isValid || !tower.active) {
-                // Tower已死亡，减少人口
-                if (this.gameManager) {
-                    this.gameManager.removePopulation(1);
-                }
+                removedCount++;
                 return false;
             }
             
+            // 检查Arrower脚本是否存活（节点有效时才检查）
             const towerScript = tower.getComponent('Arrower') as any;
             if (towerScript && towerScript.isAlive) {
                 const isAlive = towerScript.isAlive();
                 if (!isAlive) {
-                    // Tower已死亡，减少人口
-                    if (this.gameManager) {
-                        this.gameManager.removePopulation(1);
-                    }
+                    removedCount++;
                 }
                 return isAlive;
             }
             
+            // 如果没有Arrower脚本，保留节点（可能是其他类型的单位）
             return true;
         });
         
+        // 只在有Tower死亡时减少人口（避免重复减少）
+        // 注意：Arrower的buildCost为0，所以Arrower.destroyTower()不会减少人口
+        // 因此这里需要减少人口
+        if (removedCount > 0 && this.gameManager) {
+            this.gameManager.removePopulation(removedCount);
+            console.debug(`WarAncientTree.cleanupDeadTowers: Removed ${removedCount} dead arrowers, remaining: ${this.producedTowers.length}, population reduced by ${removedCount}`);
+        }
+        
         const afterCount = this.producedTowers.length;
         if (beforeCount !== afterCount) {
-            console.debug(`WarAncientTree.cleanupDeadTowers: Removed ${beforeCount - afterCount} dead arrowers, remaining: ${afterCount}`);
-            
             // 更新单位信息面板（如果被选中）
             if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
                 this.unitSelectionManager.updateUnitInfo({

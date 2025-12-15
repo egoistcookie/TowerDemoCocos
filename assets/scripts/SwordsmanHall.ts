@@ -299,7 +299,23 @@ export class SwordsmanHall extends Component {
 
         // 生产ElfSwordsman逻辑
         const aliveSwordsmanCount = this.producedSwordsmen.length;
-        if (aliveSwordsmanCount < this.maxSwordsmanCount && this.gameManager.canAddPopulation(1)) {
+        // 确保在检查时也检查人口上限，补充士兵时也需要占用人口
+        if (aliveSwordsmanCount < this.maxSwordsmanCount) {
+            // 检查人口上限（补充士兵时也需要占用人口）
+            if (!this.gameManager) {
+                this.findGameManager();
+            }
+            
+            if (this.gameManager && !this.gameManager.canAddPopulation(1)) {
+                // 人口已满，停止生产
+                if (this.isProducing) {
+                    this.isProducing = false;
+                    this.productionProgress = 0;
+                    this.updateProductionProgressBar();
+                }
+                return;
+            }
+            
             if (!this.isProducing) {
                 // 开始生产
                 this.isProducing = true;
@@ -318,6 +334,7 @@ export class SwordsmanHall extends Component {
             this.updateProductionProgressBar();
 
             if (this.productionTimer >= this.productionInterval) {
+                // produceSwordsman() 方法内部会检查并占用人口
                 this.produceSwordsman();
                 this.productionTimer = 0;
                 this.productionProgress = 0;
@@ -658,29 +675,36 @@ export class SwordsmanHall extends Component {
     cleanupDeadSwordsmen() {
         // 清理已死亡的ElfSwordsman
         const beforeCount = this.producedSwordsmen.length;
+        let removedCount = 0;
+        
         this.producedSwordsmen = this.producedSwordsmen.filter(swordsman => {
+            // 检查节点是否有效
             if (!swordsman || !swordsman.isValid || !swordsman.active) {
-                // ElfSwordsman已死亡，减少人口
-                if (this.gameManager) {
-                    this.gameManager.removePopulation(1);
-                }
-                return false;
+                removedCount++;
+                return false; // 节点无效，直接移除，不再检查脚本
             }
             
+            // 检查ElfSwordsman脚本是否存活（节点有效时才检查）
             const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
             if (swordsmanScript && swordsmanScript.isAlive) {
                 const isAlive = swordsmanScript.isAlive();
                 if (!isAlive) {
-                    // ElfSwordsman已死亡，减少人口
-                    if (this.gameManager) {
-                        this.gameManager.removePopulation(1);
-                    }
+                    removedCount++;
                 }
                 return isAlive;
             }
             
+            // 如果没有ElfSwordsman脚本，保留节点（可能是其他类型的单位）
             return true;
         });
+        
+        // 只在有ElfSwordsman死亡时减少人口（避免重复减少）
+        // 注意：ElfSwordsman的buildCost为0，所以ElfSwordsman.destroyTower()不会减少人口
+        // 因此这里需要减少人口
+        if (removedCount > 0 && this.gameManager) {
+            this.gameManager.removePopulation(removedCount);
+            console.debug(`SwordsmanHall.cleanupDeadSwordsmen: Removed ${removedCount} dead swordsmen, population reduced by ${removedCount}`);
+        }
         
         const afterCount = this.producedSwordsmen.length;
         if (beforeCount !== afterCount) {

@@ -299,7 +299,23 @@ export class HunterHall extends Component {
 
         // 生产Hunter逻辑
         const aliveHunterCount = this.producedHunters.length;
-        if (aliveHunterCount < this.maxHunterCount && this.gameManager.canAddPopulation(1)) {
+        // 确保在检查时也检查人口上限，补充士兵时也需要占用人口
+        if (aliveHunterCount < this.maxHunterCount) {
+            // 检查人口上限（补充士兵时也需要占用人口）
+            if (!this.gameManager) {
+                this.findGameManager();
+            }
+            
+            if (this.gameManager && !this.gameManager.canAddPopulation(1)) {
+                // 人口已满，停止生产
+                if (this.isProducing) {
+                    this.isProducing = false;
+                    this.productionProgress = 0;
+                    this.updateProductionProgressBar();
+                }
+                return;
+            }
+            
             if (!this.isProducing) {
                 // 开始生产
                 this.isProducing = true;
@@ -318,6 +334,7 @@ export class HunterHall extends Component {
             this.updateProductionProgressBar();
 
             if (this.productionTimer >= this.productionInterval) {
+                // produceHunter() 方法内部会检查并占用人口
                 this.produceHunter();
                 this.productionTimer = 0;
                 this.productionProgress = 0;
@@ -658,29 +675,38 @@ export class HunterHall extends Component {
     cleanupDeadHunters() {
         // 清理已死亡的Hunter
         const beforeCount = this.producedHunters.length;
+        let removedCount = 0;
+        
         this.producedHunters = this.producedHunters.filter(hunter => {
+            // 检查节点是否有效
             if (!hunter || !hunter.isValid || !hunter.active) {
-                // Hunter已死亡，减少人口
-                if (this.gameManager) {
-                    this.gameManager.removePopulation(1);
-                }
-                return false;
+                removedCount++;
+                return false; // 节点无效，直接移除，不再检查脚本
             }
             
+            // 检查Hunter脚本是否存活（节点有效时才检查）
             const hunterScript = hunter.getComponent('Hunter') as any;
             if (hunterScript && hunterScript.isAlive) {
                 const isAlive = hunterScript.isAlive();
                 if (!isAlive) {
-                    // Hunter已死亡，减少人口
-                    if (this.gameManager) {
-                        this.gameManager.removePopulation(1);
-                    }
+                    removedCount++;
                 }
                 return isAlive;
             }
             
+            // 如果没有Hunter脚本，保留节点（可能是其他类型的单位）
             return true;
         });
+        
+        // 只在有Hunter死亡时减少人口（避免重复减少）
+        // 注意：Hunter的buildCost为0，所以Hunter.destroyTower()不会减少人口
+        // 因此这里需要减少人口
+        if (removedCount > 0 && this.gameManager) {
+            const beforePopulation = this.gameManager.getPopulation();
+            this.gameManager.removePopulation(removedCount);
+            const afterPopulation = this.gameManager.getPopulation();
+            console.debug(`HunterHall.cleanupDeadHunters: Removed ${removedCount} dead hunters, population ${beforePopulation} -> ${afterPopulation} (reduced by ${removedCount})`);
+        }
         
         const afterCount = this.producedHunters.length;
         if (beforeCount !== afterCount) {
