@@ -348,8 +348,8 @@ export class WarAncientTree extends Component {
             }
         }
 
-        // 清理已死亡的Tower
-        // this.cleanupDeadTowers();
+        // 清理已死亡的Tower，及时释放人口并触发补充
+        this.cleanupDeadTowers();
 
         // 生产Tower逻辑
         const aliveTowerCount = this.producedTowers.length;
@@ -976,10 +976,10 @@ export class WarAncientTree extends Component {
         // 只在有Tower死亡时减少人口（避免重复减少）
         // 注意：Arrower的buildCost为0，所以Arrower.destroyTower()不会减少人口
         // 因此这里需要减少人口
-        if (removedCount > 0 && this.gameManager) {
-            this.gameManager.removePopulation(removedCount);
-            console.debug(`WarAncientTree.cleanupDeadTowers: Removed ${removedCount} dead arrowers, remaining: ${this.producedTowers.length}, population reduced by ${removedCount}`);
-        }
+        // if (removedCount > 0 && this.gameManager) {
+        //     this.gameManager.removePopulation(removedCount);
+        //     console.debug(`WarAncientTree.cleanupDeadTowers: Removed ${removedCount} dead arrowers, remaining: ${this.producedTowers.length}, population reduced by ${removedCount}`);
+        // }
         
         const afterCount = this.producedTowers.length;
         if (beforeCount !== afterCount) {

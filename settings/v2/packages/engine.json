@@ -12,7 +12,7 @@
             "_value": true
           },
           "gfx-webgl2": {
-            "_value": true
+            "_value": false
           },
           "gfx-webgpu": {
             "_value": false
@@ -45,7 +45,7 @@
             "_value": true
           },
           "ui-skew": {
-            "_value": false
+            "_value": true
           },
           "affine-transform": {
             "_value": true
@@ -61,7 +61,7 @@
             "_option": "physics-ammo"
           },
           "physics-ammo": {
-            "_value": false,
+            "_value": true,
             "_flags": {
               "LOAD_BULLET_MANUALLY": false
             }
@@ -79,11 +79,11 @@
             "_value": false
           },
           "physics-2d": {
-            "_value": true,
+            "_value": false,
             "_option": "physics-2d-box2d"
           },
           "physics-2d-box2d": {
-            "_value": false
+            "_value": true
           },
           "physics-2d-box2d-wasm": {
             "_value": false,
@@ -122,10 +122,10 @@
             "_value": true
           },
           "video": {
-            "_value": true
+            "_value": false
           },
           "webview": {
-            "_value": true
+            "_value": false
           },
           "tween": {
             "_value": true
@@ -143,13 +143,13 @@
             "_value": false
           },
           "tiled-map": {
-            "_value": true
+            "_value": false
           },
           "vendor-google": {
             "_value": false
           },
           "spine": {
-            "_value": true,
+            "_value": false,
             "_option": "spine-3.8"
           },
           "spine-3.8": {
@@ -165,7 +165,7 @@
             }
           },
           "dragon-bones": {
-            "_value": true
+            "_value": false
           },
           "marionette": {
             "_value": false
@@ -190,6 +190,7 @@
             "_value": false
           }
         },
+        "flags": {},
         "includeModules": [
           "2d",
           "affine-transform",
@@ -197,28 +198,21 @@
           "audio",
           "base",
           "custom-pipeline",
-          "dragon-bones",
           "gfx-webgl",
-          "gfx-webgl2",
           "graphics",
           "intersection-2d",
           "mask",
           "particle-2d",
-          "physics-2d-box2d",
           "profiler",
           "rich-text",
-          "spine-3.8",
-          "tiled-map",
           "tween",
           "ui",
-          "video",
-          "webview"
+          "ui-skew"
         ],
         "noDeprecatedFeatures": {
-          "value": false,
+          "value": true,
           "version": ""
-        },
-        "flags": {}
+        }
       }
     },
     "globalConfigKey": "defaultConfig"

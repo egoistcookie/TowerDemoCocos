@@ -1527,7 +1527,7 @@ export class Role extends Component {
                         const spriteFrame = this.sprite.spriteFrame;
                         // 注意：在Cocos Creator中，SpriteFrame的offset是只读的，所以我们需要通过调整节点的scaleY或者使用其他方式
                         // 这里使用调整节点scaleY的方式，只针对Y轴进行压缩
-                        this.sprite.node.setScale(1, 0.8); // Y轴缩小到80%，可根据实际情况调整
+                        this.sprite.node.setScale(1, 0.5); // Y轴缩小到50%，可根据实际情况调整
                     }
                 } else {
                     // 其他帧恢复正常比例
@@ -1543,7 +1543,7 @@ export class Role extends Component {
                 this.sprite.spriteFrame = this.deathAnimationFrames[frameCount - 1];
                 // 最后一帧也要调整比例
                 if (frameCount >= 5) {
-                    this.sprite.node.setScale(1, 0.8); // Y轴缩小到80%
+                    this.sprite.node.setScale(1, 0.5); // Y轴缩小到50%
                 }
             }
             // 死亡动画播放完成，不再恢复
