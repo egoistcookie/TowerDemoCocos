@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, Prefab, find, Sprite, SpriteFrame, Color, Graphics, UITransform, Label, EventTouch, Camera, instantiate } from 'cc';
+import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Sprite, SpriteFrame, Color, Graphics, UITransform, Label, EventTouch, Camera } from 'cc';
 import { GameManager, GameState } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
@@ -11,21 +11,27 @@ const { ccclass, property } = _decorator;
 
 @ccclass('Build')
 export class Build extends Component {
-    // 基础属性（protected，子类可访问）
+    // 基础属性（protected）
     @property
     protected maxHealth: number = 100;
 
-    @property
-    protected buildCost: number = 10;
+    @property(Prefab)
+    protected explosionEffect: Prefab = null!;
+
+    @property(Prefab)
+    protected damageNumberPrefab: Prefab = null!;
 
     @property
-    protected level: number = 1;
+    protected buildCost: number = 10; // 建造成本
 
     @property
-    protected collisionRadius: number = 50;
+    protected level: number = 1; // 建筑物等级
+
+    @property
+    protected collisionRadius: number = 50; // 占地范围（像素）
 
     @property(SpriteFrame)
-    protected cardIcon: SpriteFrame = null!;
+    protected cardIcon: SpriteFrame = null!; // 单位名片图片
 
     // 单位类型
     public unitType: UnitType = UnitType.BUILDING;
@@ -35,16 +41,10 @@ export class Build extends Component {
     protected unitName: string = "建筑物";
     
     @property
-    protected unitDescription: string = "基础建筑物";
+    protected unitDescription: string = "基础建筑物。";
     
     @property(SpriteFrame)
     protected unitIcon: SpriteFrame = null!;
-
-    @property(Prefab)
-    protected explosionEffect: Prefab = null!;
-
-    @property(Prefab)
-    protected damageNumberPrefab: Prefab = null!;
 
     // 通用组件引用（protected）
     protected currentHealth: number = 100;
@@ -57,21 +57,21 @@ export class Build extends Component {
     protected defaultScale: Vec3 = new Vec3(1, 1, 1);
     
     // 小精灵相关
-    protected attachedWisps: Node[] = [];
+    protected attachedWisps: Node[] = []; // 依附的小精灵列表
 
     // 选择面板相关
-    protected selectionPanel: Node = null!;
-    protected globalTouchHandler: ((event: EventTouch) => void) | null = null;
-    protected unitSelectionManager: UnitSelectionManager = null!;
+    protected selectionPanel: Node = null!; // 选择面板节点
+    protected globalTouchHandler: ((event: EventTouch) => void) | null = null; // 全局触摸事件处理器
+    protected unitSelectionManager: UnitSelectionManager = null!; // 单位选择管理器
 
     // 网格位置相关
-    public gridX: number = -1;
-    public gridY: number = -1;
-    protected isMoving: boolean = false;
-    protected moveStartPos: Vec3 = new Vec3();
-    protected gridPanel: BuildingGridPanel = null!;
+    public gridX: number = -1; // 网格X坐标
+    public gridY: number = -1; // 网格Y坐标
+    protected isMoving: boolean = false; // 是否正在移动
+    protected moveStartPos: Vec3 = new Vec3(); // 移动起始位置
+    protected gridPanel: BuildingGridPanel = null!; // 网格面板组件
 
-    start() {
+    protected start() {
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
         this.attachedWisps = [];
@@ -158,37 +158,6 @@ export class Build extends Component {
         }
     }
 
-    /**
-     * 恢复血量（由小精灵调用）
-     */
-    protected heal(amount: number) {
-        if (this.isDestroyed) {
-            return;
-        }
-
-        // 如果血量已满，不恢复
-        if (this.currentHealth >= this.maxHealth) {
-            return;
-        }
-
-        const oldHealth = this.currentHealth;
-        this.currentHealth = Math.min(this.currentHealth + amount, this.maxHealth);
-        const actualHeal = this.currentHealth - oldHealth;
-
-        // 更新血条
-        if (this.healthBar) {
-            this.healthBar.setHealth(this.currentHealth);
-        }
-
-        // 更新单位信息面板
-        if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
-            this.unitSelectionManager.updateUnitInfo({
-                currentHealth: this.currentHealth,
-                maxHealth: this.maxHealth
-            });
-        }
-    }
-
     protected takeDamage(damage: number) {
         if (this.isDestroyed) {
             return;
@@ -219,6 +188,37 @@ export class Build extends Component {
 
         if (this.currentHealth <= 0) {
             this.die();
+        }
+    }
+
+    /**
+     * 恢复血量（由小精灵调用）
+     */
+    protected heal(amount: number) {
+        if (this.isDestroyed) {
+            return;
+        }
+
+        // 如果血量已满，不恢复
+        if (this.currentHealth >= this.maxHealth) {
+            return;
+        }
+
+        const oldHealth = this.currentHealth;
+        this.currentHealth = Math.min(this.currentHealth + amount, this.maxHealth);
+        const actualHeal = this.currentHealth - oldHealth;
+
+        // 更新血条
+        if (this.healthBar) {
+            this.healthBar.setHealth(this.currentHealth);
+        }
+
+        // 更新单位信息面板
+        if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            this.unitSelectionManager.updateUnitInfo({
+                currentHealth: this.currentHealth,
+                maxHealth: this.maxHealth
+            });
         }
     }
 
@@ -277,11 +277,10 @@ export class Build extends Component {
     }
 
     /**
-     * 显示选择面板（子类可重写）
+     * 显示选择面板（子类需要重写）
      */
     protected showSelectionPanel() {
-        // 基础实现，子类应该重写此方法
-        console.warn('Build.showSelectionPanel: This method should be overridden by subclasses');
+        // 子类实现
     }
 
     /**
@@ -333,20 +332,29 @@ export class Build extends Component {
         // 隐藏面板
         this.hideSelectionPanel();
         
-        // 销毁建筑物（子类可重写）
+        // 销毁建筑物（子类可以重写）
         this.destroyBuilding();
     }
 
     /**
-     * 升级按钮点击事件（子类可重写）
+     * 升级按钮点击事件（子类需要重写）
      */
     protected onUpgradeClick(event?: EventTouch) {
-        if (event) {
-            event.propagationStopped = true;
-        }
-        
-        // 基础实现，子类应该重写此方法
-        console.warn('Build.onUpgradeClick: This method should be overridden by subclasses');
+        // 子类实现
+    }
+
+    /**
+     * 销毁建筑物（子类可以重写）
+     */
+    protected destroyBuilding() {
+        // 隐藏面板
+        this.hideSelectionPanel();
+
+        // 移除点击事件监听（子类需要重写点击事件处理方法名）
+        // this.node.off(Node.EventType.TOUCH_END, this.onBuildingClick, this);
+
+        // 调用die方法进行销毁
+        this.die();
     }
 
     /**
@@ -582,14 +590,9 @@ export class Build extends Component {
     }
 
     /**
-     * 销毁建筑物（子类可重写）
+     * 建筑物点击事件处理（子类需要重写）
      */
-    protected destroyBuilding() {
-        // 隐藏面板
-        this.hideSelectionPanel();
-
-        // 调用die方法进行销毁
-        this.die();
+    protected onBuildingClick(event: EventTouch) {
+        // 子类实现
     }
 }
-
