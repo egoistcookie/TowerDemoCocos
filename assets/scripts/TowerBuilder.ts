@@ -9,6 +9,7 @@ import { Tree } from './Tree';
 import { HunterHall } from './HunterHall';
 import { StoneWall } from './StoneWall';
 import { SwordsmanHall } from './SwordsmanHall';
+import { Church } from './Church';
 import { UnitConfigManager } from './UnitConfigManager';
 import { BuildingGridPanel } from './BuildingGridPanel';
 import { StoneWallGridPanel } from './StoneWallGridPanel';
@@ -52,6 +53,12 @@ export class TowerBuilder extends Component {
     @property(SpriteFrame)
     swordsmanHallIcon: SpriteFrame = null!; // 剑士小屋图标
 
+    @property(Prefab)
+    churchPrefab: Prefab = null!; // 教堂预制体
+
+    @property(SpriteFrame)
+    churchIcon: SpriteFrame = null!; // 教堂图标
+
     @property(Node)
     buildingSelectionPanel: Node = null!; // 建筑物选择面板节点
 
@@ -86,6 +93,9 @@ export class TowerBuilder extends Component {
     swordsmanHallContainer: Node = null!; // 剑士小屋容器
 
     @property(Node)
+    churchContainer: Node = null!; // 教堂容器
+
+    @property(Node)
     buildingGridPanel: Node = null!; // 建筑物网格面板节点
 
     @property(Node)
@@ -108,6 +118,9 @@ export class TowerBuilder extends Component {
 
     @property
     swordsmanHallCost: number = 10; // 剑士小屋建造成本（10金币）
+
+    @property
+    churchCost: number = 10; // 教堂建造成本（10金币）
 
     private isBuildingMode: boolean = false;
     private previewTower: Node = null!;
@@ -229,6 +242,22 @@ export class TowerBuilder extends Component {
                     this.swordsmanHallContainer.setParent(canvas);
                 } else if (this.node.scene) {
                     this.swordsmanHallContainer.setParent(this.node.scene);
+                }
+            }
+        }
+
+        // 创建教堂容器
+        if (!this.churchContainer) {
+            const existingChurches = find('Churches');
+            if (existingChurches) {
+                this.churchContainer = existingChurches;
+            } else {
+                this.churchContainer = new Node('Churches');
+                const canvas = find('Canvas');
+                if (canvas) {
+                    this.churchContainer.setParent(canvas);
+                } else if (this.node.scene) {
+                    this.churchContainer.setParent(this.node.scene);
                 }
             }
         }
@@ -418,6 +447,15 @@ export class TowerBuilder extends Component {
                 cost: this.swordsmanHallCost,
                 icon: this.swordsmanHallIcon || null!,
                 description: '可以生产精灵剑士单位'
+            });
+        }
+        if (this.churchPrefab) {
+            buildingTypes.push({
+                name: '教堂',
+                prefab: this.churchPrefab,
+                cost: this.churchCost,
+                icon: this.churchIcon || null!,
+                description: '可以生产为友军治疗的牧师单位'
             });
         }
         this.buildingPanel.setBuildingTypes(buildingTypes);
@@ -1131,6 +1169,17 @@ export class TowerBuilder extends Component {
             }
         }
 
+        // 检查是否与现有教堂重叠
+        const churches = this.churchContainer?.children || [];
+        for (const c of churches) {
+            if (c.active) {
+                const d = Vec3.distance(position, c.worldPosition);
+                if (d < 80) { // 教堂之间/与其他建筑的最小距离
+                    return false;
+                }
+            }
+        }
+
         // 检查是否与现有石墙重叠（其他建筑物不能与石墙重叠）
         const stoneWalls = this.stoneWallContainer?.children || [];
         for (const wall of stoneWalls) {
@@ -1190,6 +1239,8 @@ export class TowerBuilder extends Component {
             this.buildStoneWall(worldPosition);
         } else if (building.name === '剑士小屋' || building.prefab === this.swordsmanHallPrefab) {
             this.buildSwordsmanHall(worldPosition);
+        } else if (building.name === '教堂' || building.prefab === this.churchPrefab) {
+            this.buildChurch(worldPosition);
         } else {
             // 可以扩展其他建筑物类型
             console.warn('TowerBuilder.buildBuilding: Unknown building type:', building.name);
@@ -1660,6 +1711,66 @@ export class TowerBuilder extends Component {
         console.debug('TowerBuilder.buildSwordsmanHall: Built at', worldPosition);
     }
 
+    /**
+     * 建造教堂
+     */
+    buildChurch(worldPosition: Vec3) {
+        if (!this.churchPrefab) {
+            console.error('TowerBuilder.buildChurch: churchPrefab is null!');
+            return;
+        }
+
+        // 消耗金币
+        if (this.gameManager) {
+            this.gameManager.spendGold(this.churchCost);
+        }
+
+        const church = instantiate(this.churchPrefab);
+
+        // 设置父节点
+        const parent = this.churchContainer || this.node;
+        if (parent && !parent.active) {
+            parent.active = true;
+        }
+
+        church.setParent(parent);
+        church.active = true;
+        church.setPosition(0, 0, 0);
+        church.setRotationFromEuler(0, 0, 0);
+        church.setScale(1, 1, 1);
+        church.setWorldPosition(worldPosition);
+
+        const churchScript = church.getComponent(Church);
+        if (churchScript) {
+            // 先应用配置（排除 buildCost）
+            const configManager = UnitConfigManager.getInstance();
+            if (configManager.isConfigLoaded()) {
+                (configManager as any).applyConfigToUnit?.('Church', churchScript, ['buildCost']);
+            }
+
+            // 然后设置建造成本
+            churchScript.buildCost = this.churchCost;
+
+            // 记录网格位置并标记占用
+            if (this.gridPanel) {
+                const grid = this.gridPanel.worldToGrid(worldPosition);
+                if (grid) {
+                    churchScript.gridX = grid.x;
+                    churchScript.gridY = grid.y;
+                    this.gridPanel.occupyGrid(grid.x, grid.y, church);
+                }
+            }
+
+            // 检查首次出现
+            if (this.gameManager) {
+                const unitType = (churchScript as any).unitType || 'Church';
+                this.gameManager.checkUnitFirstAppearance(unitType, churchScript);
+            }
+        }
+
+        console.debug('TowerBuilder.buildChurch: Built at', worldPosition);
+    }
+
     // 可以通过按钮调用
     onBuildButtonClick() {
         // 检查warAncientTreePrefab是否设置
@@ -1693,7 +1804,8 @@ export class TowerBuilder extends Component {
             this.moonWellContainer,
             this.treeContainer,
             this.hunterHallContainer,
-            this.stoneWallContainer
+            this.stoneWallContainer,
+            this.churchContainer
         ];
 
         for (const container of containers) {
@@ -1828,19 +1940,26 @@ export class TowerBuilder extends Component {
         }
 
         const hunterHall = building.getComponent(HunterHall);
+        const church = building.getComponent(Church);
         if (hunterHall && hunterHall.showSelectionPanel) {
             hunterHall.showSelectionPanel();
             console.debug('[TowerBuilder] showBuildingInfoPanel - HunterHall面板已打开');
             return;
         }
 
+        if (church && church.showSelectionPanel) {
+            church.showSelectionPanel();
+            console.debug('[TowerBuilder] showBuildingInfoPanel - Church面板已打开');
+            return;
+        }
+        
         const stoneWall = building.getComponent(StoneWall);
         if (stoneWall && stoneWall.showSelectionPanel) {
             stoneWall.showSelectionPanel();
             console.debug('[TowerBuilder] showBuildingInfoPanel - StoneWall面板已打开');
             return;
         }
-
+        
         console.warn('[TowerBuilder] showBuildingInfoPanel - 无法找到建筑物的showSelectionPanel方法');
     }
 
@@ -2322,6 +2441,14 @@ export class TowerBuilder extends Component {
             } else {
                 building.setWorldPosition(targetWorldPos);
             }
+        } else if (church) {
+            church.gridX = gridX;
+            church.gridY = gridY;
+            if (church.moveToGridPosition) {
+                church.moveToGridPosition(gridX, gridY);
+            } else {
+                building.setWorldPosition(targetWorldPos);
+            }
         } else {
             // 如果没有找到脚本，直接设置位置
             building.setWorldPosition(targetWorldPos);
@@ -2358,11 +2485,13 @@ export class TowerBuilder extends Component {
         const moonWell1 = building1.getComponent(MoonWell);
         const tree1 = building1.getComponent(Tree);
         const hunterHall1 = building1.getComponent(HunterHall);
+        const church1 = building1.getComponent(Church);
 
         const warAncientTree2 = building2.getComponent(WarAncientTree);
         const moonWell2 = building2.getComponent(MoonWell);
         const tree2 = building2.getComponent(Tree);
         const hunterHall2 = building2.getComponent(HunterHall);
+        const church2 = building2.getComponent(Church);
 
         // 先释放两个网格
         this.gridPanel.releaseGrid(grid1X, grid1Y);
@@ -2405,6 +2534,14 @@ export class TowerBuilder extends Component {
             } else {
                 building1.setWorldPosition(targetWorldPos1);
             }
+        } else if (church1) {
+            church1.gridX = grid2X;
+            church1.gridY = grid2Y;
+            if (church1.moveToGridPosition) {
+                church1.moveToGridPosition(grid2X, grid2Y);
+            } else {
+                building1.setWorldPosition(targetWorldPos1);
+            }
         } else {
             building1.setWorldPosition(targetWorldPos1);
         }
@@ -2439,6 +2576,14 @@ export class TowerBuilder extends Component {
             hunterHall2.gridY = grid1Y;
             if (hunterHall2.moveToGridPosition) {
                 hunterHall2.moveToGridPosition(grid1X, grid1Y);
+            } else {
+                building2.setWorldPosition(targetWorldPos2);
+            }
+        } else if (church2) {
+            church2.gridX = grid1X;
+            church2.gridY = grid1Y;
+            if (church2.moveToGridPosition) {
+                church2.moveToGridPosition(grid1X, grid1Y);
             } else {
                 building2.setWorldPosition(targetWorldPos2);
             }
