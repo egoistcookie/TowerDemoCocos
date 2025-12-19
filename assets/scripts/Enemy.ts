@@ -608,18 +608,20 @@ export class Enemy extends Component {
             return;
         }
         
-        // 如果当前目标是我方单位（弓箭手、女猎手、剑士），保持这个目标作为最高优先级
+        // 如果当前目标是我方单位（弓箭手、女猎手、剑士、牧师），保持这个目标作为最高优先级
         if (this.currentTarget && !this.isInStoneWallGrid) {
             const arrowerScript = this.currentTarget.getComponent('Arrower') as any;
             const hunterScript = this.currentTarget.getComponent('Hunter') as any;
             const swordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
+            const priestScript = this.currentTarget.getComponent('Priest') as any;
             
-            if ((arrowerScript || hunterScript || swordsmanScript) && 
+            if ((arrowerScript || hunterScript || swordsmanScript || priestScript) && 
                 this.currentTarget.active && this.currentTarget.isValid) {
                 // 检查这个单位是否仍然有效且存活
                 if ((arrowerScript && arrowerScript.isAlive && arrowerScript.isAlive()) ||
                     (hunterScript && hunterScript.isAlive && hunterScript.isAlive()) ||
-                    (swordsmanScript && swordsmanScript.isAlive && swordsmanScript.isAlive())) {
+                    (swordsmanScript && swordsmanScript.isAlive && swordsmanScript.isAlive()) ||
+                    (priestScript && priestScript.isAlive && priestScript.isAlive())) {
                     const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
                     console.debug(`[Enemy] findTarget: 当前目标是我方单位，保持目标（最高优先级），距离: ${distance.toFixed(1)}`);
                     // 保持这个目标，不执行后续的目标查找逻辑
@@ -890,7 +892,7 @@ export class Enemy extends Component {
         }
         
         // 4. 查找范围内的角色（优先级第四）
-        // 查找所有角色单位：弓箭手、小精灵、女猎手
+        // 查找所有角色单位：弓箭手、小精灵、女猎手、牧师
         // 1) 弓箭手
         for (const tower of towers) {
             if (tower && tower.active && tower.isValid) {
@@ -899,6 +901,25 @@ export class Enemy extends Component {
                 if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
                     const distance = Vec3.distance(this.node.worldPosition, tower.worldPosition);
                     // 如果弓箭手在范围内，且优先级更高或距离更近
+                    if (distance <= detectionRange) {
+                        if (PRIORITY.CHARACTER < targetPriority || 
+                            (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
+                            minDistance = distance;
+                            nearestTarget = tower;
+                            targetPriority = PRIORITY.CHARACTER;
+                        }
+                    }
+                }
+            }
+        }
+        // 1.5) 牧师（也在Towers容器中）
+        for (const tower of towers) {
+            if (tower && tower.active && tower.isValid) {
+                const priestScript = tower.getComponent('Priest') as any;
+                // 检查牧师是否存活
+                if (priestScript && priestScript.isAlive && priestScript.isAlive()) {
+                    const distance = Vec3.distance(this.node.worldPosition, tower.worldPosition);
+                    // 如果牧师在范围内，且优先级更高或距离更近
                     if (distance <= detectionRange) {
                         if (PRIORITY.CHARACTER < targetPriority || 
                             (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
@@ -3282,6 +3303,15 @@ export class Enemy extends Component {
                 if (tower && tower.active && tower.isValid) {
                     const towerScript = tower.getComponent('Arrower') as any;
                     if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
+                        allPotentialTargets.push(tower);
+                    }
+                }
+            }
+            // 3.1.5) 牧师（也在Towers容器中）
+            for (const tower of towers) {
+                if (tower && tower.active && tower.isValid) {
+                    const priestScript = tower.getComponent('Priest') as any;
+                    if (priestScript && priestScript.isAlive && priestScript.isAlive()) {
                         allPotentialTargets.push(tower);
                     }
                 }

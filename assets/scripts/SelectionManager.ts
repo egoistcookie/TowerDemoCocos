@@ -3,6 +3,7 @@ import { Arrower } from './Arrower';
 import { Wisp } from './Wisp';
 import { Hunter } from './Hunter';
 import { ElfSwordsman } from './ElfSwordsman';
+import { Priest } from './Priest';
 const { ccclass, property } = _decorator;
 
 @ccclass('SelectionManager')
@@ -22,6 +23,7 @@ export class SelectionManager extends Component {
     private selectedHunters: Hunter[] = []; // 选中的女猎手数组
     private selectedWisps: Wisp[] = []; // 选中的小精灵数组
     private selectedSwordsmen: ElfSwordsman[] = []; // 选中的精灵剑士数组
+    private selectedPriests: Priest[] = []; // 选中的牧师数组
     private camera: Camera = null!; // 相机引用
     private globalTouchHandler: ((event: EventTouch) => void) | null = null!; // 全局触摸事件处理器
 
@@ -187,7 +189,7 @@ export class SelectionManager extends Component {
 
         // 如果之前没有选中的单位，清除之前的选择
         // 如果有选中的单位，保留选择（等待拖拽或点击来决定是重新选择还是移动）
-        if (this.selectedTowers.length === 0 && this.selectedHunters.length === 0 && this.selectedWisps.length === 0 && this.selectedSwordsmen.length === 0) {
+        if (this.selectedTowers.length === 0 && this.selectedHunters.length === 0 && this.selectedWisps.length === 0 && this.selectedSwordsmen.length === 0 && this.selectedPriests.length === 0) {
             this.clearSelection();
         }
     }
@@ -238,7 +240,7 @@ export class SelectionManager extends Component {
         }
 
         // 如果之前有选中的单位，检测到拖拽时清除之前的选择（开始新的选择）
-        if (this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedWisps.length > 0 || this.selectedSwordsmen.length > 0) {
+        if (this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedWisps.length > 0 || this.selectedSwordsmen.length > 0 || this.selectedPriests.length > 0) {
             const dragDistance = Vec3.distance(this.startPos, this.currentPos);
             if (dragDistance > 5) { // 检测到拖拽（移动超过5像素）
                 console.debug('SelectionManager.onTouchMove: Detected drag, clearing previous selection');
@@ -262,7 +264,7 @@ export class SelectionManager extends Component {
         // console.debug('SelectionManager.onTouchEnd: Touch end event received, isSelecting:', this.isSelecting, 'selectedTowers:', this.selectedTowers.length, 'selectedHunters:', this.selectedHunters.length, 'selectedWisps:', this.selectedWisps.length);
         
         // 检查是否有选中的单位（小精灵、防御塔、女猎手或精灵剑士）
-        const hasSelectedUnits = this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedWisps.length > 0 || this.selectedSwordsmen.length > 0;
+        const hasSelectedUnits = this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedWisps.length > 0 || this.selectedSwordsmen.length > 0 || this.selectedPriests.length > 0;
         
         // 优先检查是否在建造模式下（如果是，且没有选中单位，完全不处理，让建造系统处理）
         const buildingMode = this.isBuildingMode();
@@ -310,8 +312,8 @@ export class SelectionManager extends Component {
         const dragDistance = Vec3.distance(this.startPos, this.currentPos);
         // console.debug('SelectionManager.onTouchEnd: Drag distance:', dragDistance.toFixed(2), 'Start:', this.startPos, 'End:', this.currentPos);
         
-        // 记录拖拽开始前是否有选中的单位（包括防御单位、女猎手、小精灵和精灵剑士）
-        const hadPreviousSelection = this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedWisps.length > 0 || this.selectedSwordsmen.length > 0;
+        // 记录拖拽开始前是否有选中的单位（包括防御单位、女猎手、小精灵、精灵剑士和牧师）
+        const hadPreviousSelection = this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedWisps.length > 0 || this.selectedSwordsmen.length > 0 || this.selectedPriests.length > 0;
         // console.debug('SelectionManager.onTouchEnd: Had previous selection:', hadPreviousSelection);
         
         // console.debug('SelectionManager.onTouchEnd: Has selected units:', hasSelectedUnits, 'selectedTowers:', this.selectedTowers.length, 'selectedHunters:', this.selectedHunters.length, 'selectedWisps:', this.selectedWisps.length);
@@ -339,12 +341,12 @@ export class SelectionManager extends Component {
             const clickedBuilding = this.findBuildingAtPosition(worldPos);
             // console.debug('SelectionManager.onTouchEnd: Clicked building:', clickedBuilding ? clickedBuilding.name : 'null');
             
-            // 计算分散位置（包括防御单位、女猎手、小精灵和精灵剑士）
-            const allUnits: any[] = [...this.selectedTowers, ...this.selectedHunters, ...this.selectedWisps, ...this.selectedSwordsmen];
+            // 计算分散位置（包括防御单位、女猎手、小精灵、精灵剑士和牧师）
+            const allUnits: any[] = [...this.selectedTowers, ...this.selectedHunters, ...this.selectedWisps, ...this.selectedSwordsmen, ...this.selectedPriests];
             const formationPositions = this.calculateFormationPositions(worldPos, allUnits);
             console.debug('SelectionManager.onTouchEnd: Calculated formation positions:', formationPositions);
             
-            console.debug('SelectionManager.onTouchEnd: Moving', this.selectedTowers.length, 'towers,', this.selectedHunters.length, 'hunters,', this.selectedWisps.length, 'wisps and', this.selectedSwordsmen.length, 'swordsmen to formation positions');
+            console.debug('SelectionManager.onTouchEnd: Moving', this.selectedTowers.length, 'towers,', this.selectedHunters.length, 'hunters,', this.selectedWisps.length, 'wisps,', this.selectedSwordsmen.length, 'swordsmen and', this.selectedPriests.length, 'priests to formation positions');
 
             // 让所有选中的防御单位移动到各自的分散位置
             for (let i = 0; i < this.selectedTowers.length; i++) {
@@ -424,6 +426,18 @@ export class SelectionManager extends Component {
                         const targetPos = formationPositions[this.selectedTowers.length + this.selectedHunters.length + this.selectedWisps.length + i];
                         console.debug('SelectionManager.onTouchEnd: Moving swordsman', i, 'to (', targetPos.x.toFixed(1), ',', targetPos.y.toFixed(1), ')');
                         swordsman.setManualMoveTargetPosition(targetPos);
+                    }
+                }
+            }
+
+            // 让所有选中的牧师移动到各自的分散位置
+            for (let i = 0; i < this.selectedPriests.length; i++) {
+                const priest = this.selectedPriests[i];
+                if (priest && priest.node && priest.node.isValid) {
+                    if ((this.selectedTowers.length + this.selectedHunters.length + this.selectedWisps.length + this.selectedSwordsmen.length + i) < formationPositions.length) {
+                        const targetPos = formationPositions[this.selectedTowers.length + this.selectedHunters.length + this.selectedWisps.length + this.selectedSwordsmen.length + i];
+                        console.debug('SelectionManager.onTouchEnd: Moving priest', i, 'to (', targetPos.x.toFixed(1), ',', targetPos.y.toFixed(1), ')');
+                        priest.setManualMoveTargetPosition(targetPos);
                     }
                 }
             }
@@ -888,13 +902,35 @@ export class SelectionManager extends Component {
             }
         }
 
-        console.debug('SelectionManager.updateSelectedTowers: Found', newSelectedTowers.length, 'towers,', newSelectedHunters.length, 'hunters,', newSelectedWisps.length, 'wisps and', newSelectedSwordsmen.length, 'swordsmen in selection box');
+        // 查找牧师（也在Towers容器中）
+        const newSelectedPriests: Priest[] = [];
+        for (const tower of towers) {
+            if (tower && tower.active && tower.isValid) {
+                const priestScript = tower.getComponent(Priest) as Priest;
+                if (priestScript) {
+                    if (priestScript.isAlive && priestScript.isAlive()) {
+                        // 检查牧师是否在选择框范围内
+                        const priestPos = tower.worldPosition;
+                        const inRangeX = priestPos.x >= minX && priestPos.x <= maxX;
+                        const inRangeY = priestPos.y >= minY && priestPos.y <= maxY;
+                        const inRange = inRangeX && inRangeY;
+                        
+                        if (inRange) {
+                            newSelectedPriests.push(priestScript);
+                        }
+                    }
+                }
+            }
+        }
+
+        console.debug('SelectionManager.updateSelectedTowers: Found', newSelectedTowers.length, 'towers,', newSelectedHunters.length, 'hunters,', newSelectedWisps.length, 'wisps,', newSelectedSwordsmen.length, 'swordsmen and', newSelectedPriests.length, 'priests in selection box');
 
         // 更新选中状态
         this.setSelectedTowers(newSelectedTowers);
         this.setSelectedHunters(newSelectedHunters);
         this.setSelectedWisps(newSelectedWisps);
         this.setSelectedSwordsmen(newSelectedSwordsmen);
+        this.setSelectedPriests(newSelectedPriests);
         
         // 移除之前注册的移动命令，确保不会自动触发移动
         if (this.globalTouchHandler) {
@@ -943,6 +979,28 @@ export class SelectionManager extends Component {
         for (const swordsman of this.selectedSwordsmen) {
             if (swordsman && swordsman.node && swordsman.node.isValid) {
                 swordsman.setHighlight(true);
+            }
+        }
+    }
+
+    /**
+     * 设置选中的牧师
+     */
+    setSelectedPriests(priests: Priest[]) {
+        // 取消之前选中的高亮
+        for (const priest of this.selectedPriests) {
+            if (priest && priest.node && priest.node.isValid) {
+                priest.setHighlight(false);
+            }
+        }
+
+        // 设置新的选中
+        this.selectedPriests = priests;
+
+        // 高亮显示选中的牧师
+        for (const priest of this.selectedPriests) {
+            if (priest && priest.node && priest.node.isValid) {
+                priest.setHighlight(true);
             }
         }
     }
@@ -1040,12 +1098,14 @@ export class SelectionManager extends Component {
             this.setSelectedHunters([]);
             this.setSelectedWisps([]);
             this.setSelectedSwordsmen([]);
+            this.setSelectedPriests([]);
         } else {
             // 建造模式下静默清除，不输出日志
             this.selectedTowers = [];
             this.selectedHunters = [];
             this.selectedWisps = [];
             this.selectedSwordsmen = [];
+            this.selectedPriests = [];
             // 取消之前选中的高亮
             for (const tower of this.selectedTowers) {
                 if (tower && tower.node && tower.node.isValid) {
@@ -1065,6 +1125,11 @@ export class SelectionManager extends Component {
             for (const swordsman of this.selectedSwordsmen) {
                 if (swordsman && swordsman.node && swordsman.node.isValid) {
                     swordsman.setHighlight(false);
+                }
+            }
+            for (const priest of this.selectedPriests) {
+                if (priest && priest.node && priest.node.isValid) {
+                    priest.setHighlight(false);
                 }
             }
         }
@@ -1250,14 +1315,14 @@ export class SelectionManager extends Component {
             console.debug('SelectionManager.registerMoveCommand.globalTouchHandler: Clicked building:', clickedBuilding ? clickedBuilding.name : 'null');
             
             // 检查当前选中的单位
-            console.debug('SelectionManager.registerMoveCommand.globalTouchHandler: Current selected towers:', this.selectedTowers.length, 'selected hunters:', this.selectedHunters.length, 'selected wisps:', this.selectedWisps.length);
+            console.debug('SelectionManager.registerMoveCommand.globalTouchHandler: Current selected towers:', this.selectedTowers.length, 'selected hunters:', this.selectedHunters.length, 'selected wisps:', this.selectedWisps.length, 'selected priests:', this.selectedPriests.length);
             
-            // 计算分散位置（包括防御单位、女猎手、小精灵和精灵剑士）
-            const allUnits: any[] = [...this.selectedTowers, ...this.selectedHunters, ...this.selectedWisps, ...this.selectedSwordsmen];
+            // 计算分散位置（包括防御单位、女猎手、小精灵、精灵剑士和牧师）
+            const allUnits: any[] = [...this.selectedTowers, ...this.selectedHunters, ...this.selectedWisps, ...this.selectedSwordsmen, ...this.selectedPriests];
             const formationPositions = this.calculateFormationPositions(worldPos, allUnits);
             console.debug('SelectionManager.registerMoveCommand.globalTouchHandler: Calculated', formationPositions.length, 'formation positions');
             
-            console.debug('SelectionManager.registerMoveCommand.globalTouchHandler: Moving', this.selectedTowers.length, 'towers,', this.selectedHunters.length, 'hunters,', this.selectedWisps.length, 'wisps and', this.selectedSwordsmen.length, 'swordsmen to formation positions');
+            console.debug('SelectionManager.registerMoveCommand.globalTouchHandler: Moving', this.selectedTowers.length, 'towers,', this.selectedHunters.length, 'hunters,', this.selectedWisps.length, 'wisps,', this.selectedSwordsmen.length, 'swordsmen and', this.selectedPriests.length, 'priests to formation positions');
 
             // 让所有选中的防御单位移动到各自的分散位置
             for (let i = 0; i < this.selectedTowers.length; i++) {
@@ -1333,6 +1398,18 @@ export class SelectionManager extends Component {
                         const targetPos = formationPositions[this.selectedTowers.length + this.selectedHunters.length + this.selectedWisps.length + i];
                         console.debug('SelectionManager.registerMoveCommand.globalTouchHandler: Moving swordsman', i, 'to (', targetPos.x.toFixed(1), ',', targetPos.y.toFixed(1), ')');
                         swordsman.setManualMoveTargetPosition(targetPos);
+                    }
+                }
+            }
+
+            // 让所有选中的牧师移动到各自的分散位置
+            for (let i = 0; i < this.selectedPriests.length; i++) {
+                const priest = this.selectedPriests[i];
+                if (priest && priest.node && priest.node.isValid) {
+                    if ((this.selectedTowers.length + this.selectedHunters.length + this.selectedWisps.length + this.selectedSwordsmen.length + i) < formationPositions.length) {
+                        const targetPos = formationPositions[this.selectedTowers.length + this.selectedHunters.length + this.selectedWisps.length + this.selectedSwordsmen.length + i];
+                        console.debug('SelectionManager.registerMoveCommand.globalTouchHandler: Moving priest', i, 'to (', targetPos.x.toFixed(1), ',', targetPos.y.toFixed(1), ')');
+                        priest.setManualMoveTargetPosition(targetPos);
                     }
                 }
             }
