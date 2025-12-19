@@ -3986,12 +3986,14 @@ export class Enemy extends Component {
         const wellScript = this.currentTarget.getComponent('MoonWell') as any;
         const hallScript = this.currentTarget.getComponent('HunterHall') as any;
         const swordsmanHallScript = this.currentTarget.getComponent('SwordsmanHall') as any;
+        const churchScript = this.currentTarget.getComponent('Church') as any;
+        const priestScript = this.currentTarget.getComponent('Priest') as any;
         const crystalScript = this.currentTarget.getComponent('Crystal') as any;
         const wispScript = this.currentTarget.getComponent('Wisp') as any;
         const hunterScript = this.currentTarget.getComponent('Hunter') as any;
         const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-        const targetScript = towerScript || warAncientTreeScript || normalTreeScript || wellScript || hallScript || swordsmanHallScript || crystalScript || wispScript || hunterScript || elfSwordsmanScript || stoneWallScript;
+        const targetScript = towerScript || warAncientTreeScript || normalTreeScript || wellScript || hallScript || swordsmanHallScript || churchScript || priestScript || crystalScript || wispScript || hunterScript || elfSwordsmanScript || stoneWallScript;
         
         if (targetScript && targetScript.takeDamage) {
             this.logMessage('debug', `dealDamage: 调用takeDamage，伤害=${this.attackDamage}，目标类型=${targetScript.constructor.name}`);
