@@ -358,7 +358,6 @@ export class Wisp extends Component {
      */
     attachToBuilding(building: Node, fromBuilding: boolean = false) {
         if (this.isAttached) {
-            console.warn('Wisp: Already attached to a building!');
             return;
         }
 
@@ -403,7 +402,6 @@ export class Wisp extends Component {
             this.particleEffectNode.active = this.enableParticleEffect;
         }
 
-        console.debug('Wisp: Attached to building and disappeared into it');
     }
 
     /**
@@ -441,7 +439,6 @@ export class Wisp extends Component {
             this.isMoving = false;
         }, 1.0);
 
-        console.debug('Wisp: Detached from building and reappeared');
     }
 
     /**
@@ -517,6 +514,8 @@ export class Wisp extends Component {
             }
         };
 
+        // 先取消之前的调度，避免重复调度
+        this.unschedule(animationUpdate);
         // 开始动画更新
         this.schedule(animationUpdate, 0);
     }
@@ -548,7 +547,6 @@ export class Wisp extends Component {
         this.isMoving = false;
         this.moveTarget = null!;
         
-        console.debug(`Wisp: Manual move target set to (${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
     }
     
     /**
@@ -1046,7 +1044,6 @@ export class Wisp extends Component {
         
         // 依附在建筑物上时不会被攻击
         if (this.isAttached) {
-            console.debug('Wisp.takeDamage: Wisp is attached to building, ignoring damage');
             return;
         }
 
@@ -1293,48 +1290,34 @@ export class Wisp extends Component {
      * 点击事件
      */
     onWispClick(event: EventTouch) {
-        console.debug('Wisp.onWispClick: Wisp clicked, event:', event);
         // 阻止事件冒泡
         event.propagationStopped = true;
 
         // 检查是否处于建造模式，如果是，先退出建造模式
-        console.debug('Wisp.onWispClick: Checking building mode...');
         const towerBuilderNode = find('TowerBuilder');
         if (towerBuilderNode) {
-            console.debug('Wisp.onWispClick: TowerBuilder node found');
             const towerBuilder = towerBuilderNode.getComponent('TowerBuilder') as any;
             if (towerBuilder) {
-                console.debug('Wisp.onWispClick: TowerBuilder component found');
                 // 直接调用disableBuildingMode，不管当前是否处于建造模式
-                console.debug('Wisp.onWispClick: Calling disableBuildingMode() to exit building mode');
                 if (towerBuilder.disableBuildingMode) {
                     towerBuilder.disableBuildingMode();
-                    console.debug('Wisp.onWispClick: disableBuildingMode() called successfully');
                 } else {
-                    console.debug('Wisp.onWispClick: disableBuildingMode() method not found');
                 }
                 
                 // 直接设置isBuildingMode为false，确保建造模式被退出
-                console.debug('Wisp.onWispClick: Setting isBuildingMode to false directly');
                 towerBuilder.isBuildingMode = false;
-                console.debug('Wisp.onWispClick: After setting, isBuildingMode is now:', towerBuilder.isBuildingMode);
             } else {
-                console.debug('Wisp.onWispClick: TowerBuilder component not found');
             }
         } else {
-            console.debug('Wisp.onWispClick: TowerBuilder node not found');
         }
 
         // 显示单位信息面板
         if (!this.unitSelectionManager) {
-            console.debug('Wisp.onWispClick: Finding UnitSelectionManager');
             this.findUnitSelectionManager();
         }
         if (this.unitSelectionManager) {
-            console.debug('Wisp.onWispClick: UnitSelectionManager found');
             // 检查是否已经选中了小精灵
             if (this.unitSelectionManager.isUnitSelected(this.node)) {
-                console.debug('Wisp.onWispClick: Wisp already selected, clearing selection');
                 // 如果已经选中，清除选择
                 this.unitSelectionManager.clearSelection();
                 // 同时清除SelectionManager中的选中状态
@@ -1352,14 +1335,11 @@ export class Wisp extends Component {
                 icon: this.cardIcon || this.defaultSpriteFrame,
                 collisionRadius: this.collisionRadius
             };
-            console.debug('Wisp.onWispClick: Selecting wisp in UnitSelectionManager');
             this.unitSelectionManager.selectUnit(this.node, unitInfo);
             
             // 将小精灵添加到SelectionManager的选中列表中，以便后续可以移动
-            console.debug('Wisp.onWispClick: Adding wisp to SelectionManager');
             this.addToSelectionManager();
         } else {
-            console.debug('Wisp.onWispClick: UnitSelectionManager not found');
         }
     }
     
@@ -1367,26 +1347,18 @@ export class Wisp extends Component {
      * 将小精灵添加到SelectionManager的选中列表中
      */
     private addToSelectionManager() {
-        console.debug('Wisp.addToSelectionManager: Adding wisp to SelectionManager');
         // 查找SelectionManager
         const selectionManager = this.findSelectionManager();
         if (selectionManager) {
-            console.debug('Wisp.addToSelectionManager: SelectionManager found, clearing previous selection');
             // 清除之前的选择
             selectionManager.clearSelection();
             // 将当前小精灵添加到选中列表
-            console.debug('Wisp.addToSelectionManager: Setting selected wisps to current wisp');
             selectionManager.setSelectedWisps([this]);
             // 注册移动命令
-            console.debug('Wisp.addToSelectionManager: Registering move command');
             selectionManager.registerMoveCommand();
-            console.debug('Wisp.addToSelectionManager: Move command registered successfully');
             
             // 检查SelectionManager的状态
-            console.debug('Wisp.addToSelectionManager: After registration - selectedWisps length:', selectionManager.selectedWisps?.length || 0);
-            console.debug('Wisp.addToSelectionManager: After registration - globalTouchHandler:', !!selectionManager.globalTouchHandler);
         } else {
-            console.debug('Wisp.addToSelectionManager: SelectionManager not found');
         }
     }
     
@@ -1394,13 +1366,10 @@ export class Wisp extends Component {
      * 清除SelectionManager中的选中状态
      */
     private clearSelectionInSelectionManager() {
-        console.debug('Wisp.clearSelectionInSelectionManager: Clearing selection in SelectionManager');
         const selectionManager = this.findSelectionManager();
         if (selectionManager) {
-            console.debug('Wisp.clearSelectionInSelectionManager: SelectionManager found, clearing selection');
             selectionManager.clearSelection();
         } else {
-            console.debug('Wisp.clearSelectionInSelectionManager: SelectionManager not found');
         }
     }
     
@@ -1408,19 +1377,14 @@ export class Wisp extends Component {
      * 查找SelectionManager
      */
     private findSelectionManager(): any {
-        console.debug('Wisp.findSelectionManager: Finding SelectionManager');
         let managerNode = find('SelectionManager');
         if (managerNode) {
-            console.debug('Wisp.findSelectionManager: SelectionManager node found');
             const selectionManager = managerNode.getComponent('SelectionManager');
             if (selectionManager) {
-                console.debug('Wisp.findSelectionManager: SelectionManager component found');
                 return selectionManager;
             } else {
-                console.debug('Wisp.findSelectionManager: SelectionManager component not found');
             }
         } else {
-            console.debug('Wisp.findSelectionManager: SelectionManager node not found, searching in scene');
         }
         
         const scene = this.node.scene;
@@ -1436,13 +1400,10 @@ export class Wisp extends Component {
             };
             const selectionManager = findInScene(scene, 'SelectionManager');
             if (selectionManager) {
-                console.debug('Wisp.findSelectionManager: SelectionManager found in scene');
             } else {
-                console.debug('Wisp.findSelectionManager: SelectionManager not found in scene');
             }
             return selectionManager;
         }
-        console.debug('Wisp.findSelectionManager: Scene not found');
         return null;
     }
 }

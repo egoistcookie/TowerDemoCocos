@@ -33,7 +33,6 @@ export class SoundManager extends Component {
     // 保存音效设置
     saveSoundSettings() {
         // 这里可以将音效设置保存到本地存储
-        console.log('SoundManager: Sound settings saved');
     }
     
     // 切换背景音乐开关

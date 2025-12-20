@@ -353,7 +353,6 @@ export class SwordsmanHall extends Component {
 
     produceSwordsman() {
         if (!this.swordsmanPrefab || !this.swordsmanContainer) {
-            console.warn('SwordsmanHall: Cannot produce swordsman - prefab or container missing');
             return;
         }
 
@@ -367,7 +366,6 @@ export class SwordsmanHall extends Component {
         }
         
         if (this.gameManager && !this.gameManager.canAddPopulation(1)) {
-            console.debug('SwordsmanHall: Cannot produce swordsman - population limit reached');
             return;
         }
 
@@ -381,7 +379,6 @@ export class SwordsmanHall extends Component {
         // 增加人口（在创建ElfSwordsman之前）
         if (this.gameManager) {
             if (!this.gameManager.addPopulation(1)) {
-                console.warn('SwordsmanHall: Failed to add population, cannot produce swordsman');
                 return;
             }
         }
@@ -459,7 +456,6 @@ export class SwordsmanHall extends Component {
             }
         }
 
-        console.debug(`SwordsmanHall: Produced swordsman ${this.producedSwordsmen.length}/${this.maxSwordsmanCount} at position (${spawnPos.x.toFixed(2)}, ${spawnPos.y.toFixed(2)})`);
         
         // 更新单位信息面板（如果被选中）
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
@@ -476,49 +472,41 @@ export class SwordsmanHall extends Component {
 
         // 检查初始位置是否可用
         if (!this.hasUnitAtPosition(initialPos, checkRadius)) {
-            console.debug(`SwordsmanHall.findAvailableSpawnPosition: Initial position is available at (${initialPos.x.toFixed(1)}, ${initialPos.y.toFixed(1)})`);
             return initialPos;
         }
 
-        console.debug(`SwordsmanHall.findAvailableSpawnPosition: Initial position (${initialPos.x.toFixed(1)}, ${initialPos.y.toFixed(1)}) is occupied, searching for available position...`);
 
         // 尝试左右平移，交替检查左右两侧
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             // 先尝试右侧
             const rightPos = new Vec3(initialPos.x + offsetStep * attempt, initialPos.y, initialPos.z);
             if (!this.hasUnitAtPosition(rightPos, checkRadius)) {
-                console.debug(`SwordsmanHall.findAvailableSpawnPosition: Found available position at right offset ${offsetStep * attempt}, position: (${rightPos.x.toFixed(1)}, ${rightPos.y.toFixed(1)})`);
                 return rightPos;
             }
 
             // 再尝试左侧
             const leftPos = new Vec3(initialPos.x - offsetStep * attempt, initialPos.y, initialPos.z);
             if (!this.hasUnitAtPosition(leftPos, checkRadius)) {
-                console.debug(`SwordsmanHall.findAvailableSpawnPosition: Found available position at left offset ${offsetStep * attempt}, position: (${leftPos.x.toFixed(1)}, ${leftPos.y.toFixed(1)})`);
                 return leftPos;
             }
         }
 
         // 如果左右平移都找不到，尝试上下方向
-        console.debug(`SwordsmanHall.findAvailableSpawnPosition: Horizontal search failed, trying vertical directions...`);
         for (let attempt = 1; attempt <= maxAttempts / 2; attempt++) {
             // 尝试上方
             const upPos = new Vec3(initialPos.x, initialPos.y + offsetStep * attempt, initialPos.z);
             if (!this.hasUnitAtPosition(upPos, checkRadius)) {
-                console.debug(`SwordsmanHall.findAvailableSpawnPosition: Found available position at up offset ${offsetStep * attempt}, position: (${upPos.x.toFixed(1)}, ${upPos.y.toFixed(1)})`);
                 return upPos;
             }
 
             // 尝试下方
             const downPos = new Vec3(initialPos.x, initialPos.y - offsetStep * attempt, initialPos.z);
             if (!this.hasUnitAtPosition(downPos, checkRadius)) {
-                console.debug(`SwordsmanHall.findAvailableSpawnPosition: Found available position at down offset ${offsetStep * attempt}, position: (${downPos.x.toFixed(1)}, ${downPos.y.toFixed(1)})`);
                 return downPos;
             }
         }
 
         // 如果所有位置都被占用，尝试对角线方向
-        console.debug(`SwordsmanHall.findAvailableSpawnPosition: Vertical search failed, trying diagonal directions...`);
         for (let attempt = 1; attempt <= maxAttempts / 2; attempt++) {
             const diagonalOffset = offsetStep * attempt;
             // 尝试四个对角线方向
@@ -531,14 +519,12 @@ export class SwordsmanHall extends Component {
 
             for (const pos of positions) {
                 if (!this.hasUnitAtPosition(pos, checkRadius)) {
-                    console.debug(`SwordsmanHall.findAvailableSpawnPosition: Found available position at diagonal offset, position: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})`);
                     return pos;
                 }
             }
         }
 
         // 如果所有位置都被占用，返回初始位置（让ElfSwordsman自己处理碰撞）
-        console.warn(`SwordsmanHall.findAvailableSpawnPosition: Could not find available spawn position after ${maxAttempts * 2} attempts, using initial position`);
         return initialPos;
     }
 
@@ -577,7 +563,6 @@ export class SwordsmanHall extends Component {
         
         if (swordsmenNode) {
             const swordsmen = swordsmenNode.children || [];
-            console.debug(`SwordsmanHall.hasUnitAtPosition: Checking ${swordsmen.length} swordsmen at position (${position.x.toFixed(1)}, ${position.y.toFixed(1)})`);
             
             for (const swordsman of swordsmen) {
                 if (swordsman && swordsman.isValid && swordsman.active) {
@@ -601,9 +586,7 @@ export class SwordsmanHall extends Component {
                             }
                             
                             if (isProducedSwordsman) {
-                                console.debug(`SwordsmanHall.hasUnitAtPosition: Collision detected with produced ElfSwordsman at distance ${distance.toFixed(1)}, minDistance: ${minDistance.toFixed(1)}, swordsmanPos: (${swordsmanPos.x.toFixed(1)}, ${swordsmanPos.y.toFixed(1)})`);
                             } else {
-                                console.debug(`SwordsmanHall.hasUnitAtPosition: Collision detected with other ElfSwordsman at distance ${distance.toFixed(1)}, minDistance: ${minDistance.toFixed(1)}, swordsmanPos: (${swordsmanPos.x.toFixed(1)}, ${swordsmanPos.y.toFixed(1)})`);
                             }
                             return true;
                         }
@@ -611,7 +594,6 @@ export class SwordsmanHall extends Component {
                 }
             }
         } else {
-            console.warn('SwordsmanHall.hasUnitAtPosition: ElfSwordsmans node not found!');
         }
 
         // 检查与剑士小屋的碰撞
@@ -703,12 +685,10 @@ export class SwordsmanHall extends Component {
         // 因此这里需要减少人口
         if (removedCount > 0 && this.gameManager) {
             this.gameManager.removePopulation(removedCount);
-            console.debug(`SwordsmanHall.cleanupDeadSwordsmen: Removed ${removedCount} dead swordsmen, population reduced by ${removedCount}`);
         }
         
         const afterCount = this.producedSwordsmen.length;
         if (beforeCount !== afterCount) {
-            console.debug(`SwordsmanHall.cleanupDeadSwordsmen: Removed ${beforeCount - afterCount} dead swordsmen, remaining: ${afterCount}`);
             
             // 更新单位信息面板（如果被选中）
             if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
@@ -841,8 +821,6 @@ export class SwordsmanHall extends Component {
      * 剑士小屋点击事件
      */
     onSwordsmanHallClick(event: EventTouch) {
-        console.debug('[SwordsmanHall] onSwordsmanHallClick - 节点点击事件触发, propagationStopped:', event.propagationStopped);
-        console.debug('SwordsmanHall.onSwordsmanHallClick: Entering method');
         
         // 检查是否正在拖拽建筑物（通过TowerBuilder）
         // 使用递归查找方法，更可靠
@@ -879,12 +857,10 @@ export class SwordsmanHall extends Component {
             towerBuilder = findComponentInScene(this.node.scene, 'TowerBuilder');
         }
         
-        console.debug('[SwordsmanHall] onSwordsmanHallClick - 查找TowerBuilder, 节点找到:', !!towerBuilderNode, '组件找到:', !!towerBuilder, 'isDraggingBuilding:', towerBuilder?.isDraggingBuilding);
         
         // 检查是否正在长按检测（由TowerBuilder处理）
         // 注意：不要阻止事件传播，让TowerBuilder的onTouchEnd也能处理
         if (towerBuilder && (towerBuilder as any).isLongPressActive) {
-            console.debug('[SwordsmanHall] onSwordsmanHallClick - 检测到正在长按检测，不处理点击事件，让TowerBuilder处理');
             // 不阻止事件传播，让TowerBuilder的onTouchEnd也能处理
             // event.propagationStopped = true; // 注释掉，让事件继续传播
             return;
@@ -892,12 +868,10 @@ export class SwordsmanHall extends Component {
         
         // 检查是否正在显示信息面板（由TowerBuilder打开）
         if ((this.node as any)._showingInfoPanel) {
-            console.debug('SwordsmanHall.onSwordsmanHallClick: 正在显示信息面板，不处理点击事件');
             return;
         }
         
         if (towerBuilder && towerBuilder.isDraggingBuilding) {
-            console.debug('[SwordsmanHall] onSwordsmanHallClick - 检测到正在拖拽建筑物，直接调用TowerBuilder.endDraggingBuilding处理');
             // 直接调用TowerBuilder的方法来处理拖拽结束，而不是依赖事件传播
             if (towerBuilder.endDraggingBuilding && typeof towerBuilder.endDraggingBuilding === 'function') {
                 towerBuilder.endDraggingBuilding(event);
@@ -907,26 +881,21 @@ export class SwordsmanHall extends Component {
         
         // 检查是否有选中的小精灵，如果有则不处理点击事件（让小精灵移动到建筑物）
         const selectionManager = this.findSelectionManager();
-        console.debug('SwordsmanHall.onSwordsmanHallClick: Found selectionManager:', selectionManager ? 'yes' : 'no');
         
         let hasSelectedWisps = false;
         if (selectionManager && selectionManager.hasSelectedWisps && typeof selectionManager.hasSelectedWisps === 'function') {
             hasSelectedWisps = selectionManager.hasSelectedWisps();
-            console.debug('SwordsmanHall.onSwordsmanHallClick: Has selected wisps:', hasSelectedWisps);
         } else {
-            console.debug('SwordsmanHall.onSwordsmanHallClick: selectionManager.hasSelectedWisps is not a function');
         }
         
         if (hasSelectedWisps) {
             // 有选中的小精灵，不处理建筑物的点击事件，让SelectionManager处理移动
             // 不设置propagationStopped，让事件继续传播，这样SelectionManager的移动命令可以执行
-            console.debug('SwordsmanHall.onSwordsmanHallClick: Has selected wisps, returning to let SelectionManager handle movement');
             return;
         }
 
         // 阻止事件传播
         event.propagationStopped = true;
-        console.debug('SwordsmanHall.onSwordsmanHallClick: Event propagation stopped');
 
         // 如果正在移动，不处理点击
         if (this.isMoving) {
@@ -935,7 +904,6 @@ export class SwordsmanHall extends Component {
 
         // 如果已经显示选择面板，先隐藏
         if (this.selectionPanel && this.selectionPanel.isValid) {
-            console.debug('SwordsmanHall.onSwordsmanHallClick: Selection panel already shown, hiding it');
             this.hideSelectionPanel();
             return;
         }
@@ -1085,7 +1053,6 @@ export class SwordsmanHall extends Component {
         // 移动建筑物到新位置
         this.node.setWorldPosition(targetWorldPos);
 
-        console.debug(`SwordsmanHall: Moved to grid (${gridX}, ${gridY})`);
     }
 
     /**
@@ -1272,7 +1239,6 @@ export class SwordsmanHall extends Component {
             // 回收80%金币
             const refund = Math.floor(this.buildCost * 0.8);
             this.gameManager.addGold(refund);
-            console.debug(`SwordsmanHall: Sold, refunded ${refund} gold`);
         }
 
         // 隐藏面板
@@ -1302,7 +1268,6 @@ export class SwordsmanHall extends Component {
         const upgradeCost = Math.floor(this.buildCost * 0.5);
         
         if (!this.gameManager.canAfford(upgradeCost)) {
-            console.debug(`SwordsmanHall: Not enough gold for upgrade! Need ${upgradeCost}, have ${this.gameManager.getGold()}`);
             return;
         }
 
@@ -1313,7 +1278,6 @@ export class SwordsmanHall extends Component {
         this.level++;
         this.maxSwordsmanCount += 2;
 
-        console.debug(`SwordsmanHall: Upgraded to level ${this.level}, maxSwordsmanCount increased to ${this.maxSwordsmanCount}`);
 
         // 更新单位信息面板
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
@@ -1336,13 +1300,11 @@ export class SwordsmanHall extends Component {
     attachWisp(wisp: Node) {
         const wispScript = wisp.getComponent('Wisp') as any;
         if (!wispScript) {
-            console.warn('SwordsmanHall: Cannot attach - wisp script not found');
             return;
         }
 
         // 检查小精灵是否已经依附在其他建筑物上
         if (wispScript.getIsAttached && wispScript.getIsAttached()) {
-            console.warn('SwordsmanHall: Wisp already attached to another building');
             return;
         }
 
@@ -1352,7 +1314,6 @@ export class SwordsmanHall extends Component {
         // 让小精灵依附，传递fromBuilding参数为true避免循环调用
         if (wispScript.attachToBuilding) {
             wispScript.attachToBuilding(this.node, true);
-            console.debug(`SwordsmanHall: Wisp attached, total: ${this.attachedWisps.length}`);
         }
     }
 
@@ -1361,7 +1322,6 @@ export class SwordsmanHall extends Component {
      */
     detachWisp() {
         if (this.attachedWisps.length === 0) {
-            console.debug('SwordsmanHall: No wisp to detach');
             return;
         }
 
@@ -1373,7 +1333,6 @@ export class SwordsmanHall extends Component {
         const wispScript = wisp.getComponent('Wisp') as any;
         if (wispScript && wispScript.detachFromBuilding) {
             wispScript.detachFromBuilding();
-            console.debug(`SwordsmanHall: Wisp detached, remaining: ${this.attachedWisps.length}`);
         }
     }
 

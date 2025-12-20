@@ -349,7 +349,6 @@ export class Crystal extends Component {
         }
         
         if (this.gameManager && !this.gameManager.canAddPopulation(1)) {
-            console.debug('Crystal: Cannot produce wisp - population limit reached');
             // 显示人口不足弹窗
             GamePopup.showMessage('人口不足');
             return;
@@ -371,7 +370,6 @@ export class Crystal extends Component {
      */
     produceWisp() {
         if (!this.wispPrefab || !this.wispContainer) {
-            console.warn('Crystal: Cannot produce wisp - prefab or container missing');
             return;
         }
 
@@ -381,7 +379,6 @@ export class Crystal extends Component {
         }
         
         if (this.gameManager && !this.gameManager.canAddPopulation(1)) {
-            console.debug('Crystal: Cannot produce wisp - population limit reached');
             return;
         }
 
@@ -392,7 +389,6 @@ export class Crystal extends Component {
         // 增加人口（在创建小精灵之前）
         if (this.gameManager) {
             if (!this.gameManager.addPopulation(1)) {
-                console.warn('Crystal: Failed to add population, cannot produce wisp');
                 return;
             }
         }
@@ -426,7 +422,6 @@ export class Crystal extends Component {
             }
         });
 
-        console.debug(`Crystal: Produced wisp at position (${spawnPos.x.toFixed(2)}, ${spawnPos.y.toFixed(2)})`);
         
         // 更新单位信息面板（如果被选中）
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {

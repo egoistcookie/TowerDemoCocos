@@ -164,7 +164,6 @@ export class StoneWallGridPanel extends Component {
         // 让网格中心在屏幕坐标y=500处
         const yPos = - canvasCenterY + 750;
         
-        console.debug(`[StoneWallGridPanel] updatePanelPosition: gridSize=(${gridTotalWidth},${gridTotalHeight}) pos=(${xPos},${yPos}) canvasSize=(${canvasWidth},${canvasHeight})`);
         
         // 设置节点位置
         this.node.setPosition(xPos, yPos, 0);
@@ -289,10 +288,8 @@ export class StoneWallGridPanel extends Component {
         const localX = startX + gridX * (this.cellSize + this.cellSpacing) + this.cellSize / 2;
         const localY = gridY * (this.cellSize + this.cellSpacing) + this.cellSize / 2;
 
-        console.debug(`[StoneWallGridPanel] gridToWorld: localX=${localX} this.node.worldPosition ${this.node.worldPosition.x}`);
         const wordX = this.node.worldPosition.x + localX;
         
-        console.debug(`[StoneWallGridPanel] gridToWorld: localY=${localY}`);
         const wordY = 500 + localY;
         
         // 转换为世界坐标

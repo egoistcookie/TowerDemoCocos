@@ -49,15 +49,12 @@ export class UnitConfigManager {
         this.loadPromise = new Promise((resolve, reject) => {
             resources.load('config/unitConfig', JsonAsset, (err, jsonAsset) => {
                 if (err) {
-                    console.error('UnitConfigManager: Failed to load unitConfig.json', err);
-                    console.error('UnitConfigManager: Please ensure unitConfig.json is located in assets/resources/config/ folder');
                     reject(err);
                     return;
                 }
 
                 this.config = jsonAsset.json as Record<string, UnitConfig>;
                 this.isLoaded = true;
-                console.log('UnitConfigManager: Unit config loaded successfully');
                 resolve();
             });
         });
@@ -72,7 +69,6 @@ export class UnitConfigManager {
      */
     public getUnitConfig(unitId: string): UnitConfig | null {
         if (!this.isLoaded) {
-            console.warn(`UnitConfigManager: Config not loaded yet, cannot get config for ${unitId}`);
             return null;
         }
 
@@ -88,7 +84,6 @@ export class UnitConfigManager {
     public applyConfigToUnit(unitId: string, unitScript: any, excludeProperties: string[] = []): boolean {
         const config = this.getUnitConfig(unitId);
         if (!config) {
-            console.warn(`UnitConfigManager: No config found for unit ${unitId}`);
             return false;
         }
 
@@ -117,7 +112,6 @@ export class UnitConfigManager {
             }
         }
 
-        console.log(`UnitConfigManager: Applied config to unit ${unitId}`);
         return true;
     }
 

@@ -14,7 +14,7 @@ export class Church extends Build {
     protected maxHealth: number = 120;
 
     @property({ override: true })
-    protected buildCost: number = 12;
+    public buildCost: number = 12;
 
     @property({ override: true })
     protected collisionRadius: number = 50;
@@ -204,7 +204,6 @@ export class Church extends Build {
 
     private producePriest() {
         if (!this.priestPrefab || !this.priestContainer) {
-            console.warn('Church: Cannot produce priest - prefab or container missing');
             return;
         }
 
@@ -217,7 +216,6 @@ export class Church extends Build {
         }
 
         if (this.gameManager && !this.gameManager.canAddPopulation(1)) {
-            console.debug('Church: Cannot produce priest - population limit reached');
             return;
         }
 
@@ -227,7 +225,6 @@ export class Church extends Build {
 
         if (this.gameManager) {
             if (!this.gameManager.addPopulation(1)) {
-                console.warn('Church: Failed to add population, cannot produce priest');
                 return;
             }
         }
@@ -290,7 +287,6 @@ export class Church extends Build {
             }, 0.1);
         }
 
-        console.debug(`Church: Produced priest ${this.producedPriests.length}/${this.maxPriestCount}`);
 
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
             this.unitSelectionManager.updateUnitInfo({

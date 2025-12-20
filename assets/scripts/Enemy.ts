@@ -130,24 +130,6 @@ export class Enemy extends Component {
     // Animation组件相关
     protected animationComponent: Animation = null!; // Animation组件引用
 
-    // 日志格式化辅助方法
-    private logMessage(level: 'info' | 'debug' | 'warn' | 'error', message: string) {
-        const formattedMessage = `[${this.enemyId}] ${message}`;
-        switch (level) {
-            case 'info':
-                console.info(formattedMessage);
-                break;
-            case 'debug':
-                console.debug(formattedMessage);
-                break;
-            case 'warn':
-                this.logMessage('debug', formattedMessage);
-                break;
-            case 'error':
-                console.error(formattedMessage);
-                break;
-        }
-    }
 
     start() {
         // 生成唯一ID（使用时间戳和随机数）
@@ -263,7 +245,6 @@ export class Enemy extends Component {
             return;
         }
 
-        this.logMessage('info', `[Enemy] update: gameManager`);
         // 检查游戏状态 - 如果GameManager不存在，尝试重新查找
         if (!this.gameManager) {
             this.findGameManager();
@@ -280,28 +261,26 @@ export class Enemy extends Component {
             }
         }
 
-        this.logMessage('info', `[Enemy] update: oldAttackTimer`);
         // 更新攻击计时器
         const oldAttackTimer = this.attackTimer;
         this.attackTimer += deltaTime;
         // 如果attackTimer接近或达到attackInterval，添加详细日志
-        if (this.currentTarget && Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition) <= this.attackRange) {
-            if (this.attackTimer >= this.attackInterval - 0.1 || (oldAttackTimer < this.attackInterval && this.attackTimer >= this.attackInterval)) {
-                this.logMessage('debug', `update: ⏰ attackTimer累积: ${oldAttackTimer.toFixed(2)} -> ${this.attackTimer.toFixed(2)}, attackInterval=${this.attackInterval}, 是否达到攻击条件=${this.attackTimer >= this.attackInterval}`);
+        if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.worldPosition && 
+            this.node && this.node.isValid && this.node.worldPosition) {
+            const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
+            if (distance <= this.attackRange) {
+                if (this.attackTimer >= this.attackInterval - 0.1 || (oldAttackTimer < this.attackInterval && this.attackTimer >= this.attackInterval)) {
+                }
             }
         }
 
-        this.logMessage('info', `[Enemy] update: findTarget`);
         // 查找目标（优先防御塔，然后水晶）
         this.findTarget();
 
-        this.logMessage('info', `[Enemy] update: 如果在网格中寻路` + this.isInStoneWallGrid);
         // 最高优先级：如果在网格中寻路，优先执行网格寻路逻辑
         if (this.isInStoneWallGrid) {
-            this.logMessage('info', `[Enemy] update: 在网格中寻路，执行网格移动逻辑`);
             // 如果正在播放攻击动画，停止攻击动画并切换到移动动画
             if (this.isPlayingAttackAnimation) {
-                this.logMessage('info', `[Enemy] update: 在网格中寻路，检测到正在播放攻击动画，停止攻击动画并切换到移动动画`);
                 this.isPlayingAttackAnimation = false;
                 this.attackComplete = false;
                 this.stopAllAnimations();
@@ -309,18 +288,14 @@ export class Enemy extends Component {
             const hadTargetBefore = !!this.currentTarget;
             this.moveInStoneWallGrid(deltaTime);
             // 如果moveInStoneWallGrid检测到我方单位并设置了currentTarget，且退出了网格寻路模式，不直接return，让后续逻辑处理目标
-            this.logMessage('info', `[Enemy] update: moveInStoneWallGrid检测到我方单位，已退出网格寻路模式，继续处理目标移动` + this.isInStoneWallGrid + " " + this.currentTarget + " " + hadTargetBefore);
             if (!this.isInStoneWallGrid && this.currentTarget && !hadTargetBefore) {
-                this.logMessage('info', `[Enemy] update: moveInStoneWallGrid检测到我方单位，已退出网格寻路模式，继续处理目标移动`);
                 // 不return，继续执行后续逻辑处理移动和攻击
             } else {
-                this.logMessage('info', `[Enemy] update: moveInStoneWallGrid检测到我方单位，已退出网格寻路模式，继续处理目标移动` + this.isInStoneWallGrid + " " + this.currentTarget + " " + hadTargetBefore);
                 this.updateAnimation(deltaTime);
                 return;
             }
         }
 
-        this.logMessage('info', `[Enemy] update: 检查敌人是否在网格上方` + this.currentTarget + " " + this.isInStoneWallGrid + " " + this.topLayerGapTarget);
         // 检查敌人是否在网格上方，如果是，先移动到缺口（但前提是还没有到达最底层）
         // 优先级：如果有缺口目标，优先移动到缺口；如果没有，检查是否在网格上方并查找缺口
         if (!this.currentTarget && !this.isInStoneWallGrid) {
@@ -328,7 +303,6 @@ export class Enemy extends Component {
             const currentGrid = this.stoneWallGridPanelComponent?.worldToGrid(this.node.worldPosition);
             if (currentGrid && currentGrid.y <= 0) {
                 // 已在最底层，清除所有网格相关状态，直接向水晶移动
-                this.logMessage('debug', `[Enemy] update: 敌人已在最底层（gridY=${currentGrid.y}），清除网格相关状态，直接向水晶移动`);
                 this.topLayerGapTarget = null;
                 this.detourTarget = null;
                 // 直接跳过后续的网格和绕行逻辑，进入向水晶移动的逻辑
@@ -339,7 +313,6 @@ export class Enemy extends Component {
                     const gapPos = this.findGapInTopLayer();
                     if (gapPos) {
                         this.topLayerGapTarget = gapPos;
-                        this.logMessage('debug', `[Enemy] update: ✅ 在网格上方，找到缺口位置: (${gapPos.x.toFixed(1)}, ${gapPos.y.toFixed(1)})`);
                     } else {
                         // 找不到缺口，攻击最近的石墙
                         const nearestWall = this.findNearestStoneWall();
@@ -347,7 +320,6 @@ export class Enemy extends Component {
                             this.currentTarget = nearestWall;
                             // 清除缺口目标，确保不会进入缺口移动逻辑
                             this.topLayerGapTarget = null;
-                            this.logMessage('debug', `[Enemy] update: 网格最上层没有缺口，设置为攻击最近的石墙，距离=${Vec3.distance(this.node.worldPosition, nearestWall.worldPosition).toFixed(1)}`);
                             // 直接跳出缺口处理分支，继续执行后续的"处理当前目标"逻辑
                             // 不执行return，让后续逻辑处理移动和攻击
                         } else {
@@ -375,7 +347,6 @@ export class Enemy extends Component {
 
                     if (gapDistance < 15) {
                         // 已到达缺口，清除缺口标记，进入网格寻路模式
-                        this.logMessage('debug', `[Enemy] update: ✅ 已到达缺口位置(${this.topLayerGapTarget.x.toFixed(1)}, ${this.topLayerGapTarget.y.toFixed(1)})，距离=${gapDistance.toFixed(1)}，进入网格寻路模式`);
                         
                         // 确保敌人位置精确对齐到缺口位置
                         const clampedPos = this.clampPositionToScreen(this.topLayerGapTarget);
@@ -390,7 +361,6 @@ export class Enemy extends Component {
                         if (path && path.length > 0) {
                             this.gridPath = path;
                             this.currentPathIndex = 0;
-                            this.logMessage('debug', `[Enemy] update: 找到网格路径，路径点数量=${path.length}，开始网格内移动`);
                             this.moveInStoneWallGrid(deltaTime);
                             return;
                         } else {
@@ -401,13 +371,10 @@ export class Enemy extends Component {
                                 this.currentTarget = nearestWall;
                                 // 清除绕行目标点，因为A*寻路失败后的石墙攻击优先级更高
                                 if (this.detourTarget) {
-                                    this.logMessage('debug', `[Enemy] update: A*寻路失败后的石墙目标（最高优先级），清除绕行目标点`);
                                     this.detourTarget = null;
                                 }
-                                this.logMessage('debug', `[Enemy] update: ❌ A*寻路失败，设置为攻击最近的石墙（最高优先级）`);
                                 // 不立即return，让后续逻辑处理移动和攻击
                             } else {
-                                this.logMessage('debug', `[Enemy] update: ❌ A*寻路失败且找不到石墙，停止移动`);
                                 return;
                             }
                         }
@@ -417,7 +384,6 @@ export class Enemy extends Component {
                         const friendlyUnit = this.checkForFriendlyUnitInGrid();
                         if (friendlyUnit) {
                             // 检测到我方单位且路径畅通，优先攻击我方单位
-                            this.logMessage('debug', `[Enemy] update: 在网格上方检测到我方单位且路径畅通，优先攻击`);
                             this.topLayerGapTarget = null;
                             this.currentTarget = friendlyUnit;
                             // 清除绕行目标点
@@ -429,7 +395,6 @@ export class Enemy extends Component {
                         }
 
                         // 向缺口移动
-                        this.logMessage('debug', `[Enemy] update: 🎯 向缺口移动，当前位置(${enemyPos.x.toFixed(1)}, ${enemyPos.y.toFixed(1)})，目标(${this.topLayerGapTarget.x.toFixed(1)}, ${this.topLayerGapTarget.y.toFixed(1)})，距离=${gapDistance.toFixed(1)}`);
                         toGap.normalize();
                         const moveDistance = this.moveSpeed * deltaTime;
                         const newPos = new Vec3();
@@ -454,7 +419,6 @@ export class Enemy extends Component {
             }
         }
 
-        this.logMessage('info', `[Enemy] update: 检查是否需要进入网格寻路模式` + this.isInStoneWallGrid + " " + this.topLayerGapTarget + " " + this.currentTarget);
         // 检查是否需要进入网格寻路模式（但前提是还没有到达最底层，且没有缺口目标）
         // 如果正在移动到缺口，不应该进入网格寻路模式
         if (!this.currentTarget && !this.isInStoneWallGrid && !this.topLayerGapTarget) {
@@ -462,13 +426,11 @@ export class Enemy extends Component {
             const currentGrid = this.stoneWallGridPanelComponent?.worldToGrid(this.node.worldPosition);
             if (currentGrid && currentGrid.y <= 0) {
                 // 已在最底层，清除所有网格相关状态，直接向水晶移动
-                this.logMessage('debug', `[Enemy] update: 敌人已在最底层（gridY=${currentGrid.y}），清除网格相关状态，直接向水晶移动`);
                 this.topLayerGapTarget = null;
                 this.detourTarget = null;
                 // 直接跳过后续的网格和绕行逻辑，进入向水晶移动的逻辑
             } else if (this.checkStoneWallGridBelowEnemy()) {
                 // checkStoneWallGridBelowEnemy() 已经检查了是否到达最底层，所以这里直接进入网格寻路模式
-                this.logMessage('debug', `[Enemy] update: 检测到石墙网格在下方，进入网格寻路模式`);
                 this.isInStoneWallGrid = true;
                 const path = this.findPathInStoneWallGrid();
                 if (path && path.length > 0) {
@@ -488,35 +450,29 @@ export class Enemy extends Component {
                         this.currentTarget = nearestWall;
                         // 清除绕行目标点，因为A*寻路失败后的石墙攻击优先级更高
                         if (this.detourTarget) {
-                            this.logMessage('debug', `[Enemy] update: A*寻路失败后的石墙目标（最高优先级），清除绕行目标点`);
                             this.detourTarget = null;
                         }
-                        this.logMessage('debug', `[Enemy] update: ❌ A*寻路失败，设置为攻击最近的石墙（最高优先级）`);
                         // 不立即return，让后续逻辑处理移动和攻击
                     } else {
-                        this.logMessage('debug', `[Enemy] update: ❌ A*寻路失败且找不到石墙，停止移动`);
                         return;
                     }
                 }
                 // 继续执行，让后续逻辑处理石墙攻击
             }
         }
-        this.logMessage('info', `[Enemy] update: 最高优先级`);
 
         // 最高优先级：如果当前目标是石墙且不在网格寻路模式（A*寻路失败后设置的），优先攻击石墙
         // 这种情况下应该清除绕行目标点，专注于攻击石墙
-        if (this.currentTarget && !this.isInStoneWallGrid) {
+        if (this.currentTarget && this.currentTarget.isValid && !this.isInStoneWallGrid) {
             const currentWallScript = this.currentTarget.getComponent('StoneWall') as any;
             if (currentWallScript && currentWallScript.isAlive && currentWallScript.isAlive()) {
                 // A*寻路失败后设置的石墙目标具有最高优先级，清除绕行目标点
                 if (this.detourTarget) {
-                    this.logMessage('debug', `[Enemy] update: A*寻路失败后的石墙目标（最高优先级），清除绕行目标点`);
                     this.detourTarget = null;
                 }
                 // 继续执行，让后续逻辑处理石墙攻击
             }
         }
-        this.logMessage('info', `[Enemy] update: 如果有绕行目标点`);
 
         // 如果有绕行目标点，直接向绕行目标点移动，忽略当前目标
         // 但前提是敌人还没有到达最底层，且当前目标不是A*寻路失败后的石墙
@@ -524,11 +480,9 @@ export class Enemy extends Component {
             const currentGrid = this.stoneWallGridPanelComponent?.worldToGrid(this.node.worldPosition);
             if (currentGrid && currentGrid.y <= 0) {
                 // 已在最底层，清除绕行目标点，直接向水晶移动
-                this.logMessage('debug', `[Enemy] update: 敌人已在最底层（gridY=${currentGrid.y}），清除绕行目标点，直接向水晶移动`);
                 this.detourTarget = null;
                 // 继续执行，进入向水晶移动的逻辑
             } else {
-                this.logMessage('debug', `[Enemy] update: 检测到绕行目标点，优先向绕行点移动`);
                 this.moveTowardsCrystal(deltaTime); // 这个方法会处理绕行目标点逻辑
                 // 如果正在播放攻击动画，停止攻击动画
                 if (this.isPlayingAttackAnimation) {
@@ -537,34 +491,28 @@ export class Enemy extends Component {
                 return;
             }
         }
-        this.logMessage('info', `[Enemy] update: 处理当前目标`);
 
         // 处理当前目标
-        if (this.currentTarget) {
+        if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.worldPosition && 
+            this.node && this.node.isValid && this.node.worldPosition) {
             const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
             const targetType = this.currentTarget.getComponent('StoneWall') ? '石墙' : 
                               this.currentTarget.getComponent('Crystal') ? '水晶' : '其他';
-            
-            this.logMessage('debug', `update: 处理当前目标${targetType}，距离=${distance.toFixed(1)}, 攻击范围=${this.attackRange}, 是否在攻击范围内=${distance <= this.attackRange}, attackTimer=${this.attackTimer.toFixed(2)}, attackInterval=${this.attackInterval}, isHit=${this.isHit}, isPlayingAttackAnimation=${this.isPlayingAttackAnimation}`);
-            
+
             if (distance <= this.attackRange) {
                 // 在攻击范围内，停止移动并攻击
-                this.logMessage('debug', `update: 目标${targetType}在攻击范围内，距离=${distance.toFixed(1)}, 攻击范围=${this.attackRange}, attackTimer=${this.attackTimer.toFixed(2)}, attackInterval=${this.attackInterval}, isHit=${this.isHit}, isPlayingAttackAnimation=${this.isPlayingAttackAnimation}`);
                 // 只有在攻击条件满足时才停止移动并攻击，避免在等待攻击时重置动画状态
                 if (this.attackTimer >= this.attackInterval && !this.isHit && !this.isPlayingAttackAnimation) {
                     // 攻击条件满足，停止移动并攻击
                     this.stopMoving();
-                    this.logMessage('debug', `update: 攻击条件满足，调用attack方法，距离=${distance.toFixed(1)}, 攻击范围=${this.attackRange}`);
                     this.attack();
                     this.attackTimer = 0;
                 } else {
                     // 攻击条件不满足，不调用移动方法也不调用stopMoving()，保持当前状态等待攻击
-                    this.logMessage('debug', `update: 攻击条件不满足，attackTimer=${this.attackTimer.toFixed(2)}, attackInterval=${this.attackInterval}, isHit=${this.isHit}, isPlayingAttackAnimation=${this.isPlayingAttackAnimation}，保持当前状态等待攻击`);
                     // 不调用移动方法，敌人自然停止移动，也不调用stopMoving()避免重置动画状态
                 }
             } else {
                 // 不在攻击范围内，只有在没有被攻击时才继续移动
-                this.logMessage('debug', `update: 目标${targetType}不在攻击范围内(距离: ${distance.toFixed(1)}, 攻击范围: ${this.attackRange})，继续移动，isHit=${this.isHit}, isPlayingAttackAnimation=${this.isPlayingAttackAnimation}`);
                 if (!this.isHit && !this.isPlayingAttackAnimation) {
                     this.moveTowardsTarget(deltaTime);
                     // 如果正在播放攻击动画，停止攻击动画
@@ -572,7 +520,6 @@ export class Enemy extends Component {
                         this.isPlayingAttackAnimation = false;
                     }
                 } else {
-                    this.logMessage('debug', `update: 无法移动，isHit=${this.isHit}, isPlayingAttackAnimation=${this.isPlayingAttackAnimation}`);
                 }
             }
         } else {
@@ -582,7 +529,6 @@ export class Enemy extends Component {
                 const blockedStoneWall = this.checkPathBlockedByStoneWall();
                 if (blockedStoneWall) {
                     // 路径被石墙阻挡且无法绕行，立即设置为攻击目标
-                    this.logMessage('debug', `[Enemy] update: 路径被石墙阻挡且无法绕行，设置石墙为攻击目标`);
                     this.currentTarget = blockedStoneWall;
                     // 继续执行，让下一帧处理攻击逻辑
                 } else {
@@ -596,7 +542,6 @@ export class Enemy extends Component {
             }
         }
         
-        this.logMessage('info', `[Enemy] update: updateAnimation`);
         // 更新动画
         this.updateAnimation(deltaTime);
     }
@@ -604,26 +549,25 @@ export class Enemy extends Component {
     private findTarget() {
         // 如果有绕行目标点，直接返回，不执行目标查找逻辑，确保敌人优先朝绕行点移动
         if (this.detourTarget) {
-            console.debug(`[Enemy] findTarget: 已有绕行目标点，跳过目标查找`);
             return;
         }
         
         // 如果当前目标是我方单位（弓箭手、女猎手、剑士、牧师），保持这个目标作为最高优先级
-        if (this.currentTarget && !this.isInStoneWallGrid) {
+        if (this.currentTarget && this.currentTarget.isValid && !this.isInStoneWallGrid) {
             const arrowerScript = this.currentTarget.getComponent('Arrower') as any;
             const hunterScript = this.currentTarget.getComponent('Hunter') as any;
             const swordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
             const priestScript = this.currentTarget.getComponent('Priest') as any;
             
             if ((arrowerScript || hunterScript || swordsmanScript || priestScript) && 
-                this.currentTarget.active && this.currentTarget.isValid) {
+                this.currentTarget.active && this.currentTarget.isValid && this.currentTarget.worldPosition &&
+                this.node && this.node.isValid && this.node.worldPosition) {
                 // 检查这个单位是否仍然有效且存活
                 if ((arrowerScript && arrowerScript.isAlive && arrowerScript.isAlive()) ||
                     (hunterScript && hunterScript.isAlive && hunterScript.isAlive()) ||
                     (swordsmanScript && swordsmanScript.isAlive && swordsmanScript.isAlive()) ||
                     (priestScript && priestScript.isAlive && priestScript.isAlive())) {
                     const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
-                    console.debug(`[Enemy] findTarget: 当前目标是我方单位，保持目标（最高优先级），距离: ${distance.toFixed(1)}`);
                     // 保持这个目标，不执行后续的目标查找逻辑
                     return;
                 }
@@ -631,12 +575,12 @@ export class Enemy extends Component {
         }
 
         // 如果当前目标是石墙且敌人不在网格寻路模式（说明可能是A*寻路失败后设置的，或者是网格最上层没有缺口时设置的），保持这个目标作为最高优先级
-        if (this.currentTarget && !this.isInStoneWallGrid) {
+        if (this.currentTarget && this.currentTarget.isValid && !this.isInStoneWallGrid && this.currentTarget.worldPosition &&
+            this.node && this.node.isValid && this.node.worldPosition) {
             const currentWallScript = this.currentTarget.getComponent('StoneWall') as any;
             if (currentWallScript && currentWallScript.isAlive && currentWallScript.isAlive()) {
                 // 检查这个石墙是否仍然有效且存活
                 const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
-                this.logMessage('debug', `findTarget: 当前目标是石墙（A*寻路失败后设置或网格最上层没有缺口时设置），保持目标（最高优先级），距离: ${distance.toFixed(1)}, 攻击范围: ${this.attackRange}`);
                 // 保持这个目标，不执行后续的目标查找逻辑，确保敌人会移动到攻击范围内
                 return;
             }
@@ -666,36 +610,32 @@ export class Enemy extends Component {
             
             // 如果目标是石墙，检查是否仍然存活
             if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
-                console.debug(`[Enemy] findTarget: 当前目标已被摧毁，清除目标`);
                 this.currentTarget = null!;
-            } else {
+            } else if (this.currentTarget && this.currentTarget.worldPosition &&
+                       this.node && this.node.isValid && this.node.worldPosition) {
                 const currentWallScript = this.currentTarget.getComponent('StoneWall') as any;
                 if (currentWallScript && currentWallScript.isAlive && currentWallScript.isAlive()) {
                     // 当前目标是石墙且仍然存活，检查距离
                     const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
-                    console.debug(`[Enemy] findTarget: 当前目标是石墙，距离: ${distance.toFixed(1)}, 攻击范围: ${this.attackRange}`);
                     
                     // 如果石墙在攻击范围内，保持这个目标（正在攻击中）
                     if (distance <= this.attackRange) {
-                        console.debug(`[Enemy] findTarget: 石墙在攻击范围内，保持目标`);
                         return;
                     }
                     
                     // 检查路径是否仍然被这个石墙或其他石墙阻挡且无法绕行
                     const blockedStoneWall = this.checkPathBlockedByStoneWall();
-                    if (blockedStoneWall) {
+                    if (blockedStoneWall && blockedStoneWall.isValid && blockedStoneWall.worldPosition &&
+                        this.node && this.node.isValid && this.node.worldPosition) {
                         // 路径仍然被阻挡且无法绕行，保持当前石墙目标或切换到更近的阻挡石墙
                         if (blockedStoneWall === this.currentTarget) {
-                            console.debug(`[Enemy] findTarget: 路径仍然被当前石墙阻挡且无法绕行，保持目标`);
                             return;
                         } else {
                             const blockedDistance = Vec3.distance(this.node.worldPosition, blockedStoneWall.worldPosition);
                             if (blockedDistance < distance) {
-                                console.debug(`[Enemy] findTarget: 切换到更近的阻挡石墙`);
                                 this.currentTarget = blockedStoneWall;
                                 return;
                             } else {
-                                console.debug(`[Enemy] findTarget: 当前石墙更近，保持目标`);
                                 return;
                             }
                         }
@@ -706,12 +646,10 @@ export class Enemy extends Component {
                         const isGridTopLayerWall = this.checkEnemyAboveGrid() && !this.topLayerGapTarget;
                         if (isGridTopLayerWall) {
                             // 是在网格上方且没有缺口时设置的石墙目标，保持目标，不绕行
-                            console.info(`[Enemy] findTarget: 路径可以绕行，但是当前石墙目标是网格最上层没有缺口时设置的，保持目标，不绕行，距离: ${distance.toFixed(1)}`);
                             return;
                         } else {
                             // 路径不再被阻挡（可以绕行），清除石墙目标，优先绕开石墙
                             // 只有当实在无法绕行时才考虑攻击石墙
-                            console.debug(`[Enemy] findTarget: 路径可以绕行，清除石墙目标，优先绕开石墙`);
                             this.currentTarget = null!;
                             // 继续执行下面的逻辑，查找其他目标
                         }
@@ -821,7 +759,8 @@ export class Enemy extends Component {
         };
 
         // 1. 检查水晶是否在范围内（优先级最高）
-        if (this.targetCrystal && this.targetCrystal.isValid) {
+        if (this.targetCrystal && this.targetCrystal.isValid && this.targetCrystal.worldPosition &&
+            this.node && this.node.isValid && this.node.worldPosition) {
             const crystalScript = this.targetCrystal.getComponent('Crystal') as any;
             if (crystalScript && crystalScript.isAlive && crystalScript.isAlive()) {
                 const distance = Vec3.distance(this.node.worldPosition, this.targetCrystal.worldPosition);
@@ -836,20 +775,19 @@ export class Enemy extends Component {
         // 2. 检查路径是否被石墙阻挡（优先级第二）
         // 如果路径被石墙阻挡且无法绕行，无论距离多远都要攻击石墙
         const blockedStoneWall = this.checkPathBlockedByStoneWall();
-        if (blockedStoneWall) {
+        if (blockedStoneWall && blockedStoneWall.isValid && blockedStoneWall.worldPosition &&
+            this.node && this.node.isValid && this.node.worldPosition) {
             const distance = Vec3.distance(this.node.worldPosition, blockedStoneWall.worldPosition);
             // 如果路径被阻挡且无法绕行，无论距离多远都要攻击石墙
             // 路径被完全阻挡时，石墙的优先级应该高于水晶（除非水晶已经在攻击范围内且敌人正在攻击）
-            if (targetPriority === PRIORITY.CRYSTAL) {
+            if (targetPriority === PRIORITY.CRYSTAL && this.targetCrystal && this.targetCrystal.worldPosition) {
                 const crystalDistance = Vec3.distance(this.node.worldPosition, this.targetCrystal.worldPosition);
                 // 如果水晶在攻击范围内且当前目标就是水晶，保持攻击水晶（可能正在攻击中）
                 // 否则，即使水晶在检测范围内，也要优先攻击阻挡路径的石墙
                 if (crystalDistance <= this.attackRange && this.currentTarget === this.targetCrystal) {
                     // 水晶在攻击范围内且正在攻击，保持水晶为目标
-                    console.debug(`[Enemy] findTarget: 水晶在攻击范围内且正在攻击，保持水晶为目标`);
                 } else {
                     // 水晶不在攻击范围内，或当前目标不是水晶，优先攻击阻挡路径的石墙
-                    console.debug(`[Enemy] findTarget: 路径被完全阻挡，优先攻击石墙（距离: ${distance.toFixed(1)}），而不是水晶（距离: ${crystalDistance.toFixed(1)}）`);
                     minDistance = distance;
                     nearestTarget = blockedStoneWall;
                     targetPriority = PRIORITY.STONEWALL;
@@ -1093,7 +1031,6 @@ export class Enemy extends Component {
             
             if (isCurrentTargetGridTopLayerWall && !newTargetIsWall) {
                 // 当前目标是网格最上层没有缺口时设置的石墙，且新目标不是石墙，保持当前目标
-                console.info(`[Enemy] findTarget: 当前目标是网格最上层没有缺口时设置的石墙，保持目标，不替换为新目标`);
                 return;
             }
             
@@ -1101,7 +1038,6 @@ export class Enemy extends Component {
         } else {
             // 如果有绕行目标点，不要设置水晶为当前目标，让moveTowardsCrystal处理绕行逻辑
             if (this.detourTarget) {
-                console.debug(`[Enemy] findTarget: 已有绕行目标点，不设置水晶为当前目标`);
                 this.currentTarget = null!;
             } else {
                 // 200像素范围内没有任何我方单位，目标设为水晶
@@ -1121,13 +1057,11 @@ export class Enemy extends Component {
 
     private moveTowardsTarget(deltaTime: number) {
         if (!this.currentTarget) {
-             this.logMessage('debug', `[Enemy] moveTowardsTarget: 没有当前目标，无法移动`);
             return;
         }
 
         // 如果正在播放攻击动画，停止攻击动画并切换到移动动画
         if (this.isPlayingAttackAnimation) {
-            this.logMessage('debug', `moveTowardsTarget: 检测到正在播放攻击动画，停止攻击动画并切换到移动动画`);
             this.isPlayingAttackAnimation = false;
             this.attackComplete = false;
             this.stopAllAnimations();
@@ -1140,15 +1074,12 @@ export class Enemy extends Component {
         // 检查目标是否是石墙
         const targetScript = this.currentTarget.getComponent('StoneWall') as any;
         const isTargetStoneWall = !!targetScript;
-        
-        this.logMessage('debug', `moveTowardsTarget: 开始移动，目标=${this.currentTarget.name || '未知'}, 距离=${distance.toFixed(1)}, 攻击范围=${this.attackRange}, 是石墙=${isTargetStoneWall}`);
-        
+
         // 如果目标是石墙，使用简化的移动逻辑：直接移动到攻击范围内
         if (isTargetStoneWall) {
             // 检查是否已经在攻击范围内
             if (distance <= this.attackRange) {
                 // 已经在攻击范围内，停止移动，让update()方法处理攻击
-                this.logMessage('debug', `moveTowardsTarget: 目标石墙已在攻击范围内(距离: ${distance.toFixed(1)}, 攻击范围: ${this.attackRange})，停止移动`);
                 return;
             }
             
@@ -1161,13 +1092,10 @@ export class Enemy extends Component {
             
             // 检查新位置到石墙的距离
             const newDistance = Vec3.distance(newPos, this.currentTarget.worldPosition);
-            
-            this.logMessage('debug', `moveTowardsTarget: 石墙目标移动计算，当前位置(${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}), 石墙位置(${this.currentTarget.worldPosition.x.toFixed(1)}, ${this.currentTarget.worldPosition.y.toFixed(1)}), 移动方向(${direction.x.toFixed(2)}, ${direction.y.toFixed(2)}), 移动步长=${moveStep.toFixed(1)}, 新位置(${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)}), 当前距离: ${distance.toFixed(1)}, 新距离: ${newDistance.toFixed(1)}, 攻击范围: ${this.attackRange}`);
-            
+
             // 如果移动后距离小于等于攻击范围，允许移动到该位置（即使检测到碰撞）
             if (newDistance <= this.attackRange) {
                 // 移动后会在攻击范围内，正常移动（忽略碰撞检测）
-                this.logMessage('debug', `moveTowardsTarget: 向石墙移动（将进入攻击范围），当前位置(${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}), 新位置(${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)}), 当前距离: ${distance.toFixed(1)}, 新距离: ${newDistance.toFixed(1)}, 攻击范围: ${this.attackRange}`);
                 
                 const clampedPos = this.clampPositionToScreen(newPos);
                 const clampedDistance = Vec3.distance(clampedPos, this.currentTarget.worldPosition);
@@ -1175,16 +1103,13 @@ export class Enemy extends Component {
                 // 检查位置是否被限制（如果被限制，说明可能到达了屏幕边界）
                 const wasClamped = Math.abs(clampedPos.x - newPos.x) > 0.1 || Math.abs(clampedPos.y - newPos.y) > 0.1;
                 if (wasClamped) {
-                    this.logMessage('debug', `moveTowardsTarget: 位置被屏幕边界限制，原始位置(${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)}), 限制后位置(${clampedPos.x.toFixed(1)}, ${clampedPos.y.toFixed(1)})`);
                 }
                 
                 this.node.setWorldPosition(clampedPos);
-                this.logMessage('debug', `moveTowardsTarget: 已设置新位置(${clampedPos.x.toFixed(1)}, ${clampedPos.y.toFixed(1)}), 实际距离=${clampedDistance.toFixed(1)}`);
                 this.flipDirection(direction);
                 this.playWalkAnimation();
             } else {
                 // 移动后距离仍然大于攻击范围，计算攻击范围边缘位置并移动到那里
-                this.logMessage('debug', `moveTowardsTarget: 移动后距离仍然大于攻击范围(newDistance=${newDistance.toFixed(1)}, attackRange=${this.attackRange})，计算攻击范围边缘位置`);
                 const targetPos = this.currentTarget.worldPosition;
                 const attackRangePos = new Vec3();
                 // 从石墙位置向敌人方向后退 attackRange 距离
@@ -1194,11 +1119,8 @@ export class Enemy extends Component {
                 const moveToRangeDirection = new Vec3();
                 Vec3.subtract(moveToRangeDirection, attackRangePos, currentPos);
                 const moveToRangeDistance = moveToRangeDirection.length();
-                
-                this.logMessage('debug', `moveTowardsTarget: 攻击范围边缘位置=(${attackRangePos.x.toFixed(1)}, ${attackRangePos.y.toFixed(1)}), 到边缘距离=${moveToRangeDistance.toFixed(1)}, 移动步长=${moveStep.toFixed(1)}`);
-                
+
                 if (moveToRangeDistance > moveStep) {
-                    this.logMessage('debug', `moveTowardsTarget: 还需要移动(moveToRangeDistance=${moveToRangeDistance.toFixed(1)} > moveStep=${moveStep.toFixed(1)})，计算新位置`);
                     // 还需要移动，计算新位置
                     moveToRangeDirection.normalize();
                     Vec3.scaleAndAdd(newPos, currentPos, moveToRangeDirection, moveStep);
@@ -1206,28 +1128,20 @@ export class Enemy extends Component {
                     // 检查新位置是否会被clampPositionToScreen限制
                     const clampedPos = this.clampPositionToScreen(newPos);
                     const clampedDistance = Vec3.distance(clampedPos, targetPos);
-                    
-                    this.logMessage('debug', `moveTowardsTarget: 向石墙攻击范围边缘移动，当前位置(${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}), 石墙位置(${targetPos.x.toFixed(1)}, ${targetPos.y.toFixed(1)}), 攻击范围边缘(${attackRangePos.x.toFixed(1)}, ${attackRangePos.y.toFixed(1)}), 新位置(${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)}), 限制后位置(${clampedPos.x.toFixed(1)}, ${clampedPos.y.toFixed(1)}), 当前距离: ${distance.toFixed(1)}, 新距离: ${newDistance.toFixed(1)}, 限制后距离: ${clampedDistance.toFixed(1)}, 攻击范围: ${this.attackRange}`);
-                    
+
                     // 检查位置是否被限制（如果被限制，说明可能到达了屏幕边界）
                     const wasClamped = Math.abs(clampedPos.x - newPos.x) > 0.1 || Math.abs(clampedPos.y - newPos.y) > 0.1;
                     if (wasClamped) {
-                        this.logMessage('debug', `moveTowardsTarget: 位置被屏幕边界限制，原始位置(${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)}), 限制后位置(${clampedPos.x.toFixed(1)}, ${clampedPos.y.toFixed(1)})`);
                     }
-                    
-                    this.logMessage('debug', `moveTowardsTarget: 已设置新位置(${clampedPos.x.toFixed(1)}, ${clampedPos.y.toFixed(1)}), 实际距离=${clampedDistance.toFixed(1)}`);
-                    
+
                     this.node.setWorldPosition(clampedPos);
                     this.flipDirection(moveToRangeDirection);
                     this.playWalkAnimation();
-                    this.logMessage('debug', `moveTowardsTarget: 已设置新位置并播放行走动画`);
                 } else {
                     // 已经到达攻击范围边缘，直接移动到该位置
-                    this.logMessage('debug', `moveTowardsTarget: 已到达石墙攻击范围边缘，当前位置(${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}), 石墙位置(${targetPos.x.toFixed(1)}, ${targetPos.y.toFixed(1)}), 攻击范围边缘(${attackRangePos.x.toFixed(1)}, ${attackRangePos.y.toFixed(1)}), 当前距离: ${distance.toFixed(1)}, 攻击范围: ${this.attackRange}`);
                     
                     const clampedPos = this.clampPositionToScreen(attackRangePos);
                     const clampedDistance = Vec3.distance(clampedPos, targetPos);
-                    this.logMessage('debug', `moveTowardsTarget: 已设置新位置(${clampedPos.x.toFixed(1)}, ${clampedPos.y.toFixed(1)}), 实际距离=${clampedDistance.toFixed(1)}`);
                     this.node.setWorldPosition(clampedPos);
                     this.flipDirection(direction);
                 }
@@ -1244,9 +1158,7 @@ export class Enemy extends Component {
             
             const newPos = new Vec3();
             Vec3.scaleAndAdd(newPos, this.node.worldPosition, finalDirection, this.moveSpeed * deltaTime);
-            
-            console.debug(`[Enemy] moveTowardsTarget: 当前位置(${this.node.worldPosition.x.toFixed(1)}, ${this.node.worldPosition.y.toFixed(1)}), 目标位置(${this.currentTarget.worldPosition.x.toFixed(1)}, ${this.currentTarget.worldPosition.y.toFixed(1)}), 新位置(${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)})`);
-            
+
             // 检查移动路径上是否有石墙阻挡
             const hasCollision = this.checkCollisionWithStoneWall(newPos);
             
@@ -1257,11 +1169,9 @@ export class Enemy extends Component {
                 
                 if (isTargetWall) {
                     // 碰撞的是目标石墙，说明已经到达，停止移动
-                    console.debug(`[Enemy] moveTowardsTarget: 碰撞的是目标石墙，已到达目标，停止移动`);
                     return;
                 } else {
                     // 路径被其他石墙阻挡，先尝试局部绕路
-                    console.debug(`[Enemy] moveTowardsTarget: 路径被其他石墙阻挡，开始尝试绕路`);
                     const detourPos = this.calculateDetourPosition(direction, deltaTime);
                     if (detourPos) {
                         // 找到绕路位置，平滑移动到该位置（避免闪现）
@@ -1287,17 +1197,13 @@ export class Enemy extends Component {
                         return;
                     } else {
                         // 局部无法绕路，检查全局路径是否被阻挡且无法绕行
-                        console.debug(`[Enemy] moveTowardsTarget: 局部无法找到绕路位置，检查全局路径是否被阻挡`);
                         const blockedStoneWall = this.checkPathBlockedByStoneWall();
                         if (blockedStoneWall) {
                             // 全局路径被阻挡且无法绕行，设置石墙为目标
-                            console.debug(`[Enemy] moveTowardsTarget: 全局路径被石墙阻挡且无法绕行，设置石墙为攻击目标`);
                             this.currentTarget = blockedStoneWall;
-                            console.debug(`[Enemy] moveTowardsTarget: 当前目标已设置为石墙，距离: ${Vec3.distance(this.node.worldPosition, blockedStoneWall.worldPosition).toFixed(1)}`);
                             return;
                         } else {
                             // 全局路径可以绕行，继续尝试移动（可能只是局部阻挡）
-                            console.debug(`[Enemy] moveTowardsTarget: 全局路径可以绕行，继续尝试移动`);
                             // 尝试一个小的偏移来绕过局部阻挡
                             const smallOffset = new Vec3(-direction.y, direction.x, 0);
                             smallOffset.normalize();
@@ -1312,26 +1218,21 @@ export class Enemy extends Component {
                                 return;
                             }
                             // 如果小偏移也不行，所有绕路尝试都失败，攻击最近的石墙
-                            console.debug(`[Enemy] moveTowardsTarget: 所有绕路尝试都失败，查找最近的石墙作为攻击目标`);
                             const nearestWall = this.findNearestStoneWall();
                             if (nearestWall) {
-                                console.debug(`[Enemy] moveTowardsTarget: 找到最近的石墙，设置为攻击目标，距离: ${Vec3.distance(this.node.worldPosition, nearestWall.worldPosition).toFixed(1)}`);
                                 this.currentTarget = nearestWall;
                                 return;
                             }
                             // 找不到石墙，停止移动
-                            console.debug(`[Enemy] moveTowardsTarget: 无法绕过局部阻挡且找不到石墙，停止移动`);
                             return;
                         }
                     }
                 }
             } else {
-                console.debug(`[Enemy] moveTowardsTarget: 目标不是石墙，未检测到碰撞`);
             }
             
             // 限制位置在屏幕范围内
             const clampedPos = this.clampPositionToScreen(newPos);
-            console.debug(`[Enemy] moveTowardsTarget: 正常移动，设置位置(${clampedPos.x.toFixed(1)}, ${clampedPos.y.toFixed(1)})`);
             this.node.setWorldPosition(clampedPos);
             
             // 根据移动方向翻转
@@ -1350,7 +1251,6 @@ export class Enemy extends Component {
         // 优先检查是否需要进入网格寻路模式
         if (!this.isInStoneWallGrid && this.checkStoneWallGridBelowEnemy()) {
             // checkStoneWallGridBelowEnemy() 已经检查了是否到达最底层，所以这里直接进入网格寻路模式
-            console.debug(`[Enemy] moveTowardsCrystal: 检测到石墙网格在下方，进入网格寻路模式`);
             this.isInStoneWallGrid = true;
             const path = this.findPathInStoneWallGrid();
             if (path && path.length > 0) {
@@ -1366,14 +1266,11 @@ export class Enemy extends Component {
                     this.currentTarget = nearestWall;
                     // 清除绕行目标点，因为A*寻路失败后的石墙攻击优先级更高
                     if (this.detourTarget) {
-                        console.debug(`[Enemy] moveTowardsCrystal: A*寻路失败后的石墙目标（最高优先级），清除绕行目标点`);
                         this.detourTarget = null;
                     }
-                    this.logMessage('debug', `[Enemy] moveTowardsCrystal: ❌ A*寻路失败，设置为攻击最近的石墙（最高优先级）`);
                     // 不立即return，让调用者知道需要处理石墙攻击
                     return;
                 } else {
-                    this.logMessage('debug', `[Enemy] moveTowardsCrystal: ❌ A*寻路失败且找不到石墙`);
                     return;
                 }
             }
@@ -1392,14 +1289,12 @@ export class Enemy extends Component {
             const blockedStoneWall = this.checkPathBlockedByStoneWall();
             if (blockedStoneWall) {
                 // 路径被石墙阻挡且无法绕行，立即设置为攻击目标
-                console.debug(`[Enemy] moveTowardsCrystal: 路径被石墙阻挡且无法绕行，设置石墙为攻击目标`);
                 this.currentTarget = blockedStoneWall;
                 // 清除绕行目标点
                 this.detourTarget = null;
                 return;
             }
             
-            console.debug(`[Enemy] moveTowardsCrystal: 路径畅通，开始向水晶移动`);
         }
 
         // 如果有绕行目标点，优先移动到绕行目标点（不检查其他目标）
@@ -1408,7 +1303,6 @@ export class Enemy extends Component {
             const currentGrid = this.stoneWallGridPanelComponent?.worldToGrid(this.node.worldPosition);
             if (currentGrid && currentGrid.y <= 0) {
                 // 已在最底层，清除绕行目标点，直接向水晶移动
-                console.debug(`[Enemy] moveTowardsCrystal: 敌人已在最底层（gridY=${currentGrid.y}），清除绕行目标点，直接向水晶移动`);
                 this.detourTarget = null;
                 // 继续执行，进入向水晶移动的逻辑
             } else {
@@ -1419,7 +1313,6 @@ export class Enemy extends Component {
                 
                 // 如果已经到达绕行目标点（距离小于阈值），清除绕行目标点，继续向水晶移动
                 if (detourDistance < 5) {
-                    console.debug(`[Enemy] moveTowardsCrystal: ✅ 已到达绕行目标点！`);
                     
                     // 清除绕行目标点和标记
                     this.detourTarget = null;
@@ -1440,7 +1333,6 @@ export class Enemy extends Component {
                     this.flipDirection(toDetour);
                     this.playWalkAnimation();
                     // 移除频繁调用的日志以减少日志 spam
-                    // console.debug(`[Enemy] moveTowardsCrystal: 向绕行目标点移动，距离: ${detourDistance.toFixed(1)}像素`);
                     return;
                 }
             }
@@ -1448,32 +1340,24 @@ export class Enemy extends Component {
 
         // 如果还有绕行目标点（说明还没到达），直接返回，不要执行后续的水晶移动逻辑
         if (this.detourTarget) {
-            console.debug(`[Enemy] moveTowardsCrystal: 还有绕行目标点，继续向绕行点移动`);
             return;
         }
-        
-        console.debug(`[Enemy] moveTowardsCrystal: 无绕行目标，准备向水晶移动`);
 
         // 只有在没有绕行目标点时，才检查路径上的目标
         this.checkForTargetsOnPath();
 
         // 如果检测到目标（包括石墙），停止朝水晶移动，让update()方法处理目标
         if (this.currentTarget) {
-            console.debug(`[Enemy] moveTowardsCrystal: 检测到当前目标，停止向水晶移动`);
             return;
         }
         
         // 检查checkForTargetsOnPath是否设置了detourTarget
         if (this.detourTarget) {
-            console.debug(`[Enemy] moveTowardsCrystal: checkForTargetsOnPath设置了新的绕行目标，下一帧将向绕行目标移动`);
             return;
         }
-        
-        this.logMessage('debug', `moveTowardsCrystal: 无当前目标和绕行目标，开始向水晶移动`);
 
         // 如果正在播放攻击动画，停止攻击动画并切换到移动动画
         if (this.isPlayingAttackAnimation) {
-            this.logMessage('debug', `moveTowardsCrystal: 检测到正在播放攻击动画，停止攻击动画并切换到移动动画`);
             this.isPlayingAttackAnimation = false;
             this.attackComplete = false;
             this.stopAllAnimations();
@@ -1498,10 +1382,8 @@ export class Enemy extends Component {
             
             // 检查移动路径上是否有石墙阻挡
             const hasCollision = this.checkCollisionWithStoneWall(newPos);
-            console.debug(`[Enemy] moveTowardsCrystal: 当前位置(${this.node.worldPosition.x.toFixed(1)}, ${this.node.worldPosition.y.toFixed(1)}), 水晶位置(${crystalWorldPos.x.toFixed(1)}, ${crystalWorldPos.y.toFixed(1)}), 新位置(${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)}), 碰撞检测: ${hasCollision}`);
             if (hasCollision) {
                 // 路径被石墙阻挡，尝试绕路
-                console.debug(`[Enemy] moveTowardsCrystal: 检测到石墙阻挡，开始尝试绕路`);
                 const detourPos = this.calculateDetourPosition(direction, deltaTime);
                 if (detourPos) {
                     // 找到绕路位置，平滑移动到该位置（避免闪现）
@@ -1527,16 +1409,13 @@ export class Enemy extends Component {
                     return;
                 } else {
                     // 局部无法绕路，检查全局路径是否被阻挡且无法绕行
-                    console.debug(`[Enemy] moveTowardsCrystal: 局部无法找到绕路位置，检查全局路径是否被阻挡`);
                     const blockedStoneWall = this.checkPathBlockedByStoneWall();
                     if (blockedStoneWall) {
                         // 全局路径被阻挡且无法绕行，设置石墙为目标
-                        console.debug(`[Enemy] moveTowardsCrystal: 全局路径被石墙阻挡且无法绕行，设置石墙为攻击目标`);
                         this.currentTarget = blockedStoneWall;
                         return;
                     } else {
                         // 全局路径可以绕行，继续尝试移动（可能只是局部阻挡）
-                        console.debug(`[Enemy] moveTowardsCrystal: 全局路径可以绕行，继续尝试移动`);
                         // 尝试一个小的偏移来绕过局部阻挡
                         const smallOffset = new Vec3(-direction.y, direction.x, 0);
                         smallOffset.normalize();
@@ -1551,15 +1430,12 @@ export class Enemy extends Component {
                             return;
                         }
                         // 如果小偏移也不行，所有绕路尝试都失败，攻击最近的石墙
-                        console.debug(`[Enemy] moveTowardsCrystal: 所有绕路尝试都失败，查找最近的石墙作为攻击目标`);
                         const nearestWall = this.findNearestStoneWall();
                         if (nearestWall) {
-                            console.debug(`[Enemy] moveTowardsCrystal: 找到最近的石墙，设置为攻击目标，距离: ${Vec3.distance(this.node.worldPosition, nearestWall.worldPosition).toFixed(1)}`);
                             this.currentTarget = nearestWall;
                             return;
                         }
                         // 找不到石墙，停止移动
-                        console.debug(`[Enemy] moveTowardsCrystal: 无法绕过局部阻挡且找不到石墙，停止移动`);
                         return;
                     }
                 }
@@ -1586,7 +1462,6 @@ export class Enemy extends Component {
     private calculateDetourPosition(direction: Vec3, deltaTime: number): Vec3 | null {
         // 如果已经有全局绕行目标点，就不执行局部绕路逻辑
         if (this.detourTarget) {
-            console.debug(`[Enemy] calculateDetourPosition: 已有全局绕行目标点，跳过局部绕路计算`);
             return null;
         }
         
@@ -1595,9 +1470,7 @@ export class Enemy extends Component {
         
         // 使用较小的偏移距离，让移动更平滑
         const offsetDistances = [30, 50, 80]; // 逐步增加偏移距离
-        
-        console.debug(`[Enemy] calculateDetourPosition: 当前位置(${this.node.worldPosition.x.toFixed(1)}, ${this.node.worldPosition.y.toFixed(1)}), 移动方向(${direction.x.toFixed(2)}, ${direction.y.toFixed(2)}), 移动距离: ${moveDistance.toFixed(1)}`);
-        
+
         // 尝试不同偏移距离的绕路
         for (const offsetDistance of offsetDistances) {
             // 尝试右侧绕路（优先右侧绕路，符合用户需求）
@@ -1606,9 +1479,7 @@ export class Enemy extends Component {
             const rightPos = new Vec3();
             Vec3.scaleAndAdd(rightPos, rightOffset, direction, moveDistance);
             const rightCollision = this.checkCollisionWithStoneWall(rightPos);
-            console.debug(`[Enemy] calculateDetourPosition: 尝试右侧绕路(偏移${offsetDistance}), 位置(${rightPos.x.toFixed(1)}, ${rightPos.y.toFixed(1)}), 碰撞: ${rightCollision}`);
             if (!rightCollision) {
-                console.debug(`[Enemy] calculateDetourPosition: 右侧绕路成功`);
                 return rightPos;
             }
             
@@ -1618,15 +1489,12 @@ export class Enemy extends Component {
             const leftPos = new Vec3();
             Vec3.scaleAndAdd(leftPos, leftOffset, direction, moveDistance);
             const leftCollision = this.checkCollisionWithStoneWall(leftPos);
-            console.debug(`[Enemy] calculateDetourPosition: 尝试左侧绕路(偏移${offsetDistance}), 位置(${leftPos.x.toFixed(1)}, ${leftPos.y.toFixed(1)}), 碰撞: ${leftCollision}`);
             if (!leftCollision) {
-                console.debug(`[Enemy] calculateDetourPosition: 左侧绕路成功`);
                 return leftPos;
             }
         }
         
         // 无法找到可行的绕路位置
-        console.debug(`[Enemy] calculateDetourPosition: 所有绕路尝试都失败`);
         return null;
     }
 
@@ -1726,7 +1594,6 @@ export class Enemy extends Component {
 
             // 如果距离小于检查半径，说明该位置有石墙
             if (distance < checkRadius) {
-                console.debug(`[Enemy] checkStoneWallAtPosition: 位置(${position.x.toFixed(1)}, ${position.y.toFixed(1)}) 检测到石墙，距离=${distance.toFixed(1)}`);
                 return true;
             }
         }
@@ -1761,12 +1628,10 @@ export class Enemy extends Component {
         // 从场景根节点开始查找所有石墙
         const scene = this.node.scene;
         if (!scene) {
-            console.debug(`[Enemy] getBlockingStoneWall: 场景不存在`);
             return null;
         }
 
         const allStoneWalls = findAllStoneWalls(scene);
-        console.debug(`[Enemy] getBlockingStoneWall: 找到${allStoneWalls.length}个石墙节点`);
 
         const enemyRadius = 20; // 敌人的碰撞半径
 
@@ -1781,11 +1646,8 @@ export class Enemy extends Component {
             const distanceToWall = Vec3.distance(position, wallPos);
             const minDistance = enemyRadius + wallRadius;
 
-            console.debug(`[Enemy] getBlockingStoneWall: 检查石墙(${wallPos.x.toFixed(1)}, ${wallPos.y.toFixed(1)}), 距离: ${distanceToWall.toFixed(1)}, 最小距离: ${minDistance.toFixed(1)}`);
-
             // 如果距离小于最小距离，说明碰撞
             if (distanceToWall < minDistance) {
-                console.debug(`[Enemy] getBlockingStoneWall: 检测到碰撞，返回石墙节点`);
                 return wall;
             }
         }
@@ -1797,10 +1659,8 @@ export class Enemy extends Component {
         const blockingWall = this.getBlockingStoneWall(position);
         if (blockingWall) {
             const wallPos = blockingWall.worldPosition;
-            console.debug(`[Enemy] checkCollisionWithStoneWall: 检测到碰撞！位置(${position.x.toFixed(1)}, ${position.y.toFixed(1)})与石墙(${wallPos.x.toFixed(1)}, ${wallPos.y.toFixed(1)})碰撞`);
             return true;
         }
-        console.debug(`[Enemy] checkCollisionWithStoneWall: 位置(${position.x.toFixed(1)}, ${position.y.toFixed(1)})未检测到碰撞`);
         return false;
     }
 
@@ -1857,7 +1717,6 @@ export class Enemy extends Component {
         // 如果敌人已在最底层，直接返回null，不执行绕行逻辑，直接向水晶移动
         const currentGrid = this.stoneWallGridPanelComponent?.worldToGrid(this.node.worldPosition);
         if (currentGrid && currentGrid.y <= 0) {
-            console.debug(`[Enemy] checkPathBlockedByStoneWall: 敌人已在最底层（gridY=${currentGrid.y}），跳过绕行逻辑，直接向水晶移动`);
             // 清除可能存在的绕行目标点
             if (this.detourTarget) {
                 this.detourTarget = null;
@@ -1892,7 +1751,6 @@ export class Enemy extends Component {
         if (stoneWallsNode) {
             const containerWalls = stoneWallsNode.children || [];
             stoneWalls.push(...containerWalls);
-            console.debug(`[Enemy] checkPathBlockedByStoneWall: 从StoneWalls容器找到 ${containerWalls.length} 个石墙节点`);
         }
         
         // 方法2: 始终递归查找场景中所有带有StoneWall组件的节点（包括提前放置的石墙）
@@ -1909,7 +1767,6 @@ export class Enemy extends Component {
                 return walls;
             };
             const sceneWalls = findAllStoneWalls(this.node.scene);
-            console.debug(`[Enemy] checkPathBlockedByStoneWall: 递归查找场景找到 ${sceneWalls.length} 个石墙节点`);
             
             // 合并容器中的石墙和场景中的石墙，去重
             const allWallsMap = new Map<Node, boolean>();
@@ -1930,9 +1787,7 @@ export class Enemy extends Component {
             const wallScript = wall.getComponent('StoneWall') as any;
             return wallScript && wallScript.isAlive && wallScript.isAlive();
         });
-        
-        console.debug(`[Enemy] checkPathBlockedByStoneWall: 最终有效的石墙数量: ${stoneWalls.length}`);
-        
+
         if (stoneWalls.length === 0) {
             return null; // 没有石墙
         }
@@ -2034,7 +1889,6 @@ export class Enemy extends Component {
         // 将连接在一起的石墙分组（视为整体障碍物）
         const wallGroups = this.groupConnectedWalls(blockingWalls.map(bw => bw.wall), stoneWalls);
         const groupInfo = wallGroups.map((group, idx) => `组${idx + 1}:${group.length}个石墙`).join(', ');
-        console.debug(`[Enemy] checkPathBlockedByStoneWall: 检测到${blockingWalls.length}个阻挡石墙，分为${wallGroups.length}个连接组 [${groupInfo}]`);
 
         // 改进的绕行检测：尝试多个角度和距离的组合
         // perpendicular已经在上面计算过了，直接使用
@@ -2055,7 +1909,6 @@ export class Enemy extends Component {
         };
 
         // 计算石墙组与游戏边界形成的房间出口
-        console.debug(`[Enemy] checkPathBlockedByStoneWall: 开始查找房间出口`);
         const roomExits = this.findRoomExits(enemyPos, crystalPos, wallGroups, gameBounds, perpendicular);
         
         // 如果找到房间出口，优先使用出口作为绕行点
@@ -2067,16 +1920,13 @@ export class Enemy extends Component {
                 if (this.detourTarget) {
                     const distance = Vec3.distance(this.detourTarget, bestExit);
                     if (distance < 10) {
-                        console.debug(`[Enemy] checkPathBlockedByStoneWall: 已经设置了相同的绕行目标(距离: ${distance.toFixed(1)}), 无需重复设置`);
                         canDetour = true;
                         return null;
                     }
                 }
                 
-                console.debug(`[Enemy] checkPathBlockedByStoneWall: ✓ 找到房间出口作为绕行点！出口位置: (${bestExit.x.toFixed(1)}, ${bestExit.y.toFixed(1)})`);
                 this.detourTarget = bestExit;
                 canDetour = true;
-                console.debug(`[Enemy] checkPathBlockedByStoneWall: 设置绕行目标，敌人将向出口移动`);
             }
         }
         
@@ -2085,7 +1935,6 @@ export class Enemy extends Component {
             // 优先检测左右两侧（最常见的绕行方向），使用计算出的最小绕行距离
             // 计算需要绕过整个障碍物组的最小距离
             const minDetourDistance = this.calculateMinDetourDistance(enemyPos, crystalPos, wallGroups, perpendicular);
-            console.debug(`[Enemy] checkPathBlockedByStoneWall: 开始检测绕行路径，最小绕行距离: ${minDetourDistance.toFixed(1)}像素`);
             
             // 直接使用计算出的最小绕行距离，加上一些安全余量
             const optimalDetourDistance = Math.max(100, Math.ceil(minDetourDistance / 50) * 50 + 50); // 向上取整到50的倍数，再加50作为安全余量
@@ -2121,21 +1970,17 @@ export class Enemy extends Component {
                 // 如果障碍物在右侧，优先选择右侧绕行；如果障碍物在左侧，优先选择左侧绕行
                 if (obstacleSide > 0) {
                     // 障碍物在右侧，优先选择右侧绕行
-                    console.debug(`[Enemy] checkPathBlockedByStoneWall: ✓ 找到右侧绕行路径！偏移距离: ${optimalDetourDistance}像素`);
                     this.detourTarget = clampedRightOffset.clone();
                     canDetour = true;
                 } else {
                     // 障碍物在左侧或中间，优先选择左侧绕行
-                    console.debug(`[Enemy] checkPathBlockedByStoneWall: ✓ 找到左侧绕行路径！偏移距离: ${optimalDetourDistance}像素`);
                     this.detourTarget = clampedLeftOffset.clone();
                     canDetour = true;
                 }
             } else if (leftCanDetour) {
-                console.debug(`[Enemy] checkPathBlockedByStoneWall: ✓ 找到左侧绕行路径！偏移距离: ${optimalDetourDistance}像素`);
                 this.detourTarget = clampedLeftOffset.clone();
                 canDetour = true;
             } else if (rightCanDetour) {
-                console.debug(`[Enemy] checkPathBlockedByStoneWall: ✓ 找到右侧绕行路径！偏移距离: ${optimalDetourDistance}像素`);
                 this.detourTarget = clampedRightOffset.clone();
                 canDetour = true;
             } else {
@@ -2146,7 +1991,6 @@ export class Enemy extends Component {
                     const leftOffsetFallback = new Vec3();
                     Vec3.scaleAndAdd(leftOffsetFallback, enemyPos, perpendicular, offsetDistance);
                     if (this.checkPathClearAroundObstacles(leftOffsetFallback, crystalPos, wallGroups, stoneWalls)) {
-                        console.debug(`[Enemy] checkPathBlockedByStoneWall: ✓ 找到左侧绕行路径（备用距离）！偏移距离: ${offsetDistance}像素`);
                         const clampedLeftOffsetFallback = this.clampPositionToScreen(leftOffsetFallback);
                         this.detourTarget = clampedLeftOffsetFallback.clone();
                         canDetour = true;
@@ -2157,7 +2001,6 @@ export class Enemy extends Component {
                     const rightOffsetFallback = new Vec3();
                     Vec3.scaleAndAdd(rightOffsetFallback, enemyPos, perpendicular, -offsetDistance);
                     if (this.checkPathClearAroundObstacles(rightOffsetFallback, crystalPos, wallGroups, stoneWalls)) {
-                        console.debug(`[Enemy] checkPathBlockedByStoneWall: ✓ 找到右侧绕行路径（备用距离）！偏移距离: ${offsetDistance}像素`);
                         const clampedRightOffsetFallback = this.clampPositionToScreen(rightOffsetFallback);
                         this.detourTarget = clampedRightOffsetFallback.clone();
                         canDetour = true;
@@ -2195,7 +2038,6 @@ export class Enemy extends Component {
                     
                     // 检查从偏移位置到水晶的路径是否畅通（绕过障碍物组）
                     if (this.checkPathClearAroundObstacles(offsetPos, crystalPos, wallGroups, stoneWalls)) {
-                        console.debug(`[Enemy] checkPathBlockedByStoneWall: ✓ 找到绕行路径！偏移距离: ${offsetDistance}像素, 角度: ${angleDeg}度`);
                         // 保存绕行目标点，限制在地图范围内
                         const clampedOffsetPos = this.clampPositionToScreen(offsetPos);
                         this.detourTarget = clampedOffsetPos.clone();
@@ -2212,14 +2054,12 @@ export class Enemy extends Component {
 
         // 如果所有方向都无法绕行，返回最近的石墙
         if (!canDetour) {
-            console.debug(`[Enemy] checkPathBlockedByStoneWall: ✗ 所有绕行尝试都失败，路径被石墙完全阻挡，需要攻击石墙`);
             // 清除绕行目标点
             this.detourTarget = null;
             return nearestWall;
         }
 
         // 可以绕行，返回null（绕行目标点已保存在this.detourTarget中）
-        console.debug(`[Enemy] checkPathBlockedByStoneWall: ✓ 找到可绕行路径，绕行目标点: (${this.detourTarget!.x.toFixed(1)}, ${this.detourTarget!.y.toFixed(1)})`);
         return null;
     }
 
@@ -2232,8 +2072,6 @@ export class Enemy extends Component {
         const enemyRadius = 20; // 敌人的碰撞半径
         const groups: Node[][] = [];
         const processed = new Set<Node>();
-
-        console.debug(`[Enemy] groupConnectedWalls: 开始分组，blockingWalls数量: ${blockingWalls.length}, allWalls数量: ${allWalls.length}`);
 
         for (const wall of blockingWalls) {
             if (processed.has(wall)) {
@@ -2280,7 +2118,6 @@ export class Enemy extends Component {
                     // 如果间距小于连接阈值，视为连接
                     if (distance < connectionThreshold) {
                         connectionsFound++;
-                        console.debug(`[Enemy] groupConnectedWalls: 发现连接石墙！距离: ${distance.toFixed(1)}, 阈值: ${connectionThreshold.toFixed(1)}, 当前组大小: ${group.length + 1}, 当前石墙位置: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}), 连接石墙位置: (${otherPos.x.toFixed(1)}, ${otherPos.y.toFixed(1)})`);
                         group.push(otherWall);
                         processed.add(otherWall);
                         queue.push(otherWall);
@@ -2288,12 +2125,10 @@ export class Enemy extends Component {
                 }
             }
 
-            console.debug(`[Enemy] groupConnectedWalls: 完成一组，组大小: ${group.length}, 检查了 ${totalChecked} 个石墙，找到 ${connectionsFound} 个连接`);
             groups.push(group);
         }
 
         const totalWallsInGroups = groups.reduce((sum, g) => sum + g.length, 0);
-        console.debug(`[Enemy] groupConnectedWalls: 分组完成，共 ${groups.length} 个组，总石墙数: ${totalWallsInGroups}`);
         
         // 移除误导性警告，因为我们只对阻挡路径的石墙进行分组
         // 分组数量少于allWalls是正常的，因为不是所有石墙都阻挡路径
@@ -2335,7 +2170,6 @@ export class Enemy extends Component {
                 maxY = Math.max(maxY, pos.y + radius);
             }
 
-
             // 计算从敌人到障碍物组边界的距离
             const centerX = (minX + maxX) / 2;
             const centerY = (minY + maxY) / 2;
@@ -2361,9 +2195,7 @@ export class Enemy extends Component {
     private findRoomExits(enemyPos: Vec3, crystalPos: Vec3, wallGroups: Node[][], gameBounds: { minX: number; maxX: number; minY: number; maxY: number }, perpendicular: Vec3): Vec3[] {
         const exits: Vec3[] = [];
         const enemyRadius = 20; // 敌人的碰撞半径
-        
-        console.debug(`[Enemy] findRoomExits: 开始计算房间出口，敌人位置: (${enemyPos.x.toFixed(1)}, ${enemyPos.y.toFixed(1)}), 水晶位置: (${crystalPos.x.toFixed(1)}, ${crystalPos.y.toFixed(1)})`);
-        
+
         // 合并所有石墙组的石墙到一个数组中
         const allWallsInGroups: Node[] = [];
         for (const group of wallGroups) {
@@ -2396,25 +2228,21 @@ export class Enemy extends Component {
         // 后续可以优化这些方法后再启用
         // for (const group of wallGroups) {
         //     const gaps = this.findWallGroupGaps(group, enemyRadius);
-        //     console.debug(`[Enemy] findRoomExits: 找到 ${gaps.length} 个石墙间隙`);
         //     
         //     for (const gap of gaps) {
         //         // 简化检查：只需要从间隙到水晶的路径畅通即可
         //         if (this.checkPathClearAroundObstacles(gap, crystalPos, [], this.getAllStoneWalls())) {
         //             exits.push(gap);
-        //             console.debug(`[Enemy] findRoomExits: 找到石墙组间隙作为出口！位置: (${gap.x.toFixed(1)}, ${gap.y.toFixed(1)})`);
         //         }
         //     }
         // }
         
         // 2. 暂时禁用组间间隙出口
         // const interGroupGaps = this.findInterGroupGaps(wallGroups, enemyRadius);
-        // console.debug(`[Enemy] findRoomExits: 找到 ${interGroupGaps.length} 个石墙组间间隙`);
         // 
         // for (const gap of interGroupGaps) {
         //     if (this.checkPathClearAroundObstacles(gap, crystalPos, [], this.getAllStoneWalls())) {
         //         exits.push(gap);
-        //         console.debug(`[Enemy] findRoomExits: 找到石墙组间间隙作为出口！位置: (${gap.x.toFixed(1)}, ${gap.y.toFixed(1)})`);
         //     }
         // }
         
@@ -2445,11 +2273,8 @@ export class Enemy extends Component {
         const extendedMaxX = Math.min(gameBounds.maxX, overallMaxX + 100);
         const extendedMinY = Math.max(gameBounds.minY, overallMinY - 100);
         const extendedMaxY = Math.min(gameBounds.maxY, overallMaxY + 100);
-        
-        console.debug(`[Enemy] findRoomExits: 整体边界 - minX: ${extendedMinX.toFixed(1)}, maxX: ${extendedMaxX.toFixed(1)}, minY: ${extendedMinY.toFixed(1)}, maxY: ${extendedMaxY.toFixed(1)}`);
-        
+
         // 4. 重新设计出口寻找算法：将石墙组视为边界，找到真正的口子作为出口
-        console.debug(`[Enemy] findRoomExits: 重新设计的出口寻找算法`);
         
         // 找到主要的石墙组（最大的那个）
         let mainWallGroup: Node[] = [];
@@ -2460,7 +2285,6 @@ export class Enemy extends Component {
         }
         
         if (mainWallGroup.length === 0) {
-            this.logMessage('debug', `[Enemy] findRoomExits: 没有找到主要石墙组`);
             return exits;
         }
         
@@ -2486,8 +2310,6 @@ export class Enemy extends Component {
         }
         
         // 打印主要石墙组的占地面积和节点位置（info级别）
-        console.debug(`[Enemy] findRoomExits: 主要石墙组占地面积 - minX: ${groupMinX.toFixed(1)}, maxX: ${groupMaxX.toFixed(1)}, minY: ${groupMinY.toFixed(1)}, maxY: ${groupMaxY.toFixed(1)}`);
-        console.debug(`[Enemy] findRoomExits: 主要石墙组节点位置: [${wallPositions.join(', ')}]`);
         
         // 打印所有石墙组的占地面积和节点位置
         for (let i = 0; i < wallGroups.length; i++) {
@@ -2509,12 +2331,8 @@ export class Enemy extends Component {
                 gWallPositions.push(`(${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})`);
             }
             
-            console.debug(`[Enemy] findRoomExits: 石墙组${i+1}占地面积 - minX: ${gMinX.toFixed(1)}, maxX: ${gMaxX.toFixed(1)}, minY: ${gMinY.toFixed(1)}, maxY: ${gMaxY.toFixed(1)}`);
-            console.debug(`[Enemy] findRoomExits: 石墙组${i+1}节点位置: [${gWallPositions.join(', ')}]`);
         }
-        
-        console.debug(`[Enemy] findRoomExits: 游戏边界 - minX: ${gameBounds.minX.toFixed(1)}, maxX: ${gameBounds.maxX.toFixed(1)}, minY: ${gameBounds.minY.toFixed(1)}, maxY: ${gameBounds.maxY.toFixed(1)}`);
-        
+
         // 计算敌人移动方向
         const directionToCrystal = new Vec3();
         Vec3.subtract(directionToCrystal, crystalPos, enemyPos);
@@ -2527,12 +2345,9 @@ export class Enemy extends Component {
         const hasPassedWallGroup = 
             (enemyPos.x > groupMaxX && directionToCrystal.x < 0) ||
             (enemyPos.x < groupMinX && directionToCrystal.x > 0);
-        
-        console.debug(`[Enemy] findRoomExits: 敌人位置: (${enemyPos.x.toFixed(1)}, ${enemyPos.y.toFixed(1)}), 移动方向: (${directionToCrystal.x.toFixed(2)}, ${directionToCrystal.y.toFixed(2)}), 石墙组边界: [${groupMinX.toFixed(1)}, ${groupMaxX.toFixed(1)}], 是否已通过: ${hasPassedWallGroup}`);
-        
+
         // 只有当敌人还没通过石墙组时，才寻找出口
         if (hasPassedWallGroup) {
-            console.debug(`[Enemy] findRoomExits: 敌人已经通过石墙组，不需要寻找此方向的出口`);
             return exits;
         }
         
@@ -2557,23 +2372,18 @@ export class Enemy extends Component {
         leftExit.x = Math.max(gameBounds.minX + 20, Math.min(gameBounds.maxX - 20, leftExit.x));
         leftExit.y = Math.max(gameBounds.minY + 20, Math.min(gameBounds.maxY - 20, leftExit.y));
         exits.push(leftExit);
-        
-        console.debug(`[Enemy] findRoomExits: 找到两侧出口！左侧: (${leftExit.x.toFixed(1)}, ${leftExit.y.toFixed(1)}), 右侧: (${rightExit.x.toFixed(1)}, ${rightExit.y.toFixed(1)})`);
-        
+
         // 4. 如果没有找到出口，添加一个基于敌人和水晶连线的紧急出口
         if (exits.length === 0) {
-            this.logMessage('debug', `[Enemy] findRoomExits: 未找到常规出口，添加紧急出口`);
             const emergencyExit = this.generateEmergencyExit(enemyPos, crystalPos, overallMinX, overallMaxX, overallMinY, overallMaxY, gameBounds);
             if (emergencyExit) {
                 exits.push(emergencyExit);
-                console.debug(`[Enemy] findRoomExits: 添加紧急出口！位置: (${emergencyExit.x.toFixed(1)}, ${emergencyExit.y.toFixed(1)})`);
             }
         }
         
         // 去重：移除距离过近的出口
         const uniqueExits = this.deduplicateExits(exits, enemyRadius * 2);
         
-        console.debug(`[Enemy] findRoomExits: 总共找到 ${uniqueExits.length} 个出口`);
         return uniqueExits;
     }
     
@@ -2616,7 +2426,6 @@ export class Enemy extends Component {
                             const alreadyExists = gaps.some(gap => Vec3.distance(gap, gapCenter) < minGapSize / 2);
                             if (!alreadyExists) {
                                 gaps.push(gapCenter);
-                                console.debug(`[Enemy] findInterGroupGaps: 找到石墙组间间隙！位置: (${gapCenter.x.toFixed(1)}, ${gapCenter.y.toFixed(1)}), 组A石墙: (${wallAPos.x.toFixed(1)}, ${wallAPos.y.toFixed(1)}), 组B石墙: (${wallBPos.x.toFixed(1)}, ${wallBPos.y.toFixed(1)}), 距离: ${distance.toFixed(1)}`);
                             }
                         }
                     }
@@ -2744,9 +2553,7 @@ export class Enemy extends Component {
     private generateDirectExitCandidates(enemyPos: Vec3, crystalPos: Vec3, overallMinX: number, overallMaxX: number, overallMinY: number, overallMaxY: number, gameBounds: { minX: number; maxX: number; minY: number; maxY: number }): Vec3[] {
         const candidates: Vec3[] = [];
         const offset = 50; // 出口偏移距离
-        
-        console.debug(`[Enemy] generateDirectExitCandidates: 敌人位置: (${enemyPos.x.toFixed(1)}, ${enemyPos.y.toFixed(1)}), 水晶位置: (${crystalPos.x.toFixed(1)}, ${crystalPos.y.toFixed(1)})`);
-        
+
         // 计算敌人到水晶的方向
         const direction = new Vec3();
         Vec3.subtract(direction, crystalPos, enemyPos);
@@ -2784,7 +2591,6 @@ export class Enemy extends Component {
             
             if (!isNearBoundary) {
                 candidates.push(exitPos);
-                console.debug(`[Enemy] generateDirectExitCandidates: 生成右侧出口候选点: (${exitPos.x.toFixed(1)}, ${exitPos.y.toFixed(1)}), 偏移距离: ${dist}`);
             }
         }
         
@@ -2850,7 +2656,6 @@ export class Enemy extends Component {
                     const alreadyExists = gaps.some(gap => Vec3.distance(gap, gapCenter) < minGapSize / 2);
                     if (!alreadyExists) {
                         gaps.push(gapCenter);
-                        console.debug(`[Enemy] findWallGroupGaps: 找到石墙间隙！位置: (${gapCenter.x.toFixed(1)}, ${gapCenter.y.toFixed(1)}), 石墙A: (${wallAPos.x.toFixed(1)}, ${wallAPos.y.toFixed(1)}), 石墙B: (${wallBPos.x.toFixed(1)}, ${wallBPos.y.toFixed(1)}), 距离: ${distance.toFixed(1)}, 最小距离: ${minDistance.toFixed(1)}, 间隙大小: ${(distance - minDistance).toFixed(1)}`);
                     }
                 }
             }
@@ -2920,24 +2725,18 @@ export class Enemy extends Component {
         exitY = Math.max(gameBounds.minY + 50, Math.min(gameBounds.maxY - 50, exitY));
 
         const exitPos = new Vec3(exitX, exitY, 0);
-        
-        console.debug(`[Enemy] findExitOnSide: 计算出口位置，侧边: ${side}, 位置: (${exitPos.x.toFixed(1)}, ${exitPos.y.toFixed(1)})`);
-        
+
         // 改进的路径检查：只检查从出口到水晶的路径是否畅通
         // 敌人可以自行移动到出口位置
         if (this.checkPathClearAroundObstacles(exitPos, crystalPos, [], this.getAllStoneWalls())) {
-            console.debug(`[Enemy] findExitOnSide: 出口到水晶的路径畅通，返回出口位置`);
             return exitPos;
         }
         
         // 如果严格检查失败，尝试使用更宽松的检查
-        console.debug(`[Enemy] findExitOnSide: 严格检查失败，尝试宽松检查`);
         if (this.checkPathClear(exitPos, crystalPos, this.getAllStoneWalls())) {
-            console.debug(`[Enemy] findExitOnSide: 宽松检查通过，返回出口位置`);
             return exitPos;
         }
         
-        console.debug(`[Enemy] findExitOnSide: 所有检查失败，返回null`);
         return null;
     }
 
@@ -3035,7 +2834,6 @@ export class Enemy extends Component {
             
             // 检查该位置是否与石墙碰撞
             if (this.checkCollisionWithStoneWall(checkPos)) {
-                console.debug(`[Enemy] checkPathFromCurrentToDetourBlocked: 从当前位置到绕行目标点的路径被石墙阻挡，检查点: (${checkPos.x.toFixed(1)}, ${checkPos.y.toFixed(1)})`);
                 return true;
             }
         }
@@ -3104,7 +2902,6 @@ export class Enemy extends Component {
 
         return true; // 路径畅通
     }
-
 
     /**
      * 检查位置是否与障碍物组碰撞（将组作为整体障碍物处理）
@@ -3521,7 +3318,6 @@ export class Enemy extends Component {
 
         this.animationTimer += deltaTime;
 
-        this.logMessage('info', `[Enemy] update: isPlayingIdleAnimation` + this.isPlayingIdleAnimation + " isPlayingWalkAnimation " + this.isPlayingWalkAnimation + " isPlayingAttackAnimation " + this.isPlayingAttackAnimation + " isPlayingHitAnimation " + this.isPlayingHitAnimation + " isPlayingDeathAnimation " + this.isPlayingDeathAnimation);
         // 根据当前播放的动画类型更新帧
         if (this.isPlayingIdleAnimation) {
             this.updateIdleAnimation();
@@ -3554,17 +3350,12 @@ export class Enemy extends Component {
 
     // 更新行走动画
     updateWalkAnimation() {
-        this.logMessage('info', `[Enemy] update: isPlayingWalkAnimation` + this.walkAnimationFrames.length);
         if (this.walkAnimationFrames.length === 0) {
             this.isPlayingWalkAnimation = false;
             return;
         }
-        this.logMessage('info', `[Enemy] update: walkAnimationDuration` + this.walkAnimationDuration);
         const frameDuration = this.walkAnimationDuration / this.walkAnimationFrames.length;
-        this.logMessage('info', `[Enemy] update: this.animationTimer` + frameDuration);
-        this.logMessage('info', `[Enemy] update: this.animationTimer` + this.animationTimer);
         const frameIndex = Math.floor(this.animationTimer / frameDuration) % this.walkAnimationFrames.length;
-        this.logMessage('info', `[Enemy] update: frameIndex` + frameIndex + " currentAnimationFrameIndex " + this.currentAnimationFrameIndex); 
         if (frameIndex !== this.currentAnimationFrameIndex) {
             this.currentAnimationFrameIndex = frameIndex;
             this.sprite.spriteFrame = this.walkAnimationFrames[frameIndex];
@@ -3664,17 +3455,13 @@ export class Enemy extends Component {
 
     // 播放行走动画
     playWalkAnimation() {
-        this.logMessage('debug', `playWalkAnimation: ========== 被调用 ==========`);
-        this.logMessage('debug', `playWalkAnimation: isPlayingWalkAnimation=${this.isPlayingWalkAnimation}, isDestroyed=${this.isDestroyed}, isPlayingAttackAnimation=${this.isPlayingAttackAnimation}, isPlayingHitAnimation=${this.isPlayingHitAnimation}, isPlayingIdleAnimation=${this.isPlayingIdleAnimation}`);
         
         if (this.isDestroyed) {
-            this.logMessage('debug', `playWalkAnimation: 已销毁，不播放`);
             return;
         }
 
         // 如果正在播放其他动画（攻击、被攻击、待机），需要停止并切换到行走动画
         if (this.isPlayingAttackAnimation || this.isPlayingHitAnimation || this.isPlayingIdleAnimation) {
-            this.logMessage('info', `playWalkAnimation: 正在播放其他动画，停止所有动画并切换到行走动画`);
             this.stopAllAnimations();
             this.isPlayingWalkAnimation = true;
             this.animationTimer = 0;
@@ -3684,15 +3471,11 @@ export class Enemy extends Component {
             if (this.walkAnimationFrames.length > 0 && this.walkAnimationFrames[0] && this.sprite) {
                 this.sprite.spriteFrame = this.walkAnimationFrames[0];
                 this.currentAnimationFrameIndex = 0;
-                this.logMessage('debug', `playWalkAnimation: 已设置第一帧，walkAnimationFrames.length=${this.walkAnimationFrames.length}`);
             } else {
-                this.logMessage('warn', `playWalkAnimation: 行走动画帧为空或sprite不存在，walkAnimationFrames.length=${this.walkAnimationFrames ? this.walkAnimationFrames.length : 0}, sprite=${this.sprite ? '存在' : '不存在'}`);
             }
             
-            this.logMessage('info', `playWalkAnimation: 已设置行走动画状态，isPlayingWalkAnimation=true`);
         } else if (!this.isPlayingWalkAnimation) {
             // 没有在播放任何动画，直接切换到行走动画
-            this.logMessage('info', `playWalkAnimation: 没有在播放任何动画，切换到行走动画`);
             this.isPlayingWalkAnimation = true;
             this.animationTimer = 0;
             this.currentAnimationFrameIndex = -1;
@@ -3701,13 +3484,10 @@ export class Enemy extends Component {
             if (this.walkAnimationFrames.length > 0 && this.walkAnimationFrames[0] && this.sprite) {
                 this.sprite.spriteFrame = this.walkAnimationFrames[0];
                 this.currentAnimationFrameIndex = 0;
-                this.logMessage('info', `playWalkAnimation: 已设置第一帧，walkAnimationFrames.length=${this.walkAnimationFrames.length}`);
             } else {
-                this.logMessage('info', `playWalkAnimation: 行走动画帧为空或sprite不存在，walkAnimationFrames.length=${this.walkAnimationFrames ? this.walkAnimationFrames.length : 0}, sprite=${this.sprite ? '存在' : '不存在'}`);
             }
         } else {
             // 已经在播放行走动画，重置动画计时器确保动画正常播放
-            // this.logMessage('debug', `playWalkAnimation: 已在播放行走动画，重置动画计时器确保动画正常播放`);
             // this.animationTimer = 0;
             // this.currentAnimationFrameIndex = -1;
             
@@ -3715,20 +3495,15 @@ export class Enemy extends Component {
             // if (this.walkAnimationFrames.length > 0 && this.walkAnimationFrames[0] && this.sprite) {
             //     this.sprite.spriteFrame = this.walkAnimationFrames[0];
             //     this.currentAnimationFrameIndex = 0;
-            //     this.logMessage('debug', `playWalkAnimation: 已设置第一帧，walkAnimationFrames.length=${this.walkAnimationFrames.length}`);
             // } else {
-            //     this.logMessage('warn', `playWalkAnimation: 行走动画帧为空或sprite不存在，walkAnimationFrames.length=${this.walkAnimationFrames ? this.walkAnimationFrames.length : 0}, sprite=${this.sprite ? '存在' : '不存在'}`);
             // }
         }
     }
 
     // 播放攻击动画
     playAttackAnimation() {
-        this.logMessage('debug', `playAttackAnimation: ========== 被调用 ==========`);
-        this.logMessage('debug', `playAttackAnimation: isPlayingDeathAnimation=${this.isPlayingDeathAnimation}, isDestroyed=${this.isDestroyed}, isPlayingAttackAnimation=${this.isPlayingAttackAnimation}`);
         
         if (this.isPlayingDeathAnimation || this.isDestroyed) {
-            this.logMessage('debug', `playAttackAnimation: 已死亡或正在播放死亡动画，不播放攻击动画`);
             return;
         }
 
@@ -3737,58 +3512,44 @@ export class Enemy extends Component {
             const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
             const targetType = this.currentTarget.getComponent('StoneWall') ? '石墙' : 
                               this.currentTarget.getComponent('Crystal') ? '水晶' : '其他';
-            this.logMessage('debug', `playAttackAnimation: 当前目标${targetType}，距离=${distance.toFixed(1)}, 攻击范围=${this.attackRange}, 是否在攻击范围内=${distance <= this.attackRange}`);
         } else {
-            this.logMessage('warn', `playAttackAnimation: 没有当前目标`);
         }
 
         // 停止所有动画
-        this.logMessage('debug', `playAttackAnimation: 停止所有动画，当前状态: isPlayingWalkAnimation=${this.isPlayingWalkAnimation}, isPlayingIdleAnimation=${this.isPlayingIdleAnimation}, isPlayingAttackAnimation=${this.isPlayingAttackAnimation}`);
         this.stopAllAnimations();
-        this.logMessage('debug', `playAttackAnimation: 停止所有动画后，状态: isPlayingWalkAnimation=${this.isPlayingWalkAnimation}, isPlayingIdleAnimation=${this.isPlayingIdleAnimation}, isPlayingAttackAnimation=${this.isPlayingAttackAnimation}`);
         
         // 设置攻击动画状态
         this.isPlayingAttackAnimation = true;
         this.attackComplete = false;
         this.animationTimer = 0;
         this.currentAnimationFrameIndex = -1;
-        
-        this.logMessage('debug', `playAttackAnimation: 已设置攻击动画状态，isPlayingAttackAnimation=true, attackComplete=false`);
-        
+
         // 播放攻击音效
         if (this.attackSound) {
-            this.logMessage('debug', `playAttackAnimation: 播放攻击音效`);
             AudioManager.Instance.playSFX(this.attackSound);
         } else {
-            this.logMessage('debug', `playAttackAnimation: 没有攻击音效`);
         }
         
         // 如果使用Animation组件播放攻击动画（用于需要Animation组件的情况）
         if (this.animationComponent) {
-            this.logMessage('debug', `playAttackAnimation: 使用Animation组件播放攻击动画，动画名称=${this.attackAnimationName}`);
             // 清除之前的动画事件
             this.animationComponent.off(Animation.EventType.FINISHED);
             
             // 先停止当前可能正在播放的动画，确保每次都能重新开始
             this.animationComponent.stop();
-            this.logMessage('debug', `playAttackAnimation: 已停止Animation组件当前动画`);
             
             // 获取动画状态，设置动画速度与attackAnimationDuration保持同步
             const state = this.animationComponent.getState(this.attackAnimationName);
             if (state) {
-                this.logMessage('debug', `playAttackAnimation: 找到动画状态，duration=${state.duration}, attackAnimationDuration=${this.attackAnimationDuration}`);
                 // 重置动画播放头到开始位置
                 state.time = 0;
                 // 设置动画时长与attackAnimationDuration参数保持一致
                 state.speed = state.duration / this.attackAnimationDuration;
-                this.logMessage('debug', `playAttackAnimation: 设置动画速度=${state.speed.toFixed(2)}`);
             } else {
-                this.logMessage('warn', `playAttackAnimation: 未找到动画状态，动画名称=${this.attackAnimationName}`);
             }
             
             // 注册动画完成事件监听器，确保动画播放完成后立即重置状态
             this.animationComponent.once(Animation.EventType.FINISHED, () => {
-                this.logMessage('debug', `playAttackAnimation: Animation组件动画播放完成，重置状态`);
                 if (this.isPlayingAttackAnimation) {
                     // 调用攻击回调函数（如果存在，用于特殊攻击逻辑如远程攻击）
                     if (this.attackCallback) {
@@ -3807,18 +3568,14 @@ export class Enemy extends Component {
             
             // 播放动画
             this.animationComponent.play(this.attackAnimationName);
-            this.logMessage('debug', `playAttackAnimation: 已调用animationComponent.play(${this.attackAnimationName})`);
             
             // 在动画播放到一半时造成伤害（与动画帧方式保持一致）
             const damageTimer = this.attackAnimationDuration * 0.5;
             this.scheduleOnce(() => {
-                this.logMessage('debug', `playAttackAnimation: scheduleOnce回调触发（造成伤害），isPlayingAttackAnimation=${this.isPlayingAttackAnimation}, attackComplete=${this.attackComplete}, currentTarget=${this.currentTarget ? '存在' : 'null'}`);
                 if (this.isPlayingAttackAnimation && !this.attackComplete) {
-                    this.logMessage('debug', `playAttackAnimation: 动画播放到一半，调用dealDamage造成伤害`);
                     this.dealDamage();
                     this.attackComplete = true;
                 } else {
-                    this.logMessage('warn', `playAttackAnimation: 条件不满足，不调用dealDamage，isPlayingAttackAnimation=${this.isPlayingAttackAnimation}, attackComplete=${this.attackComplete}`);
                 }
             }, damageTimer);
             
@@ -3826,7 +3583,6 @@ export class Enemy extends Component {
             const finishTimer = this.attackAnimationDuration;
             this.scheduleOnce(() => {
                 if (this.isPlayingAttackAnimation) {
-                    this.logMessage('warn', `playAttackAnimation: scheduleOnce触发，重置状态（备用方案）`);
                     // 调用攻击回调函数（如果存在，用于特殊攻击逻辑如远程攻击）
                     if (this.attackCallback) {
                         this.attackCallback();
@@ -3842,9 +3598,7 @@ export class Enemy extends Component {
                 }
             }, finishTimer);
         } else {
-            this.logMessage('debug', `playAttackAnimation: 没有Animation组件，使用动画帧方式（在updateAttackAnimation中处理）`);
         }
-        this.logMessage('debug', `playAttackAnimation: ========== 完成 ==========`);
     }
 
     // 播放被攻击动画
@@ -3895,8 +3649,6 @@ export class Enemy extends Component {
         this.isHit = false; // 清除被攻击标志
         this.attackComplete = false; // 重置攻击完成标志
         
-        this.logMessage('debug', `stopAllAnimations: 停止前状态: idle=${beforeState.isPlayingIdleAnimation}, walk=${beforeState.isPlayingWalkAnimation}, attack=${beforeState.isPlayingAttackAnimation}, hit=${beforeState.isPlayingHitAnimation}`);
-        this.logMessage('debug', `stopAllAnimations: 停止后状态: idle=${this.isPlayingIdleAnimation}, walk=${this.isPlayingWalkAnimation}, attack=${this.isPlayingAttackAnimation}, hit=${this.isPlayingHitAnimation}`);
     }
 
     // 恢复默认精灵帧
@@ -3907,17 +3659,13 @@ export class Enemy extends Component {
     }
 
     protected attack() {
-        this.logMessage('debug', `attack: ========== 开始攻击 ==========`);
-        this.logMessage('debug', `attack: currentTarget=${this.currentTarget ? '存在' : 'null'}, isDestroyed=${this.isDestroyed}, isPlayingAttackAnimation=${this.isPlayingAttackAnimation}`);
         
         if (!this.currentTarget || this.isDestroyed) {
-            this.logMessage('debug', `attack: 没有目标或已销毁，退出攻击`);
             return;
         }
 
         // 再次检查目标是否有效
         if (!this.currentTarget.isValid || !this.currentTarget.active) {
-            this.logMessage('debug', `attack: 目标无效或未激活，清除目标`);
             this.currentTarget = null!;
             return;
         }
@@ -3927,22 +3675,16 @@ export class Enemy extends Component {
         const distance = Vec3.distance(enemyPos, targetPos);
         const targetType = this.currentTarget.getComponent('StoneWall') ? '石墙' : 
                           this.currentTarget.getComponent('Crystal') ? '水晶' : '其他';
-        this.logMessage('debug', `attack: 目标${targetType}有效，位置=(${targetPos.x.toFixed(1)}, ${targetPos.y.toFixed(1)}), 敌人位置=(${enemyPos.x.toFixed(1)}, ${enemyPos.y.toFixed(1)}), 距离=${distance.toFixed(1)}, 攻击范围=${this.attackRange}, 伤害=${this.attackDamage}`);
 
         // 检查距离是否在攻击范围内
         if (distance > this.attackRange) {
-            this.logMessage('warn', `attack: ❌ 目标不在攻击范围内（距离=${distance.toFixed(1)}, 攻击范围=${this.attackRange}），不执行攻击，停止攻击动画`);
             // 如果正在播放攻击动画，停止攻击动画
             if (this.isPlayingAttackAnimation) {
-                this.logMessage('warn', `attack: 正在播放攻击动画，停止攻击动画`);
                 this.isPlayingAttackAnimation = false;
                 this.attackComplete = false;
             }
-            this.logMessage('debug', `attack: ========== 退出攻击（距离超出） ==========`);
             return;
         }
-
-        this.logMessage('debug', `attack: ✅ 距离检查通过，准备攻击`);
 
         // 攻击时朝向目标方向
         const direction = new Vec3();
@@ -3950,19 +3692,14 @@ export class Enemy extends Component {
         this.flipDirection(direction);
 
         // 播放攻击动画（使用动画帧，在updateAttackAnimation中造成伤害）
-        this.logMessage('debug', `attack: 调用playAttackAnimation，距离=${distance.toFixed(1)}, 攻击范围=${this.attackRange}`);
         this.playAttackAnimation();
-        this.logMessage('debug', `attack: ========== 攻击完成 ==========`);
     }
     
     /**
      * 处理实际伤害（在攻击动画中途调用）
      */
     protected dealDamage() {
-        this.logMessage('debug', `dealDamage: ========== 被调用 ==========`);
-        this.logMessage('debug', `dealDamage: currentTarget=${this.currentTarget ? '存在' : 'null'}, isValid=${this.currentTarget ? this.currentTarget.isValid : 'N/A'}, active=${this.currentTarget ? this.currentTarget.active : 'N/A'}`);
         if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
-            this.logMessage('warn', `dealDamage: 目标无效，清除目标`);
             this.currentTarget = null!;
             return;
         }
@@ -3972,7 +3709,6 @@ export class Enemy extends Component {
         const enemyPos = this.node.worldPosition;
         const distance = Vec3.distance(enemyPos, targetPos);
         if (distance > this.attackRange) {
-            this.logMessage('debug', `[Enemy] dealDamage: 目标不在攻击范围内（距离=${distance.toFixed(1)}, 攻击范围=${this.attackRange}），不造成伤害`);
             // 停止攻击动画
             this.isPlayingAttackAnimation = false;
             this.attackComplete = false;
@@ -3996,14 +3732,11 @@ export class Enemy extends Component {
         const targetScript = towerScript || warAncientTreeScript || normalTreeScript || wellScript || hallScript || swordsmanHallScript || churchScript || priestScript || crystalScript || wispScript || hunterScript || elfSwordsmanScript || stoneWallScript;
         
         if (targetScript && targetScript.takeDamage) {
-            this.logMessage('debug', `dealDamage: 调用takeDamage，伤害=${this.attackDamage}，目标类型=${targetScript.constructor.name}`);
             targetScript.takeDamage(this.attackDamage);
-            this.logMessage('debug', `dealDamage: 造成伤害 ${this.attackDamage}，目标类型=${targetScript.constructor.name}`);
             
             // 检查目标是否仍然存活，特别是石墙
             if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
                 const wasStoneWall = !!stoneWallScript;
-                this.logMessage('debug', `dealDamage: 目标被摧毁，wasStoneWall=${wasStoneWall}`);
                 this.currentTarget = null!;
                 // 清除绕行目标点，重新计算路径
                 this.detourTarget = null;
@@ -4013,10 +3746,8 @@ export class Enemy extends Component {
                 
                 // 如果摧毁的是石墙，检查是否需要重新进入网格寻路模式
                 if (wasStoneWall) {
-                    this.logMessage('debug', `dealDamage: 石墙被摧毁，重新规划路径`);
                     // 重置攻击动画状态，让下一帧自动切换到移动动画
                     if (this.isPlayingAttackAnimation) {
-                        this.logMessage('debug', `dealDamage: 石墙被摧毁，重置攻击动画状态，下一帧将切换到移动动画`);
                         this.isPlayingAttackAnimation = false;
                         this.attackComplete = false;
                         // 停止所有动画，让下一帧的移动逻辑自动切换到移动动画
@@ -4164,15 +3895,13 @@ export class Enemy extends Component {
         this.stopAllAnimations();
         
         // 移除绕行点标记
-        
-        
+
         // 奖励金币
         if (!this.gameManager) {
             this.findGameManager();
         }
         if (this.gameManager) {
             this.gameManager.addGold(this.goldReward);
-            console.debug(`Enemy: Died, rewarded ${this.goldReward} gold`);
         }
 
         // 销毁血条节点
@@ -4280,7 +4009,6 @@ export class Enemy extends Component {
         this.findStoneWallGridPanel();
         
         if (!this.stoneWallGridPanelComponent) {
-            console.debug(`[Enemy] checkStoneWallGridBelowEnemy: 石墙网格面板组件不存在`);
             return false;
         }
 
@@ -4288,12 +4016,9 @@ export class Enemy extends Component {
         
         // 首先检查敌人当前所在的网格坐标
         const grid = this.stoneWallGridPanelComponent.worldToGrid(enemyPos);
-        
-        console.debug(`[Enemy] checkStoneWallGridBelowEnemy: 敌人位置(${enemyPos.x.toFixed(1)}, ${enemyPos.y.toFixed(1)}), 网格坐标=${grid ? `(${grid.x}, ${grid.y})` : 'null'}`);
-        
+
         // 如果敌人已经在最底层（gridY=0或更小），不需要再进入网格寻路模式
         if (grid && grid.y <= 0) {
-            console.debug(`[Enemy] checkStoneWallGridBelowEnemy: 敌人已在最底层（gridY=${grid.y}），不需要进入网格寻路模式`);
             return false;
         }
         
@@ -4301,7 +4026,6 @@ export class Enemy extends Component {
         // 网格范围：y:500-1000，x:0-750
         const gridMinY = 500; // 最底层（gridY=0）的y坐标
         if (!grid && enemyPos.y <= gridMinY) {
-            console.debug(`[Enemy] checkStoneWallGridBelowEnemy: 敌人不在网格内但y坐标(${enemyPos.y.toFixed(1)})已低于最底层(${gridMinY})，不需要进入网格寻路模式`);
             return false;
         }
         
@@ -4321,21 +4045,17 @@ export class Enemy extends Component {
                 const gridInCheck = this.stoneWallGridPanelComponent.worldToGrid(enemyPos);
                 if (gridInCheck && gridInCheck.y <= 0) {
                     // 敌人已经在最底层，不需要进入网格寻路模式
-                    console.debug(`[Enemy] checkStoneWallGridBelowEnemy: 敌人已在最底层（gridY=${gridInCheck.y}），不需要进入网格寻路模式`);
                     return false;
                 }
                 
                 // 如果敌人还没有到达最底层（gridY=0，即y约500），需要进入网格寻路
                 if (enemyPos.y > gridMinY + 25) { // 25是半个格子的容差
-                    console.debug(`[Enemy] checkStoneWallGridBelowEnemy: ✅ 需要进入网格寻路模式（敌人在网格范围内，y=${enemyPos.y.toFixed(1)} > ${gridMinY + 25}）`);
                     return true;
                 } else {
-                    console.debug(`[Enemy] checkStoneWallGridBelowEnemy: 敌人y坐标(${enemyPos.y.toFixed(1)})已接近或低于最底层(${gridMinY + 25})，不需要进入网格寻路模式`);
                 }
             }
         }
 
-        console.debug(`[Enemy] checkStoneWallGridBelowEnemy: ❌ 不需要进入网格寻路模式`);
         return false;
     }
 
@@ -4346,7 +4066,6 @@ export class Enemy extends Component {
         this.findStoneWallGridPanel();
         
         if (!this.stoneWallGridPanelComponent) {
-            console.debug(`[Enemy] checkEnemyAboveGrid: 石墙网格面板组件不存在`);
             return false;
         }
 
@@ -4357,7 +4076,6 @@ export class Enemy extends Component {
 
         // 检查敌人是否在网格上方（y坐标 > gridMaxY），且在网格x范围内
         const isAbove = enemyPos.y > gridMaxY && enemyPos.x >= gridMinX - 50 && enemyPos.x <= gridMaxX + 50;
-        console.debug(`[Enemy] checkEnemyAboveGrid: 敌人位置(${enemyPos.x.toFixed(1)}, ${enemyPos.y.toFixed(1)}), 网格顶部y=${gridMaxY}, 是否在网格上方=${isAbove}`);
         
         return isAbove;
     }
@@ -4369,7 +4087,6 @@ export class Enemy extends Component {
         this.findStoneWallGridPanel();
         
         if (!this.stoneWallGridPanelComponent) {
-            this.logMessage('debug', `[Enemy] findGapInTopLayer: 石墙网格面板组件不存在`);
             return null;
         }
 
@@ -4377,8 +4094,6 @@ export class Enemy extends Component {
         const gridWidth = this.stoneWallGridPanelComponent.gridWidth;
         const gridHeight = this.stoneWallGridPanelComponent.gridHeight;
         const topLayerY = gridHeight - 1; // 最上层（gridY从0开始，所以是gridHeight-1）
-
-        console.debug(`[Enemy] findGapInTopLayer: 开始在网格最上层(gridY=${topLayerY})查找缺口，敌人位置(${enemyPos.x.toFixed(1)}, ${enemyPos.y.toFixed(1)})，网格尺寸=${gridWidth}x${gridHeight}`);
 
         // 将敌人的x坐标转换为网格坐标（使用网格最上层对应的y坐标）
         // 先尝试使用敌人的x坐标找到对应的网格列
@@ -4390,7 +4105,6 @@ export class Enemy extends Component {
         // 我们需要知道网格最上层的世界y坐标，可以通过将gridY=topLayerY转换为世界坐标来获取
         const testGridPos = this.stoneWallGridPanelComponent.gridToWorld(0, topLayerY);
         if (!testGridPos) {
-            this.logMessage('debug', `[Enemy] findGapInTopLayer: 无法获取网格最上层世界坐标`);
             return null;
         }
         
@@ -4400,11 +4114,9 @@ export class Enemy extends Component {
         
         if (enemyGrid && enemyGrid.y === topLayerY) {
             startX = enemyGrid.x;
-            console.debug(`[Enemy] findGapInTopLayer: 敌人对应的网格列x=${startX}`);
         } else {
             // 如果无法转换，使用粗略计算（假设网格从x=0开始，每格50像素）
             startX = Math.max(0, Math.min(gridWidth - 1, Math.floor((enemyPos.x - this.stoneWallGridPanelComponent.node.worldPosition.x + (gridWidth * 50) / 2) / 50)));
-            console.debug(`[Enemy] findGapInTopLayer: 使用粗略计算得到网格列x=${startX}`);
         }
 
         // 从敌人位置向左右两侧搜索最近的缺口
@@ -4436,34 +4148,27 @@ export class Enemy extends Component {
                                 if (distanceX < minDistance) {
                                     minDistance = distanceX;
                                     bestGap = worldPos;
-                                    console.debug(`[Enemy] findGapInTopLayer: 找到潜在缺口 (gridX=${x}, gridY=${topLayerY})，世界坐标(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})，x方向距离=${distanceX.toFixed(1)}`);
                                 }
                             } else {
-                                console.debug(`[Enemy] findGapInTopLayer: (gridX=${x}, gridY=${topLayerY}) 位置检测到实际存在石墙，跳过`);
                             }
                         }
                     } else {
-                        console.debug(`[Enemy] findGapInTopLayer: (gridX=${x}, gridY=${topLayerY}) 网格状态显示被占用`);
                     }
                 }
             }
 
             // 如果已经找到正下方的缺口，直接返回
             if (offset === 0 && bestGap) {
-                console.debug(`[Enemy] findGapInTopLayer: ✅ 在敌人正下方找到缺口 (gridX=${startX}, gridY=${topLayerY}) -> 世界坐标(${bestGap.x.toFixed(1)}, ${bestGap.y.toFixed(1)})`);
                 return bestGap;
             }
         }
 
         if (bestGap) {
-            console.debug(`[Enemy] findGapInTopLayer: ✅ 找到最佳缺口：世界坐标(${bestGap.x.toFixed(1)}, ${bestGap.y.toFixed(1)})，x方向距离=${minDistance.toFixed(1)}`);
         } else {
-            console.debug(`[Enemy] findGapInTopLayer: ❌ 未找到缺口，最上层所有格子都被占用`);
         }
         
         return bestGap;
     }
-
 
     /**
      * 检查当前网格路径是否仍然有效（路径上的点是否被石墙占用）
@@ -4480,13 +4185,11 @@ export class Enemy extends Component {
             if (grid) {
                 // 检查网格是否被占用
                 if (this.stoneWallGridPanelComponent.isGridOccupied(grid.x, grid.y)) {
-                    console.debug(`[Enemy] checkGridPathValid: 路径点[${i}] (gridX=${grid.x}, gridY=${grid.y}) 被占用，路径无效`);
                     return false;
                 }
                 
                 // 进一步验证实际是否有石墙节点
                 if (this.checkStoneWallAtPosition(pathPoint)) {
-                    console.debug(`[Enemy] checkGridPathValid: 路径点[${i}] (gridX=${grid.x}, gridY=${grid.y}) 检测到实际石墙，路径无效`);
                     return false;
                 }
             }
@@ -4500,21 +4203,16 @@ export class Enemy extends Component {
      */
     private replanGridPath() {
         if (!this.isInStoneWallGrid) {
-            console.debug('[Enemy] replanGridPath: 敌人不在网格寻路模式，无需重新规划');
             return;
         }
 
-        console.debug('[Enemy] replanGridPath: 开始重新规划网格路径');
-        
         // 重新计算路径
         const path = this.findPathInStoneWallGrid();
         if (path && path.length > 0) {
             this.gridPath = path;
             this.currentPathIndex = 0;
-            console.debug(`[Enemy] replanGridPath: ✅ 重新规划成功，新路径包含 ${path.length} 个路径点`);
         } else {
             // 无路可走，退出网格寻路模式
-            this.logMessage('debug', '[Enemy] replanGridPath: ❌ 重新规划失败，无路可走，退出网格寻路模式');
             this.isInStoneWallGrid = false;
             this.gridPath = [];
             this.currentPathIndex = 0;
@@ -4523,7 +4221,6 @@ export class Enemy extends Component {
             const nearestWall = this.findNearestStoneWall();
             if (nearestWall) {
                 this.currentTarget = nearestWall;
-                console.debug('[Enemy] replanGridPath: 设置为攻击最近的石墙');
             }
         }
     }
@@ -4549,15 +4246,12 @@ export class Enemy extends Component {
         this.findStoneWallGridPanel();
         
         if (!this.stoneWallGridPanelComponent) {
-            console.debug(`[Enemy] findPathInStoneWallGrid: 石墙网格面板组件不存在`);
             return null;
         }
 
         const enemyPos = this.node.worldPosition;
         const grid = this.stoneWallGridPanelComponent.worldToGrid(enemyPos);
-        
-        console.debug(`[Enemy] findPathInStoneWallGrid: 开始寻路，敌人位置(${enemyPos.x.toFixed(1)}, ${enemyPos.y.toFixed(1)}), 网格坐标=${grid ? `(${grid.x}, ${grid.y})` : 'null'}`);
-        
+
         // 如果敌人不在网格内，尝试找到最近的网格入口点
         let startGrid: { x: number; y: number } | null = grid;
         if (!startGrid) {
@@ -4579,23 +4273,17 @@ export class Enemy extends Component {
             const nearestWorldPos = new Vec3(nearestX, nearestY, 0);
             startGrid = this.stoneWallGridPanelComponent.worldToGrid(nearestWorldPos);
             if (!startGrid) {
-                console.debug(`[Enemy] findPathInStoneWallGrid: ❌ 无法找到起始网格点`);
                 return null;
             }
-            console.debug(`[Enemy] findPathInStoneWallGrid: 敌人不在网格内，使用最近网格点作为起点 (gridX=${startGrid.x}, gridY=${startGrid.y})`);
         }
 
         // 使用A*算法寻路到最底层（gridY=0）
-        console.debug(`[Enemy] findPathInStoneWallGrid: 开始A*寻路，起点 (gridX=${startGrid.x}, gridY=${startGrid.y}) -> 目标层 (gridY=0)`);
         const path = this.findPathToBottomLayerAStar(startGrid.x, startGrid.y);
         
         if (!path || path.length === 0) {
-            console.debug(`[Enemy] findPathInStoneWallGrid: ❌ A*寻路失败，无法找到路径`);
             return null;
         }
 
-        console.debug(`[Enemy] findPathInStoneWallGrid: ✅ A*寻路成功，找到 ${path.length} 个路径点`);
-        
         // 将网格坐标路径转换为世界坐标
         const worldPath: Vec3[] = [];
         for (let i = 0; i < path.length; i++) {
@@ -4603,11 +4291,9 @@ export class Enemy extends Component {
             const worldPos = this.stoneWallGridPanelComponent.gridToWorld(gridPos.x, gridPos.y);
             if (worldPos) {
                 worldPath.push(worldPos);
-                console.debug(`[Enemy] findPathInStoneWallGrid: 路径点[${i}] (gridX=${gridPos.x}, gridY=${gridPos.y}) -> 世界坐标(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
             }
         }
 
-        console.debug(`[Enemy] findPathInStoneWallGrid: ✅ 路径转换完成，共 ${worldPath.length} 个世界坐标点`);
         return worldPath;
     }
 
@@ -4623,8 +4309,6 @@ export class Enemy extends Component {
         const gridWidth = this.stoneWallGridPanelComponent.gridWidth;
         const gridHeight = this.stoneWallGridPanelComponent.gridHeight;
         const targetY = 0; // 最底层
-        
-        console.debug(`[Enemy] findPathToBottomLayerAStar: 开始A*寻路，网格尺寸=${gridWidth}x${gridHeight}，起点(${startX}, ${startY}) -> 目标层(gridY=${targetY})`);
 
         // 如果起点已经在最底层，直接返回
         if (startY <= targetY) {
@@ -4701,7 +4385,6 @@ export class Enemy extends Component {
                 const worldPos = this.stoneWallGridPanelComponent.gridToWorld(newX, newY);
                 if (worldPos && this.checkStoneWallAtPosition(worldPos)) {
                     // 实际检测到石墙节点，跳过该格子
-                    console.debug(`[Enemy] findPathToBottomLayerAStar: 格子(gridX=${newX}, gridY=${newY})检测到实际石墙，跳过`);
                     continue;
                 }
 
@@ -4736,7 +4419,6 @@ export class Enemy extends Component {
         // 无法找到路径
         return null;
     }
-
 
     /**
      * 在网格内或网格上方检测我方单位（弓箭手、女猎手、剑士），如果路径畅通则返回单位
@@ -4834,7 +4516,6 @@ export class Enemy extends Component {
         }
 
         if (nearestUnit) {
-            console.debug(`[Enemy] checkForFriendlyUnitInGrid: 找到我方单位且路径畅通，距离: ${minDistance.toFixed(1)}`);
         }
 
         return nearestUnit;
@@ -4930,7 +4611,6 @@ export class Enemy extends Component {
     private moveInStoneWallGrid(deltaTime: number) {
         // 如果正在播放攻击动画，停止攻击动画并切换到移动动画
         if (this.isPlayingAttackAnimation) {
-            this.logMessage('debug', `moveInStoneWallGrid: 检测到正在播放攻击动画，停止攻击动画并切换到移动动画`);
             this.isPlayingAttackAnimation = false;
             this.attackComplete = false;
             this.stopAllAnimations();
@@ -4940,7 +4620,6 @@ export class Enemy extends Component {
         const friendlyUnit = this.checkForFriendlyUnitInGrid();
         if (friendlyUnit) {
             // 检测到我方单位且路径畅通，退出网格寻路模式，优先攻击我方单位
-            console.debug(`[Enemy] moveInStoneWallGrid: 检测到我方单位且路径畅通，退出网格寻路模式，优先攻击`);
             this.isInStoneWallGrid = false;
             this.currentTarget = friendlyUnit;
             this.gridPath = [];
@@ -4962,7 +4641,6 @@ export class Enemy extends Component {
         if (this.gridPath && this.gridPath.length > 0 && now - this.lastPathCheckTime >= checkInterval) {
             this.lastPathCheckTime = now;
             if (!this.checkGridPathValid()) {
-                console.debug('[Enemy] moveInStoneWallGrid: 路径无效，重新规划路径');
                 this.replanGridPath();
                 // 如果重新规划后没有路径，继续执行后续逻辑
                 if (!this.gridPath || this.gridPath.length === 0) {
@@ -4983,7 +4661,6 @@ export class Enemy extends Component {
                 const nearestWall = this.findNearestStoneWall();
                 if (nearestWall) {
                     this.currentTarget = nearestWall;
-                    console.debug(`[Enemy] moveInStoneWallGrid: 无路可走，设置为攻击最近的石墙`);
                 }
                 return;
             }
@@ -4999,10 +4676,8 @@ export class Enemy extends Component {
             // 确认敌人确实在最底层
             const finalGrid = this.stoneWallGridPanelComponent?.worldToGrid(this.node.worldPosition);
             if (finalGrid && finalGrid.y <= 0) {
-                console.debug(`[Enemy] moveInStoneWallGrid: ✅ 已到达最底层（gridY=${finalGrid.y}），退出网格寻路模式，敌人位置(${this.node.worldPosition.x.toFixed(1)}, ${this.node.worldPosition.y.toFixed(1)})`);
             } else {
                 const finalGridInfo = finalGrid ? `gridY=${finalGrid.y}` : '不在网格内';
-                console.debug(`[Enemy] moveInStoneWallGrid: ⚠️ 路径索引超出但可能未到达最底层（${finalGridInfo}），退出网格寻路模式，敌人位置(${this.node.worldPosition.x.toFixed(1)}, ${this.node.worldPosition.y.toFixed(1)})`);
             }
             return;
         }
@@ -5016,12 +4691,10 @@ export class Enemy extends Component {
         // 如果已经到达当前路径点
         if (distance < 10) { // 10像素的到达阈值
             const currentGrid = this.stoneWallGridPanelComponent?.worldToGrid(this.node.worldPosition);
-            console.debug(`[Enemy] moveInStoneWallGrid: 到达路径点[${this.currentPathIndex}]/${this.gridPath.length}, 敌人位置(${this.node.worldPosition.x.toFixed(1)}, ${this.node.worldPosition.y.toFixed(1)}), 网格坐标=${currentGrid ? `(${currentGrid.x}, ${currentGrid.y})` : 'null'}`);
             
             // 检查是否已经到达最底层（gridY=0）
             if (currentGrid && currentGrid.y <= 0) {
                 // 已到达最底层，直接退出网格寻路模式
-                console.debug(`[Enemy] moveInStoneWallGrid: ✅ 已到达最底层（gridY=${currentGrid.y}），退出网格寻路模式`);
                 this.isInStoneWallGrid = false;
                 this.gridPath = [];
                 this.currentPathIndex = 0;
@@ -5034,7 +4707,6 @@ export class Enemy extends Component {
             if (this.currentPathIndex < this.gridPath.length) {
                 const nextPoint = this.gridPath[this.currentPathIndex];
                 const nextGrid = this.stoneWallGridPanelComponent?.worldToGrid(nextPoint);
-                console.debug(`[Enemy] moveInStoneWallGrid: 继续移动到下一个路径点[${this.currentPathIndex}] (${nextPoint.x.toFixed(1)}, ${nextPoint.y.toFixed(1)}), 网格坐标=${nextGrid ? `(${nextGrid.x}, ${nextGrid.y})` : 'null'}`);
                 
                 // 正常移动到下一个路径点（包括最底层），不进行闪现
                 return this.moveInStoneWallGrid(deltaTime);
@@ -5047,10 +4719,8 @@ export class Enemy extends Component {
                 // 确认敌人确实在最底层，避免重新进入网格寻路模式
                 const finalGrid = this.stoneWallGridPanelComponent?.worldToGrid(this.node.worldPosition);
                 if (finalGrid && finalGrid.y <= 0) {
-                    console.debug(`[Enemy] moveInStoneWallGrid: ✅ 已到达最底层（gridY=${finalGrid.y}），退出网格寻路模式，敌人位置(${this.node.worldPosition.x.toFixed(1)}, ${this.node.worldPosition.y.toFixed(1)})`);
                 } else {
                     const finalGridInfo = finalGrid ? `gridY=${finalGrid.y}` : '不在网格内';
-                    console.debug(`[Enemy] moveInStoneWallGrid: ⚠️ 路径完成但可能未到达最底层（${finalGridInfo}），退出网格寻路模式，敌人位置(${this.node.worldPosition.x.toFixed(1)}, ${this.node.worldPosition.y.toFixed(1)})`);
                 }
                 return;
             }
@@ -5261,6 +4931,4 @@ export class Enemy extends Component {
         return desiredDirection;
     }
 }
-
-
 

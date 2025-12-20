@@ -113,7 +113,6 @@ export class UnitSelectionManager extends Component {
     initUnitInfoPanel() {
         const canvas = find('Canvas');
         if (!canvas) {
-            console.error('UnitSelectionManager: Canvas not found!');
             return;
         }
 

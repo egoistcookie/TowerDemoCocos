@@ -51,13 +51,11 @@ export class Arrow extends Component {
         // 计算飞行时间（基于距离和速度）
         const distance = Vec3.distance(this.startPos, this.targetPos);
         if (distance < 0.1) {
-            console.error('Arrow: Distance too small, cannot initialize');
             return;
         }
         
         this.travelTime = distance / this.speed;
         if (this.travelTime <= 0) {
-            console.error(`Arrow: Invalid travelTime: ${this.travelTime}, distance: ${distance}, speed: ${this.speed}`);
             return;
         }
         
@@ -73,13 +71,6 @@ export class Arrow extends Component {
             this.node.setRotationFromEuler(0, 0, angle);
         }
 
-        // console.debug(`Arrow: Initialized successfully!`);
-        // console.debug(`  Start: (${this.startPos.x.toFixed(2)}, ${this.startPos.y.toFixed(2)})`);
-        // console.debug(`  Target: (${this.targetPos.x.toFixed(2)}, ${this.targetPos.y.toFixed(2)})`);
-        // console.debug(`  Distance: ${distance.toFixed(2)}`);
-        // console.debug(`  Speed: ${this.speed}`);
-        // console.debug(`  TravelTime: ${this.travelTime.toFixed(2)}s`);
-        // console.debug(`  Node active: ${this.node.active}, isValid: ${this.node.isValid}`);
     }
 
     /**
@@ -124,7 +115,6 @@ export class Arrow extends Component {
         }
 
         this.isFlying = false;
-        // console.debug(`Arrow: Hit target at position (${this.node.worldPosition.x.toFixed(2)}, ${this.node.worldPosition.y.toFixed(2)})`);
 
         // 调用命中回调
         if (this.onHitCallback) {
@@ -164,7 +154,6 @@ export class Arrow extends Component {
         // 调试：每0.5秒输出一次位置信息
         if (Math.floor(this.elapsedTime * 2) !== Math.floor((this.elapsedTime - deltaTime) * 2)) {
             const currentPos = this.calculateParabolicPosition(Math.min(this.elapsedTime / this.travelTime, 1));
-            // console.debug(`Arrow: Flying, elapsed: ${this.elapsedTime.toFixed(2)}s, position: (${currentPos.x.toFixed(2)}, ${currentPos.y.toFixed(2)}), target: (${this.targetPos.x.toFixed(2)}, ${this.targetPos.y.toFixed(2)})`);
         }
         
         // 如果目标已失效，提前销毁
@@ -216,7 +205,6 @@ export class Arrow extends Component {
         
         // 如果飞行完成但未命中目标，销毁弓箭
         if (currentRatio >= 1) {
-            console.debug('Arrow: Flight completed but not hit target, destroying arrow');
             if (this.node && this.node.isValid) {
                 this.node.destroy();
             }
@@ -225,7 +213,6 @@ export class Arrow extends Component {
         
         // 如果飞行时间过长（超过预期时间2倍），销毁弓箭（防止卡住）
         if (this.elapsedTime > this.travelTime * 2) {
-            console.warn('Arrow: Flight time exceeded, destroying arrow');
             if (this.node && this.node.isValid) {
                 this.node.destroy();
             }

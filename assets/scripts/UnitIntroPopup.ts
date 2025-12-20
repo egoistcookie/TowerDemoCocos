@@ -27,7 +27,6 @@ export class UnitIntroPopup extends Component {
         let gmNode = find('GameManager');
         if (gmNode) {
             this.gameManager = gmNode.getComponent(GameManager) as GameManager;
-            console.debug('UnitIntroPopup: Found GameManager by name');
         } else {
             // 从场景根节点查找
             const scene = this.node.scene;
@@ -43,9 +42,7 @@ export class UnitIntroPopup extends Component {
                 };
                 this.gameManager = findInScene(scene, GameManager) as GameManager;
                 if (this.gameManager) {
-                    console.debug('UnitIntroPopup: Found GameManager recursively');
                 } else {
-                    console.warn('UnitIntroPopup: GameManager not found!');
                 }
             }
         }
@@ -79,7 +76,6 @@ export class UnitIntroPopup extends Component {
             const uiManager = uiManagerNode.getComponent('UIManager') as any;
             if (uiManager && uiManager.buildButton) {
                 this.buildButton = uiManager.buildButton;
-                console.debug('UnitIntroPopup: Found BuildButton through UIManager');
                 return;
             }
         }
@@ -89,7 +85,6 @@ export class UnitIntroPopup extends Component {
         if (buildButtonNode) {
             this.buildButton = buildButtonNode.getComponent(Button);
             if (this.buildButton) {
-                console.debug('UnitIntroPopup: Found BuildButton by node name');
                 return;
             }
         }
@@ -112,13 +107,11 @@ export class UnitIntroPopup extends Component {
             if (buttonNode) {
                 this.buildButton = buttonNode.getComponent(Button);
                 if (this.buildButton) {
-                    console.debug('UnitIntroPopup: Found BuildButton recursively');
                     return;
                 }
             }
         }
         
-        console.warn('UnitIntroPopup: BuildButton not found!');
     }
     
     /**
@@ -127,7 +120,6 @@ export class UnitIntroPopup extends Component {
     private disableBuildButton() {
         if (this.buildButton) {
             this.buildButton.interactable = false;
-            console.debug('UnitIntroPopup: BuildButton disabled');
         }
     }
     
@@ -137,7 +129,6 @@ export class UnitIntroPopup extends Component {
     private enableBuildButton() {
         if (this.buildButton) {
             this.buildButton.interactable = true;
-            console.debug('UnitIntroPopup: BuildButton enabled');
         }
     }
     
@@ -156,7 +147,6 @@ export class UnitIntroPopup extends Component {
                 // 调用 disableBuildingMode 退出建造模式并关闭建造面板
                 if (towerBuilder.disableBuildingMode && typeof towerBuilder.disableBuildingMode === 'function') {
                     towerBuilder.disableBuildingMode();
-                    console.debug('UnitIntroPopup: Building mode disabled');
                 }
                 // 确保建造模式状态被设置为 false
                 if (towerBuilder.isBuildingMode !== undefined) {
@@ -174,7 +164,6 @@ export class UnitIntroPopup extends Component {
         const panelNode = find('BuildingSelectionPanel') || find('Canvas/UI/BuildingSelectionPanel') || find('UI/BuildingSelectionPanel');
         if (panelNode) {
             panelNode.active = false;
-            console.debug('UnitIntroPopup: BuildingSelectionPanel hidden immediately by node name');
             return;
         }
         
@@ -186,7 +175,6 @@ export class UnitIntroPopup extends Component {
                 // 直接设置节点为不可见
                 if (towerBuilder.buildingPanel.node) {
                     towerBuilder.buildingPanel.node.active = false;
-                    console.debug('UnitIntroPopup: BuildingSelectionPanel hidden immediately through TowerBuilder');
                     return;
                 }
                 // 如果 panelContent 存在，也隐藏它
@@ -213,7 +201,6 @@ export class UnitIntroPopup extends Component {
             const foundPanel = findInScene(scene, 'BuildingSelectionPanel');
             if (foundPanel) {
                 foundPanel.active = false;
-                console.debug('UnitIntroPopup: BuildingSelectionPanel hidden immediately recursively');
             }
         }
     }

@@ -299,7 +299,6 @@ export class TowerBuilder extends Component {
         // 监听触摸事件 - 使用capture阶段优先处理建筑物拖拽
         const canvasNode = find('Canvas');
         if (canvasNode) {
-            console.debug('[TowerBuilder] start - 注册Canvas触摸事件监听器');
             // 使用capture阶段，优先处理建筑物拖拽，避免SelectionManager干扰
             // 注意：capture阶段在Cocos Creator中需要使用不同的方式
             // 先移除可能存在的旧监听器，确保只注册一次
@@ -311,9 +310,7 @@ export class TowerBuilder extends Component {
             canvasNode.on(Node.EventType.TOUCH_START, this.onTouchStart, this);
             canvasNode.on(Node.EventType.TOUCH_END, this.onTouchEnd, this);
             canvasNode.on(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
-            console.debug('[TowerBuilder] start - Canvas触摸事件监听器注册完成');
         } else {
-            console.error('[TowerBuilder] start - Canvas节点未找到');
             // 如果没有Canvas，使用全局输入事件作为后备
             input.on(Input.EventType.TOUCH_START, this.onTouchStart, this);
             input.on(Input.EventType.TOUCH_END, this.onTouchEnd, this);
@@ -647,12 +644,10 @@ export class TowerBuilder extends Component {
                 
                 if (moveDistance > this.longPressMoveThreshold) {
                     // 移动距离超过阈值，取消长按检测
-                    console.debug('[TowerBuilder] onTouchMove - 移动距离超过阈值，取消长按检测');
                     this.cancelLongPressDetection();
                 }
             } catch (error) {
                 // 如果访问 longPressStartPos 属性出错，取消长按检测
-                console.warn('[TowerBuilder] onTouchMove - 访问 longPressStartPos 出错，取消长按检测:', error);
                 this.cancelLongPressDetection();
             }
         }
@@ -735,7 +730,6 @@ export class TowerBuilder extends Component {
         if (gmNode) {
             this.gameManager = gmNode.getComponent(GameManager);
             if (this.gameManager) {
-                console.debug('TowerBuilder: Found GameManager by name');
                 return;
             }
         }
@@ -754,7 +748,6 @@ export class TowerBuilder extends Component {
             };
             this.gameManager = findInScene(scene, GameManager);
             if (this.gameManager) {
-                console.debug('TowerBuilder: Found GameManager recursively');
                 return;
             }
         }
@@ -764,7 +757,6 @@ export class TowerBuilder extends Component {
         for (const child of sceneNodes) {
             this.gameManager = child.getComponent(GameManager);
             if (this.gameManager) {
-                console.debug('TowerBuilder: Found GameManager by checking scene children');
                 return;
             }
         }
@@ -774,7 +766,6 @@ export class TowerBuilder extends Component {
         if (canvas) {
             this.gameManager = canvas.getComponent(GameManager);
             if (this.gameManager) {
-                console.debug('TowerBuilder: Found GameManager on Canvas');
                 return;
             }
             
@@ -782,14 +773,12 @@ export class TowerBuilder extends Component {
             for (const child of canvas.children) {
                 this.gameManager = child.getComponent(GameManager);
                 if (this.gameManager) {
-                    console.debug('TowerBuilder: Found GameManager in Canvas children');
                     return;
                 }
             }
         }
         
         // 如果还是找不到，输出警告
-        console.warn('TowerBuilder: GameManager not found!');
     }
 
     enableBuildingMode() {
@@ -854,17 +843,14 @@ export class TowerBuilder extends Component {
     onTouchEnd(event: EventTouch) {
         const location = event.getLocation();
         const targetNode = event.target as Node;
-        console.debug('[TowerBuilder] onTouchEnd - 触摸结束事件触发, 位置:', `(${location.x.toFixed(1)}, ${location.y.toFixed(1)})`, 'targetNode:', targetNode?.name, 'isDraggingBuilding:', this.isDraggingBuilding, 'draggedBuilding存在:', !!this.draggedBuilding, 'isBuildingMode:', this.isBuildingMode, 'currentSelectedBuilding:', !!this.currentSelectedBuilding, 'propagationStopped:', event.propagationStopped);
         
         // 无论是否在拖拽状态，都先清除网格高亮（防止残留）
         if (this.gridPanel) {
-            console.debug('[TowerBuilder] onTouchEnd - 清除网格高亮（防止残留）');
             this.gridPanel.clearHighlight();
         }
         
         // 处理建筑物拖拽结束 - 优先处理
         if (this.isDraggingBuilding && this.draggedBuilding) {
-            console.debug('[TowerBuilder] onTouchEnd - 检测到建筑物拖拽，阻止事件传播并处理拖拽结束');
             // 立即阻止事件传播，避免SelectionManager处理
             event.propagationStopped = true;
             // 处理拖拽结束并放置建筑物
@@ -876,7 +862,6 @@ export class TowerBuilder extends Component {
         
         // 如果不在拖拽状态，但draggedBuilding还存在，说明状态不一致，强制清除
         if (!this.isDraggingBuilding && this.draggedBuilding) {
-            console.warn('[TowerBuilder] onTouchEnd - 状态不一致：isDraggingBuilding为false但draggedBuilding存在，强制清除状态');
             this.draggedBuilding = null!;
             this.draggedBuildingOriginalGrid = null;
             if (this.gridPanel) {
@@ -892,7 +877,6 @@ export class TowerBuilder extends Component {
             
             // 如果触摸时间小于阈值，说明是单击，打开信息面板
             if (elapsedTime < this.longPressThreshold) {
-                console.debug('[TowerBuilder] onTouchEnd - 检测到单击（触摸时间:', elapsedTime.toFixed(2), '秒），打开建筑物信息面板');
                 // 先清除长按检测状态，避免定时器继续运行
                 const building = this.longPressBuilding;
                 // 立即停止定时器并清除状态
@@ -923,7 +907,6 @@ export class TowerBuilder extends Component {
 
         // 只在建造模式下处理
         if (!this.isBuildingMode || !this.currentSelectedBuilding) {
-            console.debug('[TowerBuilder] onTouchEnd - 不在建造模式或没有选中建筑物，不阻止事件传播, isBuildingMode:', this.isBuildingMode, 'currentSelectedBuilding:', !!this.currentSelectedBuilding);
             // 不在建造模式或没有选中建筑物，不阻止事件传播
             return;
         }
@@ -934,7 +917,6 @@ export class TowerBuilder extends Component {
         // 对于石墙，即使在其他系统可能拦截事件的情况下，也要确保能够放置
         // 石墙是唯一可以放置在地图各处的建筑物，需要优先处理
         if (isStoneWall) {
-            console.debug('[TowerBuilder] onTouchEnd - 检测到石墙放置，优先处理并阻止事件传播');
             // 立即阻止事件传播，确保石墙放置逻辑能够执行
             event.propagationStopped = true;
         }
@@ -942,7 +924,6 @@ export class TowerBuilder extends Component {
         // 检查是否点击在UI元素上（如按钮、面板），如果是则不处理
         if (targetNode) {
             const nodeName = targetNode.name.toLowerCase();
-            console.debug('[TowerBuilder] onTouchEnd - 检查目标节点, nodeName:', nodeName);
             // 检查节点名称
             if (nodeName.includes('button') || 
                 nodeName.includes('panel') || 
@@ -950,7 +931,6 @@ export class TowerBuilder extends Component {
                 nodeName.includes('selection') ||
                 nodeName.includes('buildingitem') ||
                 nodeName.includes('buildingselection')) {
-                console.debug('[TowerBuilder] onTouchEnd - 目标节点是UI元素，不处理，允许事件继续传播');
                 return;
             }
             // 检查父节点
@@ -1018,7 +998,6 @@ export class TowerBuilder extends Component {
 
             const stonePanel = this.stoneWallGridPanelComponent;
             if (!stonePanel) {
-                console.warn('[TowerBuilder] onTouchEnd - 无法找到石墙网格面板，取消建造');
                 return;
             }
 
@@ -1204,7 +1183,6 @@ export class TowerBuilder extends Component {
         }
         
         if (this.gameManager && !this.gameManager.canAfford(building.cost)) {
-            console.debug('TowerBuilder.buildBuilding: Not enough gold! Need', building.cost, 'but have', this.gameManager.getGold());
             // 显示金币不足弹窗
             GamePopup.showMessage('金币不足');
             // 不退出建造模式，让用户可以继续尝试或选择其他建筑物
@@ -1217,7 +1195,6 @@ export class TowerBuilder extends Component {
 
         // 检查是否可以在此位置建造
         if (!this.canBuildAt(worldPosition, building)) {
-            console.debug('TowerBuilder.buildBuilding: Cannot build at this position');
             // 不能建造时不退出建造模式，让用户可以继续尝试其他位置
             // 但需要重新显示建筑物选择面板
             if (this.buildingPanel) {
@@ -1243,7 +1220,6 @@ export class TowerBuilder extends Component {
             this.buildChurch(worldPosition);
         } else {
             // 可以扩展其他建筑物类型
-            console.warn('TowerBuilder.buildBuilding: Unknown building type:', building.name);
         }
 
         // 只有在成功建造后才退出建造模式
@@ -1271,7 +1247,6 @@ export class TowerBuilder extends Component {
      */
     buildWarAncientTree(worldPosition: Vec3) {
         if (!this.warAncientTreePrefab) {
-            console.error('TowerBuilder.buildWarAncientTree: warAncientTreePrefab is null!');
             return;
         }
 
@@ -1325,7 +1300,6 @@ export class TowerBuilder extends Component {
             }
         }
 
-        console.debug('TowerBuilder.buildWarAncientTree: Built at', worldPosition);
     }
 
     /**
@@ -1333,7 +1307,6 @@ export class TowerBuilder extends Component {
      */
     buildMoonWell(worldPosition: Vec3) {
         if (!this.moonWellPrefab) {
-            console.error('TowerBuilder.buildMoonWell: moonWellPrefab is null!');
             return;
         }
 
@@ -1392,7 +1365,6 @@ export class TowerBuilder extends Component {
             }
         }
 
-        console.debug('TowerBuilder.buildMoonWell: Built at', worldPosition);
     }
     
     /**
@@ -1400,7 +1372,6 @@ export class TowerBuilder extends Component {
      */
     buildTree(worldPosition: Vec3) {
         if (!this.treePrefab) {
-            console.error('TowerBuilder.buildTree: treePrefab is null!');
             return;
         }
 
@@ -1454,7 +1425,6 @@ export class TowerBuilder extends Component {
             }
         }
 
-        console.debug('TowerBuilder.buildTree: Built at', worldPosition);
     }
 
     /**
@@ -1462,7 +1432,6 @@ export class TowerBuilder extends Component {
      */
     buildHunterHall(worldPosition: Vec3) {
         if (!this.hunterHallPrefab) {
-            console.error('TowerBuilder.buildHunterHall: hunterHallPrefab is null!');
             return;
         }
 
@@ -1509,7 +1478,6 @@ export class TowerBuilder extends Component {
             }
         }
 
-        console.debug('TowerBuilder.buildHunterHall: Built at', worldPosition);
     }
 
     /**
@@ -1517,7 +1485,6 @@ export class TowerBuilder extends Component {
      */
     buildStoneWall(worldPosition: Vec3, skipCost: boolean = false) {
         if (!this.stoneWallPrefab) {
-            console.error('TowerBuilder.buildStoneWall: stoneWallPrefab is null!');
             return;
         }
 
@@ -1567,27 +1534,22 @@ export class TowerBuilder extends Component {
                     // 检查网格是否被占用
                     if (this.stoneWallGridPanelComponent.isGridOccupied(grid.x, grid.y)) {
                         // 网格已被占用，不应该发生这种情况（应该在放置前检查）
-                        console.warn(`TowerBuilder.buildStoneWall: 网格(${grid.x}, ${grid.y})已被占用，但仍然创建了石墙`);
                     } else {
                         // 占用网格
                         if (this.stoneWallGridPanelComponent.occupyGrid(grid.x, grid.y, wall)) {
                             wallScript.gridX = grid.x;
                             wallScript.gridY = grid.y;
-                            console.debug(`TowerBuilder.buildStoneWall: 石墙占用网格(${grid.x}, ${grid.y})`);
                         } else {
-                            console.error(`TowerBuilder.buildStoneWall: 无法占用网格(${grid.x}, ${grid.y})`);
                             wallScript.gridX = -1;
                             wallScript.gridY = -1;
                         }
                     }
                 } else {
                     // 石墙不在石墙网格内，不应该发生这种情况（应该在放置前检查）
-                    console.error(`TowerBuilder.buildStoneWall: 石墙位置(${worldPosition.x.toFixed(1)}, ${worldPosition.y.toFixed(1)})不在石墙网格内`);
                     wallScript.gridX = -1;
                     wallScript.gridY = -1;
                 }
             } else {
-                console.error('TowerBuilder.buildStoneWall: 找不到石墙网格面板组件');
                 wallScript.gridX = -1;
                 wallScript.gridY = -1;
             }
@@ -1599,16 +1561,13 @@ export class TowerBuilder extends Component {
             }
         }
 
-        console.debug('TowerBuilder.buildStoneWall: Built at', worldPosition);
     }
 
     /**
      * 在石墙网格最上方一行随机生成指定数量的石墙（仅在游戏开始时调用一次）
      */
     spawnInitialStoneWalls(count: number = 14) {
-        console.log('[TowerBuilder] spawnInitialStoneWalls - start, requested:', count, 'alreadyPlaced:', this.initialStoneWallsPlaced);
         if (this.initialStoneWallsPlaced) {
-            console.log('[TowerBuilder] spawnInitialStoneWalls - already placed, skip');
             return;
         }
         if (!this.stoneWallGridPanelComponent) {
@@ -1616,7 +1575,6 @@ export class TowerBuilder extends Component {
         }
         const panel = this.stoneWallGridPanelComponent;
         if (!panel) {
-            console.warn('TowerBuilder.spawnInitialStoneWalls: stoneWallGridPanelComponent not found');
             return;
         }
 
@@ -1639,21 +1597,17 @@ export class TowerBuilder extends Component {
             if (placed >= maxCount) break;
             // 跳过已占用格子
             if (panel.isGridOccupied(x, y)) {
-                console.log(`[TowerBuilder] spawnInitialStoneWalls - grid (${x},${y}) occupied, skip`);
                 continue;
             }
             const worldPos = panel.gridToWorld(x, y);
             if (!worldPos) {
-                console.log(`[TowerBuilder] spawnInitialStoneWalls - grid (${x},${y}) worldPos null, skip`);
                 continue;
             }
             this.buildStoneWall(worldPos, true);
-            console.log(`[TowerBuilder] spawnInitialStoneWalls - placed at (${x},${y}) worldPos=(${worldPos.x.toFixed(1)},${worldPos.y.toFixed(1)})`);
             placed++;
         }
 
         this.initialStoneWallsPlaced = true;
-        console.log(`[TowerBuilder] spawnInitialStoneWalls - done, placed ${placed}/${maxCount} on top row y=${y}`);
     }
 
     /**
@@ -1661,7 +1615,6 @@ export class TowerBuilder extends Component {
      */
     buildSwordsmanHall(worldPosition: Vec3) {
         if (!this.swordsmanHallPrefab) {
-            console.error('TowerBuilder.buildSwordsmanHall: swordsmanHallPrefab is null!');
             return;
         }
 
@@ -1708,7 +1661,6 @@ export class TowerBuilder extends Component {
             }
         }
 
-        console.debug('TowerBuilder.buildSwordsmanHall: Built at', worldPosition);
     }
 
     /**
@@ -1716,7 +1668,6 @@ export class TowerBuilder extends Component {
      */
     buildChurch(worldPosition: Vec3) {
         if (!this.churchPrefab) {
-            console.error('TowerBuilder.buildChurch: churchPrefab is null!');
             return;
         }
 
@@ -1768,14 +1719,12 @@ export class TowerBuilder extends Component {
             }
         }
 
-        console.debug('TowerBuilder.buildChurch: Built at', worldPosition);
     }
 
     // 可以通过按钮调用
     onBuildButtonClick() {
         // 检查warAncientTreePrefab是否设置
         if (!this.warAncientTreePrefab) {
-            console.error('TowerBuilder: Cannot enable building mode - warAncientTreePrefab is not set!');
             return;
         }
         
@@ -1783,7 +1732,6 @@ export class TowerBuilder extends Component {
         if (!this.targetCrystal) {
             this.targetCrystal = find('Crystal');
             if (!this.targetCrystal) {
-                console.error('TowerBuilder: Cannot find Crystal node!');
                 return;
             }
         }
@@ -1844,7 +1792,6 @@ export class TowerBuilder extends Component {
         // 启动定时器检查长按时间（每0.05秒检查一次，持续检查直到达到阈值或取消）
         this.schedule(this.checkLongPress, 0.05);
         
-        console.debug('[TowerBuilder] startLongPressDetection - 开始长按检测, building:', building.name);
     }
 
     /**
@@ -1883,7 +1830,6 @@ export class TowerBuilder extends Component {
         // 如果进度达到1.0，停止定时器并进入拖拽模式
         if (progress >= 1.0) {
             // 长按时间达到阈值，进入拖拽模式
-            console.debug('[TowerBuilder] checkLongPress - 长按时间达到阈值，进入拖拽模式');
             const building = this.longPressBuilding;
             // 先停止定时器，避免继续更新
             this.unschedule(this.checkLongPress);
@@ -1915,27 +1861,23 @@ export class TowerBuilder extends Component {
             this.cancelLongPressDetection();
         }
 
-        console.debug('[TowerBuilder] showBuildingInfoPanel - 打开建筑物信息面板, building:', building.name);
 
         // 根据建筑物类型调用对应的showSelectionPanel方法
         const warAncientTree = building.getComponent(WarAncientTree);
         if (warAncientTree && warAncientTree.showSelectionPanel) {
             warAncientTree.showSelectionPanel();
-            console.debug('[TowerBuilder] showBuildingInfoPanel - WarAncientTree面板已打开');
             return;
         }
 
         const moonWell = building.getComponent(MoonWell);
         if (moonWell && moonWell.showSelectionPanel) {
             moonWell.showSelectionPanel();
-            console.debug('[TowerBuilder] showBuildingInfoPanel - MoonWell面板已打开');
             return;
         }
 
         const tree = building.getComponent(Tree);
         if (tree && tree.showSelectionPanel) {
             tree.showSelectionPanel();
-            console.debug('[TowerBuilder] showBuildingInfoPanel - Tree面板已打开');
             return;
         }
 
@@ -1943,24 +1885,20 @@ export class TowerBuilder extends Component {
         const church = building.getComponent(Church);
         if (hunterHall && hunterHall.showSelectionPanel) {
             hunterHall.showSelectionPanel();
-            console.debug('[TowerBuilder] showBuildingInfoPanel - HunterHall面板已打开');
             return;
         }
 
         if (church && church.showSelectionPanel) {
             church.showSelectionPanel();
-            console.debug('[TowerBuilder] showBuildingInfoPanel - Church面板已打开');
             return;
         }
         
         const stoneWall = building.getComponent(StoneWall);
         if (stoneWall && stoneWall.showSelectionPanel) {
             stoneWall.showSelectionPanel();
-            console.debug('[TowerBuilder] showBuildingInfoPanel - StoneWall面板已打开');
             return;
         }
         
-        console.warn('[TowerBuilder] showBuildingInfoPanel - 无法找到建筑物的showSelectionPanel方法');
     }
 
     /**
@@ -2086,11 +2024,9 @@ export class TowerBuilder extends Component {
             return;
         }
 
-        console.debug('[TowerBuilder] startDraggingBuilding - 开始拖拽建筑物, building:', building.name, '原始位置:', `(${originalGrid.x}, ${originalGrid.y})`);
         this.isDraggingBuilding = true;
         this.draggedBuilding = building;
         this.draggedBuildingOriginalGrid = originalGrid;
-        console.debug('[TowerBuilder] startDraggingBuilding - 设置 isDraggingBuilding = true, draggedBuilding存在:', !!this.draggedBuilding, 'draggedBuildingOriginalGrid存在:', !!this.draggedBuildingOriginalGrid);
 
         // 临时释放网格占用（拖拽时）
         this.gridPanel.releaseGrid(originalGrid.x, originalGrid.y);
@@ -2101,29 +2037,24 @@ export class TowerBuilder extends Component {
         // 显示网格面板
         this.gridPanel.show();
 
-        console.debug('[TowerBuilder] startDraggingBuilding - 拖拽状态设置完成');
     }
 
     /**
      * 结束拖拽建筑物
      */
     endDraggingBuilding(event: EventTouch) {
-        console.debug('[TowerBuilder] endDraggingBuilding - 开始处理拖拽结束, isDraggingBuilding:', this.isDraggingBuilding, 'draggedBuilding存在:', !!this.draggedBuilding, 'gridPanel存在:', !!this.gridPanel);
         
         // 如果不在拖拽状态，直接返回（避免重复处理）
         if (!this.isDraggingBuilding) {
-            console.debug('[TowerBuilder] endDraggingBuilding - 已经不在拖拽状态，直接返回');
             return;
         }
         
         if (!this.draggedBuilding || !this.gridPanel) {
-            console.warn('[TowerBuilder] endDraggingBuilding - 状态不正确，强制清除拖拽状态');
             // 如果状态不正确，确保清除拖拽状态
             this.isDraggingBuilding = false;
             this.draggedBuilding = null!;
             this.draggedBuildingOriginalGrid = null;
             if (this.gridPanel) {
-                console.debug('[TowerBuilder] endDraggingBuilding - 状态不正确时清除网格高亮');
                 this.gridPanel.clearHighlight();
             }
             return;
@@ -2131,18 +2062,15 @@ export class TowerBuilder extends Component {
 
         // 获取触摸位置并转换为世界坐标
         const touchLocation = event.getLocation();
-        console.debug('[TowerBuilder] endDraggingBuilding - 触摸位置:', `(${touchLocation.x.toFixed(1)}, ${touchLocation.y.toFixed(1)})`);
         
         const cameraNode = find('Canvas/Camera') || this.node.scene?.getChildByName('Camera');
         if (!cameraNode) {
-            console.warn('[TowerBuilder] endDraggingBuilding - 无法找到Camera节点，取消拖拽');
             this.cancelDraggingBuilding();
             return;
         }
         
         const camera = cameraNode.getComponent(Camera);
         if (!camera) {
-            console.warn('[TowerBuilder] endDraggingBuilding - 无法获取Camera组件，取消拖拽');
             this.cancelDraggingBuilding();
             return;
         }
@@ -2152,7 +2080,6 @@ export class TowerBuilder extends Component {
         const worldPos = new Vec3();
         camera.screenToWorld(screenPos, worldPos);
         worldPos.z = 0;
-        console.debug('[TowerBuilder] endDraggingBuilding - 世界坐标:', `(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
 
         // 判断是否是石墙
         const isStoneWall = this.draggedBuilding && this.draggedBuilding.getComponent(StoneWall) !== null;
@@ -2163,12 +2090,10 @@ export class TowerBuilder extends Component {
             // 石墙可以放置在网格外，其他建筑物必须在网格内
             if (!isStoneWall) {
                 // 不在网格内，取消拖拽，恢复原位置
-                console.debug('[TowerBuilder] endDraggingBuilding - 拖拽结束位置不在网格内，恢复原位置');
                 this.cancelDraggingBuilding();
                 return;
             }
             // 石墙不在网格内，直接使用世界坐标，不进行网格对齐
-            console.debug('[TowerBuilder] endDraggingBuilding - 石墙拖拽结束位置不在网格内，允许放置');
             // 对于石墙，直接移动到世界坐标位置
             this.draggedBuilding.setWorldPosition(worldPos);
             // 清除拖拽状态
@@ -2181,7 +2106,6 @@ export class TowerBuilder extends Component {
             return;
         }
         
-        console.debug('[TowerBuilder] endDraggingBuilding - 位置在网格内，继续处理');
 
         // 获取最近的网格中心位置（确保对齐到格子中央）
         const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
@@ -2189,12 +2113,10 @@ export class TowerBuilder extends Component {
             // 石墙可以放置在网格外，其他建筑物必须在网格内
             if (!isStoneWall) {
                 // 无法获取网格中心，取消拖拽
-                console.warn('[TowerBuilder] endDraggingBuilding - 无法获取网格中心，取消拖拽');
                 this.cancelDraggingBuilding();
                 return;
             }
             // 石墙无法获取网格中心，直接使用世界坐标
-            console.debug('[TowerBuilder] endDraggingBuilding - 石墙无法获取网格中心，使用世界坐标');
             this.draggedBuilding.setWorldPosition(worldPos);
             // 清除拖拽状态
             this.isDraggingBuilding = false;
@@ -2205,19 +2127,16 @@ export class TowerBuilder extends Component {
             }
             return;
         }
-        console.debug('[TowerBuilder] endDraggingBuilding - 网格中心:', `(${gridCenter.x.toFixed(1)}, ${gridCenter.y.toFixed(1)})`);
 
         // 获取目标网格（使用对齐后的位置）
         const targetGrid = this.gridPanel.worldToGrid(gridCenter);
         if (!targetGrid) {
             // 石墙可以放置在网格外，其他建筑物必须在网格内
             if (!isStoneWall) {
-                console.warn('[TowerBuilder] endDraggingBuilding - 无法获取目标网格，取消拖拽');
                 this.cancelDraggingBuilding();
                 return;
             }
             // 石墙无法获取目标网格，直接使用世界坐标
-            console.debug('[TowerBuilder] endDraggingBuilding - 石墙无法获取目标网格，使用世界坐标');
             this.draggedBuilding.setWorldPosition(worldPos);
             // 清除拖拽状态
             this.isDraggingBuilding = false;
@@ -2228,7 +2147,6 @@ export class TowerBuilder extends Component {
             }
             return;
         }
-        console.debug('[TowerBuilder] endDraggingBuilding - 目标网格:', `(${targetGrid.x}, ${targetGrid.y})`);
 
         // 检查目标网格是否被其他建筑物占用
         const isOccupiedByOther = this.gridPanel.isGridOccupiedByOther(
@@ -2246,7 +2164,6 @@ export class TowerBuilder extends Component {
             if (otherBuilding && otherBuilding !== this.draggedBuilding) {
                 // 使用保存的原始网格位置进行交换
                 if (this.draggedBuildingOriginalGrid) {
-                    console.debug(`TowerBuilder: 准备交换 - 建筑物1: (${this.draggedBuildingOriginalGrid.x}, ${this.draggedBuildingOriginalGrid.y}), 建筑物2: (${targetGrid.x}, ${targetGrid.y})`);
                     this.swapBuildingsWithGrid(
                         this.draggedBuilding, 
                         this.draggedBuildingOriginalGrid.x, 
@@ -2257,19 +2174,16 @@ export class TowerBuilder extends Component {
                     );
                 } else {
                     // 如果找不到原始位置，恢复原位置
-                    console.warn('TowerBuilder: 找不到原始网格位置，取消交换');
                     this.cancelDraggingBuilding();
                     return;
                 }
             } else {
                 // 找不到其他建筑物，恢复原位置
-                console.warn('TowerBuilder: 找不到目标位置的建筑物，取消交换');
                 this.cancelDraggingBuilding();
                 return;
             }
         } else {
             // 目标位置为空，直接移动
-            console.debug(`TowerBuilder: 移动建筑物到网格 (${targetGrid.x}, ${targetGrid.y})`);
             this.moveBuildingToGrid(this.draggedBuilding, targetGrid.x, targetGrid.y);
         }
 
@@ -2277,15 +2191,12 @@ export class TowerBuilder extends Component {
         const buildingToDeselect = this.draggedBuilding;
         
         // 清除拖拽状态
-        console.debug('[TowerBuilder] endDraggingBuilding - 清除拖拽状态');
         this.isDraggingBuilding = false;
         this.draggedBuilding = null!;
         this.draggedBuildingOriginalGrid = null;
 
         // 清除高亮
-        console.debug('[TowerBuilder] endDraggingBuilding - 清除网格高亮');
         this.gridPanel.clearHighlight();
-        console.debug('[TowerBuilder] endDraggingBuilding - 拖拽结束处理完成');
         
         // 清除建筑物的选中状态
         this.clearCurrentSelection();
@@ -2299,25 +2210,21 @@ export class TowerBuilder extends Component {
                 if (unitSelectionManager) {
                     // 检查该建筑物是否被选中
                     if (unitSelectionManager.isUnitSelected(buildingToDeselect)) {
-                        console.debug('TowerBuilder: 直接清除建筑物的选中状态');
                         unitSelectionManager.clearSelection();
                     }
                 }
             }
         }
         
-        console.debug('TowerBuilder: 建筑物拖拽结束，已放置');
     }
 
     /**
      * 取消拖拽建筑物（恢复原位置）
      */
     cancelDraggingBuilding() {
-        console.debug('[TowerBuilder] cancelDraggingBuilding - 开始取消拖拽, isDraggingBuilding:', this.isDraggingBuilding, 'draggedBuilding存在:', !!this.draggedBuilding, 'gridPanel存在:', !!this.gridPanel, 'draggedBuildingOriginalGrid存在:', !!this.draggedBuildingOriginalGrid);
         
         // 无论状态如何，都要清除拖拽状态，避免状态残留
         if (!this.isDraggingBuilding) {
-            console.debug('[TowerBuilder] cancelDraggingBuilding - 已经不在拖拽状态，直接清除相关状态');
             this.draggedBuilding = null!;
             this.draggedBuildingOriginalGrid = null;
             if (this.gridPanel) {
@@ -2327,13 +2234,11 @@ export class TowerBuilder extends Component {
         }
         
         if (!this.draggedBuilding || !this.gridPanel || !this.draggedBuildingOriginalGrid) {
-            console.warn('[TowerBuilder] cancelDraggingBuilding - 状态不正确，但强制清除拖拽状态');
             // 即使状态不正确，也要清除拖拽状态
             this.isDraggingBuilding = false;
             this.draggedBuilding = null!;
             this.draggedBuildingOriginalGrid = null;
             if (this.gridPanel) {
-                console.debug('[TowerBuilder] cancelDraggingBuilding - 状态不正确时清除网格高亮');
                 this.gridPanel.clearHighlight();
             }
             return;
@@ -2343,7 +2248,6 @@ export class TowerBuilder extends Component {
         const buildingToDeselect = this.draggedBuilding;
 
         // 恢复原网格位置
-        console.debug('[TowerBuilder] cancelDraggingBuilding - 恢复原网格位置:', `(${this.draggedBuildingOriginalGrid.x}, ${this.draggedBuildingOriginalGrid.y})`);
         this.moveBuildingToGrid(
             this.draggedBuilding,
             this.draggedBuildingOriginalGrid.x,
@@ -2351,15 +2255,12 @@ export class TowerBuilder extends Component {
         );
 
         // 清除拖拽状态
-        console.debug('[TowerBuilder] cancelDraggingBuilding - 清除拖拽状态');
         this.isDraggingBuilding = false;
         this.draggedBuilding = null!;
         this.draggedBuildingOriginalGrid = null;
 
         // 清除高亮
-        console.debug('[TowerBuilder] cancelDraggingBuilding - 清除网格高亮');
         this.gridPanel.clearHighlight();
-        console.debug('[TowerBuilder] cancelDraggingBuilding - 取消拖拽处理完成');
         
         // 清除建筑物的选中状态
         this.clearCurrentSelection();
@@ -2373,7 +2274,6 @@ export class TowerBuilder extends Component {
                 if (unitSelectionManager) {
                     // 检查该建筑物是否被选中
                     if (unitSelectionManager.isUnitSelected(buildingToDeselect)) {
-                        console.debug('TowerBuilder: 取消拖拽时直接清除建筑物的选中状态');
                         unitSelectionManager.clearSelection();
                     }
                 }
@@ -2400,6 +2300,7 @@ export class TowerBuilder extends Component {
         const moonWell = building.getComponent(MoonWell);
         const tree = building.getComponent(Tree);
         const hunterHall = building.getComponent(HunterHall);
+        const church = building.getComponent(Church);
 
         // 更新网格占用
         const oldGrid = this.gridPanel.getBuildingGridPosition(building);
@@ -2454,7 +2355,6 @@ export class TowerBuilder extends Component {
             building.setWorldPosition(targetWorldPos);
         }
 
-        console.debug(`TowerBuilder: 建筑物移动到网格 (${gridX}, ${gridY})`);
     }
 
     /**
@@ -2591,7 +2491,6 @@ export class TowerBuilder extends Component {
             building2.setWorldPosition(targetWorldPos2);
         }
 
-        console.debug(`TowerBuilder: 交换建筑物位置 - 建筑物1: (${grid1X}, ${grid1Y}) <-> 建筑物2: (${grid2X}, ${grid2Y})`);
     }
 
     /**
@@ -2618,18 +2517,14 @@ export class TowerBuilder extends Component {
      * 取消当前的单位选择
      */
     clearCurrentSelection() {
-        console.debug('TowerBuilder.clearCurrentSelection: 开始清除选择状态');
         
         // 清除UnitSelectionManager的选择
         const unitSelectionManagerNode = find('UnitSelectionManager');
         if (unitSelectionManagerNode) {
             const unitSelectionManager = unitSelectionManagerNode.getComponent(UnitSelectionManager);
             if (unitSelectionManager) {
-                console.debug('TowerBuilder.clearCurrentSelection: 找到UnitSelectionManager，清除选择');
                 unitSelectionManager.clearSelection();
-                console.debug('TowerBuilder.clearCurrentSelection: UnitSelectionManager selection cleared');
             } else {
-                console.warn('TowerBuilder.clearCurrentSelection: UnitSelectionManager节点存在但没有组件');
             }
         } else {
             // 如果找不到UnitSelectionManager节点，尝试在场景中查找组件
@@ -2637,11 +2532,8 @@ export class TowerBuilder extends Component {
             if (scene) {
                 const unitSelectionManager = scene.getComponentInChildren(UnitSelectionManager);
                 if (unitSelectionManager) {
-                    console.debug('TowerBuilder.clearCurrentSelection: 在场景中找到UnitSelectionManager，清除选择');
                     unitSelectionManager.clearSelection();
-                    console.debug('TowerBuilder.clearCurrentSelection: UnitSelectionManager selection cleared');
                 } else {
-                    console.warn('TowerBuilder.clearCurrentSelection: 无法找到UnitSelectionManager组件');
                 }
             }
         }
@@ -2653,7 +2545,6 @@ export class TowerBuilder extends Component {
             if (selectionManager) {
                 if (selectionManager.clearSelection) {
                     selectionManager.clearSelection();
-                    console.debug('TowerBuilder.clearCurrentSelection: SelectionManager selection cleared');
                 }
             }
         } else {
@@ -2663,12 +2554,10 @@ export class TowerBuilder extends Component {
                 const selectionManager = scene.getComponentInChildren('SelectionManager') as any;
                 if (selectionManager && selectionManager.clearSelection) {
                     selectionManager.clearSelection();
-                    console.debug('TowerBuilder.clearCurrentSelection: SelectionManager selection cleared');
                 }
             }
         }
         
-        console.debug('TowerBuilder.clearCurrentSelection: 清除选择状态完成');
     }
 }
 

@@ -22,7 +22,7 @@ export class Build extends Component {
     protected damageNumberPrefab: Prefab = null!;
 
     @property
-    protected buildCost: number = 10; // 建造成本
+    public buildCost: number = 10; // 建造成本
 
     @property
     protected level: number = 1; // 建筑物等级
@@ -326,7 +326,6 @@ export class Build extends Component {
             // 回收80%金币
             const refund = Math.floor(this.buildCost * 0.8);
             this.gameManager.addGold(refund);
-            console.debug(`Build: Sold, refunded ${refund} gold`);
         }
 
         // 隐藏面板
@@ -363,13 +362,11 @@ export class Build extends Component {
     protected attachWisp(wisp: Node) {
         const wispScript = wisp.getComponent('Wisp') as any;
         if (!wispScript) {
-            console.warn('Build: Cannot attach - wisp script not found');
             return;
         }
 
         // 检查小精灵是否已经依附在其他建筑物上
         if (wispScript.getIsAttached && wispScript.getIsAttached()) {
-            console.warn('Build: Wisp already attached to another building');
             return;
         }
 
@@ -379,7 +376,6 @@ export class Build extends Component {
         // 让小精灵依附，传递fromBuilding参数为true避免循环调用
         if (wispScript.attachToBuilding) {
             wispScript.attachToBuilding(this.node, true);
-            console.debug(`Build: Wisp attached, total: ${this.attachedWisps.length}`);
         }
     }
 
@@ -388,7 +384,6 @@ export class Build extends Component {
      */
     protected detachWisp() {
         if (this.attachedWisps.length === 0) {
-            console.debug('Build: No wisp to detach');
             return;
         }
 
@@ -400,7 +395,6 @@ export class Build extends Component {
         const wispScript = wisp.getComponent('Wisp') as any;
         if (wispScript && wispScript.detachFromBuilding) {
             wispScript.detachFromBuilding();
-            console.debug(`Build: Wisp detached, remaining: ${this.attachedWisps.length}`);
         }
         
         // 卸下小精灵后取消选中状态
@@ -520,7 +514,7 @@ export class Build extends Component {
     /**
      * 移动到指定网格位置
      */
-    protected moveToGridPosition(gridX: number, gridY: number) {
+    public moveToGridPosition(gridX: number, gridY: number) {
         if (!this.gridPanel) {
             this.findGridPanel();
         }
@@ -547,8 +541,6 @@ export class Build extends Component {
 
         // 移动建筑物到新位置
         this.node.setWorldPosition(targetWorldPos);
-
-        console.debug(`Build: Moved to grid (${gridX}, ${gridY})`);
     }
 
     /**

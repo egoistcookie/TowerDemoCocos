@@ -59,7 +59,6 @@ export class GameManager extends Component {
             return;
         }
         
-        console.debug('GameManager: Auto-creating UnitIntroPopup');
         
         // 添加Canvas节点作为容器（如果没有的话）
         let canvas = find('Canvas');
@@ -186,30 +185,24 @@ export class GameManager extends Component {
         // 设置到GameManager的属性
         this.unitIntroPopup = unitIntroPopup;
         
-        console.debug('GameManager: UnitIntroPopup created with full UI structure');
     }
 
     start() {
         // 加载单位配置
         const configManager = UnitConfigManager.getInstance();
         configManager.loadConfig().then(() => {
-            console.debug('GameManager: Unit config loaded successfully');
         }).catch((err) => {
-            console.error('GameManager: Failed to load unit config', err);
         });
         
         // 每次游戏开始时清空已出现单位类型集合
         this.appearedUnitTypes.clear();
         this.debugUnitTypes = [];
-        console.debug(`GameManager: Cleared appearedUnitTypes collection on game start`);
         
         // 显式将游戏状态设置为Ready，确保游戏开始前处于准备状态
         this.gameState = GameState.Ready;
-        console.debug('GameManager: Game state set to Ready');
         
         // 增强水晶节点查找逻辑
         if (!this.crystal) {
-            console.debug('GameManager: Crystal property not set, trying to find automatically');
             // 尝试多种路径查找水晶节点
             const crystalPaths = [
                 'Crystal',
@@ -224,28 +217,21 @@ export class GameManager extends Component {
                 const foundCrystal = find(path);
                 if (foundCrystal) {
                     this.crystal = foundCrystal;
-                    console.debug('GameManager: Crystal found at path:', path);
                     break;
                 }
             }
             
             if (!this.crystal) {
-                console.error('GameManager: Crystal not found at any path!');
                 return;
             }
         }
         
-        console.debug('GameManager: Crystal node:', this.crystal.name);
-        console.debug('GameManager: Crystal parent:', this.crystal.parent?.name);
-        console.debug('GameManager: Crystal current active state:', this.crystal.active);
         
         this.crystalScript = this.crystal.getComponent(Crystal);
         // 监听水晶销毁事件
         if (this.crystalScript) {
             Crystal.getEventTarget().on('crystal-destroyed', this.onCrystalDestroyed, this);
-            console.debug('GameManager: Crystal script found and event bound');
         } else {
-            console.error('GameManager: Crystal script not found!');
         }
         if (this.gameOverPanel) {
             this.gameOverPanel.active = false;
@@ -264,28 +250,23 @@ export class GameManager extends Component {
      * 在游戏开始前或退出游戏时隐藏所有游戏主体相关内容，但保留底部选区
      */
     hideGameElements() {
-        console.debug('GameManager: Hiding game elements, preserving bottom selection');
         
         // 隐藏所有游戏元素，包括水晶
         const enemies = find('Enemies');
         if (enemies) {
             enemies.active = false;
-            console.debug('GameManager: Enemies hidden');
         }
         
         const towers = find('Towers');
         if (towers) {
             towers.active = false;
-            console.debug('GameManager: Towers hidden');
         }
         
         // 退出游戏时隐藏水晶
         if (this.crystal) {
             this.crystal.active = false;
-            console.debug('GameManager: Crystal hidden');
         }
         
-        console.debug('GameManager: Game elements hidden, bottom selection preserved');
     }
     
     /**
@@ -328,7 +309,6 @@ export class GameManager extends Component {
         let current = node;
         while (current) {
             if (!current.active) {
-                console.debug(`GameManager: Activating parent node: ${current.name}`);
                 current.active = true;
             }
             current = current.parent;
@@ -339,43 +319,35 @@ export class GameManager extends Component {
      * 在游戏开始后显示所有游戏主体相关内容
      */
     showGameElements() {
-        console.debug('GameManager: Showing game elements - Enhanced version');
         
         // 显示所有游戏元素
         const enemies = find('Enemies');
         if (enemies) {
             enemies.active = true;
-            console.debug('GameManager: Enemies shown');
         }
         
         const towers = find('Towers');
         if (towers) {
             towers.active = true;
-            console.debug('GameManager: Towers shown');
         }
         
         // 显示水晶 - 基于用户提供的资源位置，水晶位于Canvas/Crystal
         if (!this.crystal) {
-            console.debug('GameManager: Crystal property not set, trying direct path Canvas/Crystal');
             
             // 直接使用用户提供的路径查找水晶
             this.crystal = find('Canvas/Crystal');
             
             if (this.crystal) {
-                console.debug('GameManager: Crystal found at Canvas/Crystal');
                 this.crystalScript = this.crystal.getComponent(Crystal);
                 if (this.crystalScript) {
                     Crystal.getEventTarget().on('crystal-destroyed', this.onCrystalDestroyed, this);
                 }
             } else {
-                console.error('GameManager: Crystal not found at Canvas/Crystal!');
                 // 尝试递归查找作为备用方案
                 const scene = director.getScene();
                 if (scene) {
                     this.crystal = this.findCrystalRecursive(scene);
                     if (this.crystal) {
-                        console.debug('GameManager: Crystal found recursively:', this.crystal.name);
-                        console.debug('GameManager: Crystal parent path:', this.getNodePath(this.crystal));
                         this.crystalScript = this.crystal.getComponent(Crystal);
                         if (this.crystalScript) {
                             Crystal.getEventTarget().on('crystal-destroyed', this.onCrystalDestroyed, this);
@@ -387,21 +359,16 @@ export class GameManager extends Component {
         
         // 强制显示水晶节点
         if (this.crystal) {
-            console.debug('GameManager: Forcing crystal to show');
-            console.debug('GameManager: Crystal current active:', this.crystal.active);
             
             // 确保水晶节点及其所有父节点都处于激活状态
             this.ensureNodeAndParentsActive(this.crystal);
             
             // 直接设置水晶节点为激活状态
             this.crystal.active = true;
-            console.debug('GameManager: Crystal shown successfully, final active state:', this.crystal.active);
         } else {
-            console.error('GameManager: Crystal node not found!');
             // 最后尝试直接查找并显示，不保存引用
             const directCrystal = find('Canvas/Crystal');
             if (directCrystal) {
-                console.debug('GameManager: Found crystal directly, showing without saving reference');
                 directCrystal.active = true;
             }
         }
@@ -409,31 +376,25 @@ export class GameManager extends Component {
         // 显示游戏主体相关的标签和按钮
         if (this.healthLabel) {
             this.healthLabel.node.active = true;
-            console.debug('GameManager: HealthLabel shown');
         }
         
         if (this.timerLabel) {
             this.timerLabel.node.active = true;
-            console.debug('GameManager: TimerLabel shown');
         }
         
         if (this.goldLabel) {
             this.goldLabel.node.active = true;
-            console.debug('GameManager: GoldLabel shown');
         }
         
         if (this.populationLabel) {
             this.populationLabel.node.active = true;
-            console.debug('GameManager: PopulationLabel shown');
         }
         
         // 显示建造按钮（尝试多种路径）
         const buildButton = find('UI/BuildButton') || find('Canvas/UI/BuildButton') || find('BuildButton');
         if (buildButton) {
             buildButton.active = true;
-            console.debug('GameManager: BuildButton shown');
         } else {
-            console.debug('GameManager: BuildButton not found for showing');
         }
         
         // 查找UIManager并显示建造按钮
@@ -442,7 +403,6 @@ export class GameManager extends Component {
             const uiManager = uiManagerNode.getComponent('UIManager') as any;
             if (uiManager && uiManager.buildButton) {
                 uiManager.buildButton.node.active = true;
-                console.debug('GameManager: UIManager BuildButton shown');
             }
         }
         
@@ -453,14 +413,11 @@ export class GameManager extends Component {
                 // 显示所有UI元素，除了特定的隐藏元素
                 if (child.name !== 'container' && child.name !== 'GameOverPanel') {
                     child.active = true;
-                    console.debug(`GameManager: UI element ${child.name} shown`);
                 }
             }
         } else {
-            console.debug('GameManager: UI node not found for showing elements');
         }
         
-        console.debug('GameManager: Game elements shown after game start');
     }
     
 
@@ -518,7 +475,6 @@ export class GameManager extends Component {
     }
 
     endGame(state: GameState) {
-        console.debug(`GameManager: endGame called with state: ${state} (${state === GameState.Victory ? 'Victory' : state === GameState.Defeat ? 'Defeat' : 'Unknown'})`);
         this.gameState = state;
         
         // 游戏结束时，清理所有单位（敌人直接消失，塔停止移动）
@@ -526,7 +482,6 @@ export class GameManager extends Component {
         
         if (this.gameOverPanel) {
             this.gameOverPanel.active = true;
-            console.debug('GameManager: GameOverPanel activated');
         }
 
         if (this.gameOverLabel) {
@@ -535,11 +490,9 @@ export class GameManager extends Component {
             } else {
                 this.gameOverLabel.string = '失败！';
             }
-            console.debug(`GameManager: GameOverLabel set to: ${this.gameOverLabel.string}`);
         }
         
         // 确保游戏状态已更新
-        console.debug(`GameManager: Current game state: ${this.gameState}`);
     }
 
     cleanupAllUnitsForEndGame() {
@@ -612,7 +565,6 @@ export class GameManager extends Component {
         // 暂停游戏时间
         director.getScheduler().setTimeScale(0);
         
-        console.debug('GameManager: Game paused');
     }
     
     /**
@@ -625,7 +577,6 @@ export class GameManager extends Component {
         // 恢复游戏时间
         director.getScheduler().setTimeScale(this.originalTimeScale);
         
-        console.debug('GameManager: Game resumed');
         
         // 通知所有单位游戏已恢复，确保动画能够正确播放
         this.notifyGameResumed();
@@ -635,15 +586,12 @@ export class GameManager extends Component {
      * 开始游戏
      */
     startGame() {
-        console.debug('[GameManager] startGame invoked, state:', this.gameState);
         if (this.gameState === GameState.Paused) {
             // 如果游戏已暂停，恢复游戏
             this.resumeGame();
-            console.debug('[GameManager] startGame: was Paused -> resumed');
         } else if (this.gameState === GameState.Ready) {
             // 如果游戏准备就绪，开始游戏
             this.gameState = GameState.Playing;
-            console.debug('[GameManager] startGame: state Ready -> Playing');
             
             // 显示所有游戏元素
             this.showGameElements();
@@ -652,23 +600,17 @@ export class GameManager extends Component {
             const towerBuilder = this.findComponentInScene('TowerBuilder') as any;
             if (towerBuilder && towerBuilder.spawnInitialStoneWalls) {
                 // 等待一帧，确保网格面板初始化完成
-                console.debug('[GameManager] startGame - scheduling spawnInitialStoneWalls(14)');
                 this.scheduleOnce(() => {
-                    console.debug('[GameManager] startGame - calling spawnInitialStoneWalls(14)');
                     towerBuilder.spawnInitialStoneWalls(14);
                 }, 0);
             } else {
-                console.warn('GameManager.startGame: TowerBuilder or spawnInitialStoneWalls not found');
             }
             
-            console.debug('GameManager: Game started from Ready state');
         } else if (this.gameState !== GameState.Playing) {
             // 如果游戏已结束，重新开始游戏
             this.restartGame();
-            console.debug('[GameManager] startGame: not Playing -> restartGame');
         }
         
-        console.debug('GameManager: Game started');
     }
     
     /**
@@ -707,7 +649,6 @@ export class GameManager extends Component {
                                     hunterScript.playMoveAnimation();
                                 }
                             } catch (error) {
-                                console.warn('GameManager: Error resuming hunter movement:', error);
                             }
                         }
                     }
@@ -761,11 +702,8 @@ export class GameManager extends Component {
         // 优先使用unitScript.unitName，否则使用unitType
         const uniqueUnitType = unitScript.unitName || unitType;
         
-        console.debug(`GameManager: Checking unit first appearance for type: ${uniqueUnitType}`);
-        console.debug(`GameManager: Appeared unit types: ${Array.from(this.appearedUnitTypes)}`);
         
         if (!this.appearedUnitTypes.has(uniqueUnitType)) {
-            console.debug(`GameManager: First appearance of unit type: ${uniqueUnitType}, showing intro`);
             this.appearedUnitTypes.add(uniqueUnitType);
             
             // 更新调试数组
@@ -774,7 +712,6 @@ export class GameManager extends Component {
             this.showUnitIntro(unitScript);
             return true;
         }
-        console.debug(`GameManager: Unit type ${uniqueUnitType} has already appeared`);
         return false;
     }
     
@@ -783,7 +720,6 @@ export class GameManager extends Component {
      * @param unitScript 单位脚本
      */
     showUnitIntro(unitScript: any) {
-        console.debug(`GameManager: Showing unit intro for unitScript with unitName: ${unitScript.unitName}`);
         
         // 自动创建单位介绍弹窗
         this.autoCreateUnitIntroPopup();
@@ -792,21 +728,17 @@ export class GameManager extends Component {
         let unitIcon = null;
         if (unitScript.cardIcon) {
             unitIcon = unitScript.cardIcon;
-            console.debug(`GameManager: Using cardIcon for unit intro`);
         } else if (unitScript.defaultSpriteFrame) {
             unitIcon = unitScript.defaultSpriteFrame;
-            console.debug(`GameManager: Using defaultSpriteFrame for unit intro`);
         } else if (unitScript.node) {
             // 尝试获取单位的Sprite组件的spriteFrame
             const spriteComponent = unitScript.node.getComponent(Sprite);
             if (spriteComponent && spriteComponent.spriteFrame) {
                 unitIcon = spriteComponent.spriteFrame;
-                console.debug(`GameManager: Using spriteComponent.spriteFrame for unit intro`);
             }
         }
         
         if (this.unitIntroPopup) {
-            console.debug(`GameManager: Calling unitIntroPopup.show with unitName: ${unitScript.unitName}, unitDescription: ${unitScript.unitDescription}, unitIcon: ${unitIcon ? 'available' : 'null'}, unitType: ${unitScript.unitType}`);
             this.unitIntroPopup.show({
                 unitName: unitScript.unitName || '未知单位',
                 unitDescription: unitScript.unitDescription || '暂无描述',
@@ -814,7 +746,6 @@ export class GameManager extends Component {
                 unitType: unitScript.unitType || 'unknown'
             });
         } else {
-            console.error(`GameManager: unitIntroPopup is null, cannot show unit intro`);
         }
     }
 
@@ -874,7 +805,6 @@ export class GameManager extends Component {
     }
 
     restartGame() {
-        console.debug('GameManager: restartGame called');
         
         // 清理所有敌人和防御塔
         this.cleanupAllUnits();
@@ -882,30 +812,24 @@ export class GameManager extends Component {
         const scene = director.getScene();
         let sceneName = scene?.name;
         
-        console.debug('GameManager: Current scene name:', sceneName);
         
         // 如果场景名称为空，尝试使用默认名称
         if (!sceneName || sceneName === '') {
             sceneName = 'scene';
-            console.debug('GameManager: Scene name is empty, using default name "scene"');
         }
         
         if (sceneName) {
-            console.debug('GameManager: Attempting to reload scene:', sceneName);
             
             // 使用更可靠的方式重新加载场景
             director.loadScene(sceneName, (error: Error | null) => {
                 if (error) {
-                    console.error('GameManager: Failed to reload scene:', error);
                     
                     // 场景加载失败时，手动重置游戏状态
                     this.manualResetGame();
                 } else {
-                    console.debug('GameManager: Scene reloaded successfully');
                 }
             });
         } else {
-            console.error('GameManager: Cannot get current scene name!');
             
             // 无法获取场景名称时，手动重置游戏状态
             this.manualResetGame();
@@ -916,7 +840,6 @@ export class GameManager extends Component {
      * 手动重置游戏状态（当场景重载失败时使用）
      */
     manualResetGame() {
-        console.debug('GameManager: Performing manual game reset');
         
         // 重置游戏状态
         this.gameState = GameState.Ready;
@@ -936,7 +859,6 @@ export class GameManager extends Component {
         // 更新UI
         this.updateUI();
         
-        console.debug('GameManager: Manual game reset completed');
     }
 
     cleanupAllUnits() {
@@ -1004,7 +926,6 @@ export class GameManager extends Component {
             }
         }
 
-        console.debug('GameManager: Cleaned up all enemies and arrowers');
     }
 }
 

@@ -62,7 +62,6 @@ export class UnitInfoPanel extends Component {
     initPanel() {
         const canvas = find('Canvas');
         if (!canvas) {
-            console.error('UnitInfoPanel: Canvas not found!');
             return;
         }
 

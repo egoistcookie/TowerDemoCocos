@@ -353,7 +353,6 @@ export class HunterHall extends Component {
 
     produceHunter() {
         if (!this.hunterPrefab || !this.hunterContainer) {
-            console.warn('HunterHall: Cannot produce hunter - prefab or container missing');
             return;
         }
 
@@ -367,7 +366,6 @@ export class HunterHall extends Component {
         }
         
         if (this.gameManager && !this.gameManager.canAddPopulation(1)) {
-            console.debug('HunterHall: Cannot produce hunter - population limit reached');
             return;
         }
 
@@ -381,7 +379,6 @@ export class HunterHall extends Component {
         // 增加人口（在创建Hunter之前）
         if (this.gameManager) {
             if (!this.gameManager.addPopulation(1)) {
-                console.warn('HunterHall: Failed to add population, cannot produce hunter');
                 return;
             }
         }
@@ -459,7 +456,6 @@ export class HunterHall extends Component {
             }
         }
 
-        console.debug(`HunterHall: Produced hunter ${this.producedHunters.length}/${this.maxHunterCount} at position (${spawnPos.x.toFixed(2)}, ${spawnPos.y.toFixed(2)})`);
         
         // 更新单位信息面板（如果被选中）
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
@@ -476,49 +472,41 @@ export class HunterHall extends Component {
 
         // 检查初始位置是否可用
         if (!this.hasUnitAtPosition(initialPos, checkRadius)) {
-            console.debug(`HunterHall.findAvailableSpawnPosition: Initial position is available at (${initialPos.x.toFixed(1)}, ${initialPos.y.toFixed(1)})`);
             return initialPos;
         }
 
-        console.debug(`HunterHall.findAvailableSpawnPosition: Initial position (${initialPos.x.toFixed(1)}, ${initialPos.y.toFixed(1)}) is occupied, searching for available position...`);
 
         // 尝试左右平移，交替检查左右两侧
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             // 先尝试右侧
             const rightPos = new Vec3(initialPos.x + offsetStep * attempt, initialPos.y, initialPos.z);
             if (!this.hasUnitAtPosition(rightPos, checkRadius)) {
-                console.debug(`HunterHall.findAvailableSpawnPosition: Found available position at right offset ${offsetStep * attempt}, position: (${rightPos.x.toFixed(1)}, ${rightPos.y.toFixed(1)})`);
                 return rightPos;
             }
 
             // 再尝试左侧
             const leftPos = new Vec3(initialPos.x - offsetStep * attempt, initialPos.y, initialPos.z);
             if (!this.hasUnitAtPosition(leftPos, checkRadius)) {
-                console.debug(`HunterHall.findAvailableSpawnPosition: Found available position at left offset ${offsetStep * attempt}, position: (${leftPos.x.toFixed(1)}, ${leftPos.y.toFixed(1)})`);
                 return leftPos;
             }
         }
 
         // 如果左右平移都找不到，尝试上下方向
-        console.debug(`HunterHall.findAvailableSpawnPosition: Horizontal search failed, trying vertical directions...`);
         for (let attempt = 1; attempt <= maxAttempts / 2; attempt++) {
             // 尝试上方
             const upPos = new Vec3(initialPos.x, initialPos.y + offsetStep * attempt, initialPos.z);
             if (!this.hasUnitAtPosition(upPos, checkRadius)) {
-                console.debug(`HunterHall.findAvailableSpawnPosition: Found available position at up offset ${offsetStep * attempt}, position: (${upPos.x.toFixed(1)}, ${upPos.y.toFixed(1)})`);
                 return upPos;
             }
 
             // 尝试下方
             const downPos = new Vec3(initialPos.x, initialPos.y - offsetStep * attempt, initialPos.z);
             if (!this.hasUnitAtPosition(downPos, checkRadius)) {
-                console.debug(`HunterHall.findAvailableSpawnPosition: Found available position at down offset ${offsetStep * attempt}, position: (${downPos.x.toFixed(1)}, ${downPos.y.toFixed(1)})`);
                 return downPos;
             }
         }
 
         // 如果所有位置都被占用，尝试对角线方向
-        console.debug(`HunterHall.findAvailableSpawnPosition: Vertical search failed, trying diagonal directions...`);
         for (let attempt = 1; attempt <= maxAttempts / 2; attempt++) {
             const diagonalOffset = offsetStep * attempt;
             // 尝试四个对角线方向
@@ -531,14 +519,12 @@ export class HunterHall extends Component {
 
             for (const pos of positions) {
                 if (!this.hasUnitAtPosition(pos, checkRadius)) {
-                    console.debug(`HunterHall.findAvailableSpawnPosition: Found available position at diagonal offset, position: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})`);
                     return pos;
                 }
             }
         }
 
         // 如果所有位置都被占用，返回初始位置（让Hunter自己处理碰撞）
-        console.warn(`HunterHall.findAvailableSpawnPosition: Could not find available spawn position after ${maxAttempts * 2} attempts, using initial position`);
         return initialPos;
     }
 
@@ -577,7 +563,6 @@ export class HunterHall extends Component {
         
         if (huntersNode) {
             const hunters = huntersNode.children || [];
-            console.debug(`HunterHall.hasUnitAtPosition: Checking ${hunters.length} hunters at position (${position.x.toFixed(1)}, ${position.y.toFixed(1)})`);
             
             for (const hunter of hunters) {
                 if (hunter && hunter.isValid && hunter.active) {
@@ -601,9 +586,7 @@ export class HunterHall extends Component {
                             }
                             
                             if (isProducedHunter) {
-                                console.debug(`HunterHall.hasUnitAtPosition: Collision detected with produced Hunter at distance ${distance.toFixed(1)}, minDistance: ${minDistance.toFixed(1)}, hunterPos: (${hunterPos.x.toFixed(1)}, ${hunterPos.y.toFixed(1)})`);
                             } else {
-                                console.debug(`HunterHall.hasUnitAtPosition: Collision detected with other Hunter at distance ${distance.toFixed(1)}, minDistance: ${minDistance.toFixed(1)}, hunterPos: (${hunterPos.x.toFixed(1)}, ${hunterPos.y.toFixed(1)})`);
                             }
                             return true;
                         }
@@ -611,7 +594,6 @@ export class HunterHall extends Component {
                 }
             }
         } else {
-            console.warn('HunterHall.hasUnitAtPosition: Hunters node not found!');
         }
 
         // 检查与猎手大厅的碰撞
@@ -705,12 +687,10 @@ export class HunterHall extends Component {
             const beforePopulation = this.gameManager.getPopulation();
             this.gameManager.removePopulation(removedCount);
             const afterPopulation = this.gameManager.getPopulation();
-            console.debug(`HunterHall.cleanupDeadHunters: Removed ${removedCount} dead hunters, population ${beforePopulation} -> ${afterPopulation} (reduced by ${removedCount})`);
         }
         
         const afterCount = this.producedHunters.length;
         if (beforeCount !== afterCount) {
-            console.debug(`HunterHall.cleanupDeadHunters: Removed ${beforeCount - afterCount} dead hunters, remaining: ${afterCount}`);
             
             // 更新单位信息面板（如果被选中）
             if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
@@ -843,8 +823,6 @@ export class HunterHall extends Component {
      * 猎手大厅点击事件
      */
     onHunterHallClick(event: EventTouch) {
-        console.debug('[HunterHall] onHunterHallClick - 节点点击事件触发, propagationStopped:', event.propagationStopped);
-        console.debug('HunterHall.onHunterHallClick: Entering method');
         
         // 检查是否正在拖拽建筑物（通过TowerBuilder）
         // 使用递归查找方法，更可靠
@@ -881,12 +859,10 @@ export class HunterHall extends Component {
             towerBuilder = findComponentInScene(this.node.scene, 'TowerBuilder');
         }
         
-        console.debug('[HunterHall] onHunterHallClick - 查找TowerBuilder, 节点找到:', !!towerBuilderNode, '组件找到:', !!towerBuilder, 'isDraggingBuilding:', towerBuilder?.isDraggingBuilding);
         
         // 检查是否正在长按检测（由TowerBuilder处理）
         // 注意：不要阻止事件传播，让TowerBuilder的onTouchEnd也能处理
         if (towerBuilder && (towerBuilder as any).isLongPressActive) {
-            console.debug('[HunterHall] onHunterHallClick - 检测到正在长按检测，不处理点击事件，让TowerBuilder处理');
             // 不阻止事件传播，让TowerBuilder的onTouchEnd也能处理
             // event.propagationStopped = true; // 注释掉，让事件继续传播
             return;
@@ -894,12 +870,10 @@ export class HunterHall extends Component {
         
         // 检查是否正在显示信息面板（由TowerBuilder打开）
         if ((this.node as any)._showingInfoPanel) {
-            console.debug('HunterHall.onHunterHallClick: 正在显示信息面板，不处理点击事件');
             return;
         }
         
         if (towerBuilder && towerBuilder.isDraggingBuilding) {
-            console.debug('[HunterHall] onHunterHallClick - 检测到正在拖拽建筑物，直接调用TowerBuilder.endDraggingBuilding处理');
             // 直接调用TowerBuilder的方法来处理拖拽结束，而不是依赖事件传播
             if (towerBuilder.endDraggingBuilding && typeof towerBuilder.endDraggingBuilding === 'function') {
                 towerBuilder.endDraggingBuilding(event);
@@ -909,26 +883,21 @@ export class HunterHall extends Component {
         
         // 检查是否有选中的小精灵，如果有则不处理点击事件（让小精灵移动到建筑物）
         const selectionManager = this.findSelectionManager();
-        console.debug('HunterHall.onHunterHallClick: Found selectionManager:', selectionManager ? 'yes' : 'no');
         
         let hasSelectedWisps = false;
         if (selectionManager && selectionManager.hasSelectedWisps && typeof selectionManager.hasSelectedWisps === 'function') {
             hasSelectedWisps = selectionManager.hasSelectedWisps();
-            console.debug('HunterHall.onHunterHallClick: Has selected wisps:', hasSelectedWisps);
         } else {
-            console.debug('HunterHall.onHunterHallClick: selectionManager.hasSelectedWisps is not a function');
         }
         
         if (hasSelectedWisps) {
             // 有选中的小精灵，不处理建筑物的点击事件，让SelectionManager处理移动
             // 不设置propagationStopped，让事件继续传播，这样SelectionManager的移动命令可以执行
-            console.debug('HunterHall.onHunterHallClick: Has selected wisps, returning to let SelectionManager handle movement');
             return;
         }
 
         // 阻止事件传播
         event.propagationStopped = true;
-        console.debug('HunterHall.onHunterHallClick: Event propagation stopped');
 
         // 如果正在移动，不处理点击
         if (this.isMoving) {
@@ -937,7 +906,6 @@ export class HunterHall extends Component {
 
         // 如果已经显示选择面板，先隐藏
         if (this.selectionPanel && this.selectionPanel.isValid) {
-            console.debug('HunterHall.onHunterHallClick: Selection panel already shown, hiding it');
             this.hideSelectionPanel();
             return;
         }
@@ -1087,7 +1055,6 @@ export class HunterHall extends Component {
         // 移动建筑物到新位置
         this.node.setWorldPosition(targetWorldPos);
 
-        console.debug(`HunterHall: Moved to grid (${gridX}, ${gridY})`);
     }
 
     /**
@@ -1274,7 +1241,6 @@ export class HunterHall extends Component {
             // 回收80%金币
             const refund = Math.floor(this.buildCost * 0.8);
             this.gameManager.addGold(refund);
-            console.debug(`HunterHall: Sold, refunded ${refund} gold`);
         }
 
         // 隐藏面板
@@ -1304,7 +1270,6 @@ export class HunterHall extends Component {
         const upgradeCost = Math.floor(this.buildCost * 0.5);
         
         if (!this.gameManager.canAfford(upgradeCost)) {
-            console.debug(`HunterHall: Not enough gold for upgrade! Need ${upgradeCost}, have ${this.gameManager.getGold()}`);
             return;
         }
 
@@ -1315,7 +1280,6 @@ export class HunterHall extends Component {
         this.level++;
         this.maxHunterCount += 2;
 
-        console.debug(`HunterHall: Upgraded to level ${this.level}, maxHunterCount increased to ${this.maxHunterCount}`);
 
         // 更新单位信息面板
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
@@ -1338,13 +1302,11 @@ export class HunterHall extends Component {
     attachWisp(wisp: Node) {
         const wispScript = wisp.getComponent('Wisp') as any;
         if (!wispScript) {
-            console.warn('HunterHall: Cannot attach - wisp script not found');
             return;
         }
 
         // 检查小精灵是否已经依附在其他建筑物上
         if (wispScript.getIsAttached && wispScript.getIsAttached()) {
-            console.warn('HunterHall: Wisp already attached to another building');
             return;
         }
 
@@ -1354,7 +1316,6 @@ export class HunterHall extends Component {
         // 让小精灵依附，传递fromBuilding参数为true避免循环调用
         if (wispScript.attachToBuilding) {
             wispScript.attachToBuilding(this.node, true);
-            console.debug(`HunterHall: Wisp attached, total: ${this.attachedWisps.length}`);
         }
     }
 
@@ -1363,7 +1324,6 @@ export class HunterHall extends Component {
      */
     detachWisp() {
         if (this.attachedWisps.length === 0) {
-            console.debug('HunterHall: No wisp to detach');
             return;
         }
 
@@ -1375,7 +1335,6 @@ export class HunterHall extends Component {
         const wispScript = wisp.getComponent('Wisp') as any;
         if (wispScript && wispScript.detachFromBuilding) {
             wispScript.detachFromBuilding();
-            console.debug(`HunterHall: Wisp detached, remaining: ${this.attachedWisps.length}`);
         }
     }
 

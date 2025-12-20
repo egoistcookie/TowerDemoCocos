@@ -265,7 +265,6 @@ export class OrcWarlord extends Component {
         } else {
             // 攻击动画或战争咆哮动画播放中，不累积attackTimer，避免重复触发攻击
             if (this.isPlayingAttackAnimation) {
-                console.info(`[OrcWarlord] update: 攻击动画播放中，不累积attackTimer，当前值=${this.attackTimer.toFixed(2)}, animationTimer=${this.animationTimer.toFixed(3)}`);
             }
         }
         
@@ -293,10 +292,8 @@ export class OrcWarlord extends Component {
             this.findTarget();
         } else {
             // 正在攻击动画中，只检查当前目标是否仍然有效
-            console.info(`[OrcWarlord] update: 正在播放攻击动画，跳过findTarget，当前目标=${this.currentTarget ? this.currentTarget.name : 'null'}`);
             if (this.currentTarget && (!this.currentTarget.isValid || !this.currentTarget.active)) {
                 // 当前目标已无效，清除目标
-                console.info(`[OrcWarlord] update: 攻击动画中，当前目标无效，清除目标`);
                 this.currentTarget = null!;
             } else if (this.currentTarget) {
                 // 检查当前目标是否仍然存活
@@ -315,7 +312,6 @@ export class OrcWarlord extends Component {
                 
                 if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
                     // 当前目标已被摧毁，清除目标
-                    console.info(`[OrcWarlord] update: 攻击动画中，当前目标已被摧毁，清除目标，目标类型=${targetScript.constructor.name}`);
                     this.currentTarget = null!;
                 }
             }
@@ -327,7 +323,6 @@ export class OrcWarlord extends Component {
             // 如果正在播放攻击动画，不进行距离检查和移动，让攻击动画完成
             if (this.isPlayingAttackAnimation) {
                 // 攻击动画播放中，停止移动
-                console.info(`[OrcWarlord] update: 攻击动画播放中，停止移动，目标=${this.currentTarget.name}, 距离=${distance.toFixed(1)}, 攻击范围=${this.attackRange}`);
                 this.stopMoving();
             } else if (distance <= this.attackRange) {
                 // 在攻击范围内，停止移动并攻击
@@ -336,7 +331,6 @@ export class OrcWarlord extends Component {
                     this.stopMoving();
                 }
                 if (this.attackTimer >= this.attackInterval && !this.isHit && !this.isPlayingWarcryAnimation && !this.isPlayingAttackAnimation) {
-                    console.info(`[OrcWarlord] update: 触发攻击，目标=${this.currentTarget.name}, 距离=${distance.toFixed(1)}, attackTimer=${this.attackTimer.toFixed(2)}, attackInterval=${this.attackInterval}`);
                     // 先重置attackTimer，避免重复触发
                     this.attackTimer = 0;
                     // 然后调用attack()
@@ -352,7 +346,6 @@ export class OrcWarlord extends Component {
             // 没有目标，只有在没有被攻击时才向水晶移动
             // 如果正在播放攻击动画，不移动，让攻击动画完成
             if (this.isPlayingAttackAnimation) {
-                console.info(`[OrcWarlord] update: 攻击动画播放中但无目标，停止移动`);
                 this.stopMoving();
             } else if (this.targetCrystal && this.targetCrystal.isValid && !this.isHit && !this.isPlayingWarcryAnimation) {
                 this.moveTowardsCrystal(deltaTime);
@@ -688,10 +681,8 @@ export class OrcWarlord extends Component {
             
             // 如果当前目标仍然存活，保持当前目标不变
             if (targetScript && targetScript.isAlive && targetScript.isAlive()) {
-                console.info(`[OrcWarlord] findTarget: 攻击动画中，保持当前目标不变，目标=${this.currentTarget.name}`);
                 return; // 不改变目标，保持攻击动画中的目标
             } else {
-                console.info(`[OrcWarlord] findTarget: 攻击动画中，但当前目标已死亡，允许改变目标`);
             }
         }
         
@@ -699,7 +690,6 @@ export class OrcWarlord extends Component {
         if (nearestTarget) {
             this.currentTarget = nearestTarget;
             if (oldTarget !== nearestTarget) {
-                console.info(`[OrcWarlord] findTarget: 目标改变，旧目标=${oldTarget ? oldTarget.name : 'null'}, 新目标=${nearestTarget.name}, isPlayingAttackAnimation=${this.isPlayingAttackAnimation}`);
             }
         } else {
             // 200像素范围内没有任何我方单位，目标设为水晶
@@ -708,18 +698,15 @@ export class OrcWarlord extends Component {
                 if (crystalScript && crystalScript.isAlive && crystalScript.isAlive()) {
                     this.currentTarget = this.targetCrystal;
                     if (oldTarget !== this.targetCrystal) {
-                        console.info(`[OrcWarlord] findTarget: 目标改为水晶，旧目标=${oldTarget ? oldTarget.name : 'null'}`);
                     }
                 } else {
                     this.currentTarget = null!;
                     if (oldTarget) {
-                        console.info(`[OrcWarlord] findTarget: 清除目标，旧目标=${oldTarget.name}, 原因=水晶无效或已死亡`);
                     }
                 }
             } else {
                 this.currentTarget = null!;
                 if (oldTarget) {
-                    console.info(`[OrcWarlord] findTarget: 清除目标，旧目标=${oldTarget.name}, 原因=无水晶目标`);
                 }
             }
         }
@@ -1462,7 +1449,6 @@ export class OrcWarlord extends Component {
         } else if (this.isPlayingWalkAnimation) {
             this.updateWalkAnimation();
         } else if (this.isPlayingAttackAnimation) {
-            console.info(`[OrcWarlord] updateAnimation: 更新攻击动画，animationTimer=${this.animationTimer.toFixed(3)}, deltaTime=${deltaTime.toFixed(3)}`);
             this.updateAttackAnimation();
         } else if (this.isPlayingHitAnimation) {
             this.updateHitAnimation();
@@ -1509,7 +1495,6 @@ export class OrcWarlord extends Component {
     updateAttackAnimation() {
         // 检查目标是否仍然有效，如果无效则停止攻击动画
         if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
-            console.info(`[OrcWarlord] updateAttackAnimation: 目标无效，停止攻击动画，currentTarget=${this.currentTarget ? '存在但无效' : 'null'}`);
             this.isPlayingAttackAnimation = false;
             this.attackComplete = false;
             this.currentTarget = null!;
@@ -1533,7 +1518,6 @@ export class OrcWarlord extends Component {
         
         if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
             // 目标已被摧毁，停止攻击动画
-            console.info(`[OrcWarlord] updateAttackAnimation: 目标已被摧毁，停止攻击动画，目标类型=${targetScript.constructor.name}, 目标名称=${this.currentTarget.name}`);
             this.isPlayingAttackAnimation = false;
             this.attackComplete = false;
             this.currentTarget = null!;
@@ -1558,14 +1542,12 @@ export class OrcWarlord extends Component {
                 // 在攻击动画的后半段造成伤害
                 const attackPoint = Math.floor(this.attackAnimationFrames.length * 0.5);
                 if (frameIndex === attackPoint && !this.attackComplete) {
-                    console.info(`[OrcWarlord] updateAttackAnimation: 到达攻击点，造成伤害，frameIndex=${frameIndex}, attackPoint=${attackPoint}, 目标=${this.currentTarget.name}`);
                     this.dealDamage();
                     this.attackComplete = true;
                     
                     // dealDamage() 中已经处理了目标被摧毁的情况，这里只需要检查是否还在播放攻击动画
                     // 如果目标被摧毁，dealDamage() 会停止攻击动画并清除目标
                     if (!this.isPlayingAttackAnimation) {
-                        console.info(`[OrcWarlord] updateAttackAnimation: dealDamage后攻击动画已停止`);
                         return;
                     }
                 }
@@ -1574,7 +1556,6 @@ export class OrcWarlord extends Component {
             // 在动画播放过程中，定期检查目标是否仍然有效（每5帧检查一次，减少性能开销）
             if (frameIndex % 5 === 0) {
                 if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
-                    console.info(`[OrcWarlord] updateAttackAnimation: 定期检查发现目标无效，停止攻击动画，frameIndex=${frameIndex}`);
                     this.isPlayingAttackAnimation = false;
                     this.attackComplete = false;
                     this.currentTarget = null!;
@@ -1584,13 +1565,11 @@ export class OrcWarlord extends Component {
             }
         } else {
             // 攻击动画播放完成，重置状态
-            console.info(`[OrcWarlord] updateAttackAnimation: 攻击动画播放完成，frameIndex=${frameIndex}, 总帧数=${this.attackAnimationFrames.length}, 目标=${this.currentTarget ? this.currentTarget.name : 'null'}`);
             this.isPlayingAttackAnimation = false;
             this.attackComplete = false;
             
             // 如果目标已被摧毁，重置攻击计时器，避免下一次攻击立即触发
             if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
-                console.info(`[OrcWarlord] updateAttackAnimation: 动画完成但目标无效，清除目标并重置攻击计时器`);
                 this.currentTarget = null!;
                 this.attackTimer = 0;
             }
@@ -1650,7 +1629,6 @@ export class OrcWarlord extends Component {
             
             // 如果之前正在攻击，重新开始攻击
             if (this.wasPlayingAttackBeforeWarcry) {
-                console.info(`[OrcWarlord] updateWarcryAnimation: 战争咆哮完成，重新开始攻击`);
                 this.wasPlayingAttackBeforeWarcry = false;
                 // 重新触发攻击
                 if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
@@ -1716,13 +1694,11 @@ export class OrcWarlord extends Component {
     // 播放攻击动画
     playAttackAnimation() {
         if (this.isPlayingDeathAnimation || this.isDestroyed) {
-            console.info(`[OrcWarlord] playAttackAnimation: 已死亡或正在播放死亡动画，取消攻击动画`);
             return;
         }
 
         // 如果已经在播放攻击动画，不重复播放（在stopAllAnimations之前检查）
         if (this.isPlayingAttackAnimation) {
-            console.info(`[OrcWarlord] playAttackAnimation: 已经在播放攻击动画，跳过重复调用，animationTimer=${this.animationTimer.toFixed(3)}`);
             return;
         }
 
@@ -1732,7 +1708,6 @@ export class OrcWarlord extends Component {
         
         // 如果之前正在播放攻击动画，恢复状态（不应该发生，但为了安全）
         if (wasPlayingAttack) {
-            console.warn(`[OrcWarlord] playAttackAnimation: 警告！stopAllAnimations重置了攻击动画状态，恢复状态`);
             this.isPlayingAttackAnimation = true;
             // 不重置animationTimer，继续播放
             return;
@@ -1743,7 +1718,6 @@ export class OrcWarlord extends Component {
         this.attackComplete = false;
         this.animationTimer = 0;
         this.currentAnimationFrameIndex = -1;
-        console.info(`[OrcWarlord] playAttackAnimation: 开始播放攻击动画，目标=${this.currentTarget ? this.currentTarget.name : 'null'}, 动画帧数=${this.attackAnimationFrames.length}, 动画时长=${this.attackAnimationDuration}`);
         
         // 播放攻击音效
         if (this.attackSound) {
@@ -1759,14 +1733,12 @@ export class OrcWarlord extends Component {
 
         // 如果正在播放战争咆哮动画，不重复播放
         if (this.isPlayingWarcryAnimation) {
-            console.info(`[OrcWarlord] playWarcryAnimation: 正在播放战争咆哮动画，跳过重复调用`);
             return;
         }
 
         // 如果正在播放攻击动画，保存状态，战争咆哮完成后重新开始攻击
         this.wasPlayingAttackBeforeWarcry = this.isPlayingAttackAnimation;
         
-        console.info(`[OrcWarlord] playWarcryAnimation: 开始播放战争咆哮动画，wasPlayingAttack=${this.wasPlayingAttackBeforeWarcry}`);
 
         this.stopAllAnimations();
         this.isPlayingWarcryAnimation = true;
@@ -1781,7 +1753,6 @@ export class OrcWarlord extends Component {
             this.isPlayingWarcryAnimation = false;
             // 如果之前正在攻击，重新开始攻击
             if (this.wasPlayingAttackBeforeWarcry) {
-                console.info(`[OrcWarlord] playWarcryAnimation: 战争咆哮完成，重新开始攻击`);
                 this.wasPlayingAttackBeforeWarcry = false;
                 // 重新触发攻击
                 if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
@@ -1838,9 +1809,7 @@ export class OrcWarlord extends Component {
 
     // 处理实际伤害
     dealDamage() {
-        console.info(`[OrcWarlord] dealDamage: 开始处理伤害，目标=${this.currentTarget ? this.currentTarget.name : 'null'}, isValid=${this.currentTarget?.isValid}, active=${this.currentTarget?.active}`);
         if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
-            console.info(`[OrcWarlord] dealDamage: 目标无效，清除目标并停止攻击动画`);
             this.currentTarget = null!;
             // 如果正在播放攻击动画，停止它
             if (this.isPlayingAttackAnimation) {
@@ -1867,15 +1836,12 @@ export class OrcWarlord extends Component {
         if (targetScript && targetScript.takeDamage) {
             const targetType = targetScript.constructor.name;
             const wasAlive = targetScript.isAlive && targetScript.isAlive();
-            console.info(`[OrcWarlord] dealDamage: 造成伤害 ${this.attackDamage}，目标类型=${targetType}, 目标名称=${this.currentTarget.name}, 攻击前是否存活=${wasAlive}`);
             targetScript.takeDamage(this.attackDamage);
             
             // 检查目标是否仍然存活，特别是石墙
             const isAliveAfter = targetScript.isAlive && targetScript.isAlive();
-            console.info(`[OrcWarlord] dealDamage: 攻击后目标是否存活=${isAliveAfter}`);
             if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
                 // 目标被摧毁，清除目标并停止攻击动画
-                console.info(`[OrcWarlord] dealDamage: 目标被摧毁，清除目标并停止攻击动画，目标类型=${targetType}`);
                 this.currentTarget = null!;
                 if (this.isPlayingAttackAnimation) {
                     this.isPlayingAttackAnimation = false;
@@ -1885,7 +1851,6 @@ export class OrcWarlord extends Component {
             }
         } else {
             // 目标无效，清除目标
-            console.info(`[OrcWarlord] dealDamage: 目标脚本无效或没有takeDamage方法，清除目标`);
             this.currentTarget = null!;
             // 如果正在播放攻击动画，停止它
             if (this.isPlayingAttackAnimation) {
@@ -1897,27 +1862,22 @@ export class OrcWarlord extends Component {
     }
 
     attack() {
-        console.info(`[OrcWarlord] attack: 开始攻击，目标=${this.currentTarget ? this.currentTarget.name : 'null'}, isDestroyed=${this.isDestroyed}, isPlayingAttackAnimation=${this.isPlayingAttackAnimation}, animationTimer=${this.animationTimer.toFixed(3)}`);
         
         // 如果正在播放攻击动画，不重复触发攻击
         if (this.isPlayingAttackAnimation) {
-            console.warn(`[OrcWarlord] attack: 正在播放攻击动画，跳过重复攻击！animationTimer=${this.animationTimer.toFixed(3)}, attackComplete=${this.attackComplete}`);
             // 如果attackTimer被重置了，恢复它，避免攻击间隔被缩短
             if (this.attackTimer === 0) {
                 // attackTimer已经在update中被重置，这是正常的
-                console.info(`[OrcWarlord] attack: attackTimer已被重置，这是正常的`);
             }
             return;
         }
         
         if (!this.currentTarget || this.isDestroyed) {
-            console.info(`[OrcWarlord] attack: 无目标或已销毁，取消攻击`);
             return;
         }
 
         // 再次检查目标是否有效
         if (!this.currentTarget.isValid || !this.currentTarget.active) {
-            console.info(`[OrcWarlord] attack: 目标无效，清除目标，isValid=${this.currentTarget.isValid}, active=${this.currentTarget.active}`);
             this.currentTarget = null!;
             return;
         }
@@ -1928,7 +1888,6 @@ export class OrcWarlord extends Component {
         this.flipDirection(direction);
 
         // 播放攻击动画
-        console.info(`[OrcWarlord] attack: 播放攻击动画，目标=${this.currentTarget.name}`);
         this.playAttackAnimation();
     }
 

@@ -137,7 +137,6 @@ export class MoonWell extends Component {
      */
     increasePopulationLimit() {
         if (this.hasIncreasedPopulation) {
-            console.warn('MoonWell: Population limit already increased for this well.');
             return;
         }
 
@@ -153,9 +152,7 @@ export class MoonWell extends Component {
                 const newMax = currentMax + this.populationIncrease;
                 this.gameManager.setMaxPopulation(newMax);
                 this.hasIncreasedPopulation = true;
-                console.debug(`MoonWell: Increased max population by ${this.populationIncrease}, from ${currentMax} to ${newMax}`);
             } else {
-                console.error('MoonWell: GameManager not found! Cannot increase population limit.');
             }
         }, 0.1);
     }
@@ -188,7 +185,6 @@ export class MoonWell extends Component {
             }
         }
         
-        console.warn('MoonWell: GameManager not found!');
     }
 
     /**
@@ -359,7 +355,6 @@ export class MoonWell extends Component {
             const currentMax = this.gameManager.getMaxPopulation();
             const newMax = Math.max(10, currentMax - this.populationIncrease); // 至少保持初始的10人口上限
             this.gameManager.setMaxPopulation(newMax);
-            console.debug(`MoonWell: Decreased max population by ${this.populationIncrease}, new max: ${newMax}`);
         }
 
         // 播放爆炸特效
@@ -516,7 +511,6 @@ export class MoonWell extends Component {
 
         // 调试信息（降低频率）
         if (healedCount > 0 && Math.random() < 0.1) { // 约10%的概率输出
-            console.debug(`MoonWell: Healed ${healedCount} unit(s) within range ${this.healRange}`);
         }
     }
 
@@ -524,8 +518,6 @@ export class MoonWell extends Component {
      * 点击月亮井事件
      */
     onMoonWellClick(event: EventTouch) {
-        console.debug('[MoonWell] onMoonWellClick - 节点点击事件触发, propagationStopped:', event.propagationStopped);
-        console.debug('MoonWell.onMoonWellClick: Entering method');
         
         // 检查是否正在拖拽建筑物（通过TowerBuilder）
         // 使用递归查找方法，更可靠
@@ -562,11 +554,9 @@ export class MoonWell extends Component {
             towerBuilder = findComponentInScene(this.node.scene, 'TowerBuilder');
         }
         
-        console.debug('[MoonWell] onMoonWellClick - 查找TowerBuilder, 节点找到:', !!towerBuilderNode, '组件找到:', !!towerBuilder, 'isDraggingBuilding:', towerBuilder?.isDraggingBuilding);
         
         // 检查是否正在长按检测（由TowerBuilder处理）
         if (towerBuilder && (towerBuilder as any).isLongPressActive) {
-            console.debug('[MoonWell] onMoonWellClick - 检测到正在长按检测，不处理点击事件，让TowerBuilder处理');
             // 阻止事件传播，让TowerBuilder处理
             event.propagationStopped = true;
             return;
@@ -574,12 +564,10 @@ export class MoonWell extends Component {
         
         // 检查是否正在显示信息面板（由TowerBuilder打开）
         if ((this.node as any)._showingInfoPanel) {
-            console.debug('MoonWell.onMoonWellClick: 正在显示信息面板，不处理点击事件');
             return;
         }
         
         if (towerBuilder && towerBuilder.isDraggingBuilding) {
-            console.debug('[MoonWell] onMoonWellClick - 检测到正在拖拽建筑物，直接调用TowerBuilder.endDraggingBuilding处理');
             // 直接调用TowerBuilder的方法来处理拖拽结束，而不是依赖事件传播
             if (towerBuilder.endDraggingBuilding && typeof towerBuilder.endDraggingBuilding === 'function') {
                 towerBuilder.endDraggingBuilding(event);
@@ -589,38 +577,31 @@ export class MoonWell extends Component {
         
         // 如果游戏已结束，不显示选择面板
         if (this.gameManager && this.gameManager.getGameState() !== GameState.Playing) {
-            console.debug('MoonWell.onMoonWellClick: Game not in playing state, returning');
             return;
         }
 
         // 检查是否有选中的小精灵，如果有则不处理点击事件（让小精灵移动到建筑物）
         const selectionManager = this.findSelectionManager();
-        console.debug('MoonWell.onMoonWellClick: Found selectionManager:', selectionManager ? 'yes' : 'no');
         
         let hasSelectedWisps = false;
         if (selectionManager && selectionManager.hasSelectedWisps && typeof selectionManager.hasSelectedWisps === 'function') {
             hasSelectedWisps = selectionManager.hasSelectedWisps();
-            console.debug('MoonWell.onMoonWellClick: Has selected wisps:', hasSelectedWisps);
         } else {
-            console.debug('MoonWell.onMoonWellClick: selectionManager.hasSelectedWisps is not a function');
         }
         
         if (hasSelectedWisps) {
             // 有选中的小精灵，不处理建筑物的点击事件，让SelectionManager处理移动
             // 不设置propagationStopped，让事件继续传播，这样SelectionManager的移动命令可以执行
-            console.debug('MoonWell.onMoonWellClick: Has selected wisps, returning to let SelectionManager handle movement');
             return;
         }
 
         // 检查是否正在显示信息面板（由TowerBuilder打开）
         if ((this.node as any)._showingInfoPanel) {
-            console.debug('MoonWell.onMoonWellClick: 正在显示信息面板，不处理点击事件');
             return;
         }
 
         // 阻止事件冒泡
         event.propagationStopped = true;
-        console.debug('MoonWell.onMoonWellClick: Event propagation stopped');
 
         // 如果正在移动，不处理点击
         if (this.isMoving) {
@@ -629,7 +610,6 @@ export class MoonWell extends Component {
 
         // 如果已有选择面板，先关闭
         if (this.selectionPanel) {
-            console.debug('MoonWell.onMoonWellClick: Selection panel already shown, hiding it');
             this.hideSelectionPanel();
             return;
         }
@@ -695,9 +675,7 @@ export class MoonWell extends Component {
      * 移动时的触摸结束事件
      */
     onMoveTouchEnd(event: EventTouch) {
-        console.debug('[MoonWell] onMoveTouchEnd - 触摸结束事件, isMoving:', this.isMoving, 'gridPanel存在:', !!this.gridPanel, 'propagationStopped:', event.propagationStopped);
         if (!this.isMoving || !this.gridPanel) {
-            console.debug('[MoonWell] onMoveTouchEnd - 不在移动状态或gridPanel不存在，直接返回');
             return;
         }
 
@@ -781,7 +759,6 @@ export class MoonWell extends Component {
         // 移动建筑物到新位置
         this.node.setWorldPosition(targetWorldPos);
 
-        console.debug(`MoonWell: Moved to grid (${gridX}, ${gridY})`);
     }
 
     /**
@@ -1034,7 +1011,6 @@ export class MoonWell extends Component {
             // 回收80%金币
             const refund = Math.floor(this.buildCost * 0.8);
             this.gameManager.addGold(refund);
-            console.debug(`MoonWell: Sold, refunded ${refund} gold`);
         }
 
         // 隐藏面板
@@ -1064,7 +1040,6 @@ export class MoonWell extends Component {
         const upgradeCost = Math.floor(this.buildCost * 0.5);
         
         if (!this.gameManager.canAfford(upgradeCost)) {
-            console.debug(`MoonWell: Not enough gold for upgrade! Need ${upgradeCost}, have ${this.gameManager.getGold()}`);
             return;
         }
 
@@ -1076,7 +1051,6 @@ export class MoonWell extends Component {
         this.healRange = Math.floor(this.healRange * 1.5); // 扩大50%治疗范围
         this.healInterval = Math.max(0.5, this.healInterval * 0.7); // 加快30%治疗速度（最小0.5秒）
 
-        console.debug(`MoonWell: Upgraded to level ${this.level}, healRange: ${this.healRange}, healInterval: ${this.healInterval.toFixed(2)}`);
 
         // 更新单位信息面板和范围显示
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
@@ -1113,13 +1087,11 @@ export class MoonWell extends Component {
     attachWisp(wisp: Node) {
         const wispScript = wisp.getComponent('Wisp') as any;
         if (!wispScript) {
-            console.warn('MoonWell: Cannot attach - wisp script not found');
             return;
         }
 
         // 检查小精灵是否已经依附在其他建筑物上
         if (wispScript.getIsAttached && wispScript.getIsAttached()) {
-            console.warn('MoonWell: Wisp already attached to another building');
             return;
         }
 
@@ -1129,7 +1101,6 @@ export class MoonWell extends Component {
         // 让小精灵依附，传递fromBuilding参数为true避免循环调用
         if (wispScript.attachToBuilding) {
             wispScript.attachToBuilding(this.node, true);
-            console.debug(`MoonWell: Wisp attached, total: ${this.attachedWisps.length}`);
         }
     }
 
@@ -1138,7 +1109,6 @@ export class MoonWell extends Component {
      */
     detachWisp() {
         if (this.attachedWisps.length === 0) {
-            console.debug('MoonWell: No wisp to detach');
             return;
         }
 
@@ -1150,7 +1120,6 @@ export class MoonWell extends Component {
         const wispScript = wisp.getComponent('Wisp') as any;
         if (wispScript && wispScript.detachFromBuilding) {
             wispScript.detachFromBuilding();
-            console.debug(`MoonWell: Wisp detached, remaining: ${this.attachedWisps.length}`);
         }
         
         // 卸下小精灵后取消选中状态，类似点击升级按钮

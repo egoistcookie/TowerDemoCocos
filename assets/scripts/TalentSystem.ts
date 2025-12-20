@@ -45,11 +45,9 @@ export class TalentSystem extends Component {
         this.initTalents();
         
         // 检查 arrowerPrefab 是否配置
-        console.log(`TalentSystem: start() called, arrowerPrefab: ${this.arrowerPrefab ? 'configured' : 'not configured'}`);
         
         // 如果 talentPanel 未设置，使用当前节点
         if (!this.talentPanel) {
-            console.log('TalentSystem: talentPanel is null in start(), using this.node');
             this.talentPanel = this.node;
         }
         
@@ -71,9 +69,7 @@ export class TalentSystem extends Component {
         prefabPaths.forEach(path => {
             resources.load(path, Prefab, (err, prefab) => {
                 if (!err && prefab) {
-                    console.log(`TalentSystem: Preloaded prefab: ${path}`);
                 } else {
-                    console.log(`TalentSystem: Failed to preload prefab: ${path}, err: ${err}`);
                 }
             });
         });
@@ -81,11 +77,9 @@ export class TalentSystem extends Component {
     
     onEnable() {
         // 当组件被激活时，创建天赋面板UI
-        console.log('TalentSystem: onEnable called, talentPanel:', this.talentPanel);
         
         // 如果 talentPanel 未设置，使用当前节点
         if (!this.talentPanel) {
-            console.log('TalentSystem: talentPanel is null in onEnable(), using this.node');
             this.talentPanel = this.node;
         }
         
@@ -154,16 +148,12 @@ export class TalentSystem extends Component {
     }
     
     createTalentPanelUI() {
-        console.log('TalentSystem: createTalentPanelUI called, talentPanel:', this.talentPanel);
         if (!this.talentPanel) {
-            console.error('TalentSystem: TalentPanel node is null! Please configure it in the editor.');
             // 尝试从当前节点获取
             this.talentPanel = this.node;
             if (!this.talentPanel) {
-                console.error('TalentSystem: Cannot find talentPanel node, aborting UI creation');
                 return;
             }
-            console.log('TalentSystem: Using current node as talentPanel');
         }
         
         // 清空面板内容
@@ -181,7 +171,6 @@ export class TalentSystem extends Component {
         
         // 默认显示天赋列表
         this.showTalentList();
-        console.log('TalentSystem: createTalentPanelUI completed!');
     }
     
     createTalentTabs() {
@@ -232,12 +221,10 @@ export class TalentSystem extends Component {
             // 绑定点击事件
             if (tab.id === 'talents') {
                 buttonComp.node.on(Button.EventType.CLICK, () => {
-                    console.log('TalentSystem: Talent tab clicked, showing talent list');
                     this.showTalentList();
                 }, this);
             } else if (tab.id === 'units') {
                 buttonComp.node.on(Button.EventType.CLICK, () => {
-                    console.log('TalentSystem: Units tab clicked, showing unit cards');
                     this.showUnitCards();
                 }, this);
             }
@@ -255,13 +242,11 @@ export class TalentSystem extends Component {
     }
     
     showUnitCards() {
-        console.log('TalentSystem: showUnitCards called!');
         // 销毁之前的内容
         this.clearContent();
         
         // 创建单位卡片网格
         this.createUnitCardsGrid();
-        console.log('TalentSystem: showUnitCards completed!');
     }
     
     clearContent() {
@@ -274,7 +259,6 @@ export class TalentSystem extends Component {
     }
     
     createUnitCardsGrid() {
-        console.log('TalentSystem: createUnitCardsGrid called!');
         // 友方单位列表
         const unitTypes = [
             { id: 'Arrower', name: '弓箭手', description: '远程攻击单位，能够攻击远处的敌人，射速较快', icon: 'Arrower', unitType: 'CHARACTER' },
@@ -285,7 +269,6 @@ export class TalentSystem extends Component {
             { id: 'Tree', name: '普通树木', description: '普通的树木，可以提供资源', icon: 'Tree', unitType: 'TREE' }
         ];
         
-        console.log('TalentSystem: Unit types to create cards for:', unitTypes.map(unit => unit.name));
         
         // 卡片布局配置 - 三格占满一行
         // 获取面板宽度，用于计算卡片尺寸
@@ -339,7 +322,6 @@ export class TalentSystem extends Component {
         const actualCardWidth = cardWidth;
         const actualCardHeight = cardHeight;
         
-        console.log(`TalentSystem: Card layout - panelWidth: ${panelWidth}, availableWidth: ${availableWidth}, cardWidth: ${actualCardWidth}, cardHeight: ${actualCardHeight}, startX: ${startX}, spacingX: ${spacingX}, cardSpacing: ${actualCardSpacing}, horizontalMargin: ${horizontalMargin}`);
         
         // 创建卡片容器
         const cardsContainer = new Node('UnitCardsContainer');
@@ -347,7 +329,6 @@ export class TalentSystem extends Component {
         cardsContainer.setPosition(0, 0, 0);
         // 确保卡片容器处于激活状态
         cardsContainer.active = true;
-        console.log('TalentSystem: UnitCardsContainer created and activated!');
         
         // 创建单位卡片
         for (let i = 0; i < unitTypes.length; i++) {
@@ -358,12 +339,9 @@ export class TalentSystem extends Component {
             const xPos = startX + col * spacingX;
             const yPos = startY - row * spacingY;
             
-            console.log(`TalentSystem: Creating card for unit ${unit.name} at position (${xPos}, ${yPos})`);
             this.createUnitCard(unit, xPos, yPos, actualCardWidth, actualCardHeight, cardsContainer);
-            console.log(`TalentSystem: Card for unit ${unit.name} created!`);
         }
         
-        console.log('TalentSystem: createUnitCardsGrid completed!');
     }
     
     createUnitCard(unit: any, x: number, y: number, width: number, height: number, parentNode: Node) {
@@ -525,7 +503,6 @@ export class TalentSystem extends Component {
     }
     
     showUnitDetail(unit: any) {
-        console.log(`TalentSystem: Showing detail for unit ${unit.name}`);
         
         // 创建详情面板
         const detailPanel = new Node('UnitDetailPanel');
@@ -791,7 +768,6 @@ export class TalentSystem extends Component {
      * @param sprite Sprite组件，用于显示图标
      */
     loadUnitCardIcon(unitId: string, sprite: Sprite) {
-        console.log(`TalentSystem: Loading card icon for unit ${unitId}`);
         
         // 根据单位ID构建节点名称
         const nodeName = unitId;
@@ -810,49 +786,39 @@ export class TalentSystem extends Component {
      */
     private tryGetIconFromUnitScript(unitScript: any, node: Node, sprite: Sprite, unitId: string): boolean {
         if (!unitScript) {
-            console.log(`TalentSystem: Unit script is null for ${unitId}`);
             return false;
         }
         
         // 1. 优先使用cardIcon
         if (unitScript.cardIcon) {
-            console.log(`TalentSystem: Setting card icon from ${unitId} cardIcon`);
             sprite.spriteFrame = unitScript.cardIcon;
             return true;
         } else {
-            console.log(`TalentSystem: ${unitId} cardIcon is null`);
         }
         
         // 2. 如果没有cardIcon，尝试获取unitIcon
         if (unitScript.unitIcon) {
-            console.log(`TalentSystem: Setting card icon from ${unitId} unitIcon`);
             sprite.spriteFrame = unitScript.unitIcon;
             return true;
         } else {
-            console.log(`TalentSystem: ${unitId} unitIcon is null`);
         }
         
         // 3. 尝试获取defaultSpriteFrame
         if (unitScript.defaultSpriteFrame) {
-            console.log(`TalentSystem: Setting card icon from ${unitId} defaultSpriteFrame`);
             sprite.spriteFrame = unitScript.defaultSpriteFrame;
             return true;
         } else {
-            console.log(`TalentSystem: ${unitId} defaultSpriteFrame is null`);
         }
         
         // 4. 尝试获取Sprite组件的spriteFrame
         const spriteComponent = node.getComponent(Sprite);
         if (spriteComponent) {
             if (spriteComponent.spriteFrame) {
-                console.log(`TalentSystem: Setting card icon from ${unitId} Sprite component spriteFrame`);
                 sprite.spriteFrame = spriteComponent.spriteFrame;
                 return true;
             } else {
-                console.log(`TalentSystem: ${unitId} Sprite component spriteFrame is null`);
             }
         } else {
-            console.log(`TalentSystem: No Sprite component found on node for ${unitId}`);
         }
         
         return false;
@@ -865,7 +831,6 @@ export class TalentSystem extends Component {
      * @param sprite Sprite组件
      */
     private tryGetIconFromPrefab(unitId: string, nodeName: string, sprite: Sprite) {
-        console.log(`TalentSystem: Trying to get icon from prefab for unit ${unitId}`);
         
         // 单位 prefab 的 UUID 映射表
         const prefabUuidMap: Record<string, string> = {
@@ -879,7 +844,6 @@ export class TalentSystem extends Component {
         
         // 1. 优先使用 TalentSystem 的 arrowerPrefab 属性（如果配置了）
         if (unitId === 'Arrower' && this.arrowerPrefab) {
-            console.log(`TalentSystem: Using arrowerPrefab from TalentSystem`);
             this.loadIconFromPrefabInstance(this.arrowerPrefab, unitId, sprite);
             return;
         }
@@ -887,7 +851,6 @@ export class TalentSystem extends Component {
         // 2. 通过 UUID 加载 prefab
         const uuid = prefabUuidMap[unitId];
         if (!uuid) {
-            console.debug(`TalentSystem: No UUID mapping found for ${unitId}`);
             return;
         }
         
@@ -895,28 +858,21 @@ export class TalentSystem extends Component {
         const unitIdRef = unitId; // 保存 unitId 引用
         
         assetManager.loadAny({ uuid: uuid, type: Prefab }, (err, loadedPrefab) => {
-            console.log(`TalentSystem: ${unitIdRef} UUID load callback executed, err: ${err ? err.message : 'null'}, prefab: ${loadedPrefab ? 'exists' : 'null'}`);
             if (!err && loadedPrefab) {
-                console.log(`TalentSystem: Loaded ${unitIdRef} prefab by UUID (async), spriteRef: ${spriteRef ? 'exists' : 'null'}`);
                 // 检查 sprite 是否有效，如果无效则尝试重新查找
                 let validSprite = spriteRef;
                 if (!validSprite || !validSprite.node || !validSprite.node.isValid) {
-                    console.log(`TalentSystem: Sprite reference is invalid, trying to find sprite by unitId ${unitIdRef}...`);
                     validSprite = this.tryFindSpriteByUnitId(unitIdRef);
                     if (validSprite) {
-                        console.log(`TalentSystem: Found sprite by unitId ${unitIdRef}`);
                     } else {
-                        console.debug(`TalentSystem: Could not find sprite by unitId ${unitIdRef}`);
                     }
                 }
                 if (validSprite && validSprite.node && validSprite.node.isValid) {
                     // 确保 sprite 节点仍然有效
                     this.loadIconFromPrefabInstance(loadedPrefab as Prefab, unitIdRef, validSprite);
                 } else {
-                    console.debug(`TalentSystem: Sprite reference is invalid in UUID load callback for ${unitIdRef}`);
                 }
             } else {
-                console.debug(`TalentSystem: Failed to load ${unitIdRef} prefab by UUID, err: ${err ? err.message : 'unknown error'}`);
             }
         });
     }
@@ -928,65 +884,48 @@ export class TalentSystem extends Component {
      * @param sprite Sprite组件
      */
     private loadIconFromPrefabInstance(prefab: Prefab, unitId: string, sprite: Sprite) {
-        console.log(`TalentSystem: Loading icon from prefab instance for ${unitId}, prefab: ${prefab ? 'exists' : 'null'}, sprite: ${sprite ? 'exists' : 'null'}`);
         if (!prefab) {
-            console.log(`TalentSystem: Prefab is null for ${unitId}`);
             return;
         }
         if (!sprite) {
-            console.log(`TalentSystem: Sprite is null for ${unitId}`);
             return;
         }
         // 检查 sprite 节点是否仍然有效
         if (!sprite.node || !sprite.node.isValid) {
-            console.debug(`TalentSystem: Sprite node is invalid for ${unitId}, cannot set icon`);
             return;
         }
         
         // 先尝试直接从预制体数据获取 SpriteFrame（不需要实例化）
         const prefabData = prefab.data;
         if (prefabData) {
-            console.log(`TalentSystem: Checking prefab data for ${unitId}, prefabData: ${prefabData ? 'exists' : 'null'}`);
             const prefabSprite = prefabData.getComponent(Sprite);
             if (prefabSprite) {
-                console.log(`TalentSystem: Found Sprite component in prefab data for ${unitId}, spriteFrame: ${prefabSprite.spriteFrame ? 'exists' : 'null'}`);
                 // 如果 spriteFrame 存在，直接使用
                 if (prefabSprite.spriteFrame) {
-                    console.log(`TalentSystem: Got spriteFrame directly from prefab data for ${unitId}`);
                     sprite.spriteFrame = prefabSprite.spriteFrame;
-                    console.log(`TalentSystem: Icon set from prefab data, spriteFrame: ${sprite.spriteFrame ? 'set' : 'not set'}`);
                     return;
                 }
                 // 如果 spriteFrame 为空，尝试强制刷新
-                console.log(`TalentSystem: Prefab Sprite spriteFrame is null, trying to refresh...`);
                 prefabSprite.enabled = false;
                 prefabSprite.enabled = true;
                 // 等待一帧再检查
                 this.scheduleOnce(() => {
                     // 检查 sprite 节点是否仍然有效
                     if (!sprite.node || !sprite.node.isValid) {
-                        console.debug(`TalentSystem: Sprite node is invalid when checking prefab data refresh for ${unitId}`);
                         return;
                     }
                     if (prefabSprite.spriteFrame) {
-                        console.log(`TalentSystem: Got spriteFrame after refresh from prefab data for ${unitId}`);
                         sprite.spriteFrame = prefabSprite.spriteFrame;
-                        console.log(`TalentSystem: Icon set from prefab data after refresh, spriteFrame: ${sprite.spriteFrame ? 'set' : 'not set'}`);
                     } else {
-                        console.log(`TalentSystem: Prefab Sprite spriteFrame is still null after refresh for ${unitId}, will try instantiating`);
                     }
                 }, 0);
             } else {
-                console.log(`TalentSystem: No Sprite component found in prefab data for ${unitId}`);
             }
         } else {
-            console.log(`TalentSystem: Prefab data is null for ${unitId}`);
         }
         
-        console.log(`TalentSystem: Instantiating prefab for ${unitId}...`);
         const prefabInstance = instantiate(prefab);
         if (prefabInstance) {
-            console.log(`TalentSystem: Prefab instance created for ${unitId}`);
             // 激活预制体实例，确保组件能够初始化
             prefabInstance.active = true;
             
@@ -1011,14 +950,11 @@ export class TalentSystem extends Component {
                               prefabInstance.getComponent(unitId) as any;
             
             if (unitScript) {
-                console.log(`TalentSystem: Found ${componentName} component in prefab instance`);
             } else {
-                console.log(`TalentSystem: No ${componentName} component found in prefab instance`);
             }
             
             // 使用统一的图标获取逻辑（优先从组件属性获取）
             if (unitScript && this.tryGetIconFromUnitScript(unitScript, prefabInstance, sprite, unitId)) {
-                console.log(`TalentSystem: Successfully loaded icon from unit script for ${unitId}, spriteFrame: ${sprite.spriteFrame ? 'set' : 'not set'}`);
                 prefabInstance.destroy();
                 return;
             }
@@ -1027,19 +963,15 @@ export class TalentSystem extends Component {
             // 4. 尝试从根节点获取Sprite组件（优先检查这个，因为大部分单位的Sprite在根节点）
             const rootSprite = prefabInstance.getComponent(Sprite);
             if (rootSprite) {
-                console.log(`TalentSystem: Found root Sprite component for ${unitId}, spriteFrame: ${rootSprite.spriteFrame ? 'exists' : 'null'}`);
                 
                 // 立即检查 spriteFrame
                 if (rootSprite.spriteFrame) {
-                    console.log(`TalentSystem: Setting card icon from prefab root Sprite spriteFrame for ${unitId} (immediate)`);
                     sprite.spriteFrame = rootSprite.spriteFrame;
-                    console.log(`TalentSystem: Icon set successfully for ${unitId}, spriteFrame: ${sprite.spriteFrame ? 'set' : 'not set'}`);
                     prefabInstance.destroy();
                     return;
                 }
                 
                 // 如果 spriteFrame 为空，强制刷新并等待
-                console.log(`TalentSystem: Root Sprite spriteFrame is null, refreshing and waiting...`);
                 rootSprite.enabled = false;
                 rootSprite.enabled = true;
                 
@@ -1051,39 +983,29 @@ export class TalentSystem extends Component {
                 this.scheduleOnce(() => {
                     // 检查 sprite 节点是否仍然有效
                     if (!spriteRef.node || !spriteRef.node.isValid) {
-                        console.debug(`TalentSystem: Sprite node is invalid when checking root Sprite for ${unitId}`);
                         prefabRef.destroy();
                         return;
                     }
                     let spriteFrame = rootSpriteRef.spriteFrame;
-                    console.log(`TalentSystem: After first wait, spriteFrame: ${spriteFrame ? 'exists' : 'null'}`);
                     
                     if (spriteFrame) {
-                        console.log(`TalentSystem: Setting card icon from prefab root Sprite spriteFrame for ${unitId} (after wait)`);
                         spriteRef.spriteFrame = spriteFrame;
-                        console.log(`TalentSystem: Icon set successfully for ${unitId}, spriteFrame: ${spriteRef.spriteFrame ? 'set' : 'not set'}`);
                         prefabRef.destroy();
                     } else {
                         // 再次尝试刷新
-                        console.log(`TalentSystem: Still no spriteFrame, trying second refresh...`);
                         rootSpriteRef.enabled = false;
                         rootSpriteRef.enabled = true;
                         this.scheduleOnce(() => {
                             // 再次检查 sprite 节点是否仍然有效
                             if (!spriteRef.node || !spriteRef.node.isValid) {
-                                console.debug(`TalentSystem: Sprite node is invalid when checking root Sprite second wait for ${unitId}`);
                                 prefabRef.destroy();
                                 return;
                             }
                             spriteFrame = rootSpriteRef.spriteFrame;
-                            console.log(`TalentSystem: After second wait, spriteFrame: ${spriteFrame ? 'exists' : 'null'}`);
                             
                             if (spriteFrame) {
-                                console.log(`TalentSystem: Setting card icon from prefab root Sprite spriteFrame for ${unitId} (after second wait)`);
                                 spriteRef.spriteFrame = spriteFrame;
-                                console.log(`TalentSystem: Icon set successfully for ${unitId}, spriteFrame: ${spriteRef.spriteFrame ? 'set' : 'not set'}`);
                             } else {
-                                console.debug(`TalentSystem: Root Sprite spriteFrame is still null after second wait for ${unitId}, rootSprite enabled: ${rootSpriteRef.enabled}. 没有获取到预制体的SpriteFrame`);
                             }
                             prefabRef.destroy();
                         }, 0.05); // 等待 0.05 秒
@@ -1091,22 +1013,17 @@ export class TalentSystem extends Component {
                 }, 0.05); // 等待 0.05 秒
                 return; // 等待中，先返回
             } else {
-                console.log(`TalentSystem: No root Sprite component found for ${unitId}`);
             }
             
             // 5. 尝试从子节点中查找Sprite组件（有些单位的Sprite可能在子节点中）
             const childSprite = findSpriteInChildren(prefabInstance);
             if (childSprite) {
-                console.log(`TalentSystem: Found child Sprite component for ${unitId}`);
                 if (childSprite.spriteFrame) {
-                    console.log(`TalentSystem: Setting card icon from prefab child Sprite spriteFrame for ${unitId}`);
                     sprite.spriteFrame = childSprite.spriteFrame;
-                    console.log(`TalentSystem: Icon set successfully from child Sprite for ${unitId}, spriteFrame: ${sprite.spriteFrame ? 'set' : 'not set'}`);
                     prefabInstance.destroy();
                     return;
                 } else {
                     // 如果spriteFrame为空，尝试等待一帧
-                    console.log(`TalentSystem: Child Sprite found but spriteFrame is null for ${unitId}, waiting for initialization...`);
                     const spriteRef = sprite;
                     const prefabRef = prefabInstance;
                     const childSpriteRef = childSprite;
@@ -1114,7 +1031,6 @@ export class TalentSystem extends Component {
                     this.scheduleOnce(() => {
                         // 检查 sprite 节点是否仍然有效
                         if (!spriteRef.node || !spriteRef.node.isValid) {
-                            console.debug(`TalentSystem: Sprite node is invalid when checking child Sprite for ${unitId}`);
                             prefabRef.destroy();
                             return;
                         }
@@ -1126,32 +1042,25 @@ export class TalentSystem extends Component {
                         }
                         
                         if (spriteFrame) {
-                            console.log(`TalentSystem: Got child spriteFrame after waiting for ${unitId}`);
                             spriteRef.spriteFrame = spriteFrame;
-                            console.log(`TalentSystem: Icon set successfully from child Sprite after waiting for ${unitId}, spriteFrame: ${spriteRef.spriteFrame ? 'set' : 'not set'}`);
                         } else {
-                            console.debug(`TalentSystem: Still no child spriteFrame after waiting for ${unitId}. 没有获取到预制体的SpriteFrame`);
                         }
                         prefabRef.destroy();
                     }, 0.1);
                     return; // 等待中，先返回
                 }
             } else {
-                console.log(`TalentSystem: No child Sprite component found for ${unitId}`);
             }
             
             // 6. 如果还是没有找到，输出警告
-            console.debug(`TalentSystem: Could not find spriteFrame in prefab for ${unitId}, tried: cardIcon, unitIcon, defaultSpriteFrame, root Sprite, child Sprite. 没有获取到预制体的SpriteFrame`);
             
             prefabInstance.destroy();
         } else {
-            console.log(`TalentSystem: Failed to instantiate prefab for ${unitId}`);
         }
         
         // 如果都获取不到，保持Sprite组件为空（不显示图标）
         // 最后检查一次 spriteFrame 是否已设置
         if (!sprite.spriteFrame) {
-            console.debug(`TalentSystem: Could not get icon for ${unitId}, sprite will remain empty. 没有获取到预制体的SpriteFrame`);
         }
     }
     
@@ -1274,18 +1183,15 @@ export class TalentSystem extends Component {
     upgradeTalent(talentId: string) {
         const talent = this.talents.get(talentId);
         if (!talent) {
-            console.error(`TalentSystem: Talent ${talentId} not found!`);
             return;
         }
         
         // 检查是否可以升级
         if (talent.level >= talent.maxLevel) {
-            console.log(`TalentSystem: Talent ${talentId} already at max level!`);
             return;
         }
         
         if (this.talentPoints < talent.cost) {
-            console.log(`TalentSystem: Not enough talent points for ${talentId}!`);
             return;
         }
         
@@ -1301,13 +1207,11 @@ export class TalentSystem extends Component {
         // 更新天赋面板
         this.updateTalentPanel();
         
-        console.log(`TalentSystem: Upgraded talent ${talentId} to level ${talent.level}!`);
     }
     
     applyTalentEffect(talent: Talent) {
         // 这里可以添加实际的天赋效果应用逻辑
         // 例如，遍历所有友方单位并增加相应属性
-        console.log(`TalentSystem: Applied talent effect - ${talent.name}: +${talent.value}% ${TalentType[talent.type]}`);
     }
     
     updateTalentPanel() {

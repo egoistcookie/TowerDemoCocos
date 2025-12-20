@@ -202,17 +202,12 @@ export class Role extends Component {
         // 如果已经在编辑器中设置了attackAnimationFrames，直接使用
         if (this.attackAnimationFrames && this.attackAnimationFrames.length > 0) {
             const validFrames = this.attackAnimationFrames.filter(frame => frame != null);
-            if (validFrames.length < this.attackAnimationFrames.length) {
-                console.warn(`Role: Warning - ${this.attackAnimationFrames.length - validFrames.length} frames are null or invalid!`);
-            }
             return;
         }
 
         // 如果没有设置帧数组，尝试从纹理中加载
         if (this.attackAnimationTexture) {
             this.loadFramesFromTexture();
-        } else {
-            console.warn('Role: No attack animation frames or texture set. Attack animation will not play.');
         }
     }
 
@@ -231,7 +226,7 @@ export class Role extends Component {
         // 推荐做法：在编辑器中手动设置attackAnimationFrames数组
         // 或者使用SpriteAtlas资源
         
-        console.warn('Role: Auto-loading frames from texture is not fully supported. Please set attackAnimationFrames array in editor, or use SpriteAtlas.');
+        
     }
 
     createHealthBar() {
@@ -352,11 +347,11 @@ export class Role extends Component {
                         this.attackTimer = 0;
                     }
                 }
-            } else if (distance <= this.attackRange * 2) {
-                // 在2倍攻击范围内，朝敌人移动
+            } else if (distance <= this.getMovementRange()) {
+                // 在移动范围内，朝敌人移动
                 this.moveTowardsTarget(deltaTime);
             } else {
-                // 超出2倍攻击范围，停止移动
+                // 超出移动范围，停止移动
                 this.stopMoving();
             }
         } else {
@@ -561,10 +556,26 @@ export class Role extends Component {
         return result;
     }
     
+    /**
+     * 获取移动范围（可被子类重写）
+     * @returns 移动范围，默认是攻击范围的2倍
+     */
+    protected getMovementRange(): number {
+        return this.attackRange * 2;
+    }
+
+    /**
+     * 获取索敌范围（可被子类重写）
+     * @returns 索敌范围，默认是攻击范围的2倍
+     */
+    protected getDetectionRange(): number {
+        return this.attackRange * 2;
+    }
+    
     findTarget() {
         let nearestEnemy: Node = null!;
         let minDistance = Infinity;
-        const detectionRange = this.attackRange * 2; // 2倍攻击范围用于检测
+        const detectionRange = this.getDetectionRange(); // 使用可重写的方法获取索敌范围
         
         // 使用公共函数获取敌人
         const enemies = this.getEnemies(true, detectionRange);
@@ -735,6 +746,8 @@ export class Role extends Component {
             }
         };
 
+        // 先取消之前的调度，避免重复调度
+        this.unschedule(animationUpdate);
         // 开始动画更新
         this.schedule(animationUpdate, 0);
     }
@@ -834,11 +847,9 @@ export class Role extends Component {
                     
                     // 调试：当距离较近时总是输出日志（降低阈值，确保能检测到）
                     if (towerDistance < 200) { // 使用固定值200像素，确保能检测到
-                        // console.debug(`Arrower: Checking distance to other tower #${towerCount}. Distance: ${towerDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, This: (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Other: (${tower.worldPosition.x.toFixed(1)}, ${tower.worldPosition.y.toFixed(1)}), This radius: ${this.collisionRadius}, Other radius: ${otherRadius}`);
                     }
                     
                     if (towerDistance < minDistance) {
-                        // console.debug(`Arrower: *** COLLISION DETECTED with other tower! *** Distance: ${towerDistance.toFixed(1)}, Min: ${minDistance.toFixed(1)}, This tower at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), Other tower at (${tower.worldPosition.x.toFixed(1)}, ${tower.worldPosition.y.toFixed(1)}), This radius: ${this.collisionRadius}, Other radius: ${otherRadius}`);
                         return true;
                     }
                 }
@@ -846,12 +857,10 @@ export class Role extends Component {
             
             // 调试：如果没有找到其他弓箭手
             if (towerCount === 0 && Math.random() < 0.016) {
-                // console.debug(`Arrower: No other towers found in container (total: ${towers.length})`);
             }
         } else {
             // 调试：如果找不到Towers节点（降低警告频率，避免刷屏）
             if (this.collisionCheckCount % 100 === 0) {
-                // console.warn(`Arrower: Towers node not found! Cannot check collision with other towers. (check #${this.collisionCheckCount})`);
             }
         }
 
@@ -1362,6 +1371,8 @@ export class Role extends Component {
             }
         };
         
+        // 先取消之前的调度，避免重复调度
+        this.unschedule(animationUpdate);
         // 开始动画更新（每帧更新）
         this.schedule(animationUpdate, 0);
     }
@@ -1417,6 +1428,8 @@ export class Role extends Component {
             this.currentAnimationFrameIndex = 0;
         }
         
+        // 先取消之前的调度，避免重复调度
+        this.unschedule(this.updateHitAnimation);
         // 开始动画更新
         this.schedule(this.updateHitAnimation, 0);
     }
@@ -1440,6 +1453,8 @@ export class Role extends Component {
             this.currentAnimationFrameIndex = 0;
         }
         
+        // 先取消之前的调度，避免重复调度
+        this.unschedule(this.updateDeathAnimation);
         // 开始死亡动画更新
         this.schedule(this.updateDeathAnimation, 0);
     }
@@ -1871,7 +1886,6 @@ export class Role extends Component {
         }
         if (this.gameManager) {
             // 减少人口
-            console.debug(`Role.destroyTower: buildCost=${this.buildCost}, reducing population`);
             this.gameManager.removePopulation(1);
         }
 
@@ -2066,13 +2080,11 @@ export class Role extends Component {
         // 查找Camera节点
         const cameraNode = find('Canvas/Camera') || this.node.scene?.getChildByName('Camera');
         if (!cameraNode) {
-            console.error('Role: Camera node not found!');
             return;
         }
         
         const camera = cameraNode.getComponent(Camera);
         if (!camera) {
-            console.error('Role: Camera component not found!');
             return;
         }
         

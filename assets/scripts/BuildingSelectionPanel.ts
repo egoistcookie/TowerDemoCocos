@@ -45,13 +45,10 @@ export class BuildingSelectionPanel extends Component {
         // 监听Canvas的触摸事件，用于拖拽预览和面板外点击
         this.canvasNode = find('Canvas');
         if (this.canvasNode) {
-            console.debug('[BuildingSelectionPanel] start - 注册Canvas触摸事件监听器');
             this.canvasNode.on(Node.EventType.TOUCH_START, this.onCanvasTouchStart, this);
             this.canvasNode.on(Node.EventType.TOUCH_MOVE, this.onCanvasTouchMove, this);
             this.canvasNode.on(Node.EventType.TOUCH_END, this.onCanvasTouchEnd, this);
-            console.debug('[BuildingSelectionPanel] start - Canvas触摸事件监听器注册完成');
         } else {
-            console.error('BuildingSelectionPanel.start: Canvas not found!');
         }
         
         this.lastIsDragging = this.isDragging;
@@ -63,7 +60,6 @@ export class BuildingSelectionPanel extends Component {
     update() {
         // 检测拖拽状态从 true 变为 false，说明触摸结束
         if (this.lastIsDragging && !this.isDragging) {
-            console.debug('[BuildingSelectionPanel] update - 检测到拖拽状态变化（从拖拽变为停止），清除网格高亮, lastIsDragging:', this.lastIsDragging, 'isDragging:', this.isDragging, 'selectedBuilding:', !!this.selectedBuilding);
             this.clearGridHighlight();
         }
         this.lastIsDragging = this.isDragging;
@@ -73,32 +69,23 @@ export class BuildingSelectionPanel extends Component {
      * 清除网格高亮的辅助方法
      */
     private clearGridHighlight() {
-        console.debug('[BuildingSelectionPanel] clearGridHighlight - 开始清除网格高亮, gridPanel存在:', !!this.gridPanel, 'stoneWallGridPanel存在:', !!this.stoneWallGridPanel, '调用堆栈:', new Error().stack?.split('\n').slice(1, 4).join(' -> '));
         
         // 清除普通网格高亮
         if (!this.gridPanel) {
-            console.debug('[BuildingSelectionPanel] clearGridHighlight - gridPanel不存在，尝试查找');
             this.findGridPanel();
         }
         if (this.gridPanel) {
-            console.debug('[BuildingSelectionPanel] clearGridHighlight - 调用 gridPanel.clearHighlight()');
             this.gridPanel.clearHighlight();
-            console.debug('[BuildingSelectionPanel] clearGridHighlight - gridPanel.clearHighlight调用完成');
         } else {
-            console.error('[BuildingSelectionPanel] clearGridHighlight - gridPanel 不存在，无法清除高亮');
         }
         
         // 清除石墙网格高亮
         if (!this.stoneWallGridPanel) {
-            console.debug('[BuildingSelectionPanel] clearGridHighlight - stoneWallGridPanel不存在，尝试查找');
             this.findStoneWallGridPanel();
         }
         if (this.stoneWallGridPanel) {
-            console.debug('[BuildingSelectionPanel] clearGridHighlight - 调用 stoneWallGridPanel.clearHighlight()');
             this.stoneWallGridPanel.clearHighlight();
-            console.debug('[BuildingSelectionPanel] clearGridHighlight - stoneWallGridPanel.clearHighlight调用完成');
         } else {
-            console.error('[BuildingSelectionPanel] clearGridHighlight - stoneWallGridPanel 不存在，无法清除高亮');
         }
     }
 
@@ -229,12 +216,10 @@ export class BuildingSelectionPanel extends Component {
     onCanvasTouchMove(event: EventTouch) {
         // 如果不在拖拽状态，确保清除高亮并返回
         if (!this.isDragging) {
-            console.debug('[BuildingSelectionPanel] onCanvasTouchMove - 不在拖拽状态，清除高亮, isDragging:', this.isDragging);
             this.clearGridHighlight();
             return;
         }
         
-        console.debug('[BuildingSelectionPanel] onCanvasTouchMove - 拖拽中, isDragging:', this.isDragging, 'selectedBuilding:', this.selectedBuilding?.name, 'dragPreview存在:', !!this.dragPreview);
         
         // 如果正在拖拽，必须处理触摸移动事件
         if (this.dragPreview && this.selectedBuilding) {
@@ -263,16 +248,14 @@ export class BuildingSelectionPanel extends Component {
                 // 将屏幕坐标转换为世界坐标（与普通建筑物一致）
                 const worldPos = this.getWorldPositionFromScreen(screenPos);
                 if (!worldPos) {
-                    console.warn('[BuildingSelectionPanel] onCanvasTouchMove - 无法获取世界坐标');
                     return;
                 }
                 
                 // 更新拖拽预览位置跟随鼠标
-                this.dragPreview.setWorldPosition(worldPos);
+                this.dragPreview.setWorldPosition(worldPos); 
                 
                 // 如果有石墙网格面板，处理网格高亮和对齐
                 if (this.stoneWallGridPanel) {
-                    console.debug('[BuildingSelectionPanel] onCanvasTouchMove - 处理石墙网格高亮, worldPos:', `(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
                     
                     // 尝试高亮石墙网格（如果位置在网格内）
                     this.stoneWallGridPanel.highlightGrid(worldPos);
@@ -281,15 +264,12 @@ export class BuildingSelectionPanel extends Component {
                     const gridCenter = this.stoneWallGridPanel.getNearestGridCenter(worldPos);
                     if (gridCenter) {
                         // 更新预览位置到网格中心（对齐到网格）
-                        console.debug('[BuildingSelectionPanel] onCanvasTouchMove - 石墙对齐到网格中心:', `(${gridCenter.x.toFixed(1)}, ${gridCenter.y.toFixed(1)})`);
                         this.dragPreview.setWorldPosition(gridCenter);
                     } else {
                         // 如果不在石墙网格内，清除高亮
-                        console.debug('[BuildingSelectionPanel] onCanvasTouchMove - 石墙不在网格内，清除高亮');
                         this.stoneWallGridPanel.clearHighlight();
                     }
                 } else {
-                    console.warn('[BuildingSelectionPanel] onCanvasTouchMove - stoneWallGridPanel不存在');
                 }
             } else {
                 // 其他建筑使用普通网格面板
@@ -303,7 +283,6 @@ export class BuildingSelectionPanel extends Component {
                 // 将屏幕坐标转换为世界坐标
                 const worldPos = this.getWorldPositionFromScreen(screenPos);
                 if (!worldPos) {
-                    console.warn('[BuildingSelectionPanel] onCanvasTouchMove - 无法获取世界坐标');
                     return;
                 }
                 
@@ -312,7 +291,6 @@ export class BuildingSelectionPanel extends Component {
                 
                 // 如果有普通网格面板，处理网格高亮和对齐
                 if (this.gridPanel) {
-                    console.debug('[BuildingSelectionPanel] onCanvasTouchMove - 处理普通网格高亮, worldPos:', `(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
                     
                     // 尝试高亮普通网格（如果位置在网格内）
                     this.gridPanel.highlightGrid(worldPos);
@@ -321,15 +299,12 @@ export class BuildingSelectionPanel extends Component {
                     const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
                     if (gridCenter) {
                         // 更新预览位置到网格中心（对齐到网格）
-                        console.debug('[BuildingSelectionPanel] onCanvasTouchMove - 对齐到普通网格中心:', `(${gridCenter.x.toFixed(1)}, ${gridCenter.y.toFixed(1)})`);
                         this.dragPreview.setWorldPosition(gridCenter);
                     } else {
                         // 如果不在普通网格内，清除高亮
-                        console.debug('[BuildingSelectionPanel] onCanvasTouchMove - 不在普通网格内，清除高亮');
                         this.gridPanel.clearHighlight();
                     }
                 } else {
-                    console.warn('[BuildingSelectionPanel] onCanvasTouchMove - gridPanel不存在');
                 }
             }
         }
@@ -341,15 +316,12 @@ export class BuildingSelectionPanel extends Component {
     onCanvasTouchEnd(event: EventTouch) {
         const location = event.getLocation();
         const targetNode = event.target as Node;
-        console.debug('[BuildingSelectionPanel] onCanvasTouchEnd - 触摸结束事件触发, 位置:', `(${location.x.toFixed(1)}, ${location.y.toFixed(1)})`, 'targetNode:', targetNode?.name, 'touchEndHandled:', this.touchEndHandled, 'isDragging:', this.isDragging, 'selectedBuilding:', !!this.selectedBuilding, 'dragPreview:', !!this.dragPreview, 'gridPanel:', !!this.gridPanel, 'propagationStopped:', event.propagationStopped);
         
         // 无论什么情况，都先清除网格高亮
-        console.debug('[BuildingSelectionPanel] onCanvasTouchEnd - 立即清除网格高亮（无条件）');
         this.clearGridHighlight();
         
         // 如果触摸结束事件已经被处理（在BuildingItem上），则不处理
         if (this.touchEndHandled) {
-            console.debug('[BuildingSelectionPanel] onCanvasTouchEnd - 触摸结束事件已被处理，跳过后续处理');
             this.touchEndHandled = false; // 重置标志
             return;
         }
@@ -357,9 +329,7 @@ export class BuildingSelectionPanel extends Component {
         // 如果正在拖拽且有选中的建筑物，处理建造逻辑
         if (this.isDragging && this.selectedBuilding && this.dragPreview) {
             // 立即停止拖拽状态，防止触摸移动事件继续处理
-            console.debug('[BuildingSelectionPanel] onCanvasTouchEnd - 检测到拖拽状态，设置 isDragging = false（之前为:', this.isDragging, '）');
             this.isDragging = false;
-            console.debug('[BuildingSelectionPanel] onCanvasTouchEnd - 设置 isDragging = false 后，立即清除网格高亮');
             this.clearGridHighlight();
             
             const location = event.getLocation();
@@ -505,7 +475,6 @@ export class BuildingSelectionPanel extends Component {
                 }
                 
                 if (worldPos && this.onBuildCallback) {
-                console.debug('[BuildingSelectionPanel] onCanvasTouchEnd - 开始建造建筑物, 位置:', `(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
                 this.onBuildCallback(this.selectedBuilding, worldPos);
                 
                 // 清除拖拽预览和状态
@@ -513,7 +482,6 @@ export class BuildingSelectionPanel extends Component {
                 this.selectedBuilding = null;
                 
                 // 再次确保清除网格高亮
-                console.debug('[BuildingSelectionPanel] onCanvasTouchEnd - 建造成功后，再次清除网格高亮');
                 if (this.gridPanel) {
                     this.gridPanel.clearHighlight();
                 }
@@ -526,7 +494,6 @@ export class BuildingSelectionPanel extends Component {
                 
                 // 延迟一帧再次清除选中状态和网格高亮，确保建筑物创建完成后清除
                 this.scheduleOnce(() => {
-                    console.debug('[BuildingSelectionPanel] onCanvasTouchEnd - 延迟一帧后再次清除选中状态和网格高亮');
                     this.clearBuildingSelection();
                     if (this.gridPanel) {
                         this.gridPanel.clearHighlight();
@@ -544,18 +511,14 @@ export class BuildingSelectionPanel extends Component {
                 // 拖拽距离不够，清除状态
                 this.clearDragPreview();
                 this.selectedBuilding = null;
-                console.debug('[BuildingSelectionPanel] onCanvasTouchEnd - 拖拽距离不够，清除网格高亮');
                 this.clearGridHighlight();
             }
         } else if (this.isDragging || this.selectedBuilding) {
             // 如果之前有拖拽状态但触摸结束时条件不满足，也要清除高亮
-            console.debug('[BuildingSelectionPanel] onCanvasTouchEnd - 检测到残留状态，清除网格高亮, isDragging:', this.isDragging, 'selectedBuilding:', !!this.selectedBuilding, 'dragPreview:', !!this.dragPreview);
             this.isDragging = false;
             this.selectedBuilding = null;
-            console.debug('[BuildingSelectionPanel] onCanvasTouchEnd - 清除残留状态后，清除网格高亮');
             this.clearGridHighlight();
         } else {
-            console.debug('[BuildingSelectionPanel] onCanvasTouchEnd - 没有拖拽状态，无需处理');
         }
     }
 
@@ -736,25 +699,20 @@ export class BuildingSelectionPanel extends Component {
 
         // 添加触摸事件
         item.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
-            console.debug('[BuildingSelectionPanel] createBuildingItem - BuildingItem TOUCH_START事件触发, building:', building.name);
             this.onBuildingItemTouchStart(building, event);
         }, this);
 
         item.on(Node.EventType.TOUCH_MOVE, (event: EventTouch) => {
-            console.debug('[BuildingSelectionPanel] createBuildingItem - BuildingItem TOUCH_MOVE事件触发, building:', building.name);
             this.onBuildingItemTouchMove(building, event);
         }, this);
 
         item.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
             const location = event.getLocation();
             const targetNode = event.target as Node;
-            console.debug('[BuildingSelectionPanel] createBuildingItem - BuildingItem TOUCH_END事件触发, building:', building.name, '位置:', `(${location.x.toFixed(1)}, ${location.y.toFixed(1)})`, 'targetNode:', targetNode?.name, 'propagationStopped:', event.propagationStopped);
             this.onBuildingItemTouchEnd(building, event);
-            console.debug('[BuildingSelectionPanel] createBuildingItem - BuildingItem TOUCH_END事件处理完成, propagationStopped:', event.propagationStopped);
         }, this);
 
         item.on(Node.EventType.TOUCH_CANCEL, (event: EventTouch) => {
-            console.debug('[BuildingSelectionPanel] createBuildingItem - BuildingItem TOUCH_CANCEL事件触发, building:', building.name);
             this.onBuildingItemTouchCancel(building, event);
         }, this);
 
@@ -869,15 +827,12 @@ export class BuildingSelectionPanel extends Component {
         );
         const targetNode = event.target as Node;
         
-        console.debug('[BuildingSelectionPanel] onBuildingItemTouchEnd - 触摸结束事件触发, building:', building.name, 'selectedBuilding:', this.selectedBuilding?.name, 'isDragging:', this.isDragging, 'dragDistance:', dragDistance.toFixed(1), 'targetNode:', targetNode?.name, 'propagationStopped:', event.propagationStopped);
         
         // 无论什么情况，都先清除网格高亮
-        console.debug('[BuildingSelectionPanel] onBuildingItemTouchEnd - 立即清除网格高亮（无条件）');
         this.clearGridHighlight();
         
         // 延迟一帧再次清除，确保清除完成
         this.scheduleOnce(() => {
-            console.debug('[BuildingSelectionPanel] onBuildingItemTouchEnd - 延迟清除网格高亮（延迟一帧）');
             this.clearGridHighlight();
         }, 0);
         
@@ -889,14 +844,11 @@ export class BuildingSelectionPanel extends Component {
         // location, startLocation, dragDistance 已在方法开头声明
 
         // 立即停止拖拽状态，防止触摸移动事件继续处理
-        console.debug('[BuildingSelectionPanel] onBuildingItemTouchEnd - 设置 isDragging = false（之前为:', this.isDragging, '）');
         this.isDragging = false;
-        console.debug('[BuildingSelectionPanel] onBuildingItemTouchEnd - 设置 isDragging = false 后，立即清除网格高亮');
         this.clearGridHighlight();
 
         // 如果没有发生拖拽，不处理
         if (dragDistance <= 5) {
-            console.debug('[BuildingSelectionPanel] onBuildingItemTouchEnd - 拖拽距离不足，清除状态, dragDistance:', dragDistance.toFixed(1));
             this.clearDragPreview();
             this.selectedBuilding = null;
             event.propagationStopped = true;
@@ -1037,7 +989,6 @@ export class BuildingSelectionPanel extends Component {
             if (buildPos && this.onBuildCallback) {
                 // 标记触摸结束事件已处理（成功建造）
                 this.touchEndHandled = true;
-                console.debug('[BuildingSelectionPanel] onBuildingItemTouchEnd - 开始建造建筑物, 位置:', `(${buildPos.x.toFixed(1)}, ${buildPos.y.toFixed(1)})`);
                 this.onBuildCallback(building, buildPos);
                 
                 // 清除拖拽预览和状态
@@ -1045,7 +996,6 @@ export class BuildingSelectionPanel extends Component {
                 this.selectedBuilding = null;
                 
                 // 再次确保清除网格高亮
-                console.debug('[BuildingSelectionPanel] onBuildingItemTouchEnd - 建造成功后，再次清除网格高亮');
                 if (this.gridPanel) {
                     this.gridPanel.clearHighlight();
                 }
@@ -1058,7 +1008,6 @@ export class BuildingSelectionPanel extends Component {
                 
                 // 延迟一帧再次清除选中状态和网格高亮，确保建筑物创建完成后清除
                 this.scheduleOnce(() => {
-                    console.debug('[BuildingSelectionPanel] onBuildingItemTouchEnd - 延迟一帧后再次清除选中状态和网格高亮');
                     this.clearBuildingSelection();
                     if (this.gridPanel) {
                         this.gridPanel.clearHighlight();
@@ -1098,7 +1047,6 @@ export class BuildingSelectionPanel extends Component {
         if (this.isDragging && this.selectedBuilding && this.dragPreview) {
             // 立即停止拖拽状态，防止触摸移动事件继续处理
             this.isDragging = false;
-            console.debug('[BuildingSelectionPanel] onBuildingItemTouchCancel - 设置 isDragging = false，立即清除网格高亮');
             this.clearGridHighlight();
             
             // 检查是否发生了拖拽（移动距离超过5像素）
@@ -1238,7 +1186,6 @@ export class BuildingSelectionPanel extends Component {
                 if (worldPos && this.onBuildCallback) {
                     // 标记触摸结束事件已处理（成功建造）
                     this.touchEndHandled = true;
-                    console.debug('[BuildingSelectionPanel] onBuildingItemTouchCancel - 开始建造建筑物, 位置:', `(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
                     this.onBuildCallback(building, worldPos);
                     
                     // 清除拖拽预览和状态
@@ -1246,7 +1193,6 @@ export class BuildingSelectionPanel extends Component {
                     this.selectedBuilding = null;
                     
                     // 再次确保清除网格高亮
-                    console.debug('[BuildingSelectionPanel] onBuildingItemTouchCancel - 建造成功后，再次清除网格高亮');
                     if (this.gridPanel) {
                         this.gridPanel.clearHighlight();
                     }
@@ -1256,7 +1202,6 @@ export class BuildingSelectionPanel extends Component {
                     
                     // 延迟一帧再次清除选中状态和网格高亮，确保建筑物创建完成后清除
                     this.scheduleOnce(() => {
-                        console.debug('[BuildingSelectionPanel] onBuildingItemTouchCancel - 延迟一帧后再次清除选中状态和网格高亮');
                         this.clearBuildingSelection();
                         if (this.gridPanel) {
                             this.gridPanel.clearHighlight();
@@ -1268,7 +1213,6 @@ export class BuildingSelectionPanel extends Component {
                 }
             } else {
                 // 拖拽距离不够，清除状态
-                console.debug('[BuildingSelectionPanel] onBuildingItemTouchCancel - 拖拽距离不够，清除状态');
                 this.clearDragPreview();
                 this.selectedBuilding = null;
                 // 确保清除网格高亮
@@ -1279,7 +1223,6 @@ export class BuildingSelectionPanel extends Component {
         }
 
         // 如果没有成功建造，清除状态并重新显示面板
-        console.debug('[BuildingSelectionPanel] onBuildingItemTouchCancel - 没有成功建造，清除状态并重新显示面板');
         this.clearDragPreview();
         this.selectedBuilding = null;
         // 确保清除网格高亮
@@ -1365,13 +1308,11 @@ export class BuildingSelectionPanel extends Component {
         }
         
         if (!this.dragPreview || !this.selectedBuilding) {
-            console.warn('[BuildingSelectionPanel] updateDragPreview - dragPreview或selectedBuilding不存在');
             return;
         }
 
         // 确保预览节点有效且可见
         if (!this.dragPreview.isValid || !this.dragPreview.active) {
-            console.warn('[BuildingSelectionPanel] updateDragPreview - 预览节点无效或不可见:', 'isValid=', this.dragPreview.isValid, 'active=', this.dragPreview.active);
             return;
         }
 
@@ -1390,7 +1331,6 @@ export class BuildingSelectionPanel extends Component {
             // 对于石墙，使用世界坐标（与普通建筑物一致）
             const worldPos = this.getWorldPositionFromScreen(screenPos);
             if (!worldPos) {
-                console.warn('[BuildingSelectionPanel] updateDragPreview - 无法获取世界坐标');
                 return;
             }
             
@@ -1408,7 +1348,6 @@ export class BuildingSelectionPanel extends Component {
                 const gridCenter = this.stoneWallGridPanel.getNearestGridCenter(worldPos);
                 if (gridCenter) {
                     this.dragPreview.setWorldPosition(gridCenter);
-                    console.debug('[BuildingSelectionPanel] updateDragPreview - 石墙对齐到网格中心:', `(${gridCenter.x.toFixed(1)}, ${gridCenter.y.toFixed(1)})`);
                 } else {
                     // 如果不在石墙网格内，清除高亮
                     this.stoneWallGridPanel.clearHighlight();
@@ -1418,7 +1357,6 @@ export class BuildingSelectionPanel extends Component {
             // 对于其他建筑，使用世界坐标
             const worldPos = this.getWorldPositionFromScreen(screenPos);
             if (!worldPos) {
-                console.warn('[BuildingSelectionPanel] updateDragPreview - 无法获取世界坐标');
                 return;
             }
             
@@ -1432,7 +1370,6 @@ export class BuildingSelectionPanel extends Component {
             const newPos = this.dragPreview.worldPosition.clone();
             const posChanged = Math.abs(oldPos.x - newPos.x) > 0.1 || Math.abs(oldPos.y - newPos.y) > 0.1;
             if (posChanged) {
-                console.debug('[BuildingSelectionPanel] updateDragPreview - 预览位置已更新: 从', `(${oldPos.x.toFixed(1)}, ${oldPos.y.toFixed(1)})`, '到', `(${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)})`);
             }
             
             // 处理普通网格高亮
@@ -1446,7 +1383,6 @@ export class BuildingSelectionPanel extends Component {
                 const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
                 if (gridCenter) {
                     this.dragPreview.setWorldPosition(gridCenter);
-                    console.debug('[BuildingSelectionPanel] updateDragPreview - 对齐到网格中心:', `(${gridCenter.x.toFixed(1)}, ${gridCenter.y.toFixed(1)})`);
                 } else {
                     // 如果不在普通网格内，清除高亮
                     this.gridPanel.clearHighlight();
@@ -1459,24 +1395,19 @@ export class BuildingSelectionPanel extends Component {
      * 清除拖拽预览
      */
     clearDragPreview() {
-        console.debug('[BuildingSelectionPanel] clearDragPreview - 开始清除拖拽预览, dragPreview存在:', !!this.dragPreview, 'isValid:', this.dragPreview?.isValid);
         
         if (this.dragPreview && this.dragPreview.isValid) {
-            console.debug('[BuildingSelectionPanel] clearDragPreview - 销毁拖拽预览节点');
             this.dragPreview.destroy();
             this.dragPreview = null!;
         }
         
         // 清除网格高亮（但不隐藏网格面板，因为可能还在建造模式）
         if (!this.gridPanel) {
-            console.debug('[BuildingSelectionPanel] clearDragPreview - gridPanel不存在，尝试查找');
             this.findGridPanel();
         }
         if (this.gridPanel) {
-            console.debug('[BuildingSelectionPanel] clearDragPreview - 清除网格高亮');
             this.gridPanel.clearHighlight();
         } else {
-            console.warn('[BuildingSelectionPanel] clearDragPreview - gridPanel 不存在，无法清除高亮');
         }
     }
     
@@ -1489,7 +1420,6 @@ export class BuildingSelectionPanel extends Component {
         if (unitSelectionManagerNode) {
             const unitSelectionManager = unitSelectionManagerNode.getComponent(UnitSelectionManager);
             if (unitSelectionManager) {
-                console.debug('BuildingSelectionPanel.clearBuildingSelection: 清除UnitSelectionManager的选中状态');
                 unitSelectionManager.clearSelection();
             }
         } else {
@@ -1498,7 +1428,6 @@ export class BuildingSelectionPanel extends Component {
             if (scene) {
                 const unitSelectionManager = scene.getComponentInChildren(UnitSelectionManager);
                 if (unitSelectionManager) {
-                    console.debug('BuildingSelectionPanel.clearBuildingSelection: 在场景中找到UnitSelectionManager，清除选中状态');
                     unitSelectionManager.clearSelection();
                 }
             }

@@ -345,7 +345,6 @@ export class StoneWall extends Component {
      * 点击事件
      */
     onStoneWallClick(event: EventTouch) {
-        console.debug('[StoneWall] onStoneWallClick - 节点点击事件触发, propagationStopped:', event.propagationStopped);
         
         // 检查是否正在拖拽建筑物（通过TowerBuilder）
         // 使用递归查找方法，更可靠
@@ -382,12 +381,10 @@ export class StoneWall extends Component {
             towerBuilder = findComponentInScene(this.node.scene, 'TowerBuilder');
         }
         
-        console.debug('[StoneWall] onStoneWallClick - 查找TowerBuilder, 节点找到:', !!towerBuilderNode, '组件找到:', !!towerBuilder, 'isDraggingBuilding:', towerBuilder?.isDraggingBuilding);
         
         // 检查是否正在长按检测（由TowerBuilder处理）
         // 注意：不要阻止事件传播，让TowerBuilder的onTouchEnd也能处理
         if (towerBuilder && (towerBuilder as any).isLongPressActive) {
-            console.debug('[StoneWall] onStoneWallClick - 检测到正在长按检测，不处理点击事件，让TowerBuilder处理');
             // 不阻止事件传播，让TowerBuilder的onTouchEnd也能处理
             // event.propagationStopped = true; // 注释掉，让事件继续传播
             return;
@@ -395,12 +392,10 @@ export class StoneWall extends Component {
         
         // 检查是否正在显示信息面板（由TowerBuilder打开）
         if ((this.node as any)._showingInfoPanel) {
-            console.debug('StoneWall.onStoneWallClick: 正在显示信息面板，不处理点击事件');
             return;
         }
         
         if (towerBuilder && towerBuilder.isDraggingBuilding) {
-            console.debug('[StoneWall] onStoneWallClick - 检测到正在拖拽建筑物，直接调用TowerBuilder.endDraggingBuilding处理');
             // 直接调用TowerBuilder的方法来处理拖拽结束，而不是依赖事件传播
             if (towerBuilder.endDraggingBuilding && typeof towerBuilder.endDraggingBuilding === 'function') {
                 towerBuilder.endDraggingBuilding(event);
@@ -509,9 +504,7 @@ export class StoneWall extends Component {
      * 移动时的触摸结束事件
      */
     onMoveTouchEnd(event: EventTouch) {
-        console.debug('[StoneWall] onMoveTouchEnd - 触摸结束事件, isMoving:', this.isMoving, 'gridPanel存在:', !!this.gridPanel, 'propagationStopped:', event.propagationStopped);
         if (!this.isMoving || !this.gridPanel) {
-            console.debug('[StoneWall] onMoveTouchEnd - 不在移动状态或gridPanel不存在，直接返回');
             return;
         }
 
@@ -605,7 +598,6 @@ export class StoneWall extends Component {
         // 移动建筑物到新位置
         this.node.setWorldPosition(targetWorldPos);
 
-        console.debug(`StoneWall: Moved to grid (${gridX}, ${gridY})`);
     }
 
     /**

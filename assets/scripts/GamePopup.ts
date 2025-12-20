@@ -17,7 +17,6 @@ export class GamePopup extends Component {
     private autoHideDelay: number = 2.0; // 默认2秒后自动隐藏
     
     start() {
-        console.debug('GamePopup.start: Initializing');
         this.node.active = false; // 初始隐藏
         
         // 初始化所有必要的组件和节点
@@ -36,12 +35,10 @@ export class GamePopup extends Component {
      * 初始化所有必要的组件和节点
      */
     private initComponents() {
-        console.debug('GamePopup.initComponents: Initializing components');
         
         // 查找或创建Content节点
         this.content = this.node.getChildByName('Content');
         if (!this.content) {
-            console.debug('GamePopup.initComponents: Creating Content node');
             this.content = new Node('Content');
             this.content.setParent(this.node);
             this.content.setPosition(0, 0, 0);
@@ -52,7 +49,6 @@ export class GamePopup extends Component {
         // 查找或创建Background节点
         let bgNode = this.content.getChildByName('Background');
         if (!bgNode) {
-            console.debug('GamePopup.initComponents: Creating Background node');
             bgNode = new Node('Background');
             bgNode.setParent(this.content);
             bgNode.setPosition(0, 0, 0);
@@ -87,7 +83,6 @@ export class GamePopup extends Component {
         // 查找或创建MessageLabel节点
         let labelNode = this.content.getChildByName('MessageLabel');
         if (!labelNode) {
-            console.debug('GamePopup.initComponents: Creating MessageLabel node');
             labelNode = new Node('MessageLabel');
             labelNode.setParent(this.content);
             labelNode.setPosition(0, 0, 0);
@@ -109,11 +104,6 @@ export class GamePopup extends Component {
         // 确保文本在背景之上
         this.ensureTextOnTop();
         
-        console.debug('GamePopup.initComponents: Components initialized successfully');
-        console.debug('GamePopup.initComponents: content:', this.content);
-        console.debug('GamePopup.initComponents: messageLabel:', this.messageLabel);
-        console.debug('GamePopup.initComponents: background:', this.background);
-        console.debug('GamePopup.initComponents: backgroundGraphics:', this.backgroundGraphics);
     }
     
     /**
@@ -149,28 +139,20 @@ export class GamePopup extends Component {
      * @param delay 自动隐藏延迟时间（秒）
      */
     show(message: string, autoHide: boolean = true, delay: number = 2.0) {
-        console.debug('GamePopup.show: Showing message:', message);
         
         // 详细日志
-        console.debug('GamePopup.show: this:', this);
-        console.debug('GamePopup.show: this.node:', this.node);
-        console.debug('GamePopup.show: this.content:', this.content);
         
         // 检查必要的属性是否存在
         if (!this.node) {
-            console.error('GamePopup.show: this.node is undefined!');
             return;
         }
         
         if (!this.content) {
-            console.error('GamePopup.show: this.content is undefined!');
             // 尝试重新获取content
             this.content = this.node.getChildByName('Content');
             if (!this.content) {
-                console.error('GamePopup.show: Failed to get content node!');
                 return;
             } else {
-                console.debug('GamePopup.show: Content node found after retry:', this.content);
             }
         }
         
@@ -190,14 +172,12 @@ export class GamePopup extends Component {
                 this.adjustBackgroundSizeToText();
             }, 0);
         } else {
-            console.error('GamePopup.show: this.messageLabel is undefined!');
             // 尝试重新获取messageLabel
             const labelNode = this.content.getChildByName('MessageLabel');
             if (labelNode) {
                 this.messageLabel = labelNode.getComponent(Label);
                 if (this.messageLabel) {
                     this.messageLabel.string = message;
-                    console.debug('GamePopup.show: MessageLabel found after retry:', this.messageLabel);
                     
                     // 强制更新文本布局，确保文本大小被正确计算
                     // 先显示节点，确保文本渲染
@@ -258,11 +238,9 @@ export class GamePopup extends Component {
             return;
         }
         
-        console.debug('GamePopup.hide: Hiding popup');
         
         // 检查必要的属性是否存在
         if (!this.node || !this.content) {
-            console.error('GamePopup.hide: node or content is undefined!');
             this.isShowing = false;
             return;
         }
@@ -299,7 +277,6 @@ export class GamePopup extends Component {
      */
     setBackgroundSprite(spriteFrame: SpriteFrame) {
         if (!this.background || !this.messageLabel) {
-            console.error('GamePopup.setBackgroundSprite: background or messageLabel is undefined!');
             return;
         }
         
@@ -350,7 +327,6 @@ export class GamePopup extends Component {
             textNode.setPosition(textNode.position.x, textNode.position.y, -1);
             bgNode.setPosition(bgNode.position.x, bgNode.position.y, 0);
             
-            console.debug('GamePopup.ensureTextOnTop: Text node zIndex set above background, z position:', textNode.position.z);
         }
     }
     
@@ -410,7 +386,6 @@ export class GamePopup extends Component {
             }
         }
         
-        console.debug('GamePopup.adjustBackgroundSizeToText: Background size adjusted to text, new size:', newWidth, newHeight);
     }
     
     /**
@@ -446,12 +421,10 @@ export class GamePopup extends Component {
      * @returns GamePopup实例
      */
     static createInstance(): GamePopup {
-        console.debug('GamePopup.createInstance: Creating popup instance');
         
         // 查找Canvas
         const canvas = find('Canvas');
         if (!canvas) {
-            console.error('GamePopup.createInstance: Canvas not found!');
             return null;
         }
         
@@ -480,7 +453,6 @@ export class GamePopup extends Component {
         // 确保节点初始隐藏
         popupNode.active = false;
         
-        console.debug('GamePopup.createInstance: Popup created, node:', popup.node, 'content:', popup.content);
         
         return popup;
     }
@@ -492,7 +464,6 @@ export class GamePopup extends Component {
      * @param delay 自动隐藏延迟时间（秒）
      */
     static showMessage(message: string, autoHide: boolean = true, delay: number = 2.0) {
-        console.debug('GamePopup.showMessage: Showing message:', message);
         
         // 查找现有的GamePopup实例
         let popupNode = find('Canvas/GamePopup');
@@ -508,7 +479,6 @@ export class GamePopup extends Component {
         if (popup) {
             popup.show(message, autoHide, delay);
         } else {
-            console.error('GamePopup.showMessage: Failed to create or find GamePopup instance!');
         }
     }
 }
