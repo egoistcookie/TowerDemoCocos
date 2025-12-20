@@ -864,6 +864,46 @@ export class Role extends Component {
             }
         }
 
+        // 检查与精灵剑士的碰撞
+        let swordsmenNode = find('ElfSwordsmans');
+        // 如果直接查找失败，尝试递归查找
+        if (!swordsmenNode) {
+            const findNodeRecursive = (node: Node, name: string): Node | null => {
+                if (node.name === name) {
+                    return node;
+                }
+                for (const child of node.children) {
+                    const found = findNodeRecursive(child, name);
+                    if (found) return found;
+                }
+                return null;
+            };
+            const scene = this.node.scene;
+            if (scene) {
+                swordsmenNode = findNodeRecursive(scene, 'ElfSwordsmans');
+            }
+        }
+        
+        if (swordsmenNode) {
+            const swordsmen = swordsmenNode.children || [];
+            for (const swordsman of swordsmen) {
+                if (swordsman && swordsman.isValid && swordsman.active && swordsman !== this.node) {
+                    const swordsmanDistance = Vec3.distance(position, swordsman.worldPosition);
+                    // 获取另一个角色的碰撞半径
+                    const otherSwordsmanScript = swordsman.getComponent('Role') as any;
+                    if (!otherSwordsmanScript) {
+                        continue;
+                    }
+                    const otherRadius = otherSwordsmanScript && otherSwordsmanScript.collisionRadius ? otherSwordsmanScript.collisionRadius : this.collisionRadius;
+                    const minDistance = (this.collisionRadius + otherRadius) * 1.2; // 增加20%的安全距离
+                    
+                    if (swordsmanDistance < minDistance) {
+                        return true;
+                    }
+                }
+            }
+        }
+
         // 检查与敌人的碰撞 - 使用公共敌人获取函数
         const enemies = this.getEnemies(true);
         for (const enemy of enemies) {
