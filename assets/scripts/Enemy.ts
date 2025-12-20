@@ -588,12 +588,18 @@ export class Enemy extends Component {
         
         // 使用递归查找Towers容器（更可靠）
         const findNodeRecursive = (node: Node, name: string): Node | null => {
+            if (!node || !node.isValid) {
+                return null;
+            }
             if (node.name === name) {
                 return node;
             }
-            for (const child of node.children) {
-                const found = findNodeRecursive(child, name);
-                if (found) return found;
+            const children = node.children || [];
+            for (const child of children) {
+                if (child && child.isValid) {
+                    const found = findNodeRecursive(child, name);
+                    if (found) return found;
+                }
             }
             return null;
         };
@@ -668,7 +674,7 @@ export class Enemy extends Component {
         }
         
         if (towersNode) {
-            towers = towersNode.children;
+            towers = towersNode.children || [];
         }
 
         // 查找战争古树
@@ -678,7 +684,7 @@ export class Enemy extends Component {
             warAncientTrees = findNodeRecursive(this.node.scene, 'WarAncientTrees');
         }
         if (warAncientTrees) {
-            trees = warAncientTrees.children;
+            trees = warAncientTrees.children || [];
         }
 
         // 查找月亮井
@@ -688,7 +694,7 @@ export class Enemy extends Component {
             wellsNode = findNodeRecursive(this.node.scene, 'MoonWells');
         }
         if (wellsNode) {
-            wells = wellsNode.children;
+            wells = wellsNode.children || [];
         }
 
         // 查找猎手大厅
@@ -698,16 +704,22 @@ export class Enemy extends Component {
             hallsNode = findNodeRecursive(this.node.scene, 'HunterHalls');
         }
         if (hallsNode) {
-            halls = hallsNode.children;
+            halls = hallsNode.children || [];
         } else if (this.node.scene) {
             // 如果没有找到HunterHalls容器，直接从场景中查找所有HunterHall组件
             const findAllHunterHalls = (node: Node) => {
+                if (!node || !node.isValid) {
+                    return;
+                }
                 const hallScript = node.getComponent('HunterHall') as any;
                 if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
                     halls.push(node);
                 }
-                for (const child of node.children) {
-                    findAllHunterHalls(child);
+                const children = node.children || [];
+                for (const child of children) {
+                    if (child && child.isValid) {
+                        findAllHunterHalls(child);
+                    }
                 }
             };
             findAllHunterHalls(this.node.scene);
@@ -720,16 +732,22 @@ export class Enemy extends Component {
             swordsmanHallsNode = findNodeRecursive(this.node.scene, 'SwordsmanHalls');
         }
         if (swordsmanHallsNode) {
-            swordsmanHalls = swordsmanHallsNode.children;
+            swordsmanHalls = swordsmanHallsNode.children || [];
         } else if (this.node.scene) {
             // 如果没有找到SwordsmanHalls容器，直接从场景中查找所有SwordsmanHall组件
             const findAllSwordsmanHalls = (node: Node) => {
+                if (!node || !node.isValid) {
+                    return;
+                }
                 const hallScript = node.getComponent('SwordsmanHall') as any;
                 if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
                     swordsmanHalls.push(node);
                 }
-                for (const child of node.children) {
-                    findAllSwordsmanHalls(child);
+                const children = node.children || [];
+                for (const child of children) {
+                    if (child && child.isValid) {
+                        findAllSwordsmanHalls(child);
+                    }
                 }
             };
             findAllSwordsmanHalls(this.node.scene);
@@ -742,7 +760,7 @@ export class Enemy extends Component {
             wispsNode = findNodeRecursive(this.node.scene, 'Wisps');
         }
         if (wispsNode) {
-            wisps = wispsNode.children;
+            wisps = wispsNode.children || [];
         }
         
         let nearestTarget: Node = null!;
@@ -876,7 +894,7 @@ export class Enemy extends Component {
             huntersNode = findNodeRecursive(this.node.scene, 'Hunters');
         }
         if (huntersNode) {
-            hunters = huntersNode.children;
+            hunters = huntersNode.children || [];
         }
         for (const hunter of hunters) {
             if (hunter && hunter.active && hunter.isValid) {
@@ -903,7 +921,7 @@ export class Enemy extends Component {
             swordsmenNode = findNodeRecursive(this.node.scene, 'ElfSwordsmans');
         }
         if (swordsmenNode) {
-            swordsmen = swordsmenNode.children;
+            swordsmen = swordsmenNode.children || [];
         }
         for (const swordsman of swordsmen) {
             if (swordsman && swordsman.active && swordsman.isValid) {
@@ -1024,10 +1042,10 @@ export class Enemy extends Component {
 
         // 如果找到目标，设置为当前目标
         // 但是，如果当前目标是石墙（网格最上层没有缺口时设置的），且新找到的目标不是石墙，不要替换
-        if (nearestTarget) {
+        if (nearestTarget && nearestTarget.isValid) {
             const currentWallScript = this.currentTarget?.getComponent('StoneWall') as any;
             const isCurrentTargetGridTopLayerWall = currentWallScript && this.checkEnemyAboveGrid() && !this.topLayerGapTarget;
-            const newTargetIsWall = nearestTarget.getComponent('StoneWall') !== null;
+            const newTargetIsWall = nearestTarget.isValid ? nearestTarget.getComponent('StoneWall') !== null : false;
             
             if (isCurrentTargetGridTopLayerWall && !newTargetIsWall) {
                 // 当前目标是网格最上层没有缺口时设置的石墙，且新目标不是石墙，保持当前目标
@@ -4449,7 +4467,7 @@ export class Enemy extends Component {
             towersNode = findNodeRecursive(this.node.scene, 'Towers');
         }
         if (towersNode) {
-            const towers = towersNode.children;
+            const towers = towersNode.children || [];
             for (const tower of towers) {
                 if (tower && tower.active && tower.isValid) {
                     const towerScript = tower.getComponent('Arrower') as any;
@@ -4473,7 +4491,7 @@ export class Enemy extends Component {
             huntersNode = findNodeRecursive(this.node.scene, 'Hunters');
         }
         if (huntersNode) {
-            const hunters = huntersNode.children;
+            const hunters = huntersNode.children || [];
             for (const hunter of hunters) {
                 if (hunter && hunter.active && hunter.isValid) {
                     const hunterScript = hunter.getComponent('Hunter') as any;
@@ -4497,7 +4515,7 @@ export class Enemy extends Component {
             swordsmenNode = findNodeRecursive(this.node.scene, 'ElfSwordsmans');
         }
         if (swordsmenNode) {
-            const swordsmen = swordsmenNode.children;
+            const swordsmen = swordsmenNode.children || [];
             for (const swordsman of swordsmen) {
                 if (swordsman && swordsman.active && swordsman.isValid) {
                     const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
