@@ -612,7 +612,8 @@ export class Enemy extends Component {
             const targetScript = this.currentTarget.getComponent('StoneWall') as any || 
                                 this.currentTarget.getComponent('Arrower') as any || 
                                 this.currentTarget.getComponent('WarAncientTree') as any ||
-                                this.currentTarget.getComponent('Crystal') as any;
+                                this.currentTarget.getComponent('Crystal') as any ||
+                                this.currentTarget.getComponent('Church') as any;
             
             // 如果目标是石墙，检查是否仍然存活
             if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
@@ -1013,6 +1014,53 @@ export class Enemy extends Component {
                             (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
                             minDistance = distance;
                             nearestTarget = hall;
+                            targetPriority = PRIORITY.BUILDING;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 查找教堂
+        let churches: Node[] = [];
+        let churchesNode = find('Churches');
+        if (!churchesNode && this.node.scene) {
+            churchesNode = findNodeRecursive(this.node.scene, 'Churches');
+        }
+        if (churchesNode) {
+            churches = churchesNode.children || [];
+        } else if (this.node.scene) {
+            // 如果没有找到Churches容器，直接从场景中查找所有Church组件
+            const findAllChurches = (node: Node) => {
+                if (!node || !node.isValid) {
+                    return;
+                }
+                const churchScript = node.getComponent('Church') as any;
+                if (churchScript && churchScript.isAlive && churchScript.isAlive()) {
+                    churches.push(node);
+                }
+                const children = node.children || [];
+                for (const child of children) {
+                    if (child && child.isValid) {
+                        findAllChurches(child);
+                    }
+                }
+            };
+            findAllChurches(this.node.scene);
+        }
+        // 教堂
+        for (const church of churches) {
+            if (church && church.active && church.isValid) {
+                const churchScript = church.getComponent('Church') as any;
+                // 检查教堂是否存活
+                if (churchScript && churchScript.isAlive && churchScript.isAlive()) {
+                    const distance = Vec3.distance(this.node.worldPosition, church.worldPosition);
+                    // 如果教堂在范围内，且优先级更高或距离更近
+                    if (distance <= detectionRange) {
+                        if (PRIORITY.BUILDING < targetPriority || 
+                            (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
+                            minDistance = distance;
+                            nearestTarget = church;
                             targetPriority = PRIORITY.BUILDING;
                         }
                     }

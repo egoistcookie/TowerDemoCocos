@@ -86,8 +86,8 @@ export class WarAncientTree extends Build {
         // 创建生产进度条
         this.createProductionProgressBar();
 
-        // 添加点击事件监听
-        this.node.on(Node.EventType.TOUCH_END, this.onWarAncientTreeClick, this);
+        // 添加点击事件监听（使用父类的通用方法）
+        this.node.on(Node.EventType.TOUCH_END, this.onBuildingClick, this);
     }
 
     findTowerContainer() {
@@ -836,259 +836,26 @@ export class WarAncientTree extends Build {
     }
 
     /**
-     * 战争古树点击事件
+     * 获取单位信息（重写父类方法）
      */
-    onWarAncientTreeClick(event: EventTouch) {
-        
-        // 检查是否正在拖拽建筑物（通过TowerBuilder）
-        // 使用递归查找方法，更可靠
-        let towerBuilderNode = find('TowerBuilder');
-        if (!towerBuilderNode && this.node.scene) {
-            const findNodeRecursive = (node: Node, name: string): Node | null => {
-                if (node.name === name) {
-                    return node;
-                }
-                for (const child of node.children) {
-                    const found = findNodeRecursive(child, name);
-                    if (found) return found;
-                }
-                return null;
-            };
-            towerBuilderNode = findNodeRecursive(this.node.scene, 'TowerBuilder');
-        }
-        
-        // 如果还是找不到，尝试通过组件类型查找
-        let towerBuilder: any = null;
-        if (towerBuilderNode) {
-            towerBuilder = towerBuilderNode.getComponent('TowerBuilder') as any;
-        } else if (this.node.scene) {
-            // 从场景中查找TowerBuilder组件
-            const findComponentInScene = (node: Node, componentType: string): any => {
-                const comp = node.getComponent(componentType);
-                if (comp) return comp;
-                for (const child of node.children) {
-                    const found = findComponentInScene(child, componentType);
-                    if (found) return found;
-                }
-                return null;
-            };
-            towerBuilder = findComponentInScene(this.node.scene, 'TowerBuilder');
-        }
-        
-        
-        // 检查是否正在长按检测（由TowerBuilder处理）
-        // 注意：不要阻止事件传播，让TowerBuilder的onTouchEnd也能处理
-        if (towerBuilder && (towerBuilder as any).isLongPressActive) {
-            // 不阻止事件传播，让TowerBuilder的onTouchEnd也能处理
-            // event.propagationStopped = true; // 注释掉，让事件继续传播
-            return;
-        }
-        
-        // 检查是否正在显示信息面板（由TowerBuilder打开）
-        if ((this.node as any)._showingInfoPanel) {
-            return;
-        }
-        
-        if (towerBuilder && towerBuilder.isDraggingBuilding) {
-            // 直接调用TowerBuilder的方法来处理拖拽结束，而不是依赖事件传播
-            // 因为节点级别的事件不会自动传播到Canvas级别
-            if (towerBuilder.endDraggingBuilding && typeof towerBuilder.endDraggingBuilding === 'function') {
-                towerBuilder.endDraggingBuilding(event);
-            }
-            // 不设置propagationStopped，让事件继续传播（虽然可能不会触发Canvas级别的事件）
-            return;
-        }
-        
-        // 如果不在拖拽状态，继续正常处理点击事件
-        
-        // 检查是否有选中的小精灵，如果有则不处理点击事件（让小精灵移动到建筑物）
-        const selectionManager = this.findSelectionManager();
-        
-        let hasSelectedWisps = false;
-        if (selectionManager && selectionManager.hasSelectedWisps && typeof selectionManager.hasSelectedWisps === 'function') {
-            hasSelectedWisps = selectionManager.hasSelectedWisps();
-        } else {
-        }
-        
-        if (hasSelectedWisps) {
-            // 有选中的小精灵，不处理建筑物的点击事件，让SelectionManager处理移动
-            // 不设置propagationStopped，让事件继续传播，这样SelectionManager的移动命令可以执行
-            return;
-        }
-
-        // 检查是否正在显示信息面板（由TowerBuilder打开）
-        if ((this.node as any)._showingInfoPanel) {
-            return;
-        }
-
-        // 阻止事件传播
-        event.propagationStopped = true;
-
-        // 如果正在移动，不处理点击
-        if (this.isMoving) {
-            return;
-        }
-
-        // 如果已经显示选择面板，先隐藏
-        if (this.selectionPanel && this.selectionPanel.isValid) {
-            this.hideSelectionPanel();
-            return;
-        }
-
-        // 开始移动模式
-        this.startMoving(event);
+    protected getUnitInfo(): UnitInfo | null {
+        return {
+            name: '弓箭手小屋',
+            level: this.level,
+            currentHealth: this.currentHealth,
+            maxHealth: this.maxHealth,
+            attackDamage: this.attackDamage,
+            populationCost: 0, // 战争古树不占用人口
+            icon: this.cardIcon || this.defaultSpriteFrame,
+            collisionRadius: this.collisionRadius,
+            attackRange: this.attackRange,
+            currentUnitCount: this.producedTowers.length,
+            maxUnitCount: this.maxTowerCount
+        };
     }
 
     /**
-     * 显示选择面板
-     */
-    showSelectionPanel() {
-        // 创建选择面板
-        const canvas = find('Canvas');
-        if (!canvas) return;
-
-        this.selectionPanel = new Node('WarAncientTreeSelectionPanel');
-        this.selectionPanel.setParent(canvas);
-
-        // 添加UITransform
-        const uiTransform = this.selectionPanel.addComponent(UITransform);
-        uiTransform.setContentSize(120, 40);
-
-        // 设置位置（在战争古树上方）
-        const worldPos = this.node.worldPosition.clone();
-        worldPos.y += 50;
-        this.selectionPanel.setWorldPosition(worldPos);
-
-        // 添加半透明背景
-        const graphics = this.selectionPanel.addComponent(Graphics);
-        graphics.fillColor = new Color(0, 0, 0, 180); // 半透明黑色
-        graphics.rect(-60, -20, 120, 40);
-        graphics.fill();
-
-        // 创建拆除按钮
-        const sellBtn = new Node('SellButton');
-        sellBtn.setParent(this.selectionPanel);
-        const sellBtnTransform = sellBtn.addComponent(UITransform);
-        sellBtnTransform.setContentSize(50, 30);
-        sellBtn.setPosition(-35, 0);
-
-        const sellLabel = sellBtn.addComponent(Label);
-        sellLabel.string = '拆除';
-        sellLabel.fontSize = 16;
-        sellLabel.color = Color.WHITE;
-
-        // 创建升级按钮
-        const upgradeBtn = new Node('UpgradeButton');
-        upgradeBtn.setParent(this.selectionPanel);
-        const upgradeBtnTransform = upgradeBtn.addComponent(UITransform);
-        upgradeBtnTransform.setContentSize(50, 30);
-        upgradeBtn.setPosition(35, 0);
-
-        const upgradeLabel = upgradeBtn.addComponent(Label);
-        upgradeLabel.string = '升级';
-        upgradeLabel.fontSize = 16;
-        upgradeLabel.color = Color.WHITE;
-
-        // 添加按钮点击事件
-        sellBtn.on(Node.EventType.TOUCH_END, this.onSellClick, this);
-        upgradeBtn.on(Node.EventType.TOUCH_END, this.onUpgradeClick, this);
-
-        // 显示单位信息面板和范围
-        if (!this.unitSelectionManager) {
-            this.findUnitSelectionManager();
-        }
-        if (this.unitSelectionManager) {
-            const unitInfo: UnitInfo = {
-                name: '弓箭手小屋',
-                level: this.level,
-                currentHealth: this.currentHealth,
-                maxHealth: this.maxHealth,
-                attackDamage: this.attackDamage,
-                populationCost: 0, // 战争古树不占用人口
-                icon: this.cardIcon || this.defaultSpriteFrame,
-                collisionRadius: this.collisionRadius,
-                attackRange: this.attackRange,
-                currentUnitCount: this.producedTowers.length,
-                maxUnitCount: this.maxTowerCount,
-                onUpgradeClick: () => {
-                    this.onUpgradeClick();
-                },
-                onSellClick: () => {
-                    this.onSellClick();
-                },
-                onDetachWispClick: () => {
-                    this.detachWisp();
-                }
-            };
-            this.unitSelectionManager.selectUnit(this.node, unitInfo);
-        }
-
-        // 点击其他地方关闭面板
-        this.scheduleOnce(() => {
-            if (canvas) {
-                // 创建全局触摸事件处理器
-                this.globalTouchHandler = (event: EventTouch) => {
-                    // 检查点击是否在选择面板或其子节点上
-                    if (this.selectionPanel && this.selectionPanel.isValid) {
-                        const targetNode = event.target as Node;
-                        if (targetNode) {
-                            // 检查目标节点是否是选择面板或其子节点
-                            let currentNode: Node | null = targetNode;
-                            while (currentNode) {
-                                if (currentNode === this.selectionPanel) {
-                                    // 点击在选择面板上，不关闭
-                                    return;
-                                }
-                                currentNode = currentNode.parent;
-                            }
-                        }
-                    }
-                    
-                    // 点击不在选择面板上，关闭面板
-                    this.hideSelectionPanel();
-                };
-                
-                canvas.on(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
-            }
-        }, 0.1);
-    }
-
-    /**
-     * 隐藏选择面板
-     */
-    hideSelectionPanel() {
-        // 移除全局触摸事件监听
-        if (this.globalTouchHandler) {
-            const canvas = find('Canvas');
-            if (canvas) {
-                canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
-            }
-            this.globalTouchHandler = null;
-        }
-        
-        if (this.selectionPanel && this.selectionPanel.isValid) {
-            this.selectionPanel.destroy();
-            this.selectionPanel = null!;
-        }
-
-        // 清除单位信息面板和范围显示交给父类处理
-        super.hideSelectionPanel();
-    }
-
-    /**
-     * 拆除按钮点击事件
-     */
-    protected onSellClick(event?: EventTouch) {
-        if (event) {
-            event.propagationStopped = true;
-        }
-
-        // 使用父类的通用拆除逻辑（包括金币返还与销毁）
-        super.onSellClick();
-    }
-
-    /**
-     * 升级按钮点击事件
+     * 升级按钮点击事件（重写父类方法）
      */
     protected onUpgradeClick(event?: EventTouch) {
         if (event) {
@@ -1117,7 +884,6 @@ export class WarAncientTree extends Build {
         this.level++;
         this.maxTowerCount += 2;
 
-
         // 更新单位信息面板
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
             this.unitSelectionManager.updateUnitInfo({
@@ -1134,67 +900,16 @@ export class WarAncientTree extends Build {
     }
 
     /**
-     * 让小精灵依附
+     * 销毁建筑物（重写父类方法，添加生产停止逻辑）
      */
-    attachWisp(wisp: Node) {
-        const wispScript = wisp.getComponent('Wisp') as any;
-        if (!wispScript) {
-            return;
-        }
-
-        // 检查小精灵是否已经依附在其他建筑物上
-        if (wispScript.getIsAttached && wispScript.getIsAttached()) {
-            return;
-        }
-
-        // 先将小精灵添加到依附列表，再调用attachToBuilding
-        this.attachedWisps.push(wisp);
-        
-        // 让小精灵依附，传递fromBuilding参数为true避免循环调用
-        if (wispScript.attachToBuilding) {
-            wispScript.attachToBuilding(this.node, true);
-        }
-    }
-
-    /**
-     * 卸下小精灵
-     */
-    detachWisp() {
-        if (this.attachedWisps.length === 0) {
-            return;
-        }
-
-        // 卸下第一个小精灵
-        const wisp = this.attachedWisps[0];
-        // 先从列表中移除，再调用detachFromBuilding，避免indexOf出错
-        this.attachedWisps.shift();
-        
-        const wispScript = wisp.getComponent('Wisp') as any;
-        if (wispScript && wispScript.detachFromBuilding) {
-            wispScript.detachFromBuilding();
-        }
-        
-        // 卸下小精灵后取消选中状态，类似点击升级按钮
-        this.hideSelectionPanel();
-    }
-
-    /**
-     * 销毁战争古树（用于拆除）
-     */
-    destroyWarAncientTree() {
+    protected destroyBuilding() {
         // 停止所有生产
         this.isProducing = false;
         this.productionTimer = 0;
         this.productionProgress = 0;
 
-        // 隐藏面板
-        this.hideSelectionPanel();
-
-        // 移除点击事件监听
-        this.node.off(Node.EventType.TOUCH_END, this.onWarAncientTreeClick, this);
-
-        // 调用die方法进行销毁
-        this.die();
+        // 调用父类的销毁方法
+        super.destroyBuilding();
     }
 }
 

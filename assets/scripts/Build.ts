@@ -277,10 +277,116 @@ export class Build extends Component {
     }
 
     /**
-     * 显示选择面板（子类需要重写）
+     * 获取单位信息（子类需要重写）
+     */
+    protected getUnitInfo(): UnitInfo | null {
+        // 子类实现
+        return null;
+    }
+
+    /**
+     * 显示选择面板（通用实现）
      */
     protected showSelectionPanel() {
-        // 子类实现
+        // 创建选择面板
+        const canvas = find('Canvas');
+        if (!canvas) return;
+
+        this.selectionPanel = new Node('BuildingSelectionPanel');
+        this.selectionPanel.setParent(canvas);
+
+        // 添加UITransform
+        const uiTransform = this.selectionPanel.addComponent(UITransform);
+        uiTransform.setContentSize(120, 40);
+
+        // 设置位置（在建筑物上方）
+        const worldPos = this.node.worldPosition.clone();
+        worldPos.y += 50;
+        this.selectionPanel.setWorldPosition(worldPos);
+
+        // 添加半透明背景
+        const graphics = this.selectionPanel.addComponent(Graphics);
+        graphics.fillColor = new Color(0, 0, 0, 180); // 半透明黑色
+        graphics.rect(-60, -20, 120, 40);
+        graphics.fill();
+
+        // 创建拆除按钮
+        const sellBtn = new Node('SellButton');
+        sellBtn.setParent(this.selectionPanel);
+        const sellBtnTransform = sellBtn.addComponent(UITransform);
+        sellBtnTransform.setContentSize(50, 30);
+        sellBtn.setPosition(-35, 0);
+
+        const sellLabel = sellBtn.addComponent(Label);
+        sellLabel.string = '拆除';
+        sellLabel.fontSize = 16;
+        sellLabel.color = Color.WHITE;
+
+        // 创建升级按钮
+        const upgradeBtn = new Node('UpgradeButton');
+        upgradeBtn.setParent(this.selectionPanel);
+        const upgradeBtnTransform = upgradeBtn.addComponent(UITransform);
+        upgradeBtnTransform.setContentSize(50, 30);
+        upgradeBtn.setPosition(35, 0);
+
+        const upgradeLabel = upgradeBtn.addComponent(Label);
+        upgradeLabel.string = '升级';
+        upgradeLabel.fontSize = 16;
+        upgradeLabel.color = Color.WHITE;
+
+        // 添加按钮点击事件
+        sellBtn.on(Node.EventType.TOUCH_END, this.onSellClick, this);
+        upgradeBtn.on(Node.EventType.TOUCH_END, this.onUpgradeClick, this);
+
+        // 显示单位信息面板和范围
+        if (!this.unitSelectionManager) {
+            this.findUnitSelectionManager();
+        }
+        if (this.unitSelectionManager) {
+            const unitInfo = this.getUnitInfo();
+            if (unitInfo) {
+                // 确保回调函数正确绑定
+                unitInfo.onUpgradeClick = () => {
+                    this.onUpgradeClick();
+                };
+                unitInfo.onSellClick = () => {
+                    this.onSellClick();
+                };
+                unitInfo.onDetachWispClick = () => {
+                    this.detachWisp();
+                };
+                this.unitSelectionManager.selectUnit(this.node, unitInfo);
+            }
+        }
+
+        // 点击其他地方关闭面板
+        this.scheduleOnce(() => {
+            if (canvas) {
+                // 创建全局触摸事件处理器
+                this.globalTouchHandler = (event: EventTouch) => {
+                    // 检查点击是否在选择面板或其子节点上
+                    if (this.selectionPanel && this.selectionPanel.isValid) {
+                        const targetNode = event.target as Node;
+                        if (targetNode) {
+                            // 检查目标节点是否是选择面板或其子节点
+                            let currentNode: Node | null = targetNode;
+                            while (currentNode) {
+                                if (currentNode === this.selectionPanel) {
+                                    // 点击在选择面板上，不关闭
+                                    return;
+                                }
+                                currentNode = currentNode.parent;
+                            }
+                        }
+                    }
+                    
+                    // 点击不在选择面板上，关闭面板
+                    this.hideSelectionPanel();
+                };
+                
+                canvas.on(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
+            }
+        }, 0.1);
     }
 
     /**
@@ -343,14 +449,14 @@ export class Build extends Component {
     }
 
     /**
-     * 销毁建筑物（子类可以重写）
+     * 销毁建筑物（通用实现）
      */
     protected destroyBuilding() {
         // 隐藏面板
         this.hideSelectionPanel();
 
-        // 移除点击事件监听（子类需要重写点击事件处理方法名）
-        // this.node.off(Node.EventType.TOUCH_END, this.onBuildingClick, this);
+        // 移除点击事件监听
+        this.node.off(Node.EventType.TOUCH_END, this.onBuildingClick, this);
 
         // 调用die方法进行销毁
         this.die();
@@ -582,9 +688,95 @@ export class Build extends Component {
     }
 
     /**
-     * 建筑物点击事件处理（子类需要重写）
+     * 建筑物点击事件处理（通用实现）
      */
     protected onBuildingClick(event: EventTouch) {
-        // 子类实现
+        // 检查是否正在拖拽建筑物（通过TowerBuilder）
+        // 使用递归查找方法，更可靠
+        let towerBuilderNode = find('TowerBuilder');
+        if (!towerBuilderNode && this.node.scene) {
+            const findNodeRecursive = (node: Node, name: string): Node | null => {
+                if (node.name === name) {
+                    return node;
+                }
+                for (const child of node.children) {
+                    const found = findNodeRecursive(child, name);
+                    if (found) return found;
+                }
+                return null;
+            };
+            towerBuilderNode = findNodeRecursive(this.node.scene, 'TowerBuilder');
+        }
+        
+        // 如果还是找不到，尝试通过组件类型查找
+        let towerBuilder: any = null;
+        if (towerBuilderNode) {
+            towerBuilder = towerBuilderNode.getComponent('TowerBuilder') as any;
+        } else if (this.node.scene) {
+            // 从场景中查找TowerBuilder组件
+            const findComponentInScene = (node: Node, componentType: string): any => {
+                const comp = node.getComponent(componentType);
+                if (comp) return comp;
+                for (const child of node.children) {
+                    const found = findComponentInScene(child, componentType);
+                    if (found) return found;
+                }
+                return null;
+            };
+            towerBuilder = findComponentInScene(this.node.scene, 'TowerBuilder');
+        }
+        
+        // 检查是否正在长按检测（由TowerBuilder处理）
+        if (towerBuilder && (towerBuilder as any).isLongPressActive) {
+            return;
+        }
+        
+        // 检查是否正在显示信息面板（由TowerBuilder打开）
+        if ((this.node as any)._showingInfoPanel) {
+            return;
+        }
+        
+        if (towerBuilder && towerBuilder.isDraggingBuilding) {
+            // 直接调用TowerBuilder的方法来处理拖拽结束
+            if (towerBuilder.endDraggingBuilding && typeof towerBuilder.endDraggingBuilding === 'function') {
+                towerBuilder.endDraggingBuilding(event);
+            }
+            return;
+        }
+        
+        // 检查是否有选中的小精灵，如果有则不处理点击事件（让小精灵移动到建筑物）
+        const selectionManager = this.findSelectionManager();
+        
+        let hasSelectedWisps = false;
+        if (selectionManager && selectionManager.hasSelectedWisps && typeof selectionManager.hasSelectedWisps === 'function') {
+            hasSelectedWisps = selectionManager.hasSelectedWisps();
+        }
+        
+        if (hasSelectedWisps) {
+            // 有选中的小精灵，不处理建筑物的点击事件，让SelectionManager处理移动
+            return;
+        }
+
+        // 检查是否正在显示信息面板（由TowerBuilder打开）
+        if ((this.node as any)._showingInfoPanel) {
+            return;
+        }
+
+        // 阻止事件传播
+        event.propagationStopped = true;
+
+        // 如果正在移动，不处理点击
+        if (this.isMoving) {
+            return;
+        }
+
+        // 如果已经显示选择面板，先隐藏
+        if (this.selectionPanel && this.selectionPanel.isValid) {
+            this.hideSelectionPanel();
+            return;
+        }
+
+        // 开始移动模式
+        this.startMoving(event);
     }
 }
