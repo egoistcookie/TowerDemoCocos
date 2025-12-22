@@ -38,16 +38,6 @@ export class UIManager extends Component {
         // 检查并自动创建countdownPopup
         this.autoCreateCountdownPopup();
 
-        // 绑定按钮事件
-        if (this.buildButton) {
-            this.buildButton.node.on(Button.EventType.CLICK, this.onBuildButtonClick, this);
-        } else {
-        }
-
-        if (this.restartButton) {
-            this.restartButton.node.on(Button.EventType.CLICK, this.onRestartButtonClick, this);
-        } else {
-        }
 
         // 检查TowerBuilder
         if (this.towerBuilder) {
@@ -868,11 +858,8 @@ export class UIManager extends Component {
             if (builderScript) {
                 if (builderScript.onBuildButtonClick) {
                     builderScript.onBuildButtonClick();
-                } else {
                 }
-            } else {
             }
-        } else {
         }
     }
 

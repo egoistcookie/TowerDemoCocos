@@ -287,7 +287,7 @@ export class Build extends Component {
     /**
      * 显示选择面板（通用实现）
      */
-    protected showSelectionPanel() {
+    public showSelectionPanel() {
         // 创建选择面板
         const canvas = find('Canvas');
         if (!canvas) return;

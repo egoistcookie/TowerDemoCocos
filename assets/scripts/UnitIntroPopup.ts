@@ -137,21 +137,15 @@ export class UnitIntroPopup extends Component {
      */
     private exitBuildingMode() {
         // 查找 TowerBuilder 节点
-        const towerBuilderNode = find('TowerBuilder');
+        const towerBuilderNode = this.findTowerBuilderNode();
+        if (!towerBuilderNode) {
+            console.error('[UnitIntroPopup] TowerBuilder node not found');
+        }
         if (towerBuilderNode) {
             const towerBuilder = towerBuilderNode.getComponent('TowerBuilder') as any;
             if (towerBuilder) {
-                // 先直接关闭建筑物选择面板（立即隐藏，不等待动画）
+                // 直接关闭建筑物选择面板（立即隐藏，不等待动画）
                 this.hideBuildingPanelImmediately();
-                
-                // 调用 disableBuildingMode 退出建造模式并关闭建造面板
-                if (towerBuilder.disableBuildingMode && typeof towerBuilder.disableBuildingMode === 'function') {
-                    towerBuilder.disableBuildingMode();
-                }
-                // 确保建造模式状态被设置为 false
-                if (towerBuilder.isBuildingMode !== undefined) {
-                    towerBuilder.isBuildingMode = false;
-                }
             }
         }
     }
@@ -160,15 +154,12 @@ export class UnitIntroPopup extends Component {
      * 立即隐藏建筑物选择面板
      */
     private hideBuildingPanelImmediately() {
-        // 方法1: 通过节点名称查找 BuildingSelectionPanel
-        const panelNode = find('BuildingSelectionPanel') || find('Canvas/UI/BuildingSelectionPanel') || find('UI/BuildingSelectionPanel');
-        if (panelNode) {
-            panelNode.active = false;
-            return;
+
+        // 通过 TowerBuilder 查找
+        const towerBuilderNode = this.findTowerBuilderNode();
+        if (!towerBuilderNode) {
+            console.error('[UnitIntroPopup] TowerBuilder node not found when hiding panel (method 2)');
         }
-        
-        // 方法2: 通过 TowerBuilder 查找
-        const towerBuilderNode = find('TowerBuilder');
         if (towerBuilderNode) {
             const towerBuilder = towerBuilderNode.getComponent('TowerBuilder') as any;
             if (towerBuilder && towerBuilder.buildingPanel) {
@@ -181,26 +172,6 @@ export class UnitIntroPopup extends Component {
                 if (towerBuilder.buildingPanel.panelContent) {
                     towerBuilder.buildingPanel.panelContent.active = false;
                 }
-            }
-        }
-        
-        // 方法3: 从场景中递归查找
-        const scene = this.node.scene;
-        if (scene) {
-            const findInScene = (node: Node, name: string): Node | null => {
-                if (node.name === name) {
-                    return node;
-                }
-                for (const child of node.children) {
-                    const found = findInScene(child, name);
-                    if (found) return found;
-                }
-                return null;
-            };
-            
-            const foundPanel = findInScene(scene, 'BuildingSelectionPanel');
-            if (foundPanel) {
-                foundPanel.active = false;
             }
         }
     }
@@ -260,6 +231,47 @@ export class UnitIntroPopup extends Component {
      */
     onTouchMove(event: EventTouch) {
         event.propagationStopped = true;
+    }
+
+    /**
+     * 在当前场景中查找 TowerBuilder 节点（更稳妥的递归查找）
+     */
+    private findTowerBuilderNode(): Node | null {
+        // 优先使用全局 find 简单查找
+        const directNode = find('TowerBuilder');
+        if (directNode) {
+            return directNode;
+        }
+
+        const scene = this.node.scene;
+        if (!scene) {
+            return null;
+        }
+
+        const findInScene = (node: Node): Node | null => {
+            // 按名称匹配
+            if (node.name === 'TowerBuilder') {
+                return node;
+            }
+            // 按组件名匹配（即便节点名被改掉）
+            const tbComp = node.getComponent('TowerBuilder') as any;
+            if (tbComp) {
+                return node;
+            }
+            for (const child of node.children) {
+                const found = findInScene(child);
+                if (found) {
+                    return found;
+                }
+            }
+            return null;
+        };
+
+        const foundNode = findInScene(scene);
+        if (!foundNode) {
+            console.error('[UnitIntroPopup] findTowerBuilderNode: TowerBuilder not found in scene tree');
+        }
+        return foundNode;
     }
     
     /**
