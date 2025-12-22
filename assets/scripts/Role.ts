@@ -904,6 +904,45 @@ export class Role extends Component {
             }
         }
 
+        // 检查与女猎手的碰撞
+        let huntersNode = find('Hunters');
+        if (!huntersNode) {
+            const findNodeRecursive = (node: Node, name: string): Node | null => {
+                if (node.name === name) {
+                    return node;
+                }
+                for (const child of node.children) {
+                    const found = findNodeRecursive(child, name);
+                    if (found) return found;
+                }
+                return null;
+            };
+            const scene = this.node.scene;
+            if (scene) {
+                huntersNode = findNodeRecursive(scene, 'Hunters');
+            }
+        }
+        
+        if (huntersNode) {
+            const hunters = huntersNode.children || [];
+            for (const hunter of hunters) {
+                if (hunter && hunter.isValid && hunter.active && hunter !== this.node) {
+                    const hunterDistance = Vec3.distance(position, hunter.worldPosition);
+                    // 获取另一个角色的碰撞半径
+                    const otherHunterScript = hunter.getComponent('Role') as any;
+                    if (!otherHunterScript) {
+                        continue;
+                    }
+                    const otherRadius = otherHunterScript && otherHunterScript.collisionRadius ? otherHunterScript.collisionRadius : this.collisionRadius;
+                    const minDistance = (this.collisionRadius + otherRadius) * 1.2; // 增加20%的安全距离
+                    
+                    if (hunterDistance < minDistance) {
+                        return true;
+                    }
+                }
+            }
+        }
+
         // 检查与敌人的碰撞 - 使用公共敌人获取函数
         const enemies = this.getEnemies(true);
         for (const enemy of enemies) {
@@ -1109,6 +1148,35 @@ export class Role extends Component {
             }
         }
 
+        // 检查女猎手
+        const huntersNode = find('Hunters');
+        if (huntersNode) {
+            const hunters = huntersNode.children || [];
+            for (const hunter of hunters) {
+                if (hunter && hunter.isValid && hunter.active && hunter !== this.node) {
+                    const hunterPos = hunter.worldPosition;
+                    const distance = Vec3.distance(currentPos, hunterPos);
+                    // 获取另一个女猎手的碰撞半径
+                    const otherHunterScript = hunter.getComponent('Role') as any;
+                    if (!otherHunterScript) {
+                        continue;
+                    }
+                    const otherRadius = otherHunterScript && otherHunterScript.collisionRadius ? otherHunterScript.collisionRadius : this.collisionRadius;
+                    const minDistance = (this.collisionRadius + otherRadius) * 1.2;
+                    if (distance < minDistance && distance > 0.1) {
+                        const pushDir = new Vec3();
+                        Vec3.subtract(pushDir, currentPos, hunterPos);
+                        pushDir.normalize();
+                        // 增强推力，重叠越多推力越大
+                        const strength = Math.max(2.0, (minDistance - distance) / minDistance * 3.0);
+                        Vec3.scaleAndAdd(pushForce, pushForce, pushDir, strength);
+                        maxPushStrength = Math.max(maxPushStrength, strength);
+                        obstacleCount++;
+                    }
+                }
+            }
+        }
+
         // 检查敌人 - 使用公共敌人获取函数
         const enemies = this.getEnemies(true, this.collisionRadius * 2);
         for (const enemy of enemies) {
@@ -1197,6 +1265,37 @@ export class Role extends Component {
                     if (distance < detectionRange && distance > 0.1) {
                         const avoidDir = new Vec3();
                         Vec3.subtract(avoidDir, currentPos, towerPos);
+                        avoidDir.normalize();
+                        let strength = 1 - (distance / detectionRange);
+                        if (distance < minDistance) {
+                            strength = 3.0; // 大幅增强避障力
+                        }
+                        Vec3.scaleAndAdd(avoidanceForce, avoidanceForce, avoidDir, strength);
+                        maxStrength = Math.max(maxStrength, strength);
+                        obstacleCount++;
+                    }
+                }
+            }
+        }
+
+        // 检查女猎手
+        const huntersNode = find('Hunters');
+        if (huntersNode) {
+            const hunters = huntersNode.children || [];
+            for (const hunter of hunters) {
+                if (hunter && hunter.isValid && hunter.active && hunter !== this.node) {
+                    const hunterPos = hunter.worldPosition;
+                    const distance = Vec3.distance(currentPos, hunterPos);
+                    // 获取另一个女猎手的碰撞半径
+                    const otherHunterScript = hunter.getComponent('Role') as any;
+                    if (!otherHunterScript) {
+                        continue;
+                    }
+                    const otherRadius = otherHunterScript && otherHunterScript.collisionRadius ? otherHunterScript.collisionRadius : this.collisionRadius;
+                    const minDistance = (this.collisionRadius + otherRadius) * 1.2;
+                    if (distance < detectionRange && distance > 0.1) {
+                        const avoidDir = new Vec3();
+                        Vec3.subtract(avoidDir, currentPos, hunterPos);
                         avoidDir.normalize();
                         let strength = 1 - (distance / detectionRange);
                         if (distance < minDistance) {
@@ -2220,6 +2319,28 @@ export class Role extends Component {
                     if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
                         const distance = Vec3.distance(position, tower.worldPosition);
                         const otherRadius = towerScript.collisionRadius || radius;
+                        if (distance < radius + otherRadius) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 检查与女猎手的碰撞
+        let huntersNode = find('Hunters');
+        if (!huntersNode && this.node.scene) {
+            huntersNode = findNodeRecursive(this.node.scene, 'Hunters');
+        }
+        
+        if (huntersNode) {
+            const hunters = huntersNode.children || [];
+            for (const hunter of hunters) {
+                if (hunter && hunter.isValid && hunter.active && hunter !== this.node) {
+                    const hunterScript = hunter.getComponent('Role') as any;
+                    if (hunterScript && hunterScript.isAlive && hunterScript.isAlive()) {
+                        const distance = Vec3.distance(position, hunter.worldPosition);
+                        const otherRadius = hunterScript.collisionRadius || radius;
                         if (distance < radius + otherRadius) {
                             return true;
                         }
