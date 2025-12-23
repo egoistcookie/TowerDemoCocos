@@ -168,8 +168,27 @@ export class BuildingSelectionPanel extends Component {
      * Canvas触摸开始事件（用于检测面板外点击）
      */
     onCanvasTouchStart(event: EventTouch) {
+        console.info('[BuildingSelectionPanel] onCanvasTouchStart: 触摸开始事件触发, node.active =', this.node.active, ', _justShown =', !!(this.node as any)._justShown);
+        
+        // 如果面板刚刚显示，忽略这次触摸事件（避免建造按钮点击触发隐藏）
+        if ((this.node as any)._justShown) {
+            console.info('[BuildingSelectionPanel] onCanvasTouchStart: 面板刚刚显示，忽略这次触摸事件');
+            return;
+        }
+        
         // 只有当面板显示且没有正在拖拽时，才检查面板外点击
         if (this.node.active && !this.isDragging && !this.selectedBuilding) {
+            const targetNode = event.target as Node;
+            console.info('[BuildingSelectionPanel] onCanvasTouchStart: 面板显示，检查触摸事件，targetNode =', targetNode ? targetNode.name : 'null');
+            
+            // 检查点击目标是否是建造按钮或UI元素，如果是，不隐藏面板
+            if (this.isUIElement(targetNode)) {
+                console.info('[BuildingSelectionPanel] onCanvasTouchStart: 点击在UI元素上，不隐藏面板');
+                // 阻止事件传播，避免触发其他逻辑
+                event.propagationStopped = true;
+                return;
+            }
+            
             const location = event.getLocation();
             let isInPanelArea = false;
             
@@ -203,11 +222,63 @@ export class BuildingSelectionPanel extends Component {
                 }
             }
             
-            // 如果点击在面板外，隐藏面板
+            console.info('[BuildingSelectionPanel] onCanvasTouchStart: isInPanelArea =', isInPanelArea, ', location =', location);
+            
+            // 如果点击在面板外，延迟隐藏面板（避免与按钮点击冲突）
             if (!isInPanelArea) {
-                this.hide();
+                console.info('[BuildingSelectionPanel] onCanvasTouchStart: 点击在面板外，延迟0.3秒后检查是否隐藏');
+                // 保存延迟回调的引用，以便在show()时取消
+                const hideCallback = () => {
+                    // 再次检查面板是否仍然显示且没有选中建筑物，并且不在保护期内
+                    if (this.node.active && !this.isDragging && !this.selectedBuilding && !(this.node as any)._justShown) {
+                        console.info('[BuildingSelectionPanel] onCanvasTouchStart: 延迟检查后，面板仍然显示且不在保护期，隐藏面板');
+                        this.hide();
+                    } else {
+                        console.info('[BuildingSelectionPanel] onCanvasTouchStart: 延迟检查后，面板状态已改变或仍在保护期，不隐藏', {
+                            active: this.node.active,
+                            isDragging: this.isDragging,
+                            selectedBuilding: !!this.selectedBuilding,
+                            _justShown: !!(this.node as any)._justShown
+                        });
+                    }
+                };
+                (this.node as any)._pendingHideCallback = hideCallback;
+                this.scheduleOnce(hideCallback, 0.3);
+            } else {
+                console.info('[BuildingSelectionPanel] onCanvasTouchStart: 点击在面板内，不隐藏');
             }
+        } else {
+            console.info('[BuildingSelectionPanel] onCanvasTouchStart: 面板未显示或正在拖拽或有选中建筑物，不处理', {
+                active: this.node.active,
+                isDragging: this.isDragging,
+                selectedBuilding: !!this.selectedBuilding
+            });
         }
+    }
+    
+    /**
+     * 检查节点是否是UI元素（按钮、面板等）
+     */
+    private isUIElement(node: Node | null): boolean {
+        if (!node) return false;
+        
+        // 检查节点名称
+        const nodeName = node.name;
+        if (nodeName === 'BuildButton' || 
+            nodeName === 'UI' || 
+            nodeName === 'UIManager' ||
+            nodeName.includes('Button') ||
+            nodeName.includes('Panel') ||
+            nodeName.includes('Label')) {
+            return true;
+        }
+        
+        // 递归检查父节点
+        if (node.parent) {
+            return this.isUIElement(node.parent);
+        }
+        
+        return false;
     }
     
     /**
@@ -562,6 +633,20 @@ export class BuildingSelectionPanel extends Component {
      * 显示面板
      */
     show() {
+        console.info('[BuildingSelectionPanel] show: 开始显示面板');
+        
+        // 先取消所有延迟回调，防止之前的延迟隐藏回调执行
+        this.unscheduleAllCallbacks();
+        console.info('[BuildingSelectionPanel] show: 取消所有延迟回调');
+        
+        // 清除待执行的隐藏回调引用
+        (this.node as any)._pendingHideCallback = null;
+        
+        // 先标记面板刚刚显示，忽略下一次触摸事件（避免建造按钮点击触发隐藏）
+        // 必须在设置 active 之前设置，确保触摸事件触发时能检查到
+        (this.node as any)._justShown = true;
+        console.info('[BuildingSelectionPanel] show: 设置 _justShown = true');
+        
         this.node.active = true;
         
         // 恢复透明度（如果之前被隐藏）
@@ -574,19 +659,47 @@ export class BuildingSelectionPanel extends Component {
         this.node.setScale(0, 1, 1);
         tween(this.node)
             .to(0.2, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
+            .call(() => {
+                console.info('[BuildingSelectionPanel] show: 面板显示动画完成');
+            })
             .start();
+        
+        // 0.5秒后清除保护标记（给足够的时间让按钮点击事件处理完成）
+        this.scheduleOnce(() => {
+            (this.node as any)._justShown = false;
+            console.info('[BuildingSelectionPanel] show: 面板显示保护期结束');
+        }, 0.5);
     }
 
     /**
      * 隐藏面板
      */
     hide() {
+        console.info('[BuildingSelectionPanel] hide: 开始隐藏面板, _justShown =', !!(this.node as any)._justShown, ', node.active =', this.node.active);
+        
+        // 检查是否在保护期内，如果是，不隐藏
+        if ((this.node as any)._justShown) {
+            console.info('[BuildingSelectionPanel] hide: 面板在保护期内，取消隐藏操作');
+            return;
+        }
+        
+        // 如果面板已经隐藏，不需要再次隐藏
+        if (!this.node.active) {
+            console.info('[BuildingSelectionPanel] hide: 面板已经隐藏，不需要再次隐藏');
+            return;
+        }
+        
+        // 获取调用堆栈信息（用于调试）
+        const stack = new Error().stack;
+        console.info('[BuildingSelectionPanel] hide: 调用堆栈', stack ? stack.split('\n').slice(0, 10).join('\n') : '无堆栈信息');
+        
         tween(this.node)
             .to(0.2, { scale: new Vec3(0, 1, 1) }, { easing: 'backIn' })
             .call(() => {
                 this.node.active = false;
                 this.selectedBuilding = null;
                 this.clearDragPreview();
+                console.info('[BuildingSelectionPanel] hide: 面板已隐藏完成');
             })
             .start();
     }

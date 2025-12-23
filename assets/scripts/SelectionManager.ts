@@ -144,11 +144,14 @@ export class SelectionManager extends Component {
     onTouchStart(event: EventTouch) {
         // 优先检查是否在建造模式下（如果是，完全不处理，让建造系统处理）
         const buildingMode = this.isBuildingMode();
+        console.info('[SelectionManager] onTouchStart: buildingMode =', buildingMode);
         
         // 检查是否正在拖拽建筑物（通过TowerBuilder）
         const isDraggingBuilding = this.isDraggingBuilding();
+        console.info('[SelectionManager] onTouchStart: isDraggingBuilding =', isDraggingBuilding);
         
         if (buildingMode || isDraggingBuilding) {
+            console.info('[SelectionManager] onTouchStart: 在建造模式或拖拽建筑物，不处理多选');
             // 如果正在选择，清除选择状态
             if (this.isSelecting) {
                 this.isSelecting = false;
@@ -159,6 +162,8 @@ export class SelectionManager extends Component {
             }
             return; // 建造模式或拖拽建筑物时，不处理多选
         }
+        
+        console.info('[SelectionManager] onTouchStart: 不在建造模式，可以处理多选');
 
         // 检查是否点击在UI元素上（如按钮、选择面板等）
         const targetNode = event.target as Node;
@@ -1526,6 +1531,7 @@ export class SelectionManager extends Component {
                 // 只在第一次失败时输出警告，避免刷屏
                 if (Math.random() < 0.01) {
                 }
+                console.info('[SelectionManager] isBuildingMode: 未找到TowerBuilder节点，返回false');
                 return false;
             }
 
@@ -1534,21 +1540,28 @@ export class SelectionManager extends Component {
             if (!towerBuilder) {
                 if (Math.random() < 0.01) {
                 }
+                console.info('[SelectionManager] isBuildingMode: 未找到TowerBuilder组件，返回false');
                 return false;
             }
 
             // 优先直接访问属性，而不是调用方法，确保获取到最新值
             if (towerBuilder.isBuildingMode !== undefined) {
-                return towerBuilder.isBuildingMode === true;
+                const result = towerBuilder.isBuildingMode === true;
+                console.info('[SelectionManager] isBuildingMode: 通过isBuildingMode属性检查，结果 =', result, ', 属性值 =', towerBuilder.isBuildingMode);
+                return result;
             }
             
             // 如果没有属性，再尝试使用公共方法检查是否在建造模式
             if (towerBuilder.getIsBuildingMode && typeof towerBuilder.getIsBuildingMode === 'function') {
-                return towerBuilder.getIsBuildingMode() === true;
+                const result = towerBuilder.getIsBuildingMode() === true;
+                console.info('[SelectionManager] isBuildingMode: 通过getIsBuildingMode方法检查，结果 =', result);
+                return result;
             }
             
+            console.info('[SelectionManager] isBuildingMode: 无法检查建造模式，返回false');
             return false;
         } catch (error) {
+            console.info('[SelectionManager] isBuildingMode: 检查时发生错误，返回false', error);
             return false;
         }
     }

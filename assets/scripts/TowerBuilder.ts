@@ -782,10 +782,13 @@ export class TowerBuilder extends Component {
     }
 
     enableBuildingMode() {
+        console.info('[TowerBuilder] enableBuildingMode: 开始开启建造模式');
         this.isBuildingMode = true;
+        console.info('[TowerBuilder] enableBuildingMode: isBuildingMode 已设置为 true');
         // 显示建筑物选择面板
         if (this.buildingPanel) {
             this.buildingPanel.show();
+            console.info('[TowerBuilder] enableBuildingMode: 建筑物面板已显示');
         }
         
         // 根据当前选中的建筑类型显示相应的网格面板
@@ -806,15 +809,19 @@ export class TowerBuilder extends Component {
                 this.gridPanel.show();
             }
         }
+        console.info('[TowerBuilder] enableBuildingMode: 建造模式已开启完成');
     }
 
     disableBuildingMode() {
+        console.info('[TowerBuilder] disableBuildingMode: 开始关闭建造模式');
         this.isBuildingMode = false;
+        console.info('[TowerBuilder] disableBuildingMode: isBuildingMode 已设置为 false');
         this.currentSelectedBuilding = null;
         
         // 隐藏建筑物选择面板
         if (this.buildingPanel) {
             this.buildingPanel.hide();
+            console.info('[TowerBuilder] disableBuildingMode: 建筑物面板已隐藏');
         }
 
         if (this.previewTower) {
@@ -831,6 +838,7 @@ export class TowerBuilder extends Component {
         if (this.stoneWallGridPanelComponent) {
             this.stoneWallGridPanelComponent.clearHighlight();
         }
+        console.info('[TowerBuilder] disableBuildingMode: 建造模式已关闭完成');
     }
 
     /**
@@ -1230,12 +1238,24 @@ export class TowerBuilder extends Component {
             this.gridPanel.clearHighlight();
         }
         
-        // 清除建筑物的选中状态，确保放置后不会显示攻击范围、碰撞体积等框体
-        this.clearCurrentSelection();
+        // 清除建筑物的选中状态（只清除UnitSelectionManager，不清除SelectionManager的多选）
+        const unitSelectionManagerNode = find('UnitSelectionManager');
+        if (unitSelectionManagerNode) {
+            const unitSelectionManager = unitSelectionManagerNode.getComponent(UnitSelectionManager);
+            if (unitSelectionManager) {
+                unitSelectionManager.clearSelection();
+            }
+        }
         
         // 延迟一帧再次清除选中状态和网格高亮，确保建筑物创建完成后清除
         this.scheduleOnce(() => {
-            this.clearCurrentSelection();
+            const unitSelectionManagerNode = find('UnitSelectionManager');
+            if (unitSelectionManagerNode) {
+                const unitSelectionManager = unitSelectionManagerNode.getComponent(UnitSelectionManager);
+                if (unitSelectionManager) {
+                    unitSelectionManager.clearSelection();
+                }
+            }
             if (this.gridPanel) {
                 this.gridPanel.clearHighlight();
             }
@@ -1723,8 +1743,10 @@ export class TowerBuilder extends Component {
 
     // 可以通过按钮调用
     onBuildButtonClick() {
+        console.info('[TowerBuilder] onBuildButtonClick: 建造按钮被点击');
         // 检查warAncientTreePrefab是否设置
         if (!this.warAncientTreePrefab) {
+            console.info('[TowerBuilder] onBuildButtonClick: warAncientTreePrefab 未设置，返回');
             return;
         }
         
@@ -1732,13 +1754,32 @@ export class TowerBuilder extends Component {
         if (!this.targetCrystal) {
             this.targetCrystal = find('Crystal');
             if (!this.targetCrystal) {
+                console.info('[TowerBuilder] onBuildButtonClick: targetCrystal 未找到，返回');
                 return;
             }
         }
         
-        // 取消当前的单位选择
-        this.clearCurrentSelection();
+        // 检查面板是否显示（更准确的判断）
+        const isPanelVisible = this.buildingPanel && this.buildingPanel.node && this.buildingPanel.node.active;
+        console.info('[TowerBuilder] onBuildButtonClick: isBuildingMode =', this.isBuildingMode, ', isPanelVisible =', isPanelVisible);
         
+        // 如果已经在建造模式且面板显示，切换为关闭建造模式
+        if (this.isBuildingMode && isPanelVisible) {
+            console.info('[TowerBuilder] onBuildButtonClick: 关闭建造模式');
+            this.disableBuildingMode();
+            return;
+        }
+        
+        // 取消当前的单位选择（只清除UnitSelectionManager，不清除SelectionManager的多选）
+        const unitSelectionManagerNode = find('UnitSelectionManager');
+        if (unitSelectionManagerNode) {
+            const unitSelectionManager = unitSelectionManagerNode.getComponent(UnitSelectionManager);
+            if (unitSelectionManager) {
+                unitSelectionManager.clearSelection();
+            }
+        }
+        
+        console.info('[TowerBuilder] onBuildButtonClick: 开启建造模式');
         this.enableBuildingMode();
     }
     
