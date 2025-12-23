@@ -229,8 +229,12 @@ export class Build extends Component {
 
         this.isDestroyed = true;
 
-        // 释放网格占用
+        // 释放网格占用（确保能找到网格面板）
+        if (!this.gridPanel) {
+            this.findGridPanel();
+        }
         if (this.gridPanel && this.gridX >= 0 && this.gridY >= 0) {
+            console.info('[Build] releaseGrid on die', this.node.name, 'grid=', this.gridX, this.gridY);
             this.gridPanel.releaseGrid(this.gridX, this.gridY);
         }
 
@@ -270,6 +274,19 @@ export class Build extends Component {
 
         // 销毁节点
         this.node.destroy();
+    }
+
+    onDestroy() {
+        // 双保险：如果仍有网格占用标记，尝试释放
+        if (!this.isDestroyed && this.gridX >= 0 && this.gridY >= 0) {
+            if (!this.gridPanel) {
+                this.findGridPanel();
+            }
+            if (this.gridPanel) {
+                console.info('[Build] onDestroy releaseGrid safeguard', this.node.name, 'grid=', this.gridX, this.gridY);
+                this.gridPanel.releaseGrid(this.gridX, this.gridY);
+            }
+        }
     }
 
     protected isAlive(): boolean {

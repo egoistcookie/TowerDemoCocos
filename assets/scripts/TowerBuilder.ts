@@ -1045,7 +1045,9 @@ export class TowerBuilder extends Component {
     }
 
     canBuildAt(position: Vec3, building: BuildingType): boolean {
+        console.info('[TowerBuilder] canBuildAt start', building?.name, 'pos=', position);
         if (!this.targetCrystal || !building) {
+            console.info('[TowerBuilder] canBuildAt fail: missing targetCrystal or building');
             return false;
         }
 
@@ -1059,32 +1061,39 @@ export class TowerBuilder extends Component {
             }
             const stonePanel = this.stoneWallGridPanelComponent;
             if (!stonePanel) {
+                console.info('[TowerBuilder] canBuildAt fail: stoneWall panel null');
                 return false;
             }
 
             if (!stonePanel.isPositionInGrid(position)) {
+                console.info('[TowerBuilder] canBuildAt fail: stoneWall pos not in grid');
                 return false;
             }
 
             const grid = stonePanel.worldToGrid(position);
             if (!grid || stonePanel.isGridOccupied(grid.x, grid.y)) {
+                console.info('[TowerBuilder] canBuildAt fail: stoneWall grid invalid or occupied', grid?.x, grid?.y);
                 return false;
             }
 
+            console.info('[TowerBuilder] canBuildAt ok: stoneWall grid', grid.x, grid.y);
             return true;
         }
 
         // 非石墙：需要在普通网格内并满足距离
         if (this.gridPanel) {
             if (!this.gridPanel.isPositionInGrid(position)) {
+                console.info('[TowerBuilder] canBuildAt fail: pos not in normal grid');
                 return false;
             }
             
             // 检查目标网格是否已被占用
             const grid = this.gridPanel.worldToGrid(position);
             if (grid && this.gridPanel.isGridOccupied(grid.x, grid.y)) {
+                console.info('[TowerBuilder] canBuildAt fail: grid occupied', grid.x, grid.y);
                 return false;
             }
+            console.info('[TowerBuilder] canBuildAt ok: normal grid', grid?.x, grid?.y);
         }
 
         // 检查距离水晶的距离（保留原有逻辑作为备用检查）
@@ -1092,6 +1101,7 @@ export class TowerBuilder extends Component {
         const distance = Vec3.distance(position, crystalPos);
         
         if (distance < this.minBuildDistance || distance > this.buildRange) {
+            console.info('[TowerBuilder] canBuildAt fail: distance', distance, 'min', this.minBuildDistance, 'max', this.buildRange);
             return false;
         }
 
@@ -1102,6 +1112,7 @@ export class TowerBuilder extends Component {
             if (tower.active) {
                 const towerDistance = Vec3.distance(position, tower.worldPosition);
                 if (towerDistance < 60) { // 弓箭手之间的最小距离
+                    console.info('[TowerBuilder] canBuildAt fail: overlap tower', towerDistance);
                     return false;
                 }
             }
@@ -1113,6 +1124,7 @@ export class TowerBuilder extends Component {
             if (tree.active) {
                 const treeDistance = Vec3.distance(position, tree.worldPosition);
                 if (treeDistance < 80) { // 战争古树之间的最小距离（稍大一些）
+                    console.info('[TowerBuilder] canBuildAt fail: overlap war tree', treeDistance);
                     return false;
                 }
             }
@@ -1124,6 +1136,7 @@ export class TowerBuilder extends Component {
             if (well.active) {
                 const wellDistance = Vec3.distance(position, well.worldPosition);
                 if (wellDistance < 80) { // 月亮井之间的最小距离
+                    console.info('[TowerBuilder] canBuildAt fail: overlap moonwell', wellDistance);
                     return false;
                 }
             }
@@ -1135,6 +1148,7 @@ export class TowerBuilder extends Component {
             if (tree.active) {
                 const treeDistance = Vec3.distance(position, tree.worldPosition);
                 if (treeDistance < 60) { // 普通树木之间的最小距离
+                    console.info('[TowerBuilder] canBuildAt fail: overlap tree', treeDistance);
                     return false;
                 }
             }
@@ -1146,6 +1160,7 @@ export class TowerBuilder extends Component {
             if (hall.active) {
                 const hallDistance = Vec3.distance(position, hall.worldPosition);
                 if (hallDistance < 80) { // 猎手大厅之间的最小距离
+                    console.info('[TowerBuilder] canBuildAt fail: overlap hunter hall', hallDistance);
                     return false;
                 }
             }
@@ -1157,6 +1172,7 @@ export class TowerBuilder extends Component {
             if (c.active) {
                 const d = Vec3.distance(position, c.worldPosition);
                 if (d < 80) { // 教堂之间/与其他建筑的最小距离
+                    console.info('[TowerBuilder] canBuildAt fail: overlap church', d);
                     return false;
                 }
             }
@@ -1168,11 +1184,13 @@ export class TowerBuilder extends Component {
             if (wall.active) {
                 const wallDistance = Vec3.distance(position, wall.worldPosition);
                 if (wallDistance < 80) { // 其他建筑物与石墙的最小距离
+                    console.info('[TowerBuilder] canBuildAt fail: overlap stonewall', wallDistance);
                     return false;
                 }
             }
         }
 
+        console.info('[TowerBuilder] canBuildAt success');
         return true;
     }
 
@@ -1180,6 +1198,7 @@ export class TowerBuilder extends Component {
      * 建造建筑物（通用方法）
      */
     buildBuilding(building: BuildingType, worldPosition: Vec3) {
+        console.info('[TowerBuilder] buildBuilding start', building?.name, 'pos=', worldPosition);
         // 检查金币是否足够
         if (!this.gameManager) {
             this.findGameManager();
@@ -1224,6 +1243,7 @@ export class TowerBuilder extends Component {
         } else {
             // 可以扩展其他建筑物类型
         }
+        console.info('[TowerBuilder] buildBuilding done (may have built), disabling building mode');
 
         // 只有在成功建造后才退出建造模式
         this.disableBuildingMode();
@@ -1265,6 +1285,11 @@ export class TowerBuilder extends Component {
             return;
         }
 
+        // 确保 gridPanel 存在
+        if (!this.gridPanel) {
+            this.findGridPanel();
+        }
+
         // 消耗金币
         if (this.gameManager) {
             this.gameManager.spendGold(this.towerCost);
@@ -1302,10 +1327,15 @@ export class TowerBuilder extends Component {
             if (this.gridPanel) {
                 const grid = this.gridPanel.worldToGrid(worldPosition);
                 if (grid) {
+                    console.info('[TowerBuilder] buildWarAncientTree occupy', grid.x, grid.y, 'worldPos=', worldPosition);
                     treeScript.gridX = grid.x;
                     treeScript.gridY = grid.y;
                     this.gridPanel.occupyGrid(grid.x, grid.y, tree);
+                } else {
+                    console.info('[TowerBuilder] buildWarAncientTree worldToGrid returned null, worldPos=', worldPosition);
                 }
+            } else {
+                console.info('[TowerBuilder] buildWarAncientTree gridPanel is null, cannot occupy grid');
             }
             
             // 检查单位是否首次出现

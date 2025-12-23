@@ -82,6 +82,9 @@ export class StoneWall extends Component {
         // 查找单位选择管理器
         this.findUnitSelectionManager();
         
+        // 查找网格面板（石墙网格），确保后续死亡/回收能释放占用
+        this.findGridPanel();
+        
         // 创建血条
         this.createHealthBar();
         

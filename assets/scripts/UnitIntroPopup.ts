@@ -163,6 +163,8 @@ export class UnitIntroPopup extends Component {
         if (towerBuilderNode) {
             const towerBuilder = towerBuilderNode.getComponent('TowerBuilder') as any;
             if (towerBuilder && towerBuilder.buildingPanel) {
+                // 关闭建造模式
+                towerBuilder.isBuildingMode = false;
                 // 直接设置节点为不可见
                 if (towerBuilder.buildingPanel.node) {
                     towerBuilder.buildingPanel.node.active = false;

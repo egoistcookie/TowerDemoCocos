@@ -535,15 +535,6 @@ export class HunterHall extends Build {
             return true;
         });
         
-        // 只在有Hunter死亡时减少人口（避免重复减少）
-        // 注意：Hunter的buildCost为0，所以Hunter.destroyTower()不会减少人口
-        // 因此这里需要减少人口
-        if (removedCount > 0 && this.gameManager) {
-            const beforePopulation = this.gameManager.getPopulation();
-            this.gameManager.removePopulation(removedCount);
-            const afterPopulation = this.gameManager.getPopulation();
-        }
-        
         const afterCount = this.producedHunters.length;
         if (beforeCount !== afterCount) {
             

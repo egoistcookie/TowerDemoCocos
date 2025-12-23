@@ -680,13 +680,6 @@ export class SwordsmanHall extends Component {
             return true;
         });
         
-        // 只在有ElfSwordsman死亡时减少人口（避免重复减少）
-        // 注意：ElfSwordsman的buildCost为0，所以ElfSwordsman.destroyTower()不会减少人口
-        // 因此这里需要减少人口
-        if (removedCount > 0 && this.gameManager) {
-            this.gameManager.removePopulation(removedCount);
-        }
-        
         const afterCount = this.producedSwordsmen.length;
         if (beforeCount !== afterCount) {
             

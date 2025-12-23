@@ -90,7 +90,7 @@ export class Priest extends Role {
     unitName: string = '牧师';
 
     @property({ override: true })
-    unitDescription: string = '辅助单位，向附近受伤的弓箭手、剑士、女猎手施放治疗。';
+    unitDescription: string = '辅助单位，治疗附近受伤的友军。';
 
     @property({ type: SpriteFrame, override: true })
     unitIcon: SpriteFrame = null!;
@@ -169,7 +169,7 @@ export class Priest extends Role {
     }
 
     /**
-     * 查找最近的受伤友军（弓箭手 Arrower / 精灵剑士 ElfSwordsman / 女猎手 Hunter）
+     * 查找最近的受伤友军（弓箭手 / 精灵剑士 / 女猎手 / 牧师），允许治疗自己
      */
     private findHealTarget() {
         const candidates = this.getFriendlyUnits(true, this.attackRange * 2);
@@ -188,7 +188,7 @@ export class Priest extends Role {
     }
 
     /**
-     * 获取友军列表
+     * 获取友军列表（包含牧师自身）
      * @param onlyInjured 是否仅获取受伤单位
      * @param maxDistance 最大距离
      */
@@ -201,13 +201,14 @@ export class Priest extends Role {
         const visit = (node: Node) => {
             if (!node || !node.isValid || !node.active) return;
 
-            // 只关心三类友军
+            // 关心四类友军：弓箭手、女猎手、精灵剑士、牧师（包含自身）
             const arrower = node.getComponent('Arrower') as any;
             const hunter = node.getComponent('Hunter') as any;
             const swordsman = node.getComponent('ElfSwordsman') as any;
+            const priest = node.getComponent('Priest') as any;
 
-            const script = arrower || hunter || swordsman;
-            if (script && node !== this.node) {
+            const script = arrower || hunter || swordsman || priest;
+            if (script) {
                 const dist = Vec3.distance(this.node.worldPosition, node.worldPosition);
                 if (dist <= maxDistance) {
                     let currentHealth = 0;
@@ -300,7 +301,8 @@ export class Priest extends Role {
         const arrower = targetNode.getComponent('Arrower') as any;
         const hunter = targetNode.getComponent('Hunter') as any;
         const swordsman = targetNode.getComponent('ElfSwordsman') as any;
-        const script = arrower || hunter || swordsman;
+        const priest = targetNode.getComponent('Priest') as any;
+        const script = arrower || hunter || swordsman || priest;
 
         if (!script) {
             this.currentTarget = null!;

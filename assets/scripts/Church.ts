@@ -379,10 +379,6 @@ export class Church extends Build {
             return true;
         });
 
-        if (removed > 0 && this.gameManager) {
-            this.gameManager.removePopulation(removed);
-        }
-
         if (before !== this.producedPriests.length) {
             if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
                 this.unitSelectionManager.updateUnitInfo({

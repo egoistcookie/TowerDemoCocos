@@ -82,6 +82,9 @@ export class BuildingGridPanel extends Component {
         if (this.gridGraphics) {
             this.drawGrid();
         }
+
+        // 调试日志，确认面板开启
+        console.info('[BuildingGridPanel] show called, node.active=', this.node.active);
     }
 
     /**
@@ -292,7 +295,18 @@ export class BuildingGridPanel extends Component {
             return true; // 超出范围视为已占用
         }
         
-        return this.gridCells[gridY][gridX].occupied;
+        const cell = this.gridCells[gridY][gridX];
+        // 如果标记为占用但节点已失效/未激活，自动释放，防止僵尸占用
+        if (cell.occupied) {
+            const node = cell.buildingNode;
+            if (!node || !node.isValid || !node.active) {
+                console.info('[BuildingGridPanel] isGridOccupied auto-release zombie cell', gridX, gridY);
+                cell.occupied = false;
+                cell.buildingNode = null;
+                return false;
+            }
+        }
+        return cell.occupied;
     }
 
     /**
@@ -303,6 +317,7 @@ export class BuildingGridPanel extends Component {
             return;
         }
         
+        console.info('[BuildingGridPanel] occupyGrid', gridX, gridY, 'node=', buildingNode?.name);
         this.gridCells[gridY][gridX].occupied = true;
         this.gridCells[gridY][gridX].buildingNode = buildingNode;
     }
@@ -315,6 +330,7 @@ export class BuildingGridPanel extends Component {
             return;
         }
         
+        console.info('[BuildingGridPanel] releaseGrid', gridX, gridY);
         this.gridCells[gridY][gridX].occupied = false;
         this.gridCells[gridY][gridX].buildingNode = null;
     }
