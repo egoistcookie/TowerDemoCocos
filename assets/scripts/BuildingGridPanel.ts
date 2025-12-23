@@ -192,8 +192,8 @@ export class BuildingGridPanel extends Component {
         const startX = -gridTotalWidth / 2;
         const startY = -gridTotalHeight / 2;
         
-        // 绘制网格线（半透明灰色，提高可见性）
-        this.gridGraphics.strokeColor = new Color(200, 200, 200, 150);
+        // 绘制网格线（改为完全透明，只保留高亮效果，视觉上类似石墙网格）
+        this.gridGraphics.strokeColor = new Color(200, 200, 200, 0);
         this.gridGraphics.lineWidth = 2;
         
         // 绘制垂直线

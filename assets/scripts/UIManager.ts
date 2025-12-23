@@ -31,6 +31,29 @@ export class UIManager extends Component {
 
     private confirmDialogNode: Node | null = null;
 
+    // 首页三页签相关引用
+    private bottomSelectionNodeRef: Node = null!;
+    private gameMainPanel: Node = null!;
+    private talentPanelNode: Node = null!;
+    private settingsPanelNode: Node = null!;
+
+    // 公共背景（场景背景图）
+    private backgroundNode: Node = null!;
+
+    // 游戏 HUD 相关引用（来自 GameManager）
+    private timerLabelNode: Node = null!;
+    private goldLabelNode: Node = null!;
+    private populationLabelNode: Node = null!;
+    private healthLabelNode: Node = null!;
+
+    // 其他与游戏页相关的节点
+    private buildingGridPanelNode: Node = null!;
+    private stoneWallGridPanelNode: Node = null!;
+    private startGameButtonNode: Node = null!;
+    private backToHomeButtonNode: Node = null!;
+
+    private activePage: 'game' | 'talent' | 'settings' = 'game';
+
     start() {
         // 查找游戏管理器
         this.findGameManager();
@@ -47,8 +70,11 @@ export class UIManager extends Component {
         // 初始化特效节点
         this.createEffects();
         
-        // 创建底部选区UI
+        // 创建底部选区UI（首页三个页面）
         this.createBottomSelectionUI();
+
+        // 默认激活游戏页
+        this.setActivePage('game');
     }
     
     /**
@@ -242,8 +268,8 @@ export class UIManager extends Component {
             
             // 添加半透明背景，确保内容可见且与底部按钮容器连接
             const talentPanelBackground = talentPanel.getComponent(Graphics) || talentPanel.addComponent(Graphics);
-            // 使用更不透明的背景色，确保文字可见
-            talentPanelBackground.fillColor = new Color(0, 0, 40, 220);
+            // 设置为透明背景，让三页共用同一张全局背景图
+            talentPanelBackground.fillColor = new Color(0, 0, 0, 0);
             // 使用talentPanelTransform获取尺寸
             const talentPanelWidth = talentPanelTransform.width;
             const talentPanelHeight = talentPanelTransform.height;
@@ -378,8 +404,8 @@ export class UIManager extends Component {
         
         // 添加半透明背景，确保内容可见且覆盖整个屏幕
         const settingsPanelBackground = settingsPanel.addComponent(Graphics);
-        // 使用更不透明的背景色，确保文字可见
-        settingsPanelBackground.fillColor = new Color(40, 0, 30, 220);
+        // 设置为透明背景，让三页共用同一张全局背景图
+        settingsPanelBackground.fillColor = new Color(0, 0, 0, 0);
         // 背景从屏幕顶部到底部完全覆盖
         settingsPanelBackground.rect(-panelWidth / 2, -panelHeight / 2, panelWidth, panelHeight);
         settingsPanelBackground.fill();
@@ -514,9 +540,21 @@ export class UIManager extends Component {
         // buttonContainerBackground.stroke();
         
         // 创建三个标签页按钮
-        this.createSelectionButton(buttonContainer, '游戏', -250, bottomSelectionNode, [gameMainPanel, talentPanel, settingsPanel]);
-        this.createSelectionButton(buttonContainer, '天赋', 0, bottomSelectionNode, [gameMainPanel, talentPanel, settingsPanel]);
-        this.createSelectionButton(buttonContainer, '设置', 250, bottomSelectionNode, [gameMainPanel, talentPanel, settingsPanel]);
+        this.createSelectionButton(buttonContainer, '游戏', -250);
+        this.createSelectionButton(buttonContainer, '天赋', 0);
+        this.createSelectionButton(buttonContainer, '设置', 250);
+
+        // 记录页面和容器引用，供后续切换使用
+        this.bottomSelectionNodeRef = bottomSelectionNode;
+        this.gameMainPanel = gameMainPanel;
+        this.talentPanelNode = talentPanel;
+        this.settingsPanelNode = settingsPanel;
+        this.startGameButtonNode = startButton;
+
+        // 复用全局背景图（不随页面切换隐藏）
+        if (!this.backgroundNode) {
+            this.backgroundNode = find('Canvas/Background');
+        }
         
         // 绑定开始游戏事件
         startButtonComp.node.on(Button.EventType.CLICK, () => {
@@ -555,7 +593,7 @@ export class UIManager extends Component {
     /**
      * 创建选区按钮
      */
-    createSelectionButton(parent: Node, text: string, xPos: number, bottomSelectionNode: Node, panels: Node[]) {
+    createSelectionButton(parent: Node, text: string, xPos: number) {
         // 创建按钮节点
         const buttonNode = new Node(text + 'Button');
         buttonNode.setParent(parent);
@@ -597,70 +635,163 @@ export class UIManager extends Component {
         
         // 绑定点击事件
         button.node.on(Button.EventType.CLICK, () => {
-            
-            // 直接获取面板引用，确保正确切换
-            const gamePanel = panels[0];
-            const talentPanel = panels[1];
-            const settingsPanel = panels[2];
-            
-            
-            // 获取底部选区背景组件，用于更新整个区域的背景颜色
-            let bottomSelectionBackground = bottomSelectionNode.getComponent(Graphics);
-            if (!bottomSelectionBackground) {
-                bottomSelectionBackground = bottomSelectionNode.addComponent(Graphics);
-            }
-            
-            // 获取底部选区容器的尺寸，避免使用未定义的canvasWidth和canvasHeight
-            const bottomSelectionTransform = bottomSelectionNode.getComponent(UITransform);
-            const width = bottomSelectionTransform ? bottomSelectionTransform.width : 750;
-            const height = bottomSelectionTransform ? bottomSelectionTransform.height : 640;
-            
-            // 根据按钮文本直接切换面板和背景颜色
             if (text === '游戏') {
-                if (gamePanel) { 
-                    gamePanel.active = true; 
-                    // 确保激活的面板位于最前面（在按钮容器之下）
-                    gamePanel.setSiblingIndex(bottomSelectionNode.children.length - 2);
-                }
-                
-                // 切换到底部选区默认背景颜色
-                bottomSelectionBackground.fillColor = new Color(0, 0, 0, 150); // 半透明黑色背景
-                bottomSelectionBackground.rect(-width / 2, -height / 2, width, height);
-                bottomSelectionBackground.fill();
+                this.setActivePage('game');
             } else if (text === '天赋') {
-                if (talentPanel) { 
-                    talentPanel.active = true; 
-                    // 确保激活的面板位于最前面（在按钮容器之下）
-                    talentPanel.setSiblingIndex(bottomSelectionNode.children.length - 2);
-                    
-                    // 获取 TalentSystem 组件（应该在创建 TalentPanel 时已经添加）
-                    const talentSystem = talentPanel.getComponent(TalentSystem);
-                    if (talentSystem) {
-                        // 调用createTalentPanelUI方法确保UI被正确创建
-                        talentSystem.createTalentPanelUI();
-                    } else {
-                    }
-                }
-                
-                // 切换到底部选区天赋面板背景颜色
-                bottomSelectionBackground.fillColor = new Color(0, 0, 40, 220); // 天赋面板蓝色背景
-                bottomSelectionBackground.rect(-width / 2, -height / 2, width, height);
-                bottomSelectionBackground.fill();
+                this.setActivePage('talent');
             } else if (text === '设置') {
-                if (settingsPanel) { 
-                    settingsPanel.active = true; 
-                    // 确保激活的面板位于最前面（在按钮容器之下）
-                    settingsPanel.setSiblingIndex(bottomSelectionNode.children.length - 2);
-                }
-                
-                // 切换到底部选区设置面板背景颜色
-                bottomSelectionBackground.fillColor = new Color(40, 0, 30, 220); // 设置面板红色背景
-                bottomSelectionBackground.rect(-width / 2, -height / 2, width, height);
-                bottomSelectionBackground.fill();
+                this.setActivePage('settings');
             }
         }, this);
         
         return buttonNode;
+    }
+
+    /**
+     * 缓存常用节点引用（只在需要时查找一次）
+     */
+    private cacheCommonNodes() {
+        if (!this.backgroundNode) {
+            this.backgroundNode = find('Canvas/Background');
+        }
+
+        if (!this.buildingGridPanelNode) {
+            this.buildingGridPanelNode =
+                find('Canvas/BuildingGridPanel') ||
+                find('BuildingGridPanel');
+        }
+
+        if (!this.stoneWallGridPanelNode) {
+            this.stoneWallGridPanelNode =
+                find('Canvas/StoneWallGridPanel') ||
+                find('StoneWallGridPanel');
+        }
+
+        // 退出游戏按钮（尝试按常用路径查找）
+        if (!this.backToHomeButtonNode || !this.backToHomeButtonNode.isValid) {
+            this.backToHomeButtonNode =
+                // 优先按你提供的实际节点名 ReturnButton 查找
+                find('Canvas/UI/ReturnButton') ||
+                find('Canvas/ReturnButton') ||
+                find('UI/ReturnButton') ||
+                // 兼容旧命名 BackToHomeButton
+                find('Canvas/UI/BackToHomeButton') ||
+                find('Canvas/BackToHomeButton') ||
+                find('UI/BackToHomeButton') ||
+                find('BackToHomeButton') ||
+                this.backToHomeButtonNode;
+        }
+
+        if (this.gameManager) {
+            if (!this.timerLabelNode && (this.gameManager as any).timerLabel) {
+                this.timerLabelNode = (this.gameManager as any).timerLabel.node;
+            }
+            if (!this.goldLabelNode && this.gameManager.goldLabel) {
+                this.goldLabelNode = this.gameManager.goldLabel.node;
+            }
+            if (!this.populationLabelNode && this.gameManager.populationLabel) {
+                this.populationLabelNode = this.gameManager.populationLabel.node;
+            }
+            if (!this.healthLabelNode && this.gameManager.healthLabel) {
+                this.healthLabelNode = this.gameManager.healthLabel.node;
+            }
+        }
+    }
+
+    /**
+     * 切换首页当前激活页面
+     */
+    private setActivePage(page: 'game' | 'talent' | 'settings') {
+        this.activePage = page;
+
+        // 如果底部三页签还未创建，尝试查找
+        if (!this.bottomSelectionNodeRef) {
+            this.bottomSelectionNodeRef = find('Canvas/BottomSelection');
+        }
+        if (this.bottomSelectionNodeRef && !this.gameMainPanel) {
+            this.gameMainPanel = this.bottomSelectionNodeRef.getChildByName('GameMainPanel');
+            this.talentPanelNode = this.bottomSelectionNodeRef.getChildByName('TalentPanel');
+            this.settingsPanelNode = this.bottomSelectionNodeRef.getChildByName('SettingsPanel');
+        }
+
+        this.cacheCommonNodes();
+
+        const isGame = page === 'game';
+        const isTalent = page === 'talent';
+        const isSettings = page === 'settings';
+
+        // 保持通用背景始终可见
+        if (this.backgroundNode) {
+            this.backgroundNode.active = true;
+        }
+
+        // 切换三个主面板
+        if (this.gameMainPanel) {
+            this.gameMainPanel.active = isGame;
+            if (isGame && this.bottomSelectionNodeRef) {
+                this.gameMainPanel.setSiblingIndex(this.bottomSelectionNodeRef.children.length - 2);
+            }
+        }
+        if (this.talentPanelNode) {
+            this.talentPanelNode.active = isTalent;
+            if (isTalent && this.bottomSelectionNodeRef) {
+                this.talentPanelNode.setSiblingIndex(this.bottomSelectionNodeRef.children.length - 2);
+            }
+        }
+        if (this.settingsPanelNode) {
+            this.settingsPanelNode.active = isSettings;
+            if (isSettings && this.bottomSelectionNodeRef) {
+                this.settingsPanelNode.setSiblingIndex(this.bottomSelectionNodeRef.children.length - 2);
+            }
+        }
+
+        // 游戏页面专属 UI（开始游戏按钮）
+        if (this.startGameButtonNode && this.startGameButtonNode.isValid) {
+            this.startGameButtonNode.active = isGame;
+        }
+
+        // 游戏 HUD：金币 / 人口 / 时间标签
+        if (this.gameManager) {
+            if (!this.timerLabelNode && (this.gameManager as any).timerLabel) {
+                this.timerLabelNode = (this.gameManager as any).timerLabel.node;
+            }
+            if (!this.goldLabelNode && this.gameManager.goldLabel) {
+                this.goldLabelNode = this.gameManager.goldLabel.node;
+            }
+            if (!this.populationLabelNode && this.gameManager.populationLabel) {
+                this.populationLabelNode = this.gameManager.populationLabel.node;
+            }
+        }
+
+        if (this.timerLabelNode) {
+            this.timerLabelNode.active = isGame;
+        }
+        if (this.goldLabelNode) {
+            this.goldLabelNode.active = isGame;
+        }
+        if (this.populationLabelNode) {
+            this.populationLabelNode.active = isGame;
+        }
+        if (this.healthLabelNode) {
+            this.healthLabelNode.active = isGame;
+        }
+
+        // 建造相关：建造按钮、建筑物网格、退出/重开按钮
+        if (this.buildButton) {
+            this.buildButton.node.active = isGame;
+        }
+        if (this.restartButton) {
+            this.restartButton.node.active = isGame;
+        }
+        if (this.buildingGridPanelNode && this.buildingGridPanelNode.isValid) {
+            this.buildingGridPanelNode.active = isGame;
+        }
+        if (this.stoneWallGridPanelNode && this.stoneWallGridPanelNode.isValid) {
+            this.stoneWallGridPanelNode.active = isGame;
+        }
+        if (this.backToHomeButtonNode && this.backToHomeButtonNode.isValid) {
+            this.backToHomeButtonNode.active = isGame;
+        }
     }
     
     /**

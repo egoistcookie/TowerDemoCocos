@@ -50,9 +50,15 @@ export class SelectionManager extends Component {
             this.towerBuilderNode = find('TowerBuilder');
             // 如果直接查找失败，尝试从场景中递归查找
             if (!this.towerBuilderNode && this.node.scene) {
-                const findNodeRecursive = (node: Node, name: string): Node | null => {
+                const findNodeRecursive = (node: Node | null, name: string): Node | null => {
+                    if (!node || !node.isValid) {
+                        return null;
+                    }
                     if (node.name === name) {
                         return node;
+                    }
+                    if (!node.children) {
+                        return null;
                     }
                     for (const child of node.children) {
                         const found = findNodeRecursive(child, name);
@@ -1514,9 +1520,15 @@ export class SelectionManager extends Component {
             // 每次都重新查找TowerBuilder节点，不使用缓存，确保获取到的是正确的实例
             let towerBuilderNode = find('TowerBuilder');
             if (!towerBuilderNode && this.node.scene) {
-                const findNodeRecursive = (node: Node, name: string): Node | null => {
+                const findNodeRecursive = (node: Node | null, name: string): Node | null => {
+                    if (!node || !node.isValid) {
+                        return null;
+                    }
                     if (node.name === name) {
                         return node;
+                    }
+                    if (!node.children) {
+                        return null;
                     }
                     for (const child of node.children) {
                         const found = findNodeRecursive(child, name);
@@ -1563,9 +1575,15 @@ export class SelectionManager extends Component {
             // 查找TowerBuilder节点
             let towerBuilderNode = find('TowerBuilder');
             if (!towerBuilderNode && this.node.scene) {
-                const findNodeRecursive = (node: Node, name: string): Node | null => {
+                const findNodeRecursive = (node: Node | null, name: string): Node | null => {
+                    if (!node || !node.isValid) {
+                        return null;
+                    }
                     if (node.name === name) {
                         return node;
+                    }
+                    if (!node.children) {
+                        return null;
                     }
                     for (const child of node.children) {
                         const found = findNodeRecursive(child, name);
