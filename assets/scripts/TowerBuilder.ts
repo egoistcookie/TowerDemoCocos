@@ -782,13 +782,11 @@ export class TowerBuilder extends Component {
     }
 
     enableBuildingMode() {
-        console.info('[TowerBuilder] enableBuildingMode: 开始开启建造模式');
         this.isBuildingMode = true;
         console.info('[TowerBuilder] enableBuildingMode: isBuildingMode 已设置为 true');
         // 显示建筑物选择面板
         if (this.buildingPanel) {
             this.buildingPanel.show();
-            console.info('[TowerBuilder] enableBuildingMode: 建筑物面板已显示');
         }
         
         // 根据当前选中的建筑类型显示相应的网格面板
@@ -809,13 +807,10 @@ export class TowerBuilder extends Component {
                 this.gridPanel.show();
             }
         }
-        console.info('[TowerBuilder] enableBuildingMode: 建造模式已开启完成');
     }
 
     disableBuildingMode() {
-        console.info('[TowerBuilder] disableBuildingMode: 开始关闭建造模式');
         this.isBuildingMode = false;
-        console.info('[TowerBuilder] disableBuildingMode: isBuildingMode 已设置为 false');
         this.currentSelectedBuilding = null;
         
         // 隐藏建筑物选择面板
@@ -1761,7 +1756,6 @@ export class TowerBuilder extends Component {
         
         // 检查面板是否显示（更准确的判断）
         const isPanelVisible = this.buildingPanel && this.buildingPanel.node && this.buildingPanel.node.active;
-        console.info('[TowerBuilder] onBuildButtonClick: isBuildingMode =', this.isBuildingMode, ', isPanelVisible =', isPanelVisible);
         
         // 如果已经在建造模式且面板显示，切换为关闭建造模式
         if (this.isBuildingMode && isPanelVisible) {

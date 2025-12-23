@@ -1528,34 +1528,23 @@ export class SelectionManager extends Component {
             }
             
             if (!towerBuilderNode || !towerBuilderNode.isValid) {
-                // 只在第一次失败时输出警告，避免刷屏
-                if (Math.random() < 0.01) {
-                }
-                console.info('[SelectionManager] isBuildingMode: 未找到TowerBuilder节点，返回false');
                 return false;
             }
 
             // 获取TowerBuilder组件
             const towerBuilder = towerBuilderNode.getComponent('TowerBuilder') as any;
             if (!towerBuilder) {
-                if (Math.random() < 0.01) {
-                }
-                console.info('[SelectionManager] isBuildingMode: 未找到TowerBuilder组件，返回false');
                 return false;
             }
 
             // 优先直接访问属性，而不是调用方法，确保获取到最新值
             if (towerBuilder.isBuildingMode !== undefined) {
-                const result = towerBuilder.isBuildingMode === true;
-                console.info('[SelectionManager] isBuildingMode: 通过isBuildingMode属性检查，结果 =', result, ', 属性值 =', towerBuilder.isBuildingMode);
-                return result;
+                return towerBuilder.isBuildingMode === true;
             }
             
             // 如果没有属性，再尝试使用公共方法检查是否在建造模式
             if (towerBuilder.getIsBuildingMode && typeof towerBuilder.getIsBuildingMode === 'function') {
-                const result = towerBuilder.getIsBuildingMode() === true;
-                console.info('[SelectionManager] isBuildingMode: 通过getIsBuildingMode方法检查，结果 =', result);
-                return result;
+                return towerBuilder.getIsBuildingMode() === true;
             }
             
             console.info('[SelectionManager] isBuildingMode: 无法检查建造模式，返回false');
