@@ -464,8 +464,7 @@ export class Church extends Build {
                 currentUnitCount: this.producedPriests.length,
                 maxUnitCount: this.maxPriestCount,
                 onUpgradeClick: () => this.onUpgradeClick(),
-                onSellClick: () => this.onSellClick(),
-                onDetachWispClick: () => this.detachWisp()
+                onSellClick: () => this.onSellClick()
             };
             this.unitSelectionManager.selectUnit(this.node, info);
         }

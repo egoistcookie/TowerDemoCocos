@@ -175,7 +175,7 @@ export class UnitSelectionManager extends Component {
         // 如果有选中的单位，调用setHighlight(false)清除高亮
         if (selectedUnit && selectedUnit.isValid) {
             // 调用单位的setHighlight方法清除高亮
-            const unitScript = selectedUnit.getComponent('Wisp') as any;
+            const unitScript = selectedUnit.getComponent('Arrower') as any;
             if (unitScript && unitScript.setHighlight) {
                 unitScript.setHighlight(false);
             }
@@ -196,16 +196,6 @@ export class UnitSelectionManager extends Component {
             const warAncientTreeScript = selectedUnit.getComponent('WarAncientTree') as any;
             if (warAncientTreeScript && warAncientTreeScript.setHighlight) {
                 warAncientTreeScript.setHighlight(false);
-            }
-            
-            const moonWellScript = selectedUnit.getComponent('MoonWell') as any;
-            if (moonWellScript && moonWellScript.setHighlight) {
-                moonWellScript.setHighlight(false);
-            }
-            
-            const treeScript = selectedUnit.getComponent('Tree') as any;
-            if (treeScript && treeScript.setHighlight) {
-                treeScript.setHighlight(false);
             }
             
             const hunterHallScript = selectedUnit.getComponent('HunterHall') as any;
@@ -269,7 +259,7 @@ export class UnitSelectionManager extends Component {
             attackGraphics.stroke();
         }
 
-        // 绘制治疗范围（如果有，如月亮井）
+        // 绘制治疗范围（如果有）
         if (unitInfo.healRange && unitInfo.healRange > 0) {
             const healNode = new Node('HealRange');
             healNode.setParent(this.currentRangeDisplayNode);

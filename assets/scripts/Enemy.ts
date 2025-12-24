@@ -688,16 +688,6 @@ export class Enemy extends Component {
             trees = warAncientTrees.children || [];
         }
 
-        // 查找月亮井
-        let wells: Node[] = [];
-        let wellsNode = find('MoonWells');
-        if (!wellsNode && this.node.scene) {
-            wellsNode = findNodeRecursive(this.node.scene, 'MoonWells');
-        }
-        if (wellsNode) {
-            wells = wellsNode.children || [];
-        }
-
         // 查找猎手大厅
         let halls: Node[] = [];
         let hallsNode = find('HunterHalls');
@@ -754,16 +744,6 @@ export class Enemy extends Component {
             findAllSwordsmanHalls(this.node.scene);
         }
 
-        // 查找小精灵
-        let wisps: Node[] = [];
-        let wispsNode = find('Wisps');
-        if (!wispsNode && this.node.scene) {
-            wispsNode = findNodeRecursive(this.node.scene, 'Wisps');
-        }
-        if (wispsNode) {
-            wisps = wispsNode.children || [];
-        }
-        
         let nearestTarget: Node = null!;
         let minDistance = Infinity;
         let targetPriority = Infinity;
@@ -819,37 +799,9 @@ export class Enemy extends Component {
             }
         }
 
-        // 3. 查找范围内的树木（优先级第三）
-        // 查找树木
-        let treesNode = find('Trees');
-        if (!treesNode && this.node.scene) {
-            treesNode = findNodeRecursive(this.node.scene, 'Trees');
-        }
-        
-        if (treesNode) {
-            const trees = treesNode.children || [];
-            for (const tree of trees) {
-                if (tree && tree.active && tree.isValid) {
-                    const treeScript = tree.getComponent('Tree') as any;
-                    // 检查树木是否存活
-                    if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
-                        const distance = Vec3.distance(this.node.worldPosition, tree.worldPosition);
-                        // 如果树木在范围内，且优先级更高或距离更近
-                        if (distance <= detectionRange) {
-                            if (PRIORITY.TREE < targetPriority || 
-                                (PRIORITY.TREE === targetPriority && distance < minDistance)) {
-                                minDistance = distance;
-                                nearestTarget = tree;
-                                targetPriority = PRIORITY.TREE;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
+        // 3. 查找范围内的角色（优先级第三）
         // 4. 查找范围内的角色（优先级第四）
-        // 查找所有角色单位：弓箭手、小精灵、女猎手、牧师
+        // 查找所有角色单位：弓箭手、女猎手、牧师
         // 1) 弓箭手
         for (const tower of towers) {
             if (tower && tower.active && tower.isValid) {
@@ -943,7 +895,7 @@ export class Enemy extends Component {
             }
         }
 
-        // 5. 查找范围内的建筑物（战争古树、月亮井和猎手大厅，优先级第五）
+        // 5. 查找范围内的建筑物（战争古树和猎手大厅，优先级第五）
         // 战争古树
         for (const tree of trees) {
             if (tree && tree.active && tree.isValid) {
@@ -957,25 +909,6 @@ export class Enemy extends Component {
                             (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
                             minDistance = distance;
                             nearestTarget = tree;
-                            targetPriority = PRIORITY.BUILDING;
-                        }
-                    }
-                }
-            }
-        }
-        // 月亮井
-        for (const well of wells) {
-            if (well && well.active && well.isValid) {
-                const wellScript = well.getComponent('MoonWell') as any;
-                // 检查月亮井是否存活
-                if (wellScript && wellScript.isAlive && wellScript.isAlive()) {
-                    const distance = Vec3.distance(this.node.worldPosition, well.worldPosition);
-                    // 如果月亮井在范围内，且优先级更高或距离更近
-                    if (distance <= detectionRange) {
-                        if (PRIORITY.BUILDING < targetPriority || 
-                            (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
-                            minDistance = distance;
-                            nearestTarget = well;
                             targetPriority = PRIORITY.BUILDING;
                         }
                     }
@@ -1068,25 +1001,6 @@ export class Enemy extends Component {
             }
         }
 
-        // 3.3) 小精灵
-        for (const wisp of wisps) {
-            if (wisp && wisp.active && wisp.isValid) {
-                const wispScript = wisp.getComponent('Wisp') as any;
-                // 检查小精灵是否存活
-                if (wispScript && wispScript.isAlive && wispScript.isAlive()) {
-                    const distance = Vec3.distance(this.node.worldPosition, wisp.worldPosition);
-                    // 如果小精灵在范围内，且优先级更高或距离更近
-                    if (distance <= detectionRange) {
-                        if (PRIORITY.CHARACTER < targetPriority || 
-                            (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
-                            minDistance = distance;
-                            nearestTarget = wisp;
-                            targetPriority = PRIORITY.CHARACTER;
-                        }
-                    }
-                }
-            }
-        }
 
         // 如果找到目标，设置为当前目标
         // 但是，如果当前目标是石墙（网格最上层没有缺口时设置的），且新找到的目标不是石墙，不要替换
@@ -3137,23 +3051,6 @@ export class Enemy extends Component {
         // 3. 添加石墙（用于一般检测）
         // 已移除：当可以绕行时，不应该添加石墙到目标列表
 
-        // 4. 添加树木
-        let treesNode = find('Trees');
-        if (!treesNode && this.node.scene) {
-            treesNode = findNodeRecursive(this.node.scene, 'Trees');
-        }
-        if (treesNode) {
-            const trees = treesNode.children || [];
-            for (const tree of trees) {
-                if (tree && tree.active && tree.isValid) {
-                    const treeScript = tree.getComponent('Tree') as any;
-                    if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
-                        allPotentialTargets.push(tree);
-                    }
-                }
-            }
-        }
-        
         // 5. 添加角色单位
         // 3.1) 弓箭手
         let towersNode = find('Towers');
@@ -3215,23 +3112,6 @@ export class Enemy extends Component {
             }
         }
         
-        // 3.4) 小精灵
-        let wispsNode = find('Wisps');
-        if (!wispsNode && this.node.scene) {
-            wispsNode = findNodeRecursive(this.node.scene, 'Wisps');
-        }
-        if (wispsNode) {
-            const wisps = wispsNode.children || [];
-            for (const wisp of wisps) {
-                if (wisp && wisp.active && wisp.isValid) {
-                    const wispScript = wisp.getComponent('Wisp') as any;
-                    if (wispScript && wispScript.isAlive && wispScript.isAlive()) {
-                        allPotentialTargets.push(wisp);
-                    }
-                }
-            }
-        }
-        
         // 6. 添加建筑物
         // 4.1) 战争古树
         let warAncientTrees = find('WarAncientTrees');
@@ -3245,23 +3125,6 @@ export class Enemy extends Component {
                     const treeScript = tree.getComponent('WarAncientTree') as any;
                     if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
                         allPotentialTargets.push(tree);
-                    }
-                }
-            }
-        }
-        
-        // 4.2) 月亮井
-        let wellsNode = find('MoonWells');
-        if (!wellsNode && this.node.scene) {
-            wellsNode = findNodeRecursive(this.node.scene, 'MoonWells');
-        }
-        if (wellsNode) {
-            const wells = wellsNode.children || [];
-            for (const well of wells) {
-                if (well && well.active && well.isValid) {
-                    const wellScript = well.getComponent('MoonWell') as any;
-                    if (wellScript && wellScript.isAlive && wellScript.isAlive()) {
-                        allPotentialTargets.push(well);
                     }
                 }
             }
@@ -3343,11 +3206,9 @@ export class Enemy extends Component {
                 targetPriority = PRIORITY.CRYSTAL;
             } else if (target.getComponent('StoneWall')) {
                 targetPriority = PRIORITY.STONEWALL;
-            } else if (target.getComponent('Tree')) {
-                targetPriority = PRIORITY.TREE;
-            } else if (target.getComponent('Arrower') || target.getComponent('Hunter') || target.getComponent('Wisp') || target.getComponent('ElfSwordsman')) {
+            } else if (target.getComponent('Arrower') || target.getComponent('Hunter') || target.getComponent('ElfSwordsman')) {
                 targetPriority = PRIORITY.CHARACTER;
-            } else if (target.getComponent('WarAncientTree') || target.getComponent('MoonWell') || target.getComponent('HunterHall') || target.getComponent('SwordsmanHall')) {
+            } else if (target.getComponent('WarAncientTree') || target.getComponent('HunterHall') || target.getComponent('SwordsmanHall')) {
                 targetPriority = PRIORITY.BUILDING;
             } else {
                 // 未知类型，跳过
@@ -3784,18 +3645,15 @@ export class Enemy extends Component {
 
         const towerScript = this.currentTarget.getComponent('Arrower') as any;
         const warAncientTreeScript = this.currentTarget.getComponent('WarAncientTree') as any;
-        const normalTreeScript = this.currentTarget.getComponent('Tree') as any;
-        const wellScript = this.currentTarget.getComponent('MoonWell') as any;
         const hallScript = this.currentTarget.getComponent('HunterHall') as any;
         const swordsmanHallScript = this.currentTarget.getComponent('SwordsmanHall') as any;
         const churchScript = this.currentTarget.getComponent('Church') as any;
         const priestScript = this.currentTarget.getComponent('Priest') as any;
         const crystalScript = this.currentTarget.getComponent('Crystal') as any;
-        const wispScript = this.currentTarget.getComponent('Wisp') as any;
         const hunterScript = this.currentTarget.getComponent('Hunter') as any;
         const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-        const targetScript = towerScript || warAncientTreeScript || normalTreeScript || wellScript || hallScript || swordsmanHallScript || churchScript || priestScript || crystalScript || wispScript || hunterScript || elfSwordsmanScript || stoneWallScript;
+        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || churchScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript;
         
         if (targetScript && targetScript.takeDamage) {
             targetScript.takeDamage(this.attackDamage);

@@ -1,6 +1,5 @@
 import { _decorator, Component, Node, Vec3, Graphics, UITransform, EventTouch, find, Camera, input, Input, Sprite, Label } from 'cc';
 import { Arrower } from './Arrower';
-import { Wisp } from './Wisp';
 import { Hunter } from './Hunter';
 import { ElfSwordsman } from './ElfSwordsman';
 import { Priest } from './Priest';
@@ -21,7 +20,6 @@ export class SelectionManager extends Component {
     private currentPos: Vec3 = new Vec3(); // 当前鼠标位置（世界坐标）
     private selectedTowers: Arrower[] = []; // 选中的防御单位数组
     private selectedHunters: Hunter[] = []; // 选中的女猎手数组
-    private selectedWisps: Wisp[] = []; // 选中的小精灵数组
     private selectedSwordsmen: ElfSwordsman[] = []; // 选中的精灵剑士数组
     private selectedPriests: Priest[] = []; // 选中的牧师数组
     private camera: Camera = null!; // 相机引用
@@ -194,7 +192,7 @@ export class SelectionManager extends Component {
 
         // 如果之前没有选中的单位，清除之前的选择
         // 如果有选中的单位，保留选择（等待拖拽或点击来决定是重新选择还是移动）
-        if (this.selectedTowers.length === 0 && this.selectedHunters.length === 0 && this.selectedWisps.length === 0 && this.selectedSwordsmen.length === 0 && this.selectedPriests.length === 0) {
+        if (this.selectedTowers.length === 0 && this.selectedHunters.length === 0 && this.selectedSwordsmen.length === 0 && this.selectedPriests.length === 0) {
             this.clearSelection();
         }
     }
@@ -245,7 +243,7 @@ export class SelectionManager extends Component {
         }
 
         // 如果之前有选中的单位，检测到拖拽时清除之前的选择（开始新的选择）
-        if (this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedWisps.length > 0 || this.selectedSwordsmen.length > 0 || this.selectedPriests.length > 0) {
+        if (this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedSwordsmen.length > 0 || this.selectedPriests.length > 0) {
             const dragDistance = Vec3.distance(this.startPos, this.currentPos);
             if (dragDistance > 5) { // 检测到拖拽（移动超过5像素）
                 this.clearSelection();
@@ -265,8 +263,8 @@ export class SelectionManager extends Component {
      */
     onTouchEnd(event: EventTouch) {
         
-        // 检查是否有选中的单位（小精灵、防御塔、女猎手或精灵剑士）
-        const hasSelectedUnits = this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedWisps.length > 0 || this.selectedSwordsmen.length > 0 || this.selectedPriests.length > 0;
+        // 检查是否有选中的单位（防御塔、女猎手或精灵剑士）
+        const hasSelectedUnits = this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedSwordsmen.length > 0 || this.selectedPriests.length > 0;
         
         // 优先检查是否在建造模式下（如果是，且没有选中单位，完全不处理，让建造系统处理）
         const buildingMode = this.isBuildingMode();
@@ -305,8 +303,8 @@ export class SelectionManager extends Component {
         // 检查是否有足够的拖动距离（避免点击被误判为拖动）
         const dragDistance = Vec3.distance(this.startPos, this.currentPos);
         
-        // 记录拖拽开始前是否有选中的单位（包括防御单位、女猎手、小精灵、精灵剑士和牧师）
-        const hadPreviousSelection = this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedWisps.length > 0 || this.selectedSwordsmen.length > 0 || this.selectedPriests.length > 0;
+        // 记录拖拽开始前是否有选中的单位（包括防御单位、女猎手、精灵剑士和牧师）
+        const hadPreviousSelection = this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedSwordsmen.length > 0 || this.selectedPriests.length > 0;
         
         
         // 如果是拖拽选择，更新选中的单位
@@ -327,8 +325,8 @@ export class SelectionManager extends Component {
             // 检查点击位置是否在建筑物占地区域内
             const clickedBuilding = this.findBuildingAtPosition(worldPos);
             
-            // 计算分散位置（包括防御单位、女猎手、小精灵、精灵剑士和牧师）
-            const allUnits: any[] = [...this.selectedTowers, ...this.selectedHunters, ...this.selectedWisps, ...this.selectedSwordsmen, ...this.selectedPriests];
+            // 计算分散位置（包括防御单位、女猎手、精灵剑士和牧师）
+            const allUnits: any[] = [...this.selectedTowers, ...this.selectedHunters, ...this.selectedSwordsmen, ...this.selectedPriests];
             const formationPositions = this.calculateFormationPositions(worldPos, allUnits);
             
 
@@ -352,41 +350,12 @@ export class SelectionManager extends Component {
                 }
             }
 
-            // 让所有选中的小精灵移动到各自的分散位置或建筑物身边
-            for (let i = 0; i < this.selectedWisps.length; i++) {
-                const wisp = this.selectedWisps[i];
-                if (wisp && wisp.node && wisp.node.isValid) {
-                    if (clickedBuilding) {
-                        // 如果点击在建筑物上，让小精灵移动到建筑物附近1的位置
-                        // 设置移动目标为建筑物附近1的位置，小精灵会在到达后自动依附
-                        const buildingPos = clickedBuilding.worldPosition.clone();
-                        // 计算到建筑物的方向向量，然后移动到距离建筑物1的位置
-                        const direction = new Vec3();
-                        Vec3.subtract(direction, worldPos, buildingPos);
-                        if (direction.length() > 0) {
-                            direction.normalize();
-                            // 移动到距离建筑物1的位置
-                            const targetPos = new Vec3();
-                            Vec3.scaleAndAdd(targetPos, buildingPos, direction, 1);
-                            wisp.setManualMoveTargetPosition(targetPos);
-                        } else {
-                            // 如果点击位置就是建筑物位置，直接使用建筑物位置
-                            wisp.setManualMoveTargetPosition(buildingPos);
-                        }
-                    } else if ((this.selectedTowers.length + this.selectedHunters.length + i) < formationPositions.length) {
-                        // 否则，移动到目标位置
-                        wisp.setManualMoveTargetPosition(formationPositions[this.selectedTowers.length + this.selectedHunters.length + i]);
-                    }
-                } else {
-                }
-            }
-
             // 让所有选中的精灵剑士移动到各自的分散位置
             for (let i = 0; i < this.selectedSwordsmen.length; i++) {
                 const swordsman = this.selectedSwordsmen[i];
                 if (swordsman && swordsman.node && swordsman.node.isValid) {
-                    if ((this.selectedTowers.length + this.selectedHunters.length + this.selectedWisps.length + i) < formationPositions.length) {
-                        const targetPos = formationPositions[this.selectedTowers.length + this.selectedHunters.length + this.selectedWisps.length + i];
+                    if ((this.selectedTowers.length + this.selectedHunters.length + i) < formationPositions.length) {
+                        const targetPos = formationPositions[this.selectedTowers.length + this.selectedHunters.length + i];
                         swordsman.setManualMoveTargetPosition(targetPos);
                     }
                 }
@@ -396,8 +365,8 @@ export class SelectionManager extends Component {
             for (let i = 0; i < this.selectedPriests.length; i++) {
                 const priest = this.selectedPriests[i];
                 if (priest && priest.node && priest.node.isValid) {
-                    if ((this.selectedTowers.length + this.selectedHunters.length + this.selectedWisps.length + this.selectedSwordsmen.length + i) < formationPositions.length) {
-                        const targetPos = formationPositions[this.selectedTowers.length + this.selectedHunters.length + this.selectedWisps.length + this.selectedSwordsmen.length + i];
+                    if ((this.selectedTowers.length + this.selectedHunters.length + this.selectedSwordsmen.length + i) < formationPositions.length) {
+                        const targetPos = formationPositions[this.selectedTowers.length + this.selectedHunters.length + this.selectedSwordsmen.length + i];
                         priest.setManualMoveTargetPosition(targetPos);
                     }
                 }
@@ -706,51 +675,6 @@ export class SelectionManager extends Component {
             findAllHunters(this.node.scene);
         }
 
-        // 查找小精灵
-        let wispsNode = find('Wisps');
-        if (!wispsNode && this.node.scene) {
-            const findNodeRecursive = (node: Node, name: string): Node | null => {
-                if (node.name === name) {
-                    return node;
-                }
-                for (const child of node.children) {
-                    const found = findNodeRecursive(child, name);
-                    if (found) return found;
-                }
-                return null;
-            };
-            wispsNode = findNodeRecursive(this.node.scene, 'Wisps');
-        }
-        
-        const newSelectedWisps: Wisp[] = [];
-        if (wispsNode) {
-            const wisps = wispsNode.children || [];
-            for (const wispNode of wisps) {
-                if (!wispNode || !wispNode.isValid || !wispNode.active) {
-                    continue;
-                }
-
-                const wispScript = wispNode.getComponent(Wisp) as Wisp;
-                if (!wispScript) {
-                    continue;
-                }
-                
-                if (!wispScript.isAlive || !wispScript.isAlive()) {
-                    continue;
-                }
-
-                // 检查小精灵是否在选择框范围内
-                const wispPos = wispNode.worldPosition;
-                const inRangeX = wispPos.x >= minX && wispPos.x <= maxX;
-                const inRangeY = wispPos.y >= minY && wispPos.y <= maxY;
-                const inRange = inRangeX && inRangeY;
-                
-                if (inRange) {
-                    newSelectedWisps.push(wispScript);
-                }
-            }
-        }
-
         // 查找精灵剑士
         let swordsmenNode = find('ElfSwordsmans');
         if (!swordsmenNode && this.node.scene) {
@@ -821,7 +745,6 @@ export class SelectionManager extends Component {
         // 更新选中状态
         this.setSelectedTowers(newSelectedTowers);
         this.setSelectedHunters(newSelectedHunters);
-        this.setSelectedWisps(newSelectedWisps);
         this.setSelectedSwordsmen(newSelectedSwordsmen);
         this.setSelectedPriests(newSelectedPriests);
         
@@ -832,27 +755,6 @@ export class SelectionManager extends Component {
         }
     }
 
-    /**
-     * 设置选中的小精灵
-     */
-    setSelectedWisps(wisps: Wisp[]) {
-        // 取消之前选中的高亮
-        for (const wisp of this.selectedWisps) {
-            if (wisp && wisp.node && wisp.node.isValid) {
-                wisp.setHighlight(false);
-            }
-        }
-
-        // 设置新的选中
-        this.selectedWisps = wisps;
-
-        // 高亮显示选中的小精灵
-        for (const wisp of this.selectedWisps) {
-            if (wisp && wisp.node && wisp.node.isValid) {
-                wisp.setHighlight(true);
-            }
-        }
-    }
 
     /**
      * 设置选中的精灵剑士
@@ -972,14 +874,12 @@ export class SelectionManager extends Component {
         if (!this.isBuildingMode()) {
             this.setSelectedTowers([]);
             this.setSelectedHunters([]);
-            this.setSelectedWisps([]);
             this.setSelectedSwordsmen([]);
             this.setSelectedPriests([]);
         } else {
             // 建造模式下静默清除，不输出日志
             this.selectedTowers = [];
             this.selectedHunters = [];
-            this.selectedWisps = [];
             this.selectedSwordsmen = [];
             this.selectedPriests = [];
             // 取消之前选中的高亮
@@ -991,11 +891,6 @@ export class SelectionManager extends Component {
             for (const hunter of this.selectedHunters) {
                 if (hunter && hunter.node && hunter.node.isValid) {
                     hunter.setHighlight(false);
-                }
-            }
-            for (const wisp of this.selectedWisps) {
-                if (wisp && wisp.node && wisp.node.isValid) {
-                    wisp.setHighlight(false);
                 }
             }
             for (const swordsman of this.selectedSwordsmen) {
@@ -1181,8 +1076,8 @@ export class SelectionManager extends Component {
             
             // 检查当前选中的单位
             
-            // 计算分散位置（包括防御单位、女猎手、小精灵、精灵剑士和牧师）
-            const allUnits: any[] = [...this.selectedTowers, ...this.selectedHunters, ...this.selectedWisps, ...this.selectedSwordsmen, ...this.selectedPriests];
+            // 计算分散位置（包括防御单位、女猎手、精灵剑士和牧师）
+            const allUnits: any[] = [...this.selectedTowers, ...this.selectedHunters, ...this.selectedSwordsmen, ...this.selectedPriests];
             const formationPositions = this.calculateFormationPositions(worldPos, allUnits);
             
 
@@ -1203,42 +1098,12 @@ export class SelectionManager extends Component {
                 }
             }
 
-            // 让所有选中的小精灵移动到各自的分散位置或建筑物身边
-            for (let i = 0; i < this.selectedWisps.length; i++) {
-                const wisp = this.selectedWisps[i];
-                if (wisp && wisp.node && wisp.node.isValid) {
-                    if (clickedBuilding) {
-                        // 如果点击在建筑物上，让小精灵移动到建筑物附近1的位置
-                        // 设置移动目标为建筑物附近1的位置，小精灵会在到达后自动依附
-                        const buildingPos = clickedBuilding.worldPosition.clone();
-                        // 计算到建筑物的方向向量，然后移动到距离建筑物1的位置
-                        const direction = new Vec3();
-                        Vec3.subtract(direction, worldPos, buildingPos);
-                        if (direction.length() > 0) {
-                            direction.normalize();
-                            // 移动到距离建筑物1的位置
-                            const targetPos = new Vec3();
-                            Vec3.scaleAndAdd(targetPos, buildingPos, direction, 1);
-                            wisp.setManualMoveTargetPosition(targetPos);
-                        } else {
-                            // 如果点击位置就是建筑物位置，直接使用建筑物位置
-                            wisp.setManualMoveTargetPosition(buildingPos);
-                        }
-                    } else if ((this.selectedTowers.length + this.selectedHunters.length + i) < formationPositions.length) {
-                        // 否则，移动到目标位置
-                        wisp.setManualMoveTargetPosition(formationPositions[this.selectedTowers.length + this.selectedHunters.length + i]);
-                    } else {
-                    }
-                } else {
-                }
-            }
-
             // 让所有选中的精灵剑士移动到各自的分散位置
             for (let i = 0; i < this.selectedSwordsmen.length; i++) {
                 const swordsman = this.selectedSwordsmen[i];
                 if (swordsman && swordsman.node && swordsman.node.isValid) {
-                    if ((this.selectedTowers.length + this.selectedHunters.length + this.selectedWisps.length + i) < formationPositions.length) {
-                        const targetPos = formationPositions[this.selectedTowers.length + this.selectedHunters.length + this.selectedWisps.length + i];
+                    if ((this.selectedTowers.length + this.selectedHunters.length + i) < formationPositions.length) {
+                        const targetPos = formationPositions[this.selectedTowers.length + this.selectedHunters.length + i];
                         swordsman.setManualMoveTargetPosition(targetPos);
                     }
                 }
@@ -1248,8 +1113,8 @@ export class SelectionManager extends Component {
             for (let i = 0; i < this.selectedPriests.length; i++) {
                 const priest = this.selectedPriests[i];
                 if (priest && priest.node && priest.node.isValid) {
-                    if ((this.selectedTowers.length + this.selectedHunters.length + this.selectedWisps.length + this.selectedSwordsmen.length + i) < formationPositions.length) {
-                        const targetPos = formationPositions[this.selectedTowers.length + this.selectedHunters.length + this.selectedWisps.length + this.selectedSwordsmen.length + i];
+                    if ((this.selectedTowers.length + this.selectedHunters.length + this.selectedSwordsmen.length + i) < formationPositions.length) {
+                        const targetPos = formationPositions[this.selectedTowers.length + this.selectedHunters.length + this.selectedSwordsmen.length + i];
                         priest.setManualMoveTargetPosition(targetPos);
                     }
                 }
@@ -1291,34 +1156,9 @@ export class SelectionManager extends Component {
             }
         }
         
-        // 查找月亮井
-        let wellsNode = find('MoonWells');
-        if (wellsNode) {
-            const wells = wellsNode.children || [];
-            for (const well of wells) {
-                if (well && well.isValid && well.active) {
-                    const wellScript = well.getComponent('MoonWell') as any;
-                    if (wellScript && wellScript.isAlive && wellScript.isAlive()) {
-                        const distance = Vec3.distance(worldPos, well.worldPosition);
-                        const collisionRadius = wellScript.collisionRadius || 40;
-                        if (distance <= collisionRadius) {
-                            return well;
-                        }
-                    }
-                }
-            }
-        }
-        
         return null;
     }
 
-    /**
-     * 检查是否有选中的小精灵
-     */
-    hasSelectedWisps(): boolean {
-        return this.selectedWisps.length > 0;
-    }
-    
     /**
      * 屏幕坐标转换为世界坐标
      */
@@ -1373,10 +1213,8 @@ export class SelectionManager extends Component {
 
         // 检查是否是游戏对象（直接排除建筑物和单位）
         if (lowerName.includes('warancienttree') || 
-            lowerName.includes('moonwell') ||
             lowerName.includes('arrower') ||
             lowerName.includes('enemy') ||
-            lowerName.includes('wisp') ||
             lowerName.includes('hunter')) {
             return false;
         }
@@ -1454,34 +1292,6 @@ export class SelectionManager extends Component {
         return false;
     }
 
-    /**
-     * 检查节点是否是小精灵节点
-     */
-    isWispNode(node: Node | null): boolean {
-        if (!node) return false;
-
-        // 检查节点是否有Wisp组件
-        const wispScript = node.getComponent(Wisp);
-        if (wispScript) {
-            return true;
-        }
-
-        // 检查父节点（小精灵可能是子节点）
-        let parent = node.parent;
-        while (parent) {
-            const wispScript = parent.getComponent(Wisp);
-            if (wispScript) {
-                return true;
-            }
-            // 如果到达Wisps容器，停止查找
-            if (parent.name === 'Wisps') {
-                break;
-            }
-            parent = parent.parent;
-        }
-
-        return false;
-    }
 
     /**
      * 检查节点是否是女猎手节点

@@ -15,20 +15,20 @@ export interface UnitInfo {
     // 范围信息
     collisionRadius?: number; // 占地范围
     attackRange?: number; // 攻击范围（如果有）
-    healRange?: number; // 治疗范围（如果有，如月亮井）
+    healRange?: number; // 治疗范围（如果有）
     // 建筑物属性
     currentUnitCount?: number; // 当前训练单位数量（建筑物）
     maxUnitCount?: number; // 最大训练单位数量（建筑物）
-    healAmount?: number; // 治疗量（建筑物，如月亮井）
-    healSpeed?: number; // 治疗速度（建筑物，如月亮井，单位：次/秒）
+    healAmount?: number; // 治疗量（建筑物）
+    healSpeed?: number; // 治疗速度（建筑物，单位：次/秒）
     // 防御单位属性
     attackFrequency?: number; // 攻击频率（防御单位，单位：次/秒）
     moveSpeed?: number; // 移动速度（防御单位，单位：像素/秒）
     // 按钮回调
     onUpgradeClick?: () => void; // 升级按钮点击回调
     onSellClick?: () => void; // 回收按钮点击回调
-    onTrainWispClick?: () => void; // 训练小精灵按钮点击回调
-    onDetachWispClick?: () => void; // 卸下小精灵按钮点击回调
+    // 升级相关
+    upgradeCost?: number; // 升级费用（用于显示）
 }
 
 @ccclass('UnitInfoPanel')
@@ -383,6 +383,11 @@ export class UnitInfoPanel extends Component {
             }
         }
 
+        // 确保按钮网格节点可见
+        if (this.buttonGridNode) {
+            this.buttonGridNode.active = true;
+        }
+
         // 更新按钮
         this.updateButtons(unitInfo);
 
@@ -400,9 +405,11 @@ export class UnitInfoPanel extends Component {
 
         // 清除所有按钮的点击事件
         for (const buttonNode of this.buttonNodes) {
+            buttonNode.active = true; // 确保按钮可见
             buttonNode.off(Node.EventType.TOUCH_END);
             const labelNode = buttonNode.getChildByName('Label');
             if (labelNode) {
+                labelNode.active = true; // 确保标签可见
                 const label = labelNode.getComponent(Label);
                 if (label) {
                     label.string = '';
@@ -428,16 +435,42 @@ export class UnitInfoPanel extends Component {
             }
         }
 
-        // 设置升级按钮（位置：中间，索引4）
-        if (unitInfo.onUpgradeClick && this.buttonNodes[4]) {
-            const upgradeButton = this.buttonNodes[4];
+        // 设置升级按钮（位置：右上角，索引2）
+        if (unitInfo.onUpgradeClick && this.buttonNodes[2]) {
+            const upgradeButton = this.buttonNodes[2];
+            upgradeButton.active = true; // 确保按钮可见
+            
             const labelNode = upgradeButton.getChildByName('Label');
             if (labelNode) {
+                labelNode.active = true; // 确保标签可见
                 const label = labelNode.getComponent(Label);
                 if (label) {
-                    label.string = '升级';
+                    // 显示升级和金币数量，换行显示
+                    if (unitInfo.upgradeCost !== undefined) {
+                        label.string = `升级\n${unitInfo.upgradeCost}`;
+                        // 调整字体大小以适应两行文字
+                        label.fontSize = 12;
+                    } else {
+                        label.string = '升级';
+                        label.fontSize = 14;
+                    }
                 }
             }
+            
+            // 确保按钮背景可见
+            const graphics = upgradeButton.getComponent(Graphics);
+            if (graphics) {
+                graphics.clear();
+                const buttonSize = upgradeButton.getComponent(UITransform)!.width;
+                graphics.fillColor = new Color(60, 60, 60, 200);
+                graphics.rect(-buttonSize / 2, -buttonSize / 2, buttonSize, buttonSize);
+                graphics.fill();
+                graphics.strokeColor = new Color(150, 150, 150, 255);
+                graphics.lineWidth = 2;
+                graphics.rect(-buttonSize / 2, -buttonSize / 2, buttonSize, buttonSize);
+                graphics.stroke();
+            }
+            
             upgradeButton.on(Node.EventType.TOUCH_END, () => {
                 if (unitInfo.onUpgradeClick) {
                     unitInfo.onUpgradeClick();
@@ -462,39 +495,6 @@ export class UnitInfoPanel extends Component {
             });
         }
 
-        // 设置训练小精灵按钮（位置：左上，索引0）
-        if (unitInfo.onTrainWispClick && this.buttonNodes[0]) {
-            const trainWispButton = this.buttonNodes[0];
-            const labelNode = trainWispButton.getChildByName('Label');
-            if (labelNode) {
-                const label = labelNode.getComponent(Label);
-                if (label) {
-                    label.string = '训练小精灵';
-                }
-            }
-            trainWispButton.on(Node.EventType.TOUCH_END, () => {
-                if (unitInfo.onTrainWispClick) {
-                    unitInfo.onTrainWispClick();
-                }
-            });
-        }
-
-        // 设置卸下小精灵按钮（位置：右上，索引2）
-        if (unitInfo.onDetachWispClick && this.buttonNodes[2]) {
-            const detachWispButton = this.buttonNodes[2];
-            const labelNode = detachWispButton.getChildByName('Label');
-            if (labelNode) {
-                const label = labelNode.getComponent(Label);
-                if (label) {
-                    label.string = '卸下小精灵';
-                }
-            }
-            detachWispButton.on(Node.EventType.TOUCH_END, () => {
-                if (unitInfo.onDetachWispClick) {
-                    unitInfo.onDetachWispClick();
-                }
-            });
-        }
 
         // 其余按钮暂时置空（已默认清空）
     }

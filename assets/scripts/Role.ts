@@ -1860,7 +1860,7 @@ export class Role extends Component {
     }
 
     /**
-     * 恢复血量（由月亮井调用）
+     * 恢复血量
      * @param amount 恢复的血量
      */
     heal(amount: number) {

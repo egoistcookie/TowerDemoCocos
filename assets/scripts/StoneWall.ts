@@ -406,18 +406,6 @@ export class StoneWall extends Component {
             return;
         }
         
-        // 检查是否有选中的小精灵，如果有则不处理点击事件（让小精灵移动到石墙）
-        const selectionManager = this.findSelectionManager();
-        
-        let hasSelectedWisps = false;
-        if (selectionManager && selectionManager.hasSelectedWisps && typeof selectionManager.hasSelectedWisps === 'function') {
-            hasSelectedWisps = selectionManager.hasSelectedWisps();
-        }
-        
-        if (hasSelectedWisps) {
-            // 有选中的小精灵，不处理石墙的点击事件，让SelectionManager处理移动
-            return;
-        }
 
         // 阻止事件传播
         event.propagationStopped = true;

@@ -55,9 +55,6 @@ export class Build extends Component {
     protected sprite: Sprite = null!;
     protected defaultSpriteFrame: SpriteFrame = null!;
     protected defaultScale: Vec3 = new Vec3(1, 1, 1);
-    
-    // 小精灵相关
-    protected attachedWisps: Node[] = []; // 依附的小精灵列表
 
     // 选择面板相关
     protected selectionPanel: Node = null!; // 选择面板节点
@@ -74,7 +71,6 @@ export class Build extends Component {
     protected start() {
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
-        this.attachedWisps = [];
 
         // 获取Sprite组件
         this.sprite = this.node.getComponent(Sprite);
@@ -247,18 +243,6 @@ export class Build extends Component {
             }
         }
 
-        // 卸下所有依附的小精灵，让它们出现在建筑物下方
-        while (this.attachedWisps.length > 0) {
-            // 先从列表中移除小精灵，再处理，避免null引用
-            const wisp = this.attachedWisps.shift();
-            if (wisp && wisp.isValid) {
-                const wispScript = wisp.getComponent('Wisp') as any;
-                if (wispScript && wispScript.detachFromBuilding) {
-                    wispScript.detachFromBuilding();
-                }
-            }
-        }
-
         // 播放爆炸特效
         if (this.explosionEffect) {
             const explosion = instantiate(this.explosionEffect);
@@ -369,9 +353,6 @@ export class Build extends Component {
                 unitInfo.onSellClick = () => {
                     this.onSellClick();
                 };
-                unitInfo.onDetachWispClick = () => {
-                    this.detachWisp();
-                };
                 this.unitSelectionManager.selectUnit(this.node, unitInfo);
             }
         }
@@ -479,50 +460,6 @@ export class Build extends Component {
         this.die();
     }
 
-    /**
-     * 让小精灵依附
-     */
-    protected attachWisp(wisp: Node) {
-        const wispScript = wisp.getComponent('Wisp') as any;
-        if (!wispScript) {
-            return;
-        }
-
-        // 检查小精灵是否已经依附在其他建筑物上
-        if (wispScript.getIsAttached && wispScript.getIsAttached()) {
-            return;
-        }
-
-        // 先将小精灵添加到依附列表，再调用attachToBuilding
-        this.attachedWisps.push(wisp);
-        
-        // 让小精灵依附，传递fromBuilding参数为true避免循环调用
-        if (wispScript.attachToBuilding) {
-            wispScript.attachToBuilding(this.node, true);
-        }
-    }
-
-    /**
-     * 卸下小精灵
-     */
-    protected detachWisp() {
-        if (this.attachedWisps.length === 0) {
-            return;
-        }
-
-        // 卸下第一个小精灵
-        const wisp = this.attachedWisps[0];
-        // 先从列表中移除，再调用detachFromBuilding，避免indexOf出错
-        this.attachedWisps.shift();
-        
-        const wispScript = wisp.getComponent('Wisp') as any;
-        if (wispScript && wispScript.detachFromBuilding) {
-            wispScript.detachFromBuilding();
-        }
-        
-        // 卸下小精灵后取消选中状态
-        this.hideSelectionPanel();
-    }
 
     /**
      * 开始移动建筑物
@@ -761,19 +698,6 @@ export class Build extends Component {
             return;
         }
         
-        // 检查是否有选中的小精灵，如果有则不处理点击事件（让小精灵移动到建筑物）
-        const selectionManager = this.findSelectionManager();
-        
-        let hasSelectedWisps = false;
-        if (selectionManager && selectionManager.hasSelectedWisps && typeof selectionManager.hasSelectedWisps === 'function') {
-            hasSelectedWisps = selectionManager.hasSelectedWisps();
-        }
-        
-        if (hasSelectedWisps) {
-            // 有选中的小精灵，不处理建筑物的点击事件，让SelectionManager处理移动
-            return;
-        }
-
         // 检查是否正在显示信息面板（由TowerBuilder打开）
         if ((this.node as any)._showingInfoPanel) {
             return;

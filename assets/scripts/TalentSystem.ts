@@ -263,10 +263,7 @@ export class TalentSystem extends Component {
         const unitTypes = [
             { id: 'Arrower', name: '弓箭手', description: '远程攻击单位，能够攻击远处的敌人，射速较快', icon: 'Arrower', unitType: 'CHARACTER' },
             { id: 'Hunter', name: '女猎手', description: '远程攻击单位，投掷回旋镖攻击敌人，回旋镖可以反弹多次', icon: 'Hunter', unitType: 'CHARACTER' },
-            { id: 'Wisp', name: '小精灵', description: '能够治疗建筑物的小精灵，是维护基地的重要单位', icon: 'Wisp', unitType: 'CHARACTER' },
             { id: 'WarAncientTree', name: '战争古树', description: '能够生产弓箭手的建筑物，同时拥有远程攻击能力', icon: 'WarAncientTree', unitType: 'BUILDING' },
-            { id: 'MoonWell', name: '月亮井', description: '能够恢复周围单位生命值，并提供人口上限的建筑物', icon: 'MoonWell', unitType: 'BUILDING' },
-            { id: 'Tree', name: '普通树木', description: '普通的树木，可以提供资源', icon: 'Tree', unitType: 'TREE' }
         ];
         
         
@@ -686,8 +683,6 @@ export class TalentSystem extends Component {
                 return '角色单位';
             case 'BUILDING':
                 return '建筑物单位';
-            case 'TREE':
-                return '树木单位';
             default:
                 return '未知类型';
         }
@@ -704,14 +699,8 @@ export class TalentSystem extends Component {
                 'Arrower': 'Arrower',
                 'hunter': 'Hunter',
                 'Hunter': 'Hunter',
-                'wisp': 'Wisp',
-                'Wisp': 'Wisp',
                 'war_ancient_tree': 'WarAncientTree',
                 'WarAncientTree': 'WarAncientTree',
-                'moon_well': 'MoonWell',
-                'MoonWell': 'MoonWell',
-                'tree': 'Tree',
-                'Tree': 'Tree'
             };
             
             const normalizedUnitId = unitIdMap[unitId] || unitId;
@@ -836,10 +825,7 @@ export class TalentSystem extends Component {
         const prefabUuidMap: Record<string, string> = {
             'Arrower': 'bcbcc8da-eb3d-4ad2-a55a-b0a0cb5da998',
             'Hunter': '989ff20a-2de2-44bb-9590-29df03813990',
-            'Wisp': 'b3d6d60e-5e41-4cb3-b233-704501403faf',
             'WarAncientTree': 'be50baf7-2a47-44a1-85e1-8116927ef58e',
-            'MoonWell': '4e0a7549-50e8-4617-9b2c-012d49c17748',
-            'Tree': '61632be3-a1ef-40ba-ae2b-8ee982347b5e',
         };
         
         // 1. 优先使用 TalentSystem 的 arrowerPrefab 属性（如果配置了）

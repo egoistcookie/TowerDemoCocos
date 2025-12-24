@@ -1,5 +1,4 @@
-import { _decorator, Component, Node, EventTarget, instantiate, EventTouch, Sprite, SpriteFrame, find, Prefab, Vec3, Graphics, UITransform, Color } from 'cc';
-import { UnitConfigManager } from './UnitConfigManager';
+import { _decorator, Component, Node, EventTarget, instantiate, EventTouch, Sprite, SpriteFrame, find, Graphics, UITransform, Color } from 'cc';
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
 import { GameManager, GameState } from './GameManager';
@@ -25,14 +24,14 @@ export class Crystal extends Component {
     @property(SpriteFrame)
     cardIcon: SpriteFrame = null!; // 单位名片图片
 
-    @property(Prefab)
-    wispPrefab: Prefab = null!; // 小精灵预制体
+    @property
+    maxLevel: number = 5; // 最高等级
 
     @property
-    productionInterval: number = 2.0; // 每2秒生产一个小精灵
+    upgradeDuration: number = 60; // 升级时间（秒）
 
-    @property
-    spawnOffset: number = 100; // 小精灵出现在下方100像素
+    @property([SpriteFrame])
+    levelSprites: SpriteFrame[] = []; // 每个等级的贴图数组（索引0对应1级，索引1对应2级...）
 
     private currentHealth: number = 100;
     private isDestroyed: boolean = false;
@@ -41,22 +40,19 @@ export class Crystal extends Component {
     private defaultSpriteFrame: SpriteFrame = null!; // 默认SpriteFrame
     private gameManager: GameManager = null!; // 游戏管理器
     
-    // 生产相关
-    private producedWisps: Node[] = []; // 已生产的小精灵列表
-    private productionTimer: number = 0; // 生产计时器
-    private productionProgress: number = 0; // 生产进度（0-1）
-    private isProducing: boolean = false; // 是否正在生产
-    private wispContainer: Node = null!; // 小精灵容器
-    private productionProgressBar: Node = null!; // 生产进度条节点
-    private productionProgressGraphics: Graphics = null!; // 生产进度条Graphics组件
+    // 升级相关
+    private isUpgrading: boolean = false; // 是否正在升级
+    private upgradeTimer: number = 0; // 升级计时器
+    private upgradeProgress: number = 0; // 升级进度（0-1）
+    private upgradeProgressBar: Node = null!; // 升级进度条节点
+    private upgradeProgressGraphics: Graphics = null!; // 升级进度条Graphics组件
 
     start() {
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
-        this.producedWisps = [];
-        this.productionTimer = 0;
-        this.productionProgress = 0;
-        this.isProducing = false;
+        this.isUpgrading = false;
+        this.upgradeTimer = 0;
+        this.upgradeProgress = 0;
 
         // 查找单位选择管理器
         this.findUnitSelectionManager();
@@ -64,17 +60,17 @@ export class Crystal extends Component {
         // 查找游戏管理器
         this.findGameManager();
 
-        // 查找小精灵容器
-        this.findWispContainer();
-
         // 获取Sprite组件
         this.sprite = this.node.getComponent(Sprite);
         if (this.sprite && this.sprite.spriteFrame) {
             this.defaultSpriteFrame = this.sprite.spriteFrame;
         }
 
-        // 创建生产进度条
-        this.createProductionProgressBar();
+        // 初始化等级贴图
+        this.updateLevelSprite();
+
+        // 创建升级进度条
+        this.createUpgradeProgressBar();
 
         // 监听点击事件
         this.node.on(Node.EventType.TOUCH_END, this.onCrystalClick, this);
@@ -235,70 +231,57 @@ export class Crystal extends Component {
     }
 
     /**
-     * 查找小精灵容器
+     * 创建升级进度条
      */
-    findWispContainer() {
-        // 查找Wisps容器
-        let wispsNode = find('Wisps');
-        if (!wispsNode && this.node.scene) {
-            // 如果不存在，创建一个
-            wispsNode = new Node('Wisps');
-            const canvas = find('Canvas');
-            if (canvas) {
-                wispsNode.setParent(canvas);
-            } else if (this.node.scene) {
-                wispsNode.setParent(this.node.scene);
-            }
-        }
-        this.wispContainer = wispsNode;
-    }
-
-    /**
-     * 创建生产进度条
-     */
-    createProductionProgressBar() {
-        if (this.productionProgressBar) {
+    createUpgradeProgressBar() {
+        if (this.upgradeProgressBar) {
             return;
         }
 
-        this.productionProgressBar = new Node('ProductionProgressBar');
-        this.productionProgressBar.setParent(this.node);
-        this.productionProgressBar.setPosition(0, -60, 0); // 位于血量条下方
+        this.upgradeProgressBar = new Node('UpgradeProgressBar');
+        this.upgradeProgressBar.setParent(this.node);
+        this.upgradeProgressBar.setPosition(0, -60, 0); // 位于血量条下方
 
-        const uiTransform = this.productionProgressBar.addComponent(UITransform);
+        const uiTransform = this.upgradeProgressBar.addComponent(UITransform);
         uiTransform.setContentSize(60, 6);
 
-        this.productionProgressGraphics = this.productionProgressBar.addComponent(Graphics);
-        this.updateProductionProgressBar();
+        this.upgradeProgressGraphics = this.upgradeProgressBar.addComponent(Graphics);
+        this.updateUpgradeProgressBar();
     }
 
     /**
-     * 更新生产进度条
+     * 更新升级进度条
      */
-    updateProductionProgressBar() {
-        if (!this.productionProgressGraphics) {
+    updateUpgradeProgressBar() {
+        if (!this.upgradeProgressGraphics) {
             return;
         }
 
-        this.productionProgressGraphics.clear();
+        this.upgradeProgressGraphics.clear();
         
-        if (this.isProducing) {
+        if (this.isUpgrading) {
+            // 显示进度条
+            this.upgradeProgressBar.active = true;
+            
             // 绘制进度条背景
-            this.productionProgressGraphics.fillColor = new Color(50, 50, 50, 200);
-            this.productionProgressGraphics.rect(-30, -3, 60, 6);
-            this.productionProgressGraphics.fill();
+            this.upgradeProgressGraphics.fillColor = new Color(50, 50, 50, 200);
+            this.upgradeProgressGraphics.rect(-30, -3, 60, 6);
+            this.upgradeProgressGraphics.fill();
 
             // 绘制进度条
-            const progressWidth = 60 * this.productionProgress;
-            this.productionProgressGraphics.fillColor = new Color(0, 255, 0, 255);
-            this.productionProgressGraphics.rect(-30, -3, progressWidth, 6);
-            this.productionProgressGraphics.fill();
+            const progressWidth = 60 * this.upgradeProgress;
+            this.upgradeProgressGraphics.fillColor = new Color(0, 255, 0, 255);
+            this.upgradeProgressGraphics.rect(-30, -3, progressWidth, 6);
+            this.upgradeProgressGraphics.fill();
 
             // 绘制边框
-            this.productionProgressGraphics.strokeColor = new Color(255, 255, 255, 255);
-            this.productionProgressGraphics.lineWidth = 1;
-            this.productionProgressGraphics.rect(-30, -3, 60, 6);
-            this.productionProgressGraphics.stroke();
+            this.upgradeProgressGraphics.strokeColor = new Color(255, 255, 255, 255);
+            this.upgradeProgressGraphics.lineWidth = 1;
+            this.upgradeProgressGraphics.rect(-30, -3, 60, 6);
+            this.upgradeProgressGraphics.stroke();
+        } else {
+            // 隐藏进度条
+            this.upgradeProgressBar.active = false;
         }
     }
 
@@ -318,117 +301,163 @@ export class Crystal extends Component {
             }
         }
 
-        // 生产小精灵逻辑
-        if (this.isProducing) {
-            this.productionTimer += deltaTime;
-            this.productionProgress = Math.min(1.0, this.productionTimer / this.productionInterval);
-            this.updateProductionProgressBar();
+        // 升级逻辑
+        if (this.isUpgrading) {
+            this.upgradeTimer += deltaTime;
+            this.upgradeProgress = Math.min(1.0, this.upgradeTimer / this.upgradeDuration);
+            this.updateUpgradeProgressBar();
 
-            if (this.productionProgress >= 1.0) {
-                // 生产完成
-                this.productionTimer = 0;
-                this.productionProgress = 0;
-                this.isProducing = false;
-                this.produceWisp();
-                this.updateProductionProgressBar();
+            if (this.upgradeProgress >= 1.0) {
+                // 升级完成
+                this.completeUpgrade();
             }
         }
     }
 
     /**
-     * 开始生产小精灵
+     * 获取升级费用
      */
-    startProducingWisp() {
-        if (this.isProducing) {
-            return; // 正在生产中
+    getUpgradeCost(targetLevel: number): number {
+        if (targetLevel <= this.level) {
+            return 0; // 不能降级
         }
+        if (targetLevel === 2) {
+            return 10;
+        }
+        return 10 + (targetLevel - 2) * 5;
+    }
 
-        // 检查人口上限
-        if (!this.gameManager) {
-            this.findGameManager();
-        }
-        
-        if (this.gameManager && !this.gameManager.canAddPopulation(1)) {
-            // 显示人口不足弹窗
-            GamePopup.showMessage('人口不足');
+    /**
+     * 开始升级
+     */
+    startUpgrade() {
+        // 检查是否已达到最高等级
+        if (this.level >= this.maxLevel) {
+            GamePopup.showMessage('已达到最高等级');
             return;
         }
 
-        this.isProducing = true;
-        this.productionTimer = 0;
-        this.productionProgress = 0;
-        this.updateProductionProgressBar();
+        // 检查是否正在升级
+        if (this.isUpgrading) {
+            GamePopup.showMessage('正在升级中');
+            return;
+        }
+
+        // 查找游戏管理器
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+
+        if (!this.gameManager) {
+            return;
+        }
+
+        // 计算升级费用
+        const targetLevel = this.level + 1;
+        const upgradeCost = this.getUpgradeCost(targetLevel);
+
+        // 检查金币是否足够
+        if (!this.gameManager.canAfford(upgradeCost)) {
+            GamePopup.showMessage('金币不足');
+            return;
+        }
+
+        // 扣除金币
+        this.gameManager.spendGold(upgradeCost);
+
+        // 开始升级
+        this.isUpgrading = true;
+        this.upgradeTimer = 0;
+        this.upgradeProgress = 0;
+        this.updateUpgradeProgressBar();
         
-        // 水晶点击训练小精灵后会取消被选中的状态
+        // 升级时取消被选中的状态
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
             this.unitSelectionManager.clearSelection();
         }
     }
 
     /**
-     * 生产小精灵
+     * 完成升级
      */
-    produceWisp() {
-        if (!this.wispPrefab || !this.wispContainer) {
-            return;
-        }
-
-        // 检查人口上限
-        if (!this.gameManager) {
-            this.findGameManager();
-        }
+    completeUpgrade() {
+        this.level++;
         
-        if (this.gameManager && !this.gameManager.canAddPopulation(1)) {
-            return;
-        }
-
-        // 计算小精灵出现位置（水晶下方100像素）
-        const crystalPos = this.node.worldPosition.clone();
-        const spawnPos = new Vec3(crystalPos.x, crystalPos.y - this.spawnOffset, crystalPos.z);
-
-        // 增加人口（在创建小精灵之前）
+        // 增加人口上限
         if (this.gameManager) {
-            if (!this.gameManager.addPopulation(1)) {
-                return;
-            }
+            const currentMax = this.gameManager.getMaxPopulation();
+            this.gameManager.setMaxPopulation(currentMax + 10);
         }
 
-        // 创建小精灵
-        const wisp = instantiate(this.wispPrefab);
-        wisp.setParent(this.wispContainer);
-        wisp.setWorldPosition(spawnPos);
-        wisp.active = true;
+        // 更新贴图
+        this.updateLevelSprite();
 
-        // 应用配置
-        const wispScript = wisp.getComponent('Wisp') as any;
-        if (wispScript) {
-            const configManager = UnitConfigManager.getInstance();
-            if (configManager.isConfigLoaded()) {
-                configManager.applyConfigToUnit('Wisp', wispScript);
-            }
-        }
+        // 重置升级状态
+        this.isUpgrading = false;
+        this.upgradeTimer = 0;
+        this.upgradeProgress = 0;
+        this.updateUpgradeProgressBar();
 
-        // 添加到生产的小精灵列表
-        this.producedWisps.push(wisp);
-
-        // 监听小精灵销毁事件，从列表中移除
-        wisp.once(Node.EventType.NODE_DESTROYED, () => {
-            // 安全地从列表中移除小精灵，避免findIndex出错
-            if (this.producedWisps && Array.isArray(this.producedWisps)) {
-                const index = this.producedWisps.findIndex(w => w === wisp);
-                if (index >= 0) {
-                    this.producedWisps.splice(index, 1);
-                }
-            }
-        });
-
-        
         // 更新单位信息面板（如果被选中）
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
             this.unitSelectionManager.updateUnitInfo({
-                currentUnitCount: this.producedWisps.length
+                level: this.level
             });
         }
+    }
+
+    /**
+     * 获取当前等级的贴图
+     */
+    getCurrentLevelSprite(): SpriteFrame | null {
+        // 等级从1开始，数组索引从0开始
+        const spriteIndex = this.level - 1;
+
+        if (this.levelSprites && this.levelSprites.length > spriteIndex && this.levelSprites[spriteIndex]) {
+            // 使用该等级的贴图
+            return this.levelSprites[spriteIndex];
+        } else {
+            // 没有设置等级贴图，使用默认贴图
+            return this.defaultSpriteFrame;
+        }
+    }
+
+    /**
+     * 更新等级贴图
+     */
+    updateLevelSprite() {
+        if (!this.sprite) {
+            return;
+        }
+
+        const currentSprite = this.getCurrentLevelSprite();
+        if (currentSprite) {
+            this.sprite.spriteFrame = currentSprite;
+        }
+
+        // 根据等级设置节点缩放比例
+        // 1级：40%，2级：50%，3级：60%，4级：80%，5级：100%
+        let scalePercent: number;
+        switch (this.level) {
+            case 1:
+                scalePercent = 0.4;
+                break;
+            case 2:
+                scalePercent = 0.5;
+                break;
+            case 3:
+                scalePercent = 0.6;
+                break;
+            case 4:
+                scalePercent = 0.8;
+                break;
+            case 5:
+                scalePercent = 1.0;
+                break;
+            default:
+                scalePercent = 0.4 + (this.level - 1) * 0.15; // 默认计算方式
+        }
+        this.node.setScale(scalePercent, scalePercent, 1);
     }
 
     /**
@@ -455,20 +484,34 @@ export class Crystal extends Component {
                 return;
             }
 
+            // 确保游戏管理器已初始化
+            if (!this.gameManager) {
+                this.findGameManager();
+            }
+
+            // 计算升级费用和是否可升级
+            const nextLevel = this.level + 1;
+            const upgradeCost = this.getUpgradeCost(nextLevel);
+            const canUpgrade = this.level < this.maxLevel && !this.isUpgrading && 
+                              this.gameManager && this.gameManager.canAfford(upgradeCost);
+
+            // 获取当前等级的贴图用于显示在单位介绍框中
+            const currentLevelSprite = this.getCurrentLevelSprite();
+
             const unitInfo: UnitInfo = {
-                name: '水晶',
+                name: '生命之树',
                 level: this.level,
                 currentHealth: this.currentHealth,
                 maxHealth: this.maxHealth,
-                attackDamage: 0, // 水晶不攻击
-                populationCost: 0, // 水晶不占用人口
-                icon: this.cardIcon || this.defaultSpriteFrame,
+                attackDamage: 0, // 生命之树不攻击
+                populationCost: 0, // 生命之树不占用人口
+                icon: currentLevelSprite || this.cardIcon || this.defaultSpriteFrame, // 优先使用当前等级的贴图
                 collisionRadius: this.collisionRadius,
-                currentUnitCount: this.producedWisps.length,
-                maxUnitCount: 999, // 无上限
-                onTrainWispClick: () => {
-                    this.startProducingWisp();
-                }
+                // 只要未达到最高等级，就显示升级按钮（点击时的检查在startUpgrade中处理）
+                onUpgradeClick: this.level < this.maxLevel ? () => {
+                    this.startUpgrade();
+                } : undefined,
+                upgradeCost: this.level < this.maxLevel ? upgradeCost : undefined
             };
             this.unitSelectionManager.selectUnit(this.node, unitInfo);
         }

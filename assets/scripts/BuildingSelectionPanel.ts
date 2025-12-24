@@ -672,6 +672,18 @@ export class BuildingSelectionPanel extends Component {
                 console.info('[BuildingSelectionPanel] hide: 面板已隐藏完成');
             })
             .start();
+        
+        // 关闭建造模式// 如果找不到节点或组件，尝试从TowerBuilder获取
+        const towerBuilderNode = find('Canvas/TowerBuilder');
+        console.info('[BuildingSelectionPanel] hide: TowerBuilder node =', towerBuilderNode);
+        if (towerBuilderNode) {
+            const towerBuilder = towerBuilderNode.getComponent('TowerBuilder') as any;
+            console.info('[BuildingSelectionPanel] hide: TowerBuilder =', towerBuilder);
+            if (towerBuilder) {
+                towerBuilder.isBuildingMode = false;
+                towerBuilder.currentSelectedBuilding = null;
+            }
+        }
     }
 
     /**
@@ -1335,12 +1347,6 @@ export class BuildingSelectionPanel extends Component {
             const warAncientTree = node.getComponent('WarAncientTree');
             if (warAncientTree) {
                 warAncientTree.enabled = false;
-            }
-            
-            // 禁用MoonWell组件（防止触发人口上限增加）
-            const moonWell = node.getComponent('MoonWell');
-            if (moonWell) {
-                moonWell.enabled = false;
             }
             
             // 禁用其他可能执行逻辑的组件

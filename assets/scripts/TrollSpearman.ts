@@ -231,16 +231,13 @@ export class TrollSpearman extends Enemy {
                 if (targetNode && targetNode.isValid && targetNode.active) {
                     const towerScript = targetNode.getComponent('Arrower') as any;
                     const warAncientTreeScript = targetNode.getComponent('WarAncientTree') as any;
-                    const normalTreeScript = targetNode.getComponent('Tree') as any;
-                    const wellScript = targetNode.getComponent('MoonWell') as any;
                     const hallScript = targetNode.getComponent('HunterHall') as any;
                     const swordsmanHallScript = targetNode.getComponent('SwordsmanHall') as any;
                     const crystalScript = targetNode.getComponent('Crystal') as any;
-                    const wispScript = targetNode.getComponent('Wisp') as any;
                     const hunterScript = targetNode.getComponent('Hunter') as any;
                     const elfSwordsmanScript = targetNode.getComponent('ElfSwordsman') as any;
                     const stoneWallScript = targetNode.getComponent('StoneWall') as any;
-                    const targetScript = towerScript || warAncientTreeScript || normalTreeScript || wellScript || hallScript || swordsmanHallScript || crystalScript || wispScript || hunterScript || elfSwordsmanScript || stoneWallScript;
+                    const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript;
                     
                     if (targetScript && targetScript.takeDamage) {
                         targetScript.takeDamage(damage);

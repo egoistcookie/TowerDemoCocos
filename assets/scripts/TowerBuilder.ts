@@ -4,8 +4,6 @@ import { BuildingSelectionPanel, BuildingType } from './BuildingSelectionPanel';
 import { GamePopup } from './GamePopup';
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { WarAncientTree } from './WarAncientTree';
-import { MoonWell } from './MoonWell';
-import { Tree } from './Tree';
 import { HunterHall } from './HunterHall';
 import { StoneWall } from './StoneWall';
 import { SwordsmanHall } from './SwordsmanHall';
@@ -23,17 +21,7 @@ export class TowerBuilder extends Component {
     @property(SpriteFrame)
     warAncientTreeIcon: SpriteFrame = null!; // 战争古树图标
 
-    @property(Prefab)
-    moonWellPrefab: Prefab = null!; // 月亮井预制体
 
-    @property(SpriteFrame)
-    moonWellIcon: SpriteFrame = null!; // 月亮井图标
-
-    @property(Prefab)
-    treePrefab: Prefab = null!; // 普通树木预制体
-
-    @property(SpriteFrame)
-    treeIcon: SpriteFrame = null!; // 普通树木图标
 
     @property(Prefab)
     hunterHallPrefab: Prefab = null!; // 猎手大厅预制体
@@ -77,11 +65,7 @@ export class TowerBuilder extends Component {
     @property(Node)
     warAncientTreeContainer: Node = null!; // 战争古树容器
 
-    @property(Node)
-    moonWellContainer: Node = null!; // 月亮井容器
 
-    @property(Node)
-    treeContainer: Node = null!; // 普通树木容器
 
     @property(Node)
     hunterHallContainer: Node = null!; // 猎手大厅容器
@@ -104,11 +88,7 @@ export class TowerBuilder extends Component {
     @property
     towerCost: number = 10; // 战争古树建造成本（10金币）
 
-    @property
-    moonWellCost: number = 10; // 月亮井建造成本（10金币）
 
-    @property
-    treeCost: number = 1; // 普通树木建造成本（1金币）
 
     @property
     hunterHallCost: number = 10; // 猎手大厅建造成本（10金币）
@@ -182,37 +162,7 @@ export class TowerBuilder extends Component {
             }
         }
 
-        // 创建月亮井容器
-        if (!this.moonWellContainer) {
-            const existingWells = find('MoonWells');
-            if (existingWells) {
-                this.moonWellContainer = existingWells;
-            } else {
-                this.moonWellContainer = new Node('MoonWells');
-                const canvas = find('Canvas');
-                if (canvas) {
-                    this.moonWellContainer.setParent(canvas);
-                } else if (this.node.scene) {
-                    this.moonWellContainer.setParent(this.node.scene);
-                }
-            }
-        }
         
-        // 创建普通树木容器
-        if (!this.treeContainer) {
-            const existingTrees = find('Trees');
-            if (existingTrees) {
-                this.treeContainer = existingTrees;
-            } else {
-                this.treeContainer = new Node('Trees');
-                const canvas = find('Canvas');
-                if (canvas) {
-                    this.treeContainer.setParent(canvas);
-                } else if (this.node.scene) {
-                    this.treeContainer.setParent(this.node.scene);
-                }
-            }
-        }
 
         // 创建猎手大厅容器
         if (!this.hunterHallContainer) {
@@ -399,24 +349,6 @@ export class TowerBuilder extends Component {
                 cost: this.towerCost,
                 icon: this.warAncientTreeIcon || null!,
                 description: '可以生产Tower单位'
-            });
-        }
-        if (this.moonWellPrefab) {
-            buildingTypes.push({
-                name: '月亮井',
-                prefab: this.moonWellPrefab,
-                cost: this.moonWellCost,
-                icon: this.moonWellIcon || null!,
-                description: '增加10个人口上限'
-            });
-        }
-        if (this.treePrefab) {
-            buildingTypes.push({
-                name: '普通树木',
-                prefab: this.treePrefab,
-                cost: this.treeCost,
-                icon: this.treeIcon || null!,
-                description: '阻挡敌人，建造成本低'
             });
         }
         if (this.hunterHallPrefab) {
@@ -1130,30 +1062,6 @@ export class TowerBuilder extends Component {
             }
         }
 
-        // 检查是否与现有月亮井重叠
-        const wells = this.moonWellContainer?.children || [];
-        for (const well of wells) {
-            if (well.active) {
-                const wellDistance = Vec3.distance(position, well.worldPosition);
-                if (wellDistance < 80) { // 月亮井之间的最小距离
-                    console.info('[TowerBuilder] canBuildAt fail: overlap moonwell', wellDistance);
-                    return false;
-                }
-            }
-        }
-        
-        // 检查是否与现有普通树木重叠
-        const trees = this.treeContainer?.children || [];
-        for (const tree of trees) {
-            if (tree.active) {
-                const treeDistance = Vec3.distance(position, tree.worldPosition);
-                if (treeDistance < 60) { // 普通树木之间的最小距离
-                    console.info('[TowerBuilder] canBuildAt fail: overlap tree', treeDistance);
-                    return false;
-                }
-            }
-        }
-
         // 检查是否与现有猎手大厅重叠
         const hunterHalls = this.hunterHallContainer?.children || [];
         for (const hall of hunterHalls) {
@@ -1228,10 +1136,6 @@ export class TowerBuilder extends Component {
         // 根据建筑物类型选择建造方法
         if (building.name === '弓箭手小屋' || building.prefab === this.warAncientTreePrefab) {
             this.buildWarAncientTree(worldPosition);
-        } else if (building.name === '月亮井' || building.prefab === this.moonWellPrefab) {
-            this.buildMoonWell(worldPosition);
-        } else if (building.name === '普通树木' || building.prefab === this.treePrefab) {
-            this.buildTree(worldPosition);
         } else if (building.name === '猎手大厅' || building.prefab === this.hunterHallPrefab) {
             this.buildHunterHall(worldPosition);
         } else if (building.name === '石墙' || building.prefab === this.stoneWallPrefab) {
@@ -1341,131 +1245,6 @@ export class TowerBuilder extends Component {
             // 检查单位是否首次出现
             if (this.gameManager) {
                 const unitType = treeScript.unitType || 'WarAncientTree';
-                this.gameManager.checkUnitFirstAppearance(unitType, treeScript);
-            }
-        }
-
-    }
-
-    /**
-     * 建造月亮井
-     */
-    buildMoonWell(worldPosition: Vec3) {
-        if (!this.moonWellPrefab) {
-            return;
-        }
-
-        // 消耗金币
-        if (this.gameManager) {
-            this.gameManager.spendGold(this.moonWellCost);
-        }
-
-        // 创建月亮井
-        const well = instantiate(this.moonWellPrefab);
-        
-        // 设置父节点
-        const parent = this.moonWellContainer || this.node;
-        if (parent && !parent.active) {
-            parent.active = true;
-        }
-        
-        well.setParent(parent);
-        well.active = true;
-        well.setPosition(0, 0, 0);
-        well.setRotationFromEuler(0, 0, 0);
-        well.setScale(1, 1, 1);
-        well.setWorldPosition(worldPosition);
-
-        // 设置建造成本并增加人口上限
-        const wellScript = well.getComponent(MoonWell);
-        if (wellScript) {
-            // 先应用配置（排除 buildCost）
-            const configManager = UnitConfigManager.getInstance();
-            if (configManager.isConfigLoaded()) {
-                configManager.applyConfigToUnit('MoonWell', wellScript, ['buildCost']);
-            }
-            
-            // 然后设置建造成本（覆盖配置中的值）
-            wellScript.buildCost = this.moonWellCost;
-            
-            // 记录网格位置并标记占用
-            if (this.gridPanel) {
-                const grid = this.gridPanel.worldToGrid(worldPosition);
-                if (grid) {
-                    wellScript.gridX = grid.x;
-                    wellScript.gridY = grid.y;
-                    this.gridPanel.occupyGrid(grid.x, grid.y, well);
-                }
-            }
-            
-            // 调用月亮井的方法来增加人口上限
-            if (wellScript.increasePopulationLimit) {
-                wellScript.increasePopulationLimit();
-            }
-            
-            // 检查单位是否首次出现
-            if (this.gameManager) {
-                const unitType = wellScript.unitType || 'MoonWell';
-                this.gameManager.checkUnitFirstAppearance(unitType, wellScript);
-            }
-        }
-
-    }
-    
-    /**
-     * 建造普通树木
-     */
-    buildTree(worldPosition: Vec3) {
-        if (!this.treePrefab) {
-            return;
-        }
-
-        // 消耗金币
-        if (this.gameManager) {
-            this.gameManager.spendGold(this.treeCost);
-        }
-
-        // 创建普通树木
-        const tree = instantiate(this.treePrefab);
-        
-        // 设置父节点
-        const parent = this.treeContainer || this.node;
-        if (parent && !parent.active) {
-            parent.active = true;
-        }
-        
-        tree.setParent(parent);
-        tree.active = true;
-        tree.setPosition(0, 0, 0);
-        tree.setRotationFromEuler(0, 0, 0);
-        tree.setScale(1, 1, 1);
-        tree.setWorldPosition(worldPosition);
-
-        // 设置建造成本并检查首次出现
-        const treeScript = tree.getComponent(Tree);
-        if (treeScript) {
-            // 先应用配置（排除 buildCost）
-            const configManager = UnitConfigManager.getInstance();
-            if (configManager.isConfigLoaded()) {
-                configManager.applyConfigToUnit('Tree', treeScript, ['buildCost']);
-            }
-            
-            // 然后设置建造成本（覆盖配置中的值）
-            treeScript.buildCost = this.treeCost;
-            
-            // 记录网格位置并标记占用
-            if (this.gridPanel) {
-                const grid = this.gridPanel.worldToGrid(worldPosition);
-                if (grid) {
-                    treeScript.gridX = grid.x;
-                    treeScript.gridY = grid.y;
-                    this.gridPanel.occupyGrid(grid.x, grid.y, tree);
-                }
-            }
-            
-            // 检查单位是否首次出现
-            if (this.gameManager) {
-                const unitType = treeScript.unitType || 'Tree';
                 this.gameManager.checkUnitFirstAppearance(unitType, treeScript);
             }
         }
@@ -1814,8 +1593,6 @@ export class TowerBuilder extends Component {
         // 检查所有建筑物容器
         const containers = [
             this.warAncientTreeContainer,
-            this.moonWellContainer,
-            this.treeContainer,
             this.hunterHallContainer,
             this.stoneWallContainer,
             this.churchContainer
@@ -1934,17 +1711,7 @@ export class TowerBuilder extends Component {
             return;
         }
 
-        const moonWell = building.getComponent(MoonWell);
-        if (moonWell && moonWell.showSelectionPanel) {
-            moonWell.showSelectionPanel();
-            return;
-        }
 
-        const tree = building.getComponent(Tree);
-        if (tree && tree.showSelectionPanel) {
-            tree.showSelectionPanel();
-            return;
-        }
 
         const hunterHall = building.getComponent(HunterHall);
         const church = building.getComponent(Church);
@@ -2362,8 +2129,6 @@ export class TowerBuilder extends Component {
 
         // 获取建筑物脚本（不同建筑物类型有不同的脚本）
         const warAncientTree = building.getComponent(WarAncientTree);
-        const moonWell = building.getComponent(MoonWell);
-        const tree = building.getComponent(Tree);
         const hunterHall = building.getComponent(HunterHall);
         const church = building.getComponent(Church);
 
@@ -2380,22 +2145,6 @@ export class TowerBuilder extends Component {
             warAncientTree.gridY = gridY;
             if (warAncientTree.moveToGridPosition) {
                 warAncientTree.moveToGridPosition(gridX, gridY);
-            } else {
-                building.setWorldPosition(targetWorldPos);
-            }
-        } else if (moonWell) {
-            moonWell.gridX = gridX;
-            moonWell.gridY = gridY;
-            if (moonWell.moveToGridPosition) {
-                moonWell.moveToGridPosition(gridX, gridY);
-            } else {
-                building.setWorldPosition(targetWorldPos);
-            }
-        } else if (tree) {
-            tree.gridX = gridX;
-            tree.gridY = gridY;
-            if (tree.moveToGridPosition) {
-                tree.moveToGridPosition(gridX, gridY);
             } else {
                 building.setWorldPosition(targetWorldPos);
             }
@@ -2447,14 +2196,10 @@ export class TowerBuilder extends Component {
 
         // 获取建筑物脚本
         const warAncientTree1 = building1.getComponent(WarAncientTree);
-        const moonWell1 = building1.getComponent(MoonWell);
-        const tree1 = building1.getComponent(Tree);
         const hunterHall1 = building1.getComponent(HunterHall);
         const church1 = building1.getComponent(Church);
 
         const warAncientTree2 = building2.getComponent(WarAncientTree);
-        const moonWell2 = building2.getComponent(MoonWell);
-        const tree2 = building2.getComponent(Tree);
         const hunterHall2 = building2.getComponent(HunterHall);
         const church2 = building2.getComponent(Church);
 
@@ -2472,22 +2217,6 @@ export class TowerBuilder extends Component {
             warAncientTree1.gridY = grid2Y;
             if (warAncientTree1.moveToGridPosition) {
                 warAncientTree1.moveToGridPosition(grid2X, grid2Y);
-            } else {
-                building1.setWorldPosition(targetWorldPos1);
-            }
-        } else if (moonWell1) {
-            moonWell1.gridX = grid2X;
-            moonWell1.gridY = grid2Y;
-            if (moonWell1.moveToGridPosition) {
-                moonWell1.moveToGridPosition(grid2X, grid2Y);
-            } else {
-                building1.setWorldPosition(targetWorldPos1);
-            }
-        } else if (tree1) {
-            tree1.gridX = grid2X;
-            tree1.gridY = grid2Y;
-            if (tree1.moveToGridPosition) {
-                tree1.moveToGridPosition(grid2X, grid2Y);
             } else {
                 building1.setWorldPosition(targetWorldPos1);
             }
@@ -2517,22 +2246,6 @@ export class TowerBuilder extends Component {
             warAncientTree2.gridY = grid1Y;
             if (warAncientTree2.moveToGridPosition) {
                 warAncientTree2.moveToGridPosition(grid1X, grid1Y);
-            } else {
-                building2.setWorldPosition(targetWorldPos2);
-            }
-        } else if (moonWell2) {
-            moonWell2.gridX = grid1X;
-            moonWell2.gridY = grid1Y;
-            if (moonWell2.moveToGridPosition) {
-                moonWell2.moveToGridPosition(grid1X, grid1Y);
-            } else {
-                building2.setWorldPosition(targetWorldPos2);
-            }
-        } else if (tree2) {
-            tree2.gridX = grid1X;
-            tree2.gridY = grid1Y;
-            if (tree2.moveToGridPosition) {
-                tree2.moveToGridPosition(grid1X, grid1Y);
             } else {
                 building2.setWorldPosition(targetWorldPos2);
             }
@@ -2603,7 +2316,7 @@ export class TowerBuilder extends Component {
             }
         }
         
-        // 清除SelectionManager的选择（管理小精灵和防御塔的选择）
+        // 清除SelectionManager的选择（管理防御塔的选择）
         const selectionManagerNode = find('SelectionManager');
         if (selectionManagerNode) {
             const selectionManager = selectionManagerNode.getComponent('SelectionManager') as any;

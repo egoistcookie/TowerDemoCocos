@@ -79,9 +79,6 @@ export class SwordsmanHall extends Component {
     private productionProgress: number = 0; // 生产进度（0-1）
     private isProducing: boolean = false; // 是否正在生产
     private swordsmanContainer: Node = null!; // ElfSwordsman容器
-    
-    // 小精灵相关
-    private attachedWisps: Node[] = []; // 依附的小精灵列表
 
     // 选择面板相关
     private selectionPanel: Node = null!; // 选择面板节点
@@ -102,7 +99,6 @@ export class SwordsmanHall extends Component {
         this.productionTimer = 0;
         this.productionProgress = 0;
         this.isProducing = false;
-        this.attachedWisps = [];
 
         // 获取Sprite组件
         this.sprite = this.node.getComponent(Sprite);
@@ -777,17 +773,6 @@ export class SwordsmanHall extends Component {
             }
         }
 
-        // 卸下所有依附的小精灵，让它们出现在建筑物下方
-        while (this.attachedWisps.length > 0) {
-            // 先从列表中移除小精灵，再处理，避免null引用
-            const wisp = this.attachedWisps.shift();
-            if (wisp && wisp.isValid) {
-                const wispScript = wisp.getComponent('Wisp') as any;
-                if (wispScript && wispScript.detachFromBuilding) {
-                    wispScript.detachFromBuilding();
-                }
-            }
-        }
 
         // 播放爆炸特效
         if (this.explosionEffect) {
@@ -1151,9 +1136,6 @@ export class SwordsmanHall extends Component {
                 },
                 onSellClick: () => {
                     this.onSellClick();
-                },
-                onDetachWispClick: () => {
-                    this.detachWisp();
                 }
             };
             this.unitSelectionManager.selectUnit(this.node, unitInfo);
@@ -1287,47 +1269,6 @@ export class SwordsmanHall extends Component {
         this.hideSelectionPanel();
     }
 
-    /**
-     * 让小精灵依附
-     */
-    attachWisp(wisp: Node) {
-        const wispScript = wisp.getComponent('Wisp') as any;
-        if (!wispScript) {
-            return;
-        }
-
-        // 检查小精灵是否已经依附在其他建筑物上
-        if (wispScript.getIsAttached && wispScript.getIsAttached()) {
-            return;
-        }
-
-        // 先将小精灵添加到依附列表，再调用attachToBuilding
-        this.attachedWisps.push(wisp);
-        
-        // 让小精灵依附，传递fromBuilding参数为true避免循环调用
-        if (wispScript.attachToBuilding) {
-            wispScript.attachToBuilding(this.node, true);
-        }
-    }
-
-    /**
-     * 卸下小精灵
-     */
-    detachWisp() {
-        if (this.attachedWisps.length === 0) {
-            return;
-        }
-
-        // 卸下第一个小精灵
-        const wisp = this.attachedWisps[0];
-        // 先从列表中移除，再调用detachFromBuilding，避免indexOf出错
-        this.attachedWisps.shift();
-        
-        const wispScript = wisp.getComponent('Wisp') as any;
-        if (wispScript && wispScript.detachFromBuilding) {
-            wispScript.detachFromBuilding();
-        }
-    }
 
     /**
      * 销毁剑士小屋（用于拆除）
