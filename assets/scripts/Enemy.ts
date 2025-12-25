@@ -105,6 +105,9 @@ export class Enemy extends Component {
     @property
     goldReward: number = 0; // 消灭敌人获得的金币
     
+    @property
+    expReward: number = 0; // 消灭敌人获得的经验值
+    
     @property(AudioClip)
     deathSound: AudioClip = null!; // 敌人死亡音效
     
@@ -3820,12 +3823,19 @@ export class Enemy extends Component {
         
         // 移除绕行点标记
 
-        // 奖励金币
+        // 奖励金币和经验值
         if (!this.gameManager) {
             this.findGameManager();
         }
         if (this.gameManager) {
             this.gameManager.addGold(this.goldReward);
+            // 确保 expReward 有效才添加经验值
+            if (this.expReward > 0) {
+                this.gameManager.addExperience(this.expReward);
+            }
+        } else {
+            // 如果找不到 GameManager，输出警告
+            console.warn(`[Enemy] GameManager not found when ${this.unitName || 'Enemy'} died, expReward: ${this.expReward}`);
         }
 
         // 销毁血条节点

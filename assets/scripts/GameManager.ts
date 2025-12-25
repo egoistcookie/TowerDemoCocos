@@ -1,7 +1,8 @@
-import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button } from 'cc';
+import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3 } from 'cc';
 import { Crystal } from './Crystal';
 import { UnitIntroPopup } from './UnitIntroPopup';
 import { UnitConfigManager } from './UnitConfigManager';
+import { PlayerDataManager } from './PlayerDataManager';
 const { ccclass, property } = _decorator;
 
 export enum GameState {
@@ -35,6 +36,9 @@ export class GameManager extends Component {
     @property(Label)
     populationLabel: Label = null!; // 人口标签
 
+    @property(Label)
+    expLabel: Label = null!; // 经验值标签（游戏结束面板）
+
     @property(UnitIntroPopup)
     unitIntroPopup: UnitIntroPopup = null!;
 
@@ -44,6 +48,8 @@ export class GameManager extends Component {
     private gold: number = 10; // 初始金币
     private population: number = 0; // 当前人口
     private maxPopulation: number = 10; // 人口上限
+    private currentGameExp: number = 0; // 本局游戏获得的经验值
+    private playerDataManager: PlayerDataManager = null!;
     
     // 单位首次出现相关
     private appearedUnitTypes: Set<string> = new Set();
@@ -194,9 +200,18 @@ export class GameManager extends Component {
         }).catch((err) => {
         });
         
+        // 初始化玩家数据管理器
+        this.playerDataManager = PlayerDataManager.getInstance();
+        this.playerDataManager.loadData().then(() => {
+        }).catch((err) => {
+        });
+        
         // 每次游戏开始时清空已出现单位类型集合
         this.appearedUnitTypes.clear();
         this.debugUnitTypes = [];
+        
+        // 重置本局经验值
+        this.currentGameExp = 0;
         
         // 显式将游戏状态设置为Ready，确保游戏开始前处于准备状态
         this.gameState = GameState.Ready;
@@ -480,6 +495,41 @@ export class GameManager extends Component {
         // 游戏结束时，清理所有单位（敌人直接消失，塔停止移动）
         this.cleanupAllUnitsForEndGame();
         
+        // 结算经验值（即使为0也要保存，确保数据持久化）
+        if (this.playerDataManager) {
+            if (this.currentGameExp > 0) {
+                // 保存本次获得的经验值（用于显示）
+                const expGainedThisGame = this.currentGameExp;
+                const talentPointsGained = this.playerDataManager.addExperience(this.currentGameExp);
+                const currentExp = this.playerDataManager.getExperience();
+                const remainingExp = this.playerDataManager.getRemainingExpForNextLevel();
+                
+                // 在游戏结束面板显示经验值（包含本次获得的经验值）
+                if (this.expLabel) {
+                    let expText = `本次获得经验值: +${expGainedThisGame}`;
+                    if (talentPointsGained > 0) {
+                        expText += `\n获得天赋点: +${talentPointsGained}`;
+                    }
+                    expText += `\n当前经验值: ${currentExp} (下一级还需 ${remainingExp})`;
+                    this.expLabel.string = expText;
+                } else {
+                    // 如果expLabel未设置，尝试在gameOverPanel中创建
+                    this.createExpLabelIfNeeded(expGainedThisGame, talentPointsGained);
+                }
+            } else {
+                // 即使没有获得经验值，也要保存数据（可能使用了天赋点）
+                this.playerDataManager.saveData();
+                // 显示当前经验值
+                const currentExp = this.playerDataManager.getExperience();
+                const remainingExp = this.playerDataManager.getRemainingExpForNextLevel();
+                if (this.expLabel) {
+                    this.expLabel.string = `本次获得经验值: +0\n当前经验值: ${currentExp} (下一级还需 ${remainingExp})`;
+                } else {
+                    this.createExpLabelIfNeeded(0, 0);
+                }
+            }
+        }
+        
         if (this.gameOverPanel) {
             this.gameOverPanel.active = true;
         }
@@ -490,9 +540,89 @@ export class GameManager extends Component {
             } else {
                 this.gameOverLabel.string = '失败！';
             }
+            // 调整"失败"标签位置，往上移（保持在重新开始和建造按钮之间）
+            const gameOverLabelNode = this.gameOverLabel.node;
+            if (gameOverLabelNode) {
+                const currentPos = gameOverLabelNode.position;
+                gameOverLabelNode.setPosition(currentPos.x, 80, currentPos.z); // 往上移到Y=80位置
+            }
+        }
+        
+        // 调整经验值标签位置，保持在失败标签下方
+        if (this.expLabel) {
+            const expLabelNode = this.expLabel.node;
+            if (expLabelNode) {
+                // 如果gameOverLabel存在，放在其下方；否则使用固定位置
+                if (this.gameOverLabel && this.gameOverLabel.node) {
+                    const gameOverLabelPos = this.gameOverLabel.node.position;
+                    expLabelNode.setPosition(gameOverLabelPos.x, gameOverLabelPos.y - 60, 0);
+                } else {
+                    expLabelNode.setPosition(0, 20, 0); // 往上移到Y=20位置
+                }
+            }
         }
         
         // 确保游戏状态已更新
+    }
+    
+    /**
+     * 如果expLabel未设置，尝试在gameOverPanel中创建经验值标签
+     * @param expGained 本次获得的经验值
+     * @param talentPointsGained 本次获得的天赋点
+     */
+    private createExpLabelIfNeeded(expGained: number = 0, talentPointsGained: number = 0) {
+        if (!this.gameOverPanel || this.expLabel) {
+            return;
+        }
+        
+        // 查找gameOverLabel作为参考位置
+        const gameOverLabelNode = this.gameOverPanel.getChildByName('GameOverLabel');
+        if (!gameOverLabelNode) {
+            return;
+        }
+        
+        // 创建经验值标签
+        const expLabelNode = new Node('ExpLabel');
+        expLabelNode.setParent(this.gameOverPanel);
+        
+        const label = expLabelNode.addComponent(Label);
+        label.string = '';
+        label.fontSize = 20;
+        label.color = Color.WHITE;
+        label.horizontalAlign = Label.HorizontalAlign.CENTER;
+        label.verticalAlign = Label.VerticalAlign.TOP;
+        label.lineHeight = 24;
+        
+        const transform = expLabelNode.addComponent(UITransform);
+        transform.setContentSize(400, 80); // 增加高度以容纳多行文本
+        
+        // 设置位置在gameOverLabel下方（往上移，保持在重新开始和建造按钮之间）
+        const gameOverLabelTransform = gameOverLabelNode.getComponent(UITransform);
+        if (gameOverLabelTransform) {
+            // 先获取gameOverLabel的位置，如果它已经被调整过，使用调整后的位置
+            let gameOverLabelPos = gameOverLabelNode.position;
+            // 如果gameOverLabel在默认位置（接近0），则使用调整后的位置
+            if (Math.abs(gameOverLabelPos.y) < 10) {
+                gameOverLabelPos = new Vec3(gameOverLabelPos.x, 80, gameOverLabelPos.z);
+            }
+            expLabelNode.setPosition(gameOverLabelPos.x, gameOverLabelPos.y - 60, 0);
+        } else {
+            expLabelNode.setPosition(0, 20, 0); // 往上移到Y=20位置
+        }
+        
+        this.expLabel = label;
+        
+        // 更新经验值显示
+        if (this.playerDataManager) {
+            const currentExp = this.playerDataManager.getExperience();
+            const remainingExp = this.playerDataManager.getRemainingExpForNextLevel();
+            let expText = `本次获得经验值: +${expGained}`;
+            if (talentPointsGained > 0) {
+                expText += `\n获得天赋点: +${talentPointsGained}`;
+            }
+            expText += `\n当前经验值: ${currentExp} (下一级还需 ${remainingExp})`;
+            this.expLabel.string = expText;
+        }
     }
 
     cleanupAllUnitsForEndGame() {
@@ -759,6 +889,13 @@ export class GameManager extends Component {
         this.updateUI();
     }
 
+    // 经验值相关方法
+    addExperience(amount: number) {
+        if (amount > 0) {
+            this.currentGameExp += amount;
+        }
+    }
+
     spendGold(amount: number): boolean {
         if (this.gold >= amount) {
             this.gold -= amount;
@@ -805,6 +942,8 @@ export class GameManager extends Component {
     }
 
     restartGame() {
+        // 在重新开始游戏前，结算当前游戏的经验值
+        this.settleGameExperience();
         
         // 清理所有敌人和防御塔
         this.cleanupAllUnits();
@@ -833,6 +972,21 @@ export class GameManager extends Component {
             
             // 无法获取场景名称时，手动重置游戏状态
             this.manualResetGame();
+        }
+    }
+    
+    /**
+     * 结算游戏经验值（在游戏结束或主动退出时调用）
+     * 公共方法，供外部调用
+     */
+    public settleGameExperience() {
+        if (this.playerDataManager && this.currentGameExp > 0) {
+            this.playerDataManager.addExperience(this.currentGameExp);
+            // 重置本局经验值
+            this.currentGameExp = 0;
+        } else if (this.playerDataManager) {
+            // 即使没有获得经验值，也要保存数据（可能使用了天赋点）
+            this.playerDataManager.saveData();
         }
     }
     

@@ -16,6 +16,7 @@ export class TrollSpearman extends Enemy {
     unitName: string = "巨魔投矛手";
     unitDescription: string = "远程攻击的巨魔投矛手，拥有较远的攻击距离，但血量较低。";
     goldReward: number = 3;
+    expReward: number = 3; // 消灭投矛手获得3点经验值
     attackAnimationName: string = 'troll-spear-attack';
     attackAnimationDuration: number = 0.6;
     

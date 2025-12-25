@@ -301,90 +301,7 @@ export class UIManager extends Component {
         // 初始隐藏
         talentPanel.active = false;
         
-        // 天赋列表容器
-        const talentList = new Node('TalentList');
-        talentList.setParent(talentPanel);
-        talentList.setPosition(0, 0, 0);
-        
-        // 天赋项配置
-        const talentConfig = [
-            { name: '攻击力提升', desc: '提升所有友方单位10%攻击力', color: new Color(255, 100, 100, 255) },
-            { name: '防御力提升', desc: '提升所有友方单位10%防御力', color: new Color(100, 200, 100, 255) },
-            { name: '生命值提升', desc: '提升所有友方单位15%生命值', color: new Color(150, 150, 255, 255) },
-            { name: '攻击速度提升', desc: '提升所有友方单位15%攻击速度', color: new Color(255, 150, 100, 255) },
-            { name: '移动速度提升', desc: '提升所有友方单位20%移动速度', color: new Color(255, 255, 100, 255) }
-        ];
-        
-        // 计算天赋项的最佳位置
-        const talentItemHeight = 90; // 适当增大天赋项高度
-        const talentItemSpacing = 20; // 添加天赋项之间的间距
-        const totalTalentHeight = (talentConfig.length * talentItemHeight) + ((talentConfig.length - 1) * talentItemSpacing);
-        // 计算起始Y坐标，确保整个天赋列表在面板内垂直居中
-        const startY = totalTalentHeight / 2 - talentItemHeight / 2;
-        
-        for (let i = 0; i < talentConfig.length; i++) {
-            const talent = talentConfig[i];
-            const talentItem = new Node(`TalentItem${i}`);
-            talentItem.setParent(talentList);
-            // 垂直居中排列天赋项，添加间距
-            const itemY = startY - i * (talentItemHeight + talentItemSpacing);
-            talentItem.setPosition(0, itemY, 0);
-            
-            // 天赋项背景 - 基于屏幕宽度百分比，实现居中
-            const talentItemBg = talentItem.addComponent(Graphics);
-            // 使用固定宽度，避免使用未定义的canvasWidth
-            const talentItemWidth = 600; // 固定宽度，确保居中显示
-            // 使用已经声明的talentItemHeight变量，不再重复声明
-            
-            talentItemBg.fillColor = new Color(20, 20, 60, 220);
-            // 计算居中的矩形位置：x从-talentItemWidth/2开始，到talentItemWidth/2结束
-            talentItemBg.roundRect(-talentItemWidth/2, -talentItemHeight/2, talentItemWidth, talentItemHeight, 10);
-            talentItemBg.fill();
-            talentItemBg.lineWidth = 2;
-            talentItemBg.strokeColor = talent.color;
-            talentItemBg.roundRect(-talentItemWidth/2, -talentItemHeight/2, talentItemWidth, talentItemHeight, 10);
-            talentItemBg.stroke();
-            
-            // 天赋名称 - 创建独立子节点，确保可见
-            const talentNameNode = new Node('TalentName');
-            talentNameNode.setParent(talentItem);
-            talentNameNode.setPosition(0, 15, 0); // 位置设为(0, 15)，使其在天赋项中靠上一点
-            
-            const talentNameLabel = talentNameNode.addComponent(Label);
-            talentNameLabel.string = talent.name;
-            talentNameLabel.fontSize = 30; // 进一步增大字体
-            // 使用高对比度颜色，确保文字在深色背景上清晰可见
-            talentNameLabel.color = new Color(255, 255, 255, 255); // 白色文字
-            talentNameLabel.horizontalAlign = Label.HorizontalAlign.CENTER; // 居中对齐
-            talentNameLabel.verticalAlign = Label.VerticalAlign.CENTER;
-            
-            // 天赋描述 - 创建独立子节点，确保可见
-            const talentDescNode = new Node('TalentDesc');
-            talentDescNode.setParent(talentItem);
-            talentDescNode.setPosition(0, -15, 0); // 位置设为(0, -15)，使其在天赋项中靠下一点
-            
-            const talentDescLabel = talentDescNode.addComponent(Label);
-            talentDescLabel.string = talent.desc;
-            talentDescLabel.fontSize = 22; // 进一步增大字体
-            // 使用高对比度颜色，确保文字在深色背景上清晰可见
-            talentDescLabel.color = new Color(100, 200, 255, 255); // 亮蓝色文字
-            talentDescLabel.horizontalAlign = Label.HorizontalAlign.CENTER; // 居中对齐
-            talentDescLabel.verticalAlign = Label.VerticalAlign.CENTER;
-            
-            // 添加UITransform组件，确保点击区域正确
-            const talentItemTransform = talentItem.getComponent(UITransform) || talentItem.addComponent(UITransform);
-            talentItemTransform.setContentSize(talentItemWidth, talentItemHeight);
-            talentItemTransform.setAnchorPoint(0.5, 0.5);
-            
-            // 添加Button组件，使天赋条目可点击
-            const talentItemButton = talentItem.addComponent(Button);
-            // 绑定点击事件
-            talentItemButton.node.on(Button.EventType.CLICK, () => {
-                // 这里可以添加天赋选择的逻辑
-                this.showAnnouncement(`已选择天赋: ${talent.name}`);
-            }, this);
-        }
-        
+        // 注意：天赋列表由 TalentSystem 组件自动创建，不需要在这里手动创建
         // 3. 创建设置面板 - 初始隐藏
         const settingsPanel = new Node('SettingsPanel');
         settingsPanel.setParent(bottomSelectionNode);
@@ -423,8 +340,8 @@ export class UIManager extends Component {
         settingsLabel.color = new Color(255, 100, 150, 255);
         settingsLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         settingsLabel.verticalAlign = Label.VerticalAlign.TOP;
-        // 标题位置：顶部居中，距离顶部50像素
-        settingsLabel.node.setPosition(0, panelHeight / 2 - 100, 0);
+        // 标题位置：顶部居中，距离顶部150像素（往下移）
+        settingsLabel.node.setPosition(0, panelHeight / 2 - 150, 0);
         
         // 设置项容器
         const settingsList = new Node('SettingsList');
@@ -434,40 +351,45 @@ export class UIManager extends Component {
         // 设置项配置
         const settingNames = ['背景音乐', '音效', '语音', '振动'];
         
-        // 计算设置项的最佳位置
+        // 计算设置项的最佳位置（往下移，避免被顶部遮挡）
         const settingItemHeight = 90;
-        const totalSettingHeight = settingNames.length * settingItemHeight;
-        const settingStartY = totalSettingHeight / 2 - settingItemHeight / 2;
+        const settingItemSpacing = 25; // 增加Y轴间隔
+        const totalSettingHeight = settingNames.length * settingItemHeight + (settingNames.length - 1) * settingItemSpacing;
+        // 往下偏移150像素，确保所有元素都可见
+        const verticalOffset = -150; // 向下偏移
+        const settingStartY = totalSettingHeight / 2 - settingItemHeight / 2 + verticalOffset;
         
         for (let i = 0; i < settingNames.length; i++) {
             const settingItem = new Node(`SettingItem${i}`);
             settingItem.setParent(settingsList);
-            // 垂直居中排列设置项
-            settingItem.setPosition(0, settingStartY - i * settingItemHeight, 0);
+            // 垂直居中排列设置项，增加间隔
+            settingItem.setPosition(0, settingStartY - i * (settingItemHeight + settingItemSpacing), 0);
             
             // 设置项背景 - 基于屏幕宽度百分比，实现居中
             const settingItemBg = settingItem.addComponent(Graphics);
             const settingItemWidth = panelWidth * 0.8; // 使用面板宽度的80%，确保居中
             
-            settingItemBg.fillColor = new Color(60, 10, 30, 220);
+            // 改为透明灰色背景
+            settingItemBg.fillColor = new Color(100, 100, 100, 120); // 透明灰色
             // 计算居中的矩形位置：x从-settingItemWidth/2开始，到settingItemWidth/2结束
-            settingItemBg.roundRect(-settingItemWidth/2, -settingItemHeight/2, settingItemWidth, settingItemHeight, 10);
+            settingItemBg.roundRect(-settingItemWidth/2, -settingItemHeight/2, settingItemWidth, settingItemHeight, 12);
             settingItemBg.fill();
+            // 美化边框：使用更柔和的灰色边框
             settingItemBg.lineWidth = 2;
-            settingItemBg.strokeColor = new Color(255, 100, 150, 255);
-            settingItemBg.roundRect(-settingItemWidth/2, -settingItemHeight/2, settingItemWidth, settingItemHeight, 10);
+            settingItemBg.strokeColor = new Color(150, 150, 150, 180);
+            settingItemBg.roundRect(-settingItemWidth/2, -settingItemHeight/2, settingItemWidth, settingItemHeight, 12);
             settingItemBg.stroke();
             
             // 设置项名称 - 创建独立子节点，确保可见
             const settingNameNode = new Node('SettingName');
             settingNameNode.setParent(settingItem);
-            settingNameNode.setPosition(0, 0, 0);
+            settingNameNode.setPosition(-settingItemWidth/4, 0, 0); // 左对齐，留出空间给开关
             
             const settingItemName = settingNameNode.addComponent(Label);
             settingItemName.string = settingNames[i];
-            settingItemName.fontSize = 26; // 适当增大字体
-            settingItemName.color = new Color(255, 200, 200, 255);
-            settingItemName.horizontalAlign = Label.HorizontalAlign.CENTER; // 居中对齐
+            settingItemName.fontSize = 28; // 适当增大字体
+            settingItemName.color = new Color(255, 255, 255, 255); // 改为白色，更清晰
+            settingItemName.horizontalAlign = Label.HorizontalAlign.LEFT; // 左对齐
             settingItemName.verticalAlign = Label.VerticalAlign.CENTER;
             
             // 开关按钮容器 - 居中偏右显示
@@ -476,17 +398,27 @@ export class UIManager extends Component {
             // 位置设为(settingItemWidth/4, 0)，使其在设置项中居中偏右
             toggleContainer.setPosition(settingItemWidth/4, 0, 0);
             
-            // 开关背景
+            // 开关背景 - 美化样式
             const toggleBg = toggleContainer.addComponent(Graphics);
-            toggleBg.fillColor = new Color(100, 50, 50, 200);
+            toggleBg.fillColor = new Color(80, 80, 80, 200); // 灰色背景
             toggleBg.roundRect(-35, -20, 70, 40, 20);
             toggleBg.fill();
+            // 添加边框
+            toggleBg.lineWidth = 1;
+            toggleBg.strokeColor = new Color(120, 120, 120, 255);
+            toggleBg.roundRect(-35, -20, 70, 40, 20);
+            toggleBg.stroke();
             
-            // 开关旋钮
+            // 开关旋钮 - 美化样式
             const toggleKnob = toggleContainer.addComponent(Graphics);
-            toggleKnob.fillColor = new Color(255, 150, 150, 255);
+            toggleKnob.fillColor = new Color(200, 200, 200, 255); // 浅灰色旋钮
             toggleKnob.circle(-15, 0, 15);
             toggleKnob.fill();
+            // 添加旋钮边框
+            toggleKnob.lineWidth = 1;
+            toggleKnob.strokeColor = new Color(150, 150, 150, 255);
+            toggleKnob.circle(-15, 0, 15);
+            toggleKnob.stroke();
             
             // 设置UITransform，确保点击区域正确
             const toggleTransform = toggleContainer.addComponent(UITransform);
@@ -1286,7 +1218,10 @@ export class UIManager extends Component {
                     this.findGameManager();
                 }
                 
+                // 2. 在退出前结算经验值
                 if (this.gameManager) {
+                    // 直接调用结算方法
+                    this.gameManager.settleGameExperience();
                     this.gameManager.restartGame();
                 } else {
                 }

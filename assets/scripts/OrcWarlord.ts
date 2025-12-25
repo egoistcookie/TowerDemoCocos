@@ -88,6 +88,9 @@ export class OrcWarlord extends Component {
     @property
     goldReward: number = 5; // 消灭敌人获得的金币
     
+    @property
+    expReward: number = 10; // 消灭兽人督军获得10点经验值
+    
     @property(AudioClip)
     deathSound: AudioClip = null!; // 敌人死亡音效
     
@@ -2050,12 +2053,13 @@ export class OrcWarlord extends Component {
         this.warcryBuffedEnemies.clear();
         this.warcryBuffEndTime.clear();
         
-        // 奖励金币
+        // 奖励金币和经验值
         if (!this.gameManager) {
             this.findGameManager();
         }
         if (this.gameManager) {
             this.gameManager.addGold(this.goldReward);
+            this.gameManager.addExperience(this.expReward);
         }
 
         // 销毁血条节点

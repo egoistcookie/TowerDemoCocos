@@ -125,6 +125,126 @@
       "建造成本": "1金币",
       "回收奖励": "1金币"
     }
+  },
+  "ElfSwordsman": {
+    "baseStats": {
+      "maxHealth": 50,
+      "attackRange": 60,
+      "attackDamage": 10,
+      "attackInterval": 1.0,
+      "buildCost": 5,
+      "level": 1
+    },
+    "displayInfo": {
+      "name": "精灵剑士",
+      "description": "近战攻击单位，使用剑进行近距离战斗"
+    },
+    "displayStats": {
+      "生命值": 50,
+      "攻击力": 10,
+      "攻击范围": "60像素",
+      "攻击间隔": "1.0秒",
+      "建造成本": "5金币"
+    }
+  },
+  "Priest": {
+    "baseStats": {
+      "maxHealth": 60,
+      "attackRange": 220,
+      "attackDamage": 15,
+      "attackInterval": 1.5,
+      "buildCost": 5,
+      "level": 1
+    },
+    "displayInfo": {
+      "name": "牧师",
+      "description": "辅助单位，治疗附近受伤的友军"
+    },
+    "displayStats": {
+      "生命值": 60,
+      "治疗量": 15,
+      "治疗范围": "220像素",
+      "治疗间隔": "1.5秒",
+      "建造成本": "5金币"
+    }
+  },
+  "HunterHall": {
+    "baseStats": {
+      "maxHealth": 100,
+      "buildCost": 10,
+      "level": 1,
+      "collisionRadius": 50,
+      "maxHunterCount": 4,
+      "productionInterval": 2.0
+    },
+    "displayInfo": {
+      "name": "猎手大厅",
+      "description": "能够生产女猎手的建筑物"
+    },
+    "displayStats": {
+      "生命值": 100,
+      "建造成本": "10金币",
+      "最大生产数量": 4,
+      "生产间隔": "2.0秒"
+    }
+  },
+  "SwordsmanHall": {
+    "baseStats": {
+      "maxHealth": 100,
+      "buildCost": 10,
+      "level": 1,
+      "collisionRadius": 50,
+      "maxSwordsmanCount": 4,
+      "productionInterval": 2.0
+    },
+    "displayInfo": {
+      "name": "剑士小屋",
+      "description": "能够生产精灵剑士的建筑物，提供强大的近战攻击单位"
+    },
+    "displayStats": {
+      "生命值": 100,
+      "建造成本": "10金币",
+      "最大生产数量": 4,
+      "生产间隔": "2.0秒"
+    }
+  },
+  "Church": {
+    "baseStats": {
+      "maxHealth": 120,
+      "buildCost": 12,
+      "level": 1,
+      "collisionRadius": 50,
+      "maxPriestCount": 4,
+      "productionInterval": 2.0
+    },
+    "displayInfo": {
+      "name": "教堂",
+      "description": "训练牧师的建筑，可以持续生产为友军治疗的辅助单位"
+    },
+    "displayStats": {
+      "生命值": 120,
+      "建造成本": "12金币",
+      "最大生产数量": 4,
+      "生产间隔": "2.0秒"
+    }
+  },
+  "StoneWall": {
+    "baseStats": {
+      "maxHealth": 50,
+      "buildCost": 5,
+      "goldReward": 1,
+      "collisionRadius": 40,
+      "level": 1
+    },
+    "displayInfo": {
+      "name": "石墙",
+      "description": "坚固的石墙，可以阻挡敌人的进攻路线"
+    },
+    "displayStats": {
+      "生命值": 50,
+      "建造成本": "5金币",
+      "回收奖励": "1金币"
+    }
   }
 }
 

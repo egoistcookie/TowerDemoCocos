@@ -15,6 +15,7 @@ export class OrcWarrior extends Enemy {
     unitName: string = "兽人战士";
     unitDescription: string = "强大的兽人战士，拥有较高的攻击力和生命值。";
     goldReward: number = 3;
+    expReward: number = 5; // 消灭兽人战士获得5点经验值
     idleAnimationDuration: number = 1.0;
     walkAnimationDuration: number = 1.0;
     attackAnimationDuration: number = 0.5;

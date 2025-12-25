@@ -1990,10 +1990,18 @@ export class TowerBuilder extends Component {
         if (isOccupiedByOther) {
             // 目标位置有其他建筑物，交换位置
             // 注意：由于拖拽时已经释放了原始网格，所以需要通过网格单元格直接获取建筑物
-            const cell = (this.gridPanel as any).gridCells[targetGrid.y][targetGrid.x];
+            const gridCells = (this.gridPanel as any).gridCells;
+            if (!gridCells || !gridCells[targetGrid.y]) {
+                // 网格数据无效，恢复原位置
+                this.cancelDraggingBuilding();
+                return;
+            }
+            
+            const cell = gridCells[targetGrid.y][targetGrid.x];
             const otherBuilding = cell ? cell.buildingNode : null;
             
-            if (otherBuilding && otherBuilding !== this.draggedBuilding) {
+            // 检查建筑物节点是否有效
+            if (otherBuilding && otherBuilding.isValid && otherBuilding !== this.draggedBuilding) {
                 // 使用保存的原始网格位置进行交换
                 if (this.draggedBuildingOriginalGrid) {
                     this.swapBuildingsWithGrid(
@@ -2010,7 +2018,7 @@ export class TowerBuilder extends Component {
                     return;
                 }
             } else {
-                // 找不到其他建筑物，恢复原位置
+                // 找不到其他建筑物或建筑物已无效，恢复原位置
                 this.cancelDraggingBuilding();
                 return;
             }
@@ -2186,6 +2194,11 @@ export class TowerBuilder extends Component {
             return;
         }
 
+        // 检查建筑物节点是否有效
+        if (!building1 || !building1.isValid || !building2 || !building2.isValid) {
+            return;
+        }
+
         // 获取目标世界坐标
         const targetWorldPos1 = this.gridPanel.gridToWorld(grid2X, grid2Y);
         const targetWorldPos2 = this.gridPanel.gridToWorld(grid1X, grid1Y);
@@ -2194,14 +2207,14 @@ export class TowerBuilder extends Component {
             return;
         }
 
-        // 获取建筑物脚本
-        const warAncientTree1 = building1.getComponent(WarAncientTree);
-        const hunterHall1 = building1.getComponent(HunterHall);
-        const church1 = building1.getComponent(Church);
+        // 获取建筑物脚本（在节点有效的情况下）
+        const warAncientTree1 = building1.isValid ? building1.getComponent(WarAncientTree) : null;
+        const hunterHall1 = building1.isValid ? building1.getComponent(HunterHall) : null;
+        const church1 = building1.isValid ? building1.getComponent(Church) : null;
 
-        const warAncientTree2 = building2.getComponent(WarAncientTree);
-        const hunterHall2 = building2.getComponent(HunterHall);
-        const church2 = building2.getComponent(Church);
+        const warAncientTree2 = building2.isValid ? building2.getComponent(WarAncientTree) : null;
+        const hunterHall2 = building2.isValid ? building2.getComponent(HunterHall) : null;
+        const church2 = building2.isValid ? building2.getComponent(Church) : null;
 
         // 先释放两个网格
         this.gridPanel.releaseGrid(grid1X, grid1Y);

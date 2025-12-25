@@ -1,5 +1,6 @@
 import { _decorator, Component, Node, Button, Label, find, director, UITransform, Color, Graphics, tween, Vec3, UIOpacity, Sprite, SpriteFrame, Prefab, instantiate, assetManager, director as directorModule, resources } from 'cc';
 import { UnitConfigManager } from './UnitConfigManager';
+import { PlayerDataManager } from './PlayerDataManager';
 const { ccclass, property } = _decorator;
 
 // 天赋类型
@@ -39,10 +40,21 @@ export class TalentSystem extends Component {
     
     private talents: Map<string, Talent> = new Map();
     private talentPoints: number = 5; // 初始天赋点
+    private playerDataManager: PlayerDataManager = null!;
+    private expLabelNode: Node = null!; // 经验值标签节点
     
     start() {
-        // 初始化天赋数据
-        this.initTalents();
+        // 初始化玩家数据管理器
+        this.playerDataManager = PlayerDataManager.getInstance();
+        this.playerDataManager.loadData().then(() => {
+            // 从PlayerDataManager加载天赋点
+            this.talentPoints = this.playerDataManager.getTalentPoints();
+            // 初始化天赋数据
+            this.initTalents();
+        }).catch((err) => {
+            // 如果加载失败，使用默认值
+            this.initTalents();
+        });
         
         // 检查 arrowerPrefab 是否配置
         
@@ -64,8 +76,18 @@ export class TalentSystem extends Component {
      * 预加载单位预制体资源
      */
     private preloadUnitPrefabs() {
-        // 预加载 Arrower 和 Hunter 预制体
-        const prefabPaths = ['prefabs/Arrower', 'prefabs/Hunter'];
+        // 预加载所有单位预制体
+        const prefabPaths = [
+            'prefabs/Arrower', 
+            'prefabs/Hunter',
+            'prefabs/WarAncientTree',
+            'prefabs/ElfSwordsman',
+            'prefabs/Priest',
+            'prefabs/HunterHall',
+            'prefabs/SwordsmanHall',
+            'prefabs/Church',
+            'prefabs/StoneWall'
+        ];
         prefabPaths.forEach(path => {
             resources.load(path, Prefab, (err, prefab) => {
                 if (!err && prefab) {
@@ -81,6 +103,15 @@ export class TalentSystem extends Component {
         // 如果 talentPanel 未设置，使用当前节点
         if (!this.talentPanel) {
             this.talentPanel = this.node;
+        }
+        
+        // 如果PlayerDataManager未初始化，初始化它
+        if (!this.playerDataManager) {
+            this.playerDataManager = PlayerDataManager.getInstance();
+            this.playerDataManager.loadData().then(() => {
+                this.talentPoints = this.playerDataManager.getTalentPoints();
+            }).catch((err) => {
+            });
         }
         
         // 延迟一帧创建UI，确保所有属性都已设置
@@ -207,8 +238,23 @@ export class TalentSystem extends Component {
             buttonBackground.roundRect(-75, -20, 150, 40, 5);
             buttonBackground.stroke();
             
+            // 添加UITransform组件（Button需要UITransform来定义点击区域）
+            const tabButtonTransform = tabButton.addComponent(UITransform);
+            tabButtonTransform.setContentSize(150, 40);
+            tabButtonTransform.setAnchorPoint(0.5, 0.5);
+            
+            // 创建按钮文本节点（作为子节点，确保文本正确显示）
+            const buttonTextNode = new Node('ButtonText');
+            buttonTextNode.setParent(tabButton);
+            buttonTextNode.setPosition(0, 0, 0);
+            
+            // 为文本节点添加UITransform
+            const buttonTextTransform = buttonTextNode.addComponent(UITransform);
+            buttonTextTransform.setContentSize(150, 40);
+            buttonTextTransform.setAnchorPoint(0.5, 0.5);
+            
             // 添加按钮文本
-            const buttonText = tabButton.addComponent(Label);
+            const buttonText = buttonTextNode.addComponent(Label);
             buttonText.string = tab.name;
             buttonText.fontSize = 18;
             buttonText.color = Color.WHITE;
@@ -256,69 +302,37 @@ export class TalentSystem extends Component {
                 child.destroy();
             }
         }
+        
+        // 更新天赋点和经验值显示
+        this.updateTalentPointsDisplay();
     }
     
     createUnitCardsGrid() {
         // 友方单位列表
         const unitTypes = [
+            // 建筑物单位
+            { id: 'WarAncientTree', name: '弓箭手小屋', description: '能够训练弓箭手的建筑物，同时拥有远程攻击能力', icon: 'WarAncientTree', unitType: 'BUILDING' },
+            { id: 'HunterHall', name: '猎手大厅', description: '能够生产女猎手的建筑物', icon: 'HunterHall', unitType: 'BUILDING' },
+            { id: 'SwordsmanHall', name: '剑士小屋', description: '能够生产精灵剑士的建筑物，提供强大的近战攻击单位', icon: 'SwordsmanHall', unitType: 'BUILDING' },
+            { id: 'Church', name: '教堂', description: '训练牧师的建筑，可以持续生产为友军治疗的辅助单位', icon: 'Church', unitType: 'BUILDING' },
+            { id: 'StoneWall', name: '石墙', description: '坚固的石墙，可以阻挡敌人的进攻路线', icon: 'StoneWall', unitType: 'BUILDING' },
+            // 角色单位
             { id: 'Arrower', name: '弓箭手', description: '远程攻击单位，能够攻击远处的敌人，射速较快', icon: 'Arrower', unitType: 'CHARACTER' },
             { id: 'Hunter', name: '女猎手', description: '远程攻击单位，投掷回旋镖攻击敌人，回旋镖可以反弹多次', icon: 'Hunter', unitType: 'CHARACTER' },
-            { id: 'WarAncientTree', name: '战争古树', description: '能够生产弓箭手的建筑物，同时拥有远程攻击能力', icon: 'WarAncientTree', unitType: 'BUILDING' },
+            { id: 'ElfSwordsman', name: '精灵剑士', description: '近战攻击单位，使用剑进行近距离战斗', icon: 'ElfSwordsman', unitType: 'CHARACTER' },
+            { id: 'Priest', name: '牧师', description: '辅助单位，治疗附近受伤的友军', icon: 'Priest', unitType: 'CHARACTER' },
         ];
         
+        let cardWidth = 200;
+        let cardHeight = 230; 
         
-        // 卡片布局配置 - 三格占满一行
-        // 获取面板宽度，用于计算卡片尺寸
-        const panelTransform = this.talentPanel.getComponent(UITransform);
-        let panelWidth = 750; // 默认宽度（画面宽度）
-        let panelHeight = 960; // 默认高度
-        
-        if (panelTransform) {
-            panelWidth = panelTransform.width;
-            panelHeight = panelTransform.height;
-        } else {
-            // 如果面板没有UITransform，尝试从Canvas获取
-            const canvas = find('Canvas');
-            if (canvas) {
-                const canvasTransform = canvas.getComponent(UITransform);
-                if (canvasTransform) {
-                    panelWidth = canvasTransform.width;
-                    panelHeight = canvasTransform.height;
-                }
-            }
-        }
-        
-        // 计算卡片尺寸：三格占满一行，均匀分布
-        // 使用较小的边距，确保卡片尽可能占满画面
-        const horizontalMargin = 20; // 左右边距各10，总共20
-        const availableWidth = panelWidth - horizontalMargin; // 可用宽度
-        
-        // 三个卡片，两个间距：cardWidth * 3 + spacing * 2 = availableWidth
-        // 为了占满画面，先计算卡片宽度，然后分配间距
-        // 设置间距为15，则：cardWidth = (availableWidth - 30) / 3
-        const cardSpacing = 15; // 卡片之间的间距
-        const cardWidth = Math.floor((availableWidth - cardSpacing * 2) / 3);
-        const cardHeight = Math.floor(cardWidth * 1.6); // 高度为宽度的1.6倍
-        
-        // 重新计算实际间距，确保三格占满一行（处理取整误差）
-        const totalCardsWidth = cardWidth * 3;
-        const totalSpacing = availableWidth - totalCardsWidth;
-        const actualCardSpacing = Math.floor(totalSpacing / 2); // 两个间距，平均分配
-        
-        // 计算起始X位置：从左边距开始，第一个卡片中心位置
-        // 左边距 = horizontalMargin / 2 = 10
-        // 第一个卡片左边界 = -panelWidth/2 + 10
-        // 第一个卡片中心 = -panelWidth/2 + 10 + cardWidth/2
-        const startX = -panelWidth / 2 + horizontalMargin / 2 + cardWidth / 2;
-        const startY = 50; // 稍微向下偏移，避免与顶部标签重叠
-        const spacingX = cardWidth + actualCardSpacing; // 卡片宽度 + 间距
-        const spacingY = cardHeight + 25; // 卡片高度 + 行间距
+        // 3列布局
         const columns = 3;
         
-        // 使用计算出的卡片尺寸
-        const actualCardWidth = cardWidth;
-        const actualCardHeight = cardHeight;
-        
+        const startX = -210;
+        const startY = 10; // 稍微向下偏移，避免与顶部标签重叠
+        const spacingX = cardWidth + 10; // 卡片宽度 + 间距
+        const spacingY = cardHeight + 10; // 卡片高度 + 行间距
         
         // 创建卡片容器
         const cardsContainer = new Node('UnitCardsContainer');
@@ -336,7 +350,7 @@ export class TalentSystem extends Component {
             const xPos = startX + col * spacingX;
             const yPos = startY - row * spacingY;
             
-            this.createUnitCard(unit, xPos, yPos, actualCardWidth, actualCardHeight, cardsContainer);
+            this.createUnitCard(unit, xPos, yPos, cardWidth, cardHeight, cardsContainer);
         }
         
     }
@@ -701,6 +715,18 @@ export class TalentSystem extends Component {
                 'Hunter': 'Hunter',
                 'war_ancient_tree': 'WarAncientTree',
                 'WarAncientTree': 'WarAncientTree',
+                'elf_swordsman': 'ElfSwordsman',
+                'ElfSwordsman': 'ElfSwordsman',
+                'priest': 'Priest',
+                'Priest': 'Priest',
+                'hunter_hall': 'HunterHall',
+                'HunterHall': 'HunterHall',
+                'swordsman_hall': 'SwordsmanHall',
+                'SwordsmanHall': 'SwordsmanHall',
+                'church': 'Church',
+                'Church': 'Church',
+                'stone_wall': 'StoneWall',
+                'StoneWall': 'StoneWall',
             };
             
             const normalizedUnitId = unitIdMap[unitId] || unitId;
@@ -826,6 +852,12 @@ export class TalentSystem extends Component {
             'Arrower': 'bcbcc8da-eb3d-4ad2-a55a-b0a0cb5da998',
             'Hunter': '989ff20a-2de2-44bb-9590-29df03813990',
             'WarAncientTree': 'be50baf7-2a47-44a1-85e1-8116927ef58e',
+            'ElfSwordsman': '2f39c6d5-5dcc-4f99-b0e8-8137ca283667',
+            'Priest': 'f3983aea-26d4-452d-8336-0e29fd2ec477',
+            'HunterHall': '84fcb7a8-0a07-41ce-b1b3-19821780e361',
+            'SwordsmanHall': '42935d61-4a45-4323-aa06-5518bd9b5b8d',
+            'Church': 'ca650a85-5921-4179-9dc2-e6357f29e73c',
+            'StoneWall': 'a7405231-7385-4e8a-9fb9-633c4577e610',
         };
         
         // 1. 优先使用 TalentSystem 的 arrowerPrefab 属性（如果配置了）
@@ -930,117 +962,62 @@ export class TalentSystem extends Component {
                 return null;
             };
             
-            // 获取单位组件
-            const componentName = unitId.charAt(0).toUpperCase() + unitId.slice(1);
-            const unitScript = prefabInstance.getComponent(componentName) as any || 
-                              prefabInstance.getComponent(unitId) as any;
+            // 获取单位组件（尝试多种方式）
+            let unitScript: any = null;
             
-            if (unitScript) {
-            } else {
+            // 方式1: 尝试使用首字母大写的组件名（如 ElfSwordsman）
+            const componentName = unitId.charAt(0).toUpperCase() + unitId.slice(1);
+            unitScript = prefabInstance.getComponent(componentName) as any;
+            
+            // 方式2: 如果方式1失败，尝试使用原始ID（如 StoneWall）
+            if (!unitScript) {
+                unitScript = prefabInstance.getComponent(unitId) as any;
+            }
+            
+            // 方式3: 尝试查找所有可能的组件类型（包括基类）
+            if (!unitScript) {
+                const possibleNames = [
+                    componentName,
+                    unitId,
+                    'Build',      // 建筑物基类
+                    'Role',       // 角色基类
+                    'HunterHall', // 特殊单位
+                    'SwordsmanHall',
+                    'Church',
+                    'StoneWall',
+                ];
+                for (const name of possibleNames) {
+                    unitScript = prefabInstance.getComponent(name) as any;
+                    if (unitScript) break;
+                }
             }
             
             // 使用统一的图标获取逻辑（优先从组件属性获取）
-            if (unitScript && this.tryGetIconFromUnitScript(unitScript, prefabInstance, sprite, unitId)) {
-                prefabInstance.destroy();
-                return;
-            }
-            
-            // 如果单位脚本中没有找到图标，尝试从Sprite组件获取
-            // 4. 尝试从根节点获取Sprite组件（优先检查这个，因为大部分单位的Sprite在根节点）
-            const rootSprite = prefabInstance.getComponent(Sprite);
-            if (rootSprite) {
-                
-                // 立即检查 spriteFrame
-                if (rootSprite.spriteFrame) {
-                    sprite.spriteFrame = rootSprite.spriteFrame;
+            if (unitScript) {
+                // 先立即尝试获取（可能已经初始化）
+                if (this.tryGetIconFromUnitScript(unitScript, prefabInstance, sprite, unitId)) {
                     prefabInstance.destroy();
                     return;
                 }
                 
-                // 如果 spriteFrame 为空，强制刷新并等待
-                rootSprite.enabled = false;
-                rootSprite.enabled = true;
-                
-                const spriteRef = sprite;
-                const prefabRef = prefabInstance;
-                const rootSpriteRef = rootSprite;
-                
-                // 等待一帧确保组件初始化
+                // 如果立即获取失败，等待一帧确保组件属性已初始化
                 this.scheduleOnce(() => {
-                    // 检查 sprite 节点是否仍然有效
-                    if (!spriteRef.node || !spriteRef.node.isValid) {
-                        prefabRef.destroy();
+                    if (!sprite.node || !sprite.node.isValid) {
+                        prefabInstance.destroy();
                         return;
                     }
-                    let spriteFrame = rootSpriteRef.spriteFrame;
-                    
-                    if (spriteFrame) {
-                        spriteRef.spriteFrame = spriteFrame;
-                        prefabRef.destroy();
-                    } else {
-                        // 再次尝试刷新
-                        rootSpriteRef.enabled = false;
-                        rootSpriteRef.enabled = true;
-                        this.scheduleOnce(() => {
-                            // 再次检查 sprite 节点是否仍然有效
-                            if (!spriteRef.node || !spriteRef.node.isValid) {
-                                prefabRef.destroy();
-                                return;
-                            }
-                            spriteFrame = rootSpriteRef.spriteFrame;
-                            
-                            if (spriteFrame) {
-                                spriteRef.spriteFrame = spriteFrame;
-                            } else {
-                            }
-                            prefabRef.destroy();
-                        }, 0.05); // 等待 0.05 秒
+                    if (this.tryGetIconFromUnitScript(unitScript, prefabInstance, sprite, unitId)) {
+                        prefabInstance.destroy();
+                        return;
                     }
-                }, 0.05); // 等待 0.05 秒
-                return; // 等待中，先返回
-            } else {
+                    // 如果从组件属性获取失败，继续尝试从Sprite组件获取
+                    this.tryGetSpriteFromInstance(prefabInstance, sprite, unitId);
+                }, 0);
+                return; // 先返回，等待回调
             }
             
-            // 5. 尝试从子节点中查找Sprite组件（有些单位的Sprite可能在子节点中）
-            const childSprite = findSpriteInChildren(prefabInstance);
-            if (childSprite) {
-                if (childSprite.spriteFrame) {
-                    sprite.spriteFrame = childSprite.spriteFrame;
-                    prefabInstance.destroy();
-                    return;
-                } else {
-                    // 如果spriteFrame为空，尝试等待一帧
-                    const spriteRef = sprite;
-                    const prefabRef = prefabInstance;
-                    const childSpriteRef = childSprite;
-                    
-                    this.scheduleOnce(() => {
-                        // 检查 sprite 节点是否仍然有效
-                        if (!spriteRef.node || !spriteRef.node.isValid) {
-                            prefabRef.destroy();
-                            return;
-                        }
-                        let spriteFrame = childSpriteRef.spriteFrame;
-                        if (!spriteFrame) {
-                            childSpriteRef.enabled = false;
-                            childSpriteRef.enabled = true;
-                            spriteFrame = childSpriteRef.spriteFrame;
-                        }
-                        
-                        if (spriteFrame) {
-                            spriteRef.spriteFrame = spriteFrame;
-                        } else {
-                        }
-                        prefabRef.destroy();
-                    }, 0.1);
-                    return; // 等待中，先返回
-                }
-            } else {
-            }
-            
-            // 6. 如果还是没有找到，输出警告
-            
-            prefabInstance.destroy();
+            // 如果没有找到单位脚本，直接尝试从Sprite组件获取
+            this.tryGetSpriteFromInstance(prefabInstance, sprite, unitId);
         } else {
         }
         
@@ -1050,24 +1027,171 @@ export class TalentSystem extends Component {
         }
     }
     
+    /**
+     * 从预制体实例中尝试获取Sprite组件
+     * @param prefabInstance 预制体实例
+     * @param sprite 目标Sprite组件
+     * @param unitId 单位ID
+     */
+    private tryGetSpriteFromInstance(prefabInstance: Node, sprite: Sprite, unitId: string) {
+        // 递归查找Sprite组件的辅助函数
+        const findSpriteInChildren = (node: Node): Sprite | null => {
+            const childSprite = node.getComponent(Sprite);
+            if (childSprite && childSprite.spriteFrame) {
+                return childSprite;
+            }
+            for (const child of node.children) {
+                const found = findSpriteInChildren(child);
+                if (found) {
+                    return found;
+                }
+            }
+            return null;
+        };
+        
+        // 1. 尝试从根节点获取Sprite组件（优先检查这个，因为大部分单位的Sprite在根节点）
+        const rootSprite = prefabInstance.getComponent(Sprite);
+        if (rootSprite) {
+            // 立即检查 spriteFrame
+            if (rootSprite.spriteFrame) {
+                sprite.spriteFrame = rootSprite.spriteFrame;
+                prefabInstance.destroy();
+                return;
+            }
+            
+            // 如果 spriteFrame 为空，强制刷新并等待
+            rootSprite.enabled = false;
+            rootSprite.enabled = true;
+            
+            const spriteRef = sprite;
+            const prefabRef = prefabInstance;
+            const rootSpriteRef = rootSprite;
+            
+            // 等待一帧确保组件初始化
+            this.scheduleOnce(() => {
+                // 检查 sprite 节点是否仍然有效
+                if (!spriteRef.node || !spriteRef.node.isValid) {
+                    prefabRef.destroy();
+                    return;
+                }
+                let spriteFrame = rootSpriteRef.spriteFrame;
+                
+                if (spriteFrame) {
+                    spriteRef.spriteFrame = spriteFrame;
+                    prefabRef.destroy();
+                } else {
+                    // 再次尝试刷新
+                    rootSpriteRef.enabled = false;
+                    rootSpriteRef.enabled = true;
+                    this.scheduleOnce(() => {
+                        // 再次检查 sprite 节点是否仍然有效
+                        if (!spriteRef.node || !spriteRef.node.isValid) {
+                            prefabRef.destroy();
+                            return;
+                        }
+                        spriteFrame = rootSpriteRef.spriteFrame;
+                        
+                        if (spriteFrame) {
+                            spriteRef.spriteFrame = spriteFrame;
+                        } else {
+                        }
+                        prefabRef.destroy();
+                    }, 0.05); // 等待 0.05 秒
+                }
+            }, 0.05); // 等待 0.05 秒
+            return; // 等待中，先返回
+        }
+        
+        // 2. 尝试从子节点中查找Sprite组件（有些单位的Sprite可能在子节点中）
+        const childSprite = findSpriteInChildren(prefabInstance);
+        if (childSprite) {
+            if (childSprite.spriteFrame) {
+                sprite.spriteFrame = childSprite.spriteFrame;
+                prefabInstance.destroy();
+                return;
+            } else {
+                // 如果spriteFrame为空，尝试等待一帧
+                const spriteRef = sprite;
+                const prefabRef = prefabInstance;
+                const childSpriteRef = childSprite;
+                
+                this.scheduleOnce(() => {
+                    // 检查 sprite 节点是否仍然有效
+                    if (!spriteRef.node || !spriteRef.node.isValid) {
+                        prefabRef.destroy();
+                        return;
+                    }
+                    let spriteFrame = childSpriteRef.spriteFrame;
+                    if (!spriteFrame) {
+                        childSpriteRef.enabled = false;
+                        childSpriteRef.enabled = true;
+                        spriteFrame = childSpriteRef.spriteFrame;
+                    }
+                    
+                    if (spriteFrame) {
+                        spriteRef.spriteFrame = spriteFrame;
+                    } else {
+                    }
+                    prefabRef.destroy();
+                }, 0.1);
+                return; // 等待中，先返回
+            }
+        }
+        
+        // 3. 如果还是没有找到，销毁实例
+        prefabInstance.destroy();
+    }
+    
     createTalentPointsDisplay() {
         // 创建天赋点显示节点
         const talentPointsNode = new Node('TalentPointsDisplay');
         talentPointsNode.setParent(this.talentPanel);
-        talentPointsNode.setPosition(0, 40, 0);
+        talentPointsNode.setPosition(0, 150, 0); // 上移到页签按钮下方，避免被单位卡片遮挡
         
-        // 添加Label
+        // 添加UITransform
+        const talentPointsTransform = talentPointsNode.addComponent(UITransform);
+        talentPointsTransform.setContentSize(400, 60);
+        
+        // 添加天赋点Label
         const label = talentPointsNode.addComponent(Label);
+        // 从PlayerDataManager获取最新天赋点
+        if (this.playerDataManager) {
+            this.talentPoints = this.playerDataManager.getTalentPoints();
+        }
         label.string = `天赋点: ${this.talentPoints}`;
         label.fontSize = 24;
         label.color = Color.YELLOW;
         label.horizontalAlign = Label.HorizontalAlign.CENTER;
+        label.verticalAlign = Label.VerticalAlign.TOP;
+        
+        // 创建经验值显示节点（在天赋点下方）
+        this.expLabelNode = new Node('ExpLabel');
+        this.expLabelNode.setParent(talentPointsNode);
+        this.expLabelNode.setPosition(0, -35, 0); // 在天赋点标签下方
+        
+        const expTransform = this.expLabelNode.addComponent(UITransform);
+        expTransform.setContentSize(400, 30);
+        
+        const expLabel = this.expLabelNode.addComponent(Label);
+        // 从PlayerDataManager获取经验值
+        if (this.playerDataManager) {
+            const currentExp = this.playerDataManager.getExperience();
+            const remainingExp = this.playerDataManager.getRemainingExpForNextLevel();
+            expLabel.string = `经验值: ${currentExp} (下一级还需 ${remainingExp})`;
+        } else {
+            expLabel.string = `经验值: 0 (下一级还需 100)`;
+        }
+        expLabel.fontSize = 20;
+        expLabel.color = Color.CYAN;
+        expLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        expLabel.verticalAlign = Label.VerticalAlign.CENTER;
     }
     
     createTalentList() {
         // 天赋列表位置
         let yPos = 0;
         const spacing = 30;
+        const talentItemHeight = 50; // 增大天赋项高度
         
         // 遍历所有天赋
         for (let [talentId, talent] of this.talents) {
@@ -1079,7 +1203,7 @@ export class TalentSystem extends Component {
             // 添加背景
             const background = talentItem.addComponent(Graphics);
             background.fillColor = new Color(50, 50, 50, 150);
-            background.roundRect(-320, -15, 640, 30, 5);
+            background.roundRect(-320, -15, 640, 50, 5);
             background.fill();
             
             // 添加边框
@@ -1095,9 +1219,10 @@ export class TalentSystem extends Component {
             
             const nameLabelComp = nameLabel.addComponent(Label);
             nameLabelComp.string = talent.name;
-            nameLabelComp.fontSize = 16;
+            nameLabelComp.fontSize = 20;
             nameLabelComp.color = Color.WHITE;
             nameLabelComp.horizontalAlign = Label.HorizontalAlign.LEFT;
+            nameLabelComp.verticalAlign = Label.VerticalAlign.TOP;
             
             // 创建天赋描述标签
             const descLabel = new Node('DescLabel');
@@ -1106,9 +1231,10 @@ export class TalentSystem extends Component {
             
             const descLabelComp = descLabel.addComponent(Label);
             descLabelComp.string = talent.description;
-            descLabelComp.fontSize = 14;
+            descLabelComp.fontSize = 20;
             descLabelComp.color = Color.GRAY;
             descLabelComp.horizontalAlign = Label.HorizontalAlign.LEFT;
+            descLabelComp.verticalAlign = Label.VerticalAlign.TOP;
             
             // 创建天赋效果标签
             const effectLabel = new Node('EffectLabel');
@@ -1117,9 +1243,10 @@ export class TalentSystem extends Component {
             
             const effectLabelComp = effectLabel.addComponent(Label);
             effectLabelComp.string = `+${talent.value}%`;
-            effectLabelComp.fontSize = 14;
+            effectLabelComp.fontSize = 20;
             effectLabelComp.color = Color.GREEN;
             effectLabelComp.horizontalAlign = Label.HorizontalAlign.RIGHT;
+            effectLabelComp.verticalAlign = Label.VerticalAlign.TOP;
             
             // 创建等级显示
             const levelLabel = new Node('LevelLabel');
@@ -1128,13 +1255,20 @@ export class TalentSystem extends Component {
             
             const levelLabelComp = levelLabel.addComponent(Label);
             levelLabelComp.string = `${talent.level}/${talent.maxLevel}`;
-            levelLabelComp.fontSize = 14;
+            levelLabelComp.fontSize = 20;
             levelLabelComp.color = Color.WHITE;
+            levelLabelComp.horizontalAlign = Label.HorizontalAlign.RIGHT;
+            levelLabelComp.verticalAlign = Label.VerticalAlign.TOP;
             
             // 创建升级按钮
             const upgradeButton = new Node('UpgradeButton');
             upgradeButton.setParent(talentItem);
             upgradeButton.setPosition(270, 0, 0);
+            
+            // 添加UITransform组件（Button需要UITransform来定义点击区域）
+            const upgradeButtonTransform = upgradeButton.addComponent(UITransform);
+            upgradeButtonTransform.setContentSize(70, 24);
+            upgradeButtonTransform.setAnchorPoint(0.5, 0.5);
             
             // 添加按钮背景
             const buttonBackground = upgradeButton.addComponent(Graphics);
@@ -1142,16 +1276,29 @@ export class TalentSystem extends Component {
             buttonBackground.roundRect(-35, -12, 70, 24, 3);
             buttonBackground.fill();
             
-            // 添加按钮标签
-            const buttonLabel = new Node('ButtonLabel');
-            buttonLabel.setParent(upgradeButton);
+            // 创建按钮文本节点（参考查看详情按钮的实现方式）
+            const buttonTextNode = new Node('ButtonText');
+            buttonTextNode.setParent(upgradeButton);
+            buttonTextNode.setPosition(0, 0, 0);
+            buttonTextNode.active = true; // 确保按钮文本节点处于激活状态
             
-            const buttonLabelComp = buttonLabel.addComponent(Label);
-            buttonLabelComp.string = '升级';
-            buttonLabelComp.fontSize = 14;
-            buttonLabelComp.color = Color.WHITE;
-            buttonLabelComp.horizontalAlign = Label.HorizontalAlign.CENTER;
-            buttonLabelComp.verticalAlign = Label.VerticalAlign.CENTER;
+            // 为按钮文本添加UITransform
+            const buttonTextTransform = buttonTextNode.addComponent(UITransform);
+            buttonTextTransform.setContentSize(70, 24);
+            buttonTextTransform.setAnchorPoint(0.5, 0.5);
+            
+            const buttonTextLabel = buttonTextNode.addComponent(Label);
+            buttonTextLabel.string = '升级';
+            buttonTextLabel.fontSize = 12; // 稍微减小字体，确保在24高度的按钮中能完全显示
+            buttonTextLabel.color = Color.WHITE;
+            buttonTextLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            buttonTextLabel.verticalAlign = Label.VerticalAlign.CENTER;
+            // 设置行高与按钮高度一致，确保垂直居中（重要：必须设置才能正确垂直居中）
+            buttonTextLabel.lineHeight = 24;
+            // 确保文本在UITransform区域内正确显示
+            buttonTextLabel.overflow = Label.Overflow.NONE;
+            // 禁用文本换行
+            buttonTextLabel.enableWrapText = false;
             
             // 添加Button组件
             const buttonComp = upgradeButton.addComponent(Button);
@@ -1161,8 +1308,8 @@ export class TalentSystem extends Component {
                 this.upgradeTalent(talentId);
             }, this);
             
-            // 更新y位置
-            yPos -= spacing;
+            // 更新y位置（使用新的高度和间距）
+            yPos -= (talentItemHeight + spacing);
         }
     }
     
@@ -1177,12 +1324,24 @@ export class TalentSystem extends Component {
             return;
         }
         
+        // 从PlayerDataManager获取最新天赋点
+        if (this.playerDataManager) {
+            this.talentPoints = this.playerDataManager.getTalentPoints();
+        }
+        
+        // 检查是否有足够的天赋点
         if (this.talentPoints < talent.cost) {
             return;
         }
         
         // 扣除天赋点
         this.talentPoints -= talent.cost;
+        
+        // 保存到PlayerDataManager
+        if (this.playerDataManager) {
+            this.playerDataManager.useTalentPoint(talent.cost);
+            this.talentPoints = this.playerDataManager.getTalentPoints();
+        }
         
         // 升级天赋
         talent.level++;
@@ -1201,8 +1360,41 @@ export class TalentSystem extends Component {
     }
     
     updateTalentPanel() {
-        // 重新创建天赋面板UI
-        this.createTalentPanelUI();
+        // 更新天赋点和经验值显示
+        this.updateTalentPointsDisplay();
+        // 重新创建天赋列表（保持天赋点显示不变）
+        this.showTalentList();
+    }
+    
+    /**
+     * 更新天赋点和经验值显示
+     */
+    updateTalentPointsDisplay() {
+        // 查找天赋点显示节点
+        const talentPointsNode = this.talentPanel.getChildByName('TalentPointsDisplay');
+        if (!talentPointsNode) {
+            return;
+        }
+        
+        // 更新天赋点显示
+        const talentPointsLabel = talentPointsNode.getComponent(Label);
+        if (talentPointsLabel) {
+            // 从PlayerDataManager获取最新天赋点
+            if (this.playerDataManager) {
+                this.talentPoints = this.playerDataManager.getTalentPoints();
+            }
+            talentPointsLabel.string = `天赋点: ${this.talentPoints}`;
+        }
+        
+        // 更新经验值显示
+        if (this.expLabelNode && this.expLabelNode.isValid) {
+            const expLabel = this.expLabelNode.getComponent(Label);
+            if (expLabel && this.playerDataManager) {
+                const currentExp = this.playerDataManager.getExperience();
+                const remainingExp = this.playerDataManager.getRemainingExpForNextLevel();
+                expLabel.string = `经验值: ${currentExp} (下一级还需 ${remainingExp})`;
+            }
+        }
     }
     
     // 获取天赋效果值
