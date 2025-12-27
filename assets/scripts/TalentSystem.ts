@@ -485,10 +485,24 @@ export class TalentSystem extends Component {
         typeLabel.color = Color.GRAY;
         typeLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         
+        // 创建单位等级标签（显示使用的天赋点数）
+        const levelNode = new Node('UnitLevel');
+        levelNode.setParent(cardNode);
+        levelNode.setPosition(0, -65, 0);
+        // 确保等级节点处于激活状态
+        levelNode.active = true;
+        
+        const levelLabel = levelNode.addComponent(Label);
+        const unitLevel = this.getUnitTalentPointsUsed(unit.id);
+        levelLabel.string = `等级: ${unitLevel}`;
+        levelLabel.fontSize = 14;
+        levelLabel.color = new Color(255, 200, 100, 255); // 使用金色显示等级
+        levelLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        
         // 创建查看详情按钮
         const detailButton = new Node('DetailButton');
         detailButton.setParent(cardNode);
-        detailButton.setPosition(0, -75, 0);
+        detailButton.setPosition(0, -95, 0);
         // 确保按钮节点处于激活状态
         detailButton.active = true;
         
@@ -561,13 +575,13 @@ export class TalentSystem extends Component {
         
         // 添加内容背景（增加高度以容纳强化功能）
         const contentTransform = contentNode.addComponent(UITransform);
-        contentTransform.setContentSize(500, 650);
+        contentTransform.setContentSize(500, 750);
         contentTransform.setAnchorPoint(0.5, 0.5);
         
         // 创建详情面板背景
         const contentBackground = contentNode.addComponent(Graphics);
         contentBackground.fillColor = new Color(70, 70, 90, 255);
-        contentBackground.roundRect(-250, -325, 500, 650, 10);
+        contentBackground.roundRect(-250, -375, 500, 750, 10);
         contentBackground.fill();
         
         // 创建详情面板边框
@@ -579,7 +593,7 @@ export class TalentSystem extends Component {
             borderNode.active = true;
             
             const borderTransform = borderNode.addComponent(UITransform);
-            borderTransform.setContentSize(500, 650);
+            borderTransform.setContentSize(500, 750);
             borderTransform.setAnchorPoint(0.5, 0.5);
             
             const borderSprite = borderNode.addComponent(Sprite);
@@ -590,14 +604,14 @@ export class TalentSystem extends Component {
             // 使用 Graphics 绘制边框（降级方案）
             contentBackground.lineWidth = 2;
             contentBackground.strokeColor = new Color(120, 170, 220, 255);
-            contentBackground.roundRect(-250, -325, 500, 650, 10);
+            contentBackground.roundRect(-250, -375, 500, 750, 10);
             contentBackground.stroke();
         }
         
         // 创建关闭按钮
         const closeButton = new Node('CloseButton');
         closeButton.setParent(contentNode);
-        closeButton.setPosition(220, 295, 0);
+        closeButton.setPosition(220, 345, 0);
         
         // 添加关闭按钮背景
         const closeButtonBackground = closeButton.addComponent(Graphics);
@@ -614,7 +628,7 @@ export class TalentSystem extends Component {
         // 添加关闭按钮文本
         const closeButtonText = closeButton.addComponent(Label);
         closeButtonText.string = 'X';
-        closeButtonText.fontSize = 16;
+        closeButtonText.fontSize = 18;
         closeButtonText.color = Color.WHITE;
         closeButtonText.horizontalAlign = Label.HorizontalAlign.CENTER;
         closeButtonText.verticalAlign = Label.VerticalAlign.CENTER;
@@ -634,7 +648,7 @@ export class TalentSystem extends Component {
         
         const nameLabel = nameNode.addComponent(Label);
         nameLabel.string = unit.name;
-        nameLabel.fontSize = 32;
+        nameLabel.fontSize = 34;
         nameLabel.color = Color.WHITE;
         nameLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         
@@ -645,7 +659,7 @@ export class TalentSystem extends Component {
         
         const typeLabel = typeNode.addComponent(Label);
         typeLabel.string = this.getUnitTypeDisplayName(unit.unitType);
-        typeLabel.fontSize = 18;
+        typeLabel.fontSize = 20;
         typeLabel.color = Color.GRAY;
         typeLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         
@@ -656,7 +670,7 @@ export class TalentSystem extends Component {
         
         const descLabel = descNode.addComponent(Label);
         descLabel.string = unit.description;
-        descLabel.fontSize = 16;
+        descLabel.fontSize = 18;
         descLabel.color = Color.WHITE;
         descLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         descLabel.verticalAlign = Label.VerticalAlign.TOP;
@@ -712,7 +726,7 @@ export class TalentSystem extends Component {
                     
                     const statLabel = statNode.addComponent(Label);
                     statLabel.string = displayText;
-                    statLabel.fontSize = 14;
+                    statLabel.fontSize = 16;
                     statLabel.color = Color.WHITE; // 统一使用白色
                     statLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
                     
@@ -741,7 +755,7 @@ export class TalentSystem extends Component {
         
         const enhancementTitleLabel = enhancementTitleNode.addComponent(Label);
         enhancementTitleLabel.string = '单位强化';
-        enhancementTitleLabel.fontSize = 20;
+        enhancementTitleLabel.fontSize = 22;
         enhancementTitleLabel.color = new Color(255, 200, 100, 255);
         enhancementTitleLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         
@@ -769,7 +783,7 @@ export class TalentSystem extends Component {
         
         const statusLabel = enhancementStatusNode.addComponent(Label);
         statusLabel.string = statusText;
-        statusLabel.fontSize = 14;
+        statusLabel.fontSize = 16;
         statusLabel.color = Color.WHITE;
         statusLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         
@@ -848,7 +862,7 @@ export class TalentSystem extends Component {
             }
             
             buttonTextLabel.string = displayText;
-            buttonTextLabel.fontSize = 14;
+            buttonTextLabel.fontSize = 16;
             buttonTextLabel.color = Color.WHITE;
             buttonTextLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
             
@@ -901,6 +915,9 @@ export class TalentSystem extends Component {
         
         // 更新天赋点显示
         this.updateTalentPointsDisplay();
+        
+        // 更新卡片上的等级显示
+        this.updateUnitCardLevel(unitId);
         
         // 重新创建详情面板以显示更新后的数据
         detailPanel.destroy();
@@ -969,6 +986,41 @@ export class TalentSystem extends Component {
         
         // 如果配置未加载或找不到配置，返回空对象
         return {};
+    }
+    
+    /**
+     * 更新单位卡片上的等级显示
+     * @param unitId 单位ID
+     */
+    private updateUnitCardLevel(unitId: string) {
+        if (!this.talentPanel) {
+            return;
+        }
+        
+        // 查找对应的卡片节点
+        const cardNodeName = `UnitCard_${unitId}`;
+        const cardsContainer = this.talentPanel.getChildByName('UnitCardsContainer');
+        if (!cardsContainer) {
+            return;
+        }
+        
+        const cardNode = cardsContainer.getChildByName(cardNodeName);
+        if (!cardNode) {
+            return;
+        }
+        
+        // 查找等级节点
+        const levelNode = cardNode.getChildByName('UnitLevel');
+        if (!levelNode) {
+            return;
+        }
+        
+        // 更新等级显示
+        const levelLabel = levelNode.getComponent(Label);
+        if (levelLabel) {
+            const unitLevel = this.getUnitTalentPointsUsed(unitId);
+            levelLabel.string = `等级: ${unitLevel}`;
+        }
     }
     
     /**
@@ -1685,6 +1737,53 @@ export class TalentSystem extends Component {
                 expLabel.string = `经验值: ${currentExp} (下一级还需 ${remainingExp})\n总经验值: ${totalExp}`;
             }
         }
+    }
+    
+    /**
+     * 获取单位使用的天赋点数（等级）
+     * @param unitId 单位ID
+     * @returns 该单位使用的天赋点数
+     */
+    getUnitTalentPointsUsed(unitId: string): number {
+        if (!this.playerDataManager) {
+            return 0;
+        }
+        
+        const enhancement = this.playerDataManager.getUnitEnhancement(unitId);
+        if (!enhancement || !enhancement.enhancements) {
+            return 0;
+        }
+        
+        const enhancements = enhancement.enhancements;
+        let talentPointsUsed = 0;
+        
+        // 计算各属性使用的天赋点数
+        // 攻击力：1点 = 1天赋点
+        if (enhancements.attackDamage) {
+            talentPointsUsed += Math.floor(enhancements.attackDamage / 1);
+        }
+        
+        // 攻击速度：5% = 1天赋点
+        if (enhancements.attackSpeed) {
+            talentPointsUsed += Math.floor(enhancements.attackSpeed / 5);
+        }
+        
+        // 生命值：2点 = 1天赋点
+        if (enhancements.maxHealth) {
+            talentPointsUsed += Math.floor(enhancements.maxHealth / 2);
+        }
+        
+        // 移动速度：5点 = 1天赋点
+        if (enhancements.moveSpeed) {
+            talentPointsUsed += Math.floor(enhancements.moveSpeed / 5);
+        }
+        
+        // 建造成本：1点 = 1天赋点（负数表示减少）
+        if (enhancements.buildCost) {
+            talentPointsUsed += Math.abs(Math.floor(enhancements.buildCost / 1));
+        }
+        
+        return talentPointsUsed;
     }
     
     /**

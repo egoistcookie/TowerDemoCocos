@@ -417,6 +417,8 @@ export class Enemy extends Component {
                             this.isPlayingAttackAnimation = false;
                         }
                     }
+                    // modify by lf 2025-12-27 fix:修复敌人在网格上方移动时，没有播放行走动画的问题
+                    this.updateAnimation(deltaTime);
                     return; // 优先处理缺口移动，不继续执行后续逻辑
                 }
             }
