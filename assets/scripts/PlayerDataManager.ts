@@ -4,9 +4,26 @@ import { sys } from 'cc';
 
 const { ccclass } = _decorator;
 
+/**
+ * 单位强化数据结构
+ */
+export interface UnitEnhancement {
+    unitId: string;
+    enhancements: {
+        attackDamage?: number;    // 攻击力增幅
+        attackSpeed?: number;      // 攻击速度增幅（实际是减少attackInterval）
+        maxHealth?: number;       // 生命值增幅
+        moveSpeed?: number;       // 移动速度增幅
+        armor?: number;           // 护甲增幅
+        buildCost?: number;        // 建造成本减少（负数表示减少）
+    };
+}
+
 interface PlayerData {
     experience: number;
     talentPoints: number;
+    talentLevels?: Record<string, number>;  // 天赋ID -> 等级
+    unitEnhancements?: Record<string, UnitEnhancement>;  // 单位ID -> 强化数据
 }
 
 @ccclass('PlayerDataManager')
@@ -14,7 +31,9 @@ export class PlayerDataManager {
     private static instance: PlayerDataManager | null = null;
     private playerData: PlayerData = {
         experience: 0,
-        talentPoints: 5
+        talentPoints: 0,
+        talentLevels: {},
+        unitEnhancements: {}
     };
     private isLoaded: boolean = false;
     private loadPromise: Promise<void> | null = null;
@@ -48,7 +67,21 @@ export class PlayerDataManager {
             const savedData = sys.localStorage.getItem(this.STORAGE_KEY);
             if (savedData) {
                 try {
-                    this.playerData = JSON.parse(savedData);
+                    const parsedData = JSON.parse(savedData);
+                    // 确保新字段存在
+                    this.playerData = {
+                        experience: 0,
+                        talentPoints: 5,
+                        talentLevels: {},
+                        unitEnhancements: {},
+                        ...parsedData
+                    };
+                    if (!this.playerData.talentLevels) {
+                        this.playerData.talentLevels = {};
+                    }
+                    if (!this.playerData.unitEnhancements) {
+                        this.playerData.unitEnhancements = {};
+                    }
                     this.isLoaded = true;
                     resolve();
                     return;
@@ -63,7 +96,9 @@ export class PlayerDataManager {
                     // 如果配置文件不存在，使用默认值
                     this.playerData = {
                         experience: 0,
-                        talentPoints: 5
+                        talentPoints: 0,
+                        talentLevels: {},
+                        unitEnhancements: {}
                     };
                     this.isLoaded = true;
                     this.saveData(); // 保存默认值到localStorage
@@ -76,12 +111,39 @@ export class PlayerDataManager {
                 if (savedData) {
                     try {
                         const localStorageData = JSON.parse(savedData);
-                        this.playerData = { ...configData, ...localStorageData };
+                        // 确保新字段存在
+                        this.playerData = { 
+                            experience: 0,
+                            talentPoints: 5,
+                            talentLevels: {},
+                            unitEnhancements: {},
+                            ...configData, 
+                            ...localStorageData 
+                        };
+                        // 确保新字段不为undefined
+                        if (!this.playerData.talentLevels) {
+                            this.playerData.talentLevels = {};
+                        }
+                        if (!this.playerData.unitEnhancements) {
+                            this.playerData.unitEnhancements = {};
+                        }
                     } catch (e) {
-                        this.playerData = configData;
+                        this.playerData = {
+                            experience: 0,
+                            talentPoints: 5,
+                            talentLevels: {},
+                            unitEnhancements: {},
+                            ...configData
+                        };
                     }
                 } else {
-                    this.playerData = configData;
+                    this.playerData = {
+                        experience: 0,
+                        talentPoints: 5,
+                        talentLevels: {},
+                        unitEnhancements: {},
+                        ...configData
+                    };
                 }
 
                 this.isLoaded = true;
@@ -175,12 +237,64 @@ export class PlayerDataManager {
     }
 
     /**
+     * 获取天赋等级
+     * @param talentId 天赋ID
+     * @returns 天赋等级，如果不存在则返回0
+     */
+    public getTalentLevel(talentId: string): number {
+        if (!this.playerData.talentLevels) {
+            this.playerData.talentLevels = {};
+        }
+        return this.playerData.talentLevels[talentId] || 0;
+    }
+
+    /**
+     * 设置天赋等级
+     * @param talentId 天赋ID
+     * @param level 等级
+     */
+    public setTalentLevel(talentId: string, level: number): void {
+        if (!this.playerData.talentLevels) {
+            this.playerData.talentLevels = {};
+        }
+        this.playerData.talentLevels[talentId] = level;
+        this.saveData();
+    }
+
+    /**
+     * 获取单位强化数据
+     * @param unitId 单位ID
+     * @returns 单位强化数据，如果不存在则返回null
+     */
+    public getUnitEnhancement(unitId: string): UnitEnhancement | null {
+        if (!this.playerData.unitEnhancements) {
+            this.playerData.unitEnhancements = {};
+        }
+        return this.playerData.unitEnhancements[unitId] || null;
+    }
+
+    /**
+     * 设置单位强化数据
+     * @param unitId 单位ID
+     * @param enhancement 强化数据
+     */
+    public setUnitEnhancement(unitId: string, enhancement: UnitEnhancement): void {
+        if (!this.playerData.unitEnhancements) {
+            this.playerData.unitEnhancements = {};
+        }
+        this.playerData.unitEnhancements[unitId] = enhancement;
+        this.saveData();
+    }
+
+    /**
      * 重置玩家数据（用于测试或重置功能）
      */
     public resetData(): void {
         this.playerData = {
             experience: 0,
-            talentPoints: 5
+            talentPoints: 0,
+            talentLevels: {},
+            unitEnhancements: {}
         };
         this.saveData();
     }

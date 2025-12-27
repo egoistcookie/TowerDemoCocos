@@ -3,6 +3,7 @@ import { UnitConfigManager } from './UnitConfigManager';
 import { GameState } from './GameManager';
 import { UnitInfo } from './UnitInfoPanel';
 import { Build } from './Build';
+import { TalentEffectManager } from './TalentEffectManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('HunterHall')
@@ -268,6 +269,14 @@ export class HunterHall extends Build {
             if (configManager.isConfigLoaded()) {
                 configManager.applyConfigToUnit('Hunter', hunterScript);
             }
+            
+            // 应用单位卡片强化
+            const talentEffectManager = TalentEffectManager.getInstance();
+            talentEffectManager.applyUnitEnhancements('Hunter', hunterScript);
+            
+            // 应用公共天赋增幅
+            talentEffectManager.applyTalentEffects(hunterScript);
+            
             hunterScript.buildCost = 0; // 由猎手大厅生产的Hunter建造成本为0
             
             // 让Hunter移动到目标位置（先设置移动目标，再显示单位介绍）

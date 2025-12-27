@@ -39,6 +39,11 @@ export class GameManager extends Component {
     @property(Label)
     expLabel: Label = null!; // 经验值标签（游戏结束面板）
 
+    @property(Button)
+    exitGameButton: Button = null!; // 退出游戏按钮（ReturnButton）
+    private uiManager: any = null!; // UIManager引用
+    private gameOverDialog: Node = null!; // 游戏结束弹窗容器
+
     @property(UnitIntroPopup)
     unitIntroPopup: UnitIntroPopup = null!;
 
@@ -206,6 +211,12 @@ export class GameManager extends Component {
         }).catch((err) => {
         });
         
+        // 查找UIManager
+        const uiManagerNode = find('UIManager') || find('UI/UIManager') || find('Canvas/UI/UIManager');
+        if (uiManagerNode) {
+            this.uiManager = uiManagerNode.getComponent('UIManager');
+        }
+        
         // 每次游戏开始时清空已出现单位类型集合
         this.appearedUnitTypes.clear();
         this.debugUnitTypes = [];
@@ -250,6 +261,16 @@ export class GameManager extends Component {
         }
         if (this.gameOverPanel) {
             this.gameOverPanel.active = false;
+            
+            // 隐藏退出游戏按钮
+            if (this.exitGameButton && this.exitGameButton.node) {
+                this.exitGameButton.node.active = false;
+            }
+            
+            // 隐藏弹窗
+            if (this.gameOverDialog) {
+                this.gameOverDialog.active = false;
+            }
         }
         
         // 自动创建单位介绍弹窗
@@ -534,35 +555,313 @@ export class GameManager extends Component {
             this.gameOverPanel.active = true;
         }
 
+        // 创建或获取游戏结束弹窗
+        this.createGameOverDialog();
+        
+        // 初始化退出游戏按钮（查找场景中的ReturnButton）
+        this.initExitGameButton();
+        
+        // 显示退出游戏按钮
+        if (this.exitGameButton && this.exitGameButton.node) {
+            this.exitGameButton.node.active = true;
+        }
+        
         if (this.gameOverLabel) {
             if (state === GameState.Victory) {
                 this.gameOverLabel.string = '胜利！';
             } else {
                 this.gameOverLabel.string = '失败！';
             }
-            // 调整"失败"标签位置，往上移（保持在重新开始和建造按钮之间）
-            const gameOverLabelNode = this.gameOverLabel.node;
-            if (gameOverLabelNode) {
-                const currentPos = gameOverLabelNode.position;
-                gameOverLabelNode.setPosition(currentPos.x, 80, currentPos.z); // 往上移到Y=80位置
-            }
+            // 调大字体
+            this.gameOverLabel.fontSize = 48;
         }
         
-        // 调整经验值标签位置，保持在失败标签下方
-        if (this.expLabel) {
-            const expLabelNode = this.expLabel.node;
-            if (expLabelNode) {
-                // 如果gameOverLabel存在，放在其下方；否则使用固定位置
-                if (this.gameOverLabel && this.gameOverLabel.node) {
-                    const gameOverLabelPos = this.gameOverLabel.node.position;
-                    expLabelNode.setPosition(gameOverLabelPos.x, gameOverLabelPos.y - 60, 0);
-                } else {
-                    expLabelNode.setPosition(0, 20, 0); // 往上移到Y=20位置
+        // 确保UI元素已移动到弹窗中
+        this.moveUIElementsToDialog();
+        
+        // 调整所有UI元素的位置
+        this.layoutGameOverUI();
+        
+        // 将弹窗置于最上层
+        this.setGameOverUIOnTop();
+        
+        // 显示弹窗
+        if (this.gameOverDialog) {
+            this.gameOverDialog.active = true;
+        }
+        
+        // 确保游戏状态已更新
+    }
+    
+    /**
+     * 初始化退出游戏按钮（查找场景中的ReturnButton节点）
+     */
+    private initExitGameButton() {
+        if (!this.gameOverPanel) {
+            return;
+        }
+        
+        // 如果已经通过@property设置了，直接使用
+        if (this.exitGameButton && this.exitGameButton.node && this.exitGameButton.node.isValid) {
+            // 绑定点击事件
+            this.exitGameButton.node.off(Button.EventType.CLICK);
+            this.exitGameButton.node.on(Button.EventType.CLICK, () => {
+                this.onExitGameClick();
+            }, this);
+            return;
+        }
+        
+        // 尝试查找ReturnButton节点（在RestartButton的父节点下，即与RestartButton同级）
+        const restartButtonNode = this.gameOverPanel.getChildByName('RestartButton');
+        if (restartButtonNode && restartButtonNode.parent) {
+            const returnButtonNode = restartButtonNode.parent.getChildByName('ReturnButton');
+            if (returnButtonNode) {
+                const button = returnButtonNode.getComponent(Button);
+                if (button) {
+                    this.exitGameButton = button;
+                    // 绑定点击事件
+                    button.node.off(Button.EventType.CLICK);
+                    button.node.on(Button.EventType.CLICK, () => {
+                        this.onExitGameClick();
+                    }, this);
+                    return;
                 }
             }
         }
         
-        // 确保游戏状态已更新
+        // 如果还是找不到，尝试直接在gameOverPanel下查找
+        const returnButtonNode = this.gameOverPanel.getChildByName('ReturnButton');
+        if (returnButtonNode) {
+            const button = returnButtonNode.getComponent(Button);
+            if (button) {
+                this.exitGameButton = button;
+                // 绑定点击事件
+                button.node.off(Button.EventType.CLICK);
+                button.node.on(Button.EventType.CLICK, () => {
+                    this.onExitGameClick();
+                }, this);
+            }
+        }
+    }
+    
+    /**
+     * 退出游戏按钮点击事件
+     */
+    private onExitGameClick() {
+        // 结算经验值
+        if (this.playerDataManager) {
+            this.settleGameExperience();
+        }
+        
+        // 直接调用UIManager的onExitGameClick方法（无需确认框）
+        if (this.uiManager && (this.uiManager as any).onExitGameClick) {
+            (this.uiManager as any).onExitGameClick();
+        } else {
+            // 如果找不到UIManager，尝试直接查找
+            const uiManagerNode = find('UIManager') || find('UI/UIManager') || find('Canvas/UI/UIManager');
+            if (uiManagerNode) {
+                const uiManager = uiManagerNode.getComponent('UIManager') as any;
+                if (uiManager && uiManager.onExitGameClick) {
+                    uiManager.onExitGameClick();
+                }
+            }
+        }
+    }
+    
+    /**
+     * 创建游戏结束弹窗容器
+     */
+    private createGameOverDialog() {
+        if (!this.gameOverPanel) {
+            return;
+        }
+        
+        // 如果弹窗已存在，直接返回
+        if (this.gameOverDialog && this.gameOverDialog.isValid) {
+            // 确保UI元素在弹窗中
+            this.moveUIElementsToDialog();
+            return;
+        }
+        
+        // 创建弹窗容器 - 直接放到Canvas的最上层，而不是gameOverPanel
+        const canvas = find('Canvas');
+        this.gameOverDialog = new Node('GameOverDialog');
+        if (canvas) {
+            this.gameOverDialog.setParent(canvas);
+            // 设置到Canvas的最上层
+            this.gameOverDialog.setSiblingIndex(canvas.children.length - 1);
+        } else {
+            // 如果找不到Canvas，回退到gameOverPanel
+            this.gameOverDialog.setParent(this.gameOverPanel);
+        }
+        this.gameOverDialog.setPosition(0, 100, 0); // 向上移300像素
+        
+        // 添加UITransform组件
+        const dialogTransform = this.gameOverDialog.addComponent(UITransform);
+        dialogTransform.setContentSize(500, 400); // 弹窗大小
+        
+        // 创建弹窗背景（使用Graphics绘制半透明背景）
+        const graphics = this.gameOverDialog.addComponent(Graphics);
+        graphics.fillColor = new Color(30, 30, 30, 230); // 深色半透明背景
+        const width = 500;
+        const height = 400;
+        const cornerRadius = 10; // 圆角半径
+        graphics.roundRect(-width / 2, -height / 2, width, height, cornerRadius);
+        graphics.fill();
+        
+        // 绘制边框
+        graphics.strokeColor = new Color(200, 200, 200, 255);
+        graphics.lineWidth = 2;
+        graphics.roundRect(-width / 2, -height / 2, width, height, cornerRadius);
+        graphics.stroke();
+        
+        // 将相关UI元素移动到弹窗中
+        this.moveUIElementsToDialog();
+    }
+    
+    /**
+     * 将UI元素移动到弹窗中
+     */
+    private moveUIElementsToDialog() {
+        if (!this.gameOverDialog || !this.gameOverPanel) {
+            return;
+        }
+        
+        // 移动结果标签到弹窗（如果不在弹窗中）
+        if (this.gameOverLabel && this.gameOverLabel.node && this.gameOverLabel.node.parent !== this.gameOverDialog) {
+            this.gameOverLabel.node.setParent(this.gameOverDialog);
+        }
+        
+        // 移动经验值标签到弹窗（如果不在弹窗中）
+        if (this.expLabel && this.expLabel.node && this.expLabel.node.parent !== this.gameOverDialog) {
+            this.expLabel.node.setParent(this.gameOverDialog);
+        }
+        
+        // 移动退出游戏按钮到弹窗（如果不在弹窗中）
+        if (this.exitGameButton && this.exitGameButton.node && this.exitGameButton.node.parent !== this.gameOverDialog) {
+            this.exitGameButton.node.setParent(this.gameOverDialog);
+        }
+        
+        // 移动重新开始按钮到弹窗（如果不在弹窗中）
+        let restartButtonNode = this.gameOverPanel.getChildByName('RestartButton');
+        if (!restartButtonNode && this.gameOverDialog) {
+            restartButtonNode = this.gameOverDialog.getChildByName('RestartButton');
+        }
+        if (restartButtonNode && restartButtonNode.parent !== this.gameOverDialog) {
+            restartButtonNode.setParent(this.gameOverDialog);
+        }
+    }
+    
+    /**
+     * 调整游戏结束UI的布局
+     * 布局顺序（从上到下）：结果标签 -> 经验值标签 -> 退出游戏按钮 -> 重新开始按钮
+     */
+    private layoutGameOverUI() {
+        if (!this.gameOverDialog) {
+            return;
+        }
+        
+        // 从弹窗中查找重新开始按钮
+        let restartButtonNode = this.gameOverDialog.getChildByName('RestartButton');
+        if (!restartButtonNode && this.gameOverPanel) {
+            restartButtonNode = this.gameOverPanel.getChildByName('RestartButton');
+        }
+        if (!restartButtonNode) {
+            return;
+        }
+        
+        // 所有元素相对于弹窗中心定位（弹窗中心为0,0）
+        const spacing = 25; // 元素间距
+        const buttonSpacing = 50; // 按钮与经验值标签之间的间距（增大）
+        let currentY = 120; // 从弹窗中心上方开始（结果标签位置）
+        
+        // 结果标签位置（最上方）
+        if (this.gameOverLabel && this.gameOverLabel.node) {
+            this.gameOverLabel.node.setPosition(0, currentY, 0);
+            const labelTransform = this.gameOverLabel.node.getComponent(UITransform);
+            const labelHeight = labelTransform ? labelTransform.height : 60;
+            currentY = currentY - labelHeight / 2 - spacing;
+        }
+        
+        // 经验值标签位置（在结果标签下方）
+        if (this.expLabel && this.expLabel.node) {
+            this.expLabel.fontSize = 28;
+            const expLabelTransform = this.expLabel.node.getComponent(UITransform);
+            const expLabelHeight = expLabelTransform ? expLabelTransform.height : 100;
+            this.expLabel.node.setPosition(0, currentY - expLabelHeight / 2, 0);
+            currentY = currentY - expLabelHeight / 2 - buttonSpacing; // 使用更大的间距
+        }
+        
+        // 退出游戏按钮位置（在经验值标签下方）
+        if (this.exitGameButton && this.exitGameButton.node) {
+            const exitButtonTransform = this.exitGameButton.node.getComponent(UITransform);
+            const exitButtonHeight = exitButtonTransform ? exitButtonTransform.height : 50;
+            this.exitGameButton.node.setPosition(0, currentY - exitButtonHeight / 2, 0);
+            currentY = currentY - exitButtonHeight / 2 - spacing;
+        }
+        
+        // 重新开始按钮位置（最下方）
+        const restartButtonTransform = restartButtonNode.getComponent(UITransform);
+        const buttonHeight = restartButtonTransform ? restartButtonTransform.height : 50;
+        restartButtonNode.setPosition(0, currentY - buttonHeight / 2, 0);
+    }
+    
+    /**
+     * 将游戏结束弹窗置于面板最上层
+     */
+    private setGameOverUIOnTop() {
+        if (!this.gameOverDialog) {
+            return;
+        }
+        
+        // 如果弹窗的父节点是Canvas，直接设置到Canvas的最上层
+        const canvas = find('Canvas');
+        if (canvas && this.gameOverDialog.parent === canvas) {
+            this.gameOverDialog.setSiblingIndex(canvas.children.length - 1);
+            return;
+        }
+        
+        // 否则，设置到gameOverPanel的最上层
+        if (!this.gameOverPanel) {
+            return;
+        }
+        
+        const children = this.gameOverPanel.children;
+        if (children.length === 0) {
+            return;
+        }
+        
+        const maxIndex = children.length - 1;
+        
+        // 将弹窗置于最上层
+        this.gameOverDialog.setSiblingIndex(maxIndex);
+        
+        // 确保弹窗内的元素也正确排序（从下到上）
+        const dialogChildren = this.gameOverDialog.children;
+        if (dialogChildren.length > 0) {
+            const dialogMaxIndex = dialogChildren.length - 1;
+            
+            // 重新开始按钮（最下方）
+            const restartButtonNode = this.gameOverDialog.getChildByName('RestartButton');
+            if (restartButtonNode) {
+                restartButtonNode.setSiblingIndex(0);
+            }
+            
+            // 退出游戏按钮
+            if (this.exitGameButton && this.exitGameButton.node) {
+                this.exitGameButton.node.setSiblingIndex(1);
+            }
+            
+            // 经验值标签
+            if (this.expLabel && this.expLabel.node) {
+                this.expLabel.node.setSiblingIndex(2);
+            }
+            
+            // 结果标签（最上方）
+            if (this.gameOverLabel && this.gameOverLabel.node) {
+                this.gameOverLabel.node.setSiblingIndex(dialogMaxIndex);
+            }
+        }
     }
     
     /**
@@ -587,11 +886,11 @@ export class GameManager extends Component {
         
         const label = expLabelNode.addComponent(Label);
         label.string = '';
-        label.fontSize = 20;
+        label.fontSize = 28; // 调大字体
         label.color = Color.WHITE;
         label.horizontalAlign = Label.HorizontalAlign.CENTER;
         label.verticalAlign = Label.VerticalAlign.TOP;
-        label.lineHeight = 24;
+        label.lineHeight = 32; // 相应调整行高
         
         const transform = expLabelNode.addComponent(UITransform);
         transform.setContentSize(400, 80); // 增加高度以容纳多行文本
@@ -716,6 +1015,7 @@ export class GameManager extends Component {
      * 开始游戏
      */
     startGame() {
+        console.log('startGame'+this.gameState.toString());
         if (this.gameState === GameState.Paused) {
             // 如果游戏已暂停，恢复游戏
             this.resumeGame();
@@ -1008,6 +1308,16 @@ export class GameManager extends Component {
         // 确保游戏结束面板隐藏
         if (this.gameOverPanel) {
             this.gameOverPanel.active = false;
+            
+            // 隐藏退出游戏按钮
+            if (this.exitGameButton && this.exitGameButton.node) {
+                this.exitGameButton.node.active = false;
+            }
+            
+            // 隐藏弹窗
+            if (this.gameOverDialog) {
+                this.gameOverDialog.active = false;
+            }
         }
         
         // 更新UI

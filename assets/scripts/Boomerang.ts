@@ -5,7 +5,7 @@ const { ccclass, property } = _decorator;
 @ccclass('Boomerang')
 export class Boomerang extends Component {
     @property
-    speed: number = 500; // 回旋镖飞行速度（像素/秒）
+    speed: number = 300; // 回旋镖飞行速度（像素/秒）
 
     @property
     arcHeight: number = 50; // 抛物线弧度高度（像素）

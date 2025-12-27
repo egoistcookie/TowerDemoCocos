@@ -6,6 +6,7 @@ import { UnitInfo } from './UnitInfoPanel';
 import { UnitConfigManager } from './UnitConfigManager';
 import { UnitType } from './WarAncientTree';
 import { Priest } from './Priest';
+import { TalentEffectManager } from './TalentEffectManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('Church')
@@ -241,6 +242,14 @@ export class Church extends Build {
                 // 排除 buildCost，由教堂脚本控制
                 (configManager as any).applyConfigToUnit?.('Priest', priestScript, ['buildCost']);
             }
+            
+            // 应用单位卡片强化
+            const talentEffectManager = TalentEffectManager.getInstance();
+            talentEffectManager.applyUnitEnhancements('Priest', priestScript);
+            
+            // 应用公共天赋增幅
+            talentEffectManager.applyTalentEffects(priestScript);
+            
             priestScript.buildCost = 0;
 
             if (this.gameManager) {

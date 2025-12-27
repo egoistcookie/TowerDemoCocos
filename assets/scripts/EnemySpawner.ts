@@ -22,8 +22,16 @@ interface WaveConfig {
     enemies: EnemyConfig[];
 }
 
-interface WaveConfigFile {
+interface LevelConfig {
+    id: number;
+    name: string;
+    description: string;
     waves: WaveConfig[];
+}
+
+interface WaveConfigFile {
+    waves?: WaveConfig[]; // 兼容旧格式
+    levels?: LevelConfig[]; // 新格式：关卡数组
 }
 
 @ccclass('EnemySpawner')
@@ -61,6 +69,8 @@ export class EnemySpawner extends Component {
     
     // 波次配置
     private waveConfig: WaveConfigFile | null = null;
+    private currentLevel: number = 1; // 当前关卡（1-5）
+    private currentLevelConfig: LevelConfig | null = null; // 当前关卡配置
     private currentWaveIndex: number = -1;
     private currentWave: WaveConfig | null = null;
     private isWaveActive: boolean = false;
@@ -185,8 +195,43 @@ export class EnemySpawner extends Component {
             
             this.waveConfig = jsonAsset.json as WaveConfigFile;
             
+            // 更新当前关卡配置
+            this.updateCurrentLevel();
+            
             // 不立即开始第一波，只在游戏开始后才开始波次系统
         });
+    }
+    
+    /**
+     * 设置当前关卡
+     */
+    setLevel(level: number) {
+        if (level >= 1 && level <= 5) {
+            this.currentLevel = level;
+            this.updateCurrentLevel();
+        }
+    }
+    
+    /**
+     * 更新当前关卡配置
+     */
+    private updateCurrentLevel() {
+        if (!this.waveConfig || !this.waveConfig.levels) {
+            this.currentLevelConfig = null;
+            return;
+        }
+        
+        // 查找对应ID的关卡配置
+        const levelConfig = this.waveConfig.levels.find(level => level.id === this.currentLevel);
+        if (levelConfig) {
+            this.currentLevelConfig = levelConfig;
+        } else {
+            // 如果找不到对应关卡，使用第一个关卡
+            this.currentLevelConfig = this.waveConfig.levels[0] || null;
+            if (this.currentLevelConfig) {
+                this.currentLevel = this.currentLevelConfig.id;
+            }
+        }
     }
 
     findGameManager() {
@@ -272,14 +317,15 @@ export class EnemySpawner extends Component {
         }
         
         // 检查是否所有波次都已完成
-        if (this.waveConfig === null || this.currentWaveIndex >= this.waveConfig.waves.length) {
+        if (this.currentLevelConfig === null || !this.currentLevelConfig.waves || 
+            this.currentWaveIndex >= this.currentLevelConfig.waves.length) {
             return;
         }
         
         // 如果currentWaveIndex为-1，初始化波次系统并立即显示第一波提示
         if (this.currentWaveIndex === -1) {
             this.currentWaveIndex = 0;
-            this.currentWave = this.waveConfig.waves[0];
+            this.currentWave = this.currentLevelConfig.waves[0];
             this.preWaveDelayTimer = 0;
             this.isWaveActive = true;
             
@@ -310,7 +356,7 @@ export class EnemySpawner extends Component {
         
         // 如果没有当前波次，尝试获取
         if (!this.currentWave && this.currentWaveIndex >= 0) {
-            this.currentWave = this.waveConfig.waves[this.currentWaveIndex];
+            this.currentWave = this.currentLevelConfig.waves[this.currentWaveIndex];
         }
         
         // 如果没有激活的波次，开始下一波的延迟
@@ -373,7 +419,8 @@ export class EnemySpawner extends Component {
         }
         
         // 检查是否还有波次可玩
-        if (this.currentWaveIndex >= this.waveConfig.waves.length - 1) {
+        if (!this.currentLevelConfig || !this.currentLevelConfig.waves || 
+            this.currentWaveIndex >= this.currentLevelConfig.waves.length - 1) {
             return;
         }
         
@@ -381,11 +428,11 @@ export class EnemySpawner extends Component {
         this.currentWaveIndex++;
         
         // 检查索引是否有效
-        if (this.currentWaveIndex < 0 || this.currentWaveIndex >= this.waveConfig.waves.length) {
+        if (this.currentWaveIndex < 0 || this.currentWaveIndex >= this.currentLevelConfig.waves.length) {
             return;
         }
         
-        this.currentWave = this.waveConfig.waves[this.currentWaveIndex];
+        this.currentWave = this.currentLevelConfig.waves[this.currentWaveIndex];
         
         // 重置波次状态
         this.isWaveActive = true;
@@ -439,7 +486,8 @@ export class EnemySpawner extends Component {
         }
         
         // 如果还有下一波，开始下一波的延迟
-        if (this.waveConfig && this.currentWaveIndex < this.waveConfig.waves.length - 1) {
+        if (this.currentLevelConfig && this.currentLevelConfig.waves && 
+            this.currentWaveIndex < this.currentLevelConfig.waves.length - 1) {
         } else {
         }
     }
@@ -468,7 +516,8 @@ export class EnemySpawner extends Component {
         this.preWaveDelayTimer = 0;
         
         // 如果还有下一波，开始下一波的延迟
-        if (this.waveConfig && this.currentWaveIndex < this.waveConfig.waves.length - 1) {
+        if (this.currentLevelConfig && this.currentLevelConfig.waves && 
+            this.currentWaveIndex < this.currentLevelConfig.waves.length - 1) {
         } else {
         }
     }
@@ -652,8 +701,8 @@ export class EnemySpawner extends Component {
         // 重新初始化敌人预制体映射表
         this.initEnemyPrefabMap();
         
-        // 重新加载配置并开始第一波
-        this.loadWaveConfig();
+        // 更新当前关卡配置
+        this.updateCurrentLevel();
     }
     
     /**
@@ -661,7 +710,7 @@ export class EnemySpawner extends Component {
      */
     private useLocalWaveConfig() {
         
-        // 创建本地波次配置
+        // 创建本地波次配置（兼容旧格式）
         this.waveConfig = {
             waves: [
                 {
@@ -679,6 +728,9 @@ export class EnemySpawner extends Component {
                 }
             ]
         };
+        
+        // 更新当前关卡配置
+        this.updateCurrentLevel();
         
         // 不立即开始第一波，只在游戏开始后才开始波次系统
     }

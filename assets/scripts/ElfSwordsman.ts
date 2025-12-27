@@ -7,7 +7,7 @@ const { ccclass, property } = _decorator;
 export class ElfSwordsman extends Role {
     // 重写父类属性，设置 ElfSwordsman 的默认值
     @property({ override: true })
-    maxHealth: number = 50;
+    maxHealth: number = 200;
 
     @property({ override: true })
     attackRange: number = 60; // 近战攻击范围

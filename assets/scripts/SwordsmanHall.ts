@@ -1,6 +1,7 @@
 import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Sprite, SpriteFrame, Color, Graphics, UITransform, Label, EventTouch, Camera } from 'cc';
 import { UnitConfigManager } from './UnitConfigManager';
 import { GameManager, GameState } from './GameManager';
+import { TalentEffectManager } from './TalentEffectManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
 import { UnitSelectionManager } from './UnitSelectionManager';
@@ -409,6 +410,14 @@ export class SwordsmanHall extends Component {
             if (configManager.isConfigLoaded()) {
                 configManager.applyConfigToUnit('ElfSwordsman', swordsmanScript);
             }
+            
+            // 应用单位卡片强化
+            const talentEffectManager = TalentEffectManager.getInstance();
+            talentEffectManager.applyUnitEnhancements('ElfSwordsman', swordsmanScript);
+            
+            // 应用公共天赋增幅
+            talentEffectManager.applyTalentEffects(swordsmanScript);
+            
             swordsmanScript.buildCost = 0; // 由剑士小屋生产的ElfSwordsman建造成本为0
             
             // 让ElfSwordsman移动到目标位置（先设置移动目标，再显示单位介绍）

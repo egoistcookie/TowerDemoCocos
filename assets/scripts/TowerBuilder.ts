@@ -7,8 +7,10 @@ import { WarAncientTree } from './WarAncientTree';
 import { HunterHall } from './HunterHall';
 import { StoneWall } from './StoneWall';
 import { SwordsmanHall } from './SwordsmanHall';
+import { TalentEffectManager } from './TalentEffectManager';
 import { Church } from './Church';
 import { UnitConfigManager } from './UnitConfigManager';
+import { PlayerDataManager } from './PlayerDataManager';
 import { BuildingGridPanel } from './BuildingGridPanel';
 import { StoneWallGridPanel } from './StoneWallGridPanel';
 const { ccclass, property } = _decorator;
@@ -1194,9 +1196,12 @@ export class TowerBuilder extends Component {
             this.findGridPanel();
         }
 
+        // 获取实际建造成本（考虑单位卡片强化减少）
+        const actualCost = this.getActualBuildCost('WarAncientTree', this.towerCost);
+        
         // 消耗金币
         if (this.gameManager) {
-            this.gameManager.spendGold(this.towerCost);
+            this.gameManager.spendGold(actualCost);
         }
 
         // 创建战争古树
@@ -1224,8 +1229,15 @@ export class TowerBuilder extends Component {
                 configManager.applyConfigToUnit('WarAncientTree', treeScript, ['buildCost']);
             }
             
-            // 然后设置建造成本（覆盖配置中的值）
-            treeScript.buildCost = this.towerCost;
+            // 应用单位卡片强化
+            const talentEffectManager = TalentEffectManager.getInstance();
+            talentEffectManager.applyUnitEnhancements('WarAncientTree', treeScript);
+            
+            // 应用公共天赋增幅
+            talentEffectManager.applyTalentEffects(treeScript);
+            
+            // 然后设置建造成本（使用实际成本）
+            treeScript.buildCost = actualCost;
             
             // 记录网格位置并标记占用
             if (this.gridPanel) {
@@ -1259,9 +1271,12 @@ export class TowerBuilder extends Component {
             return;
         }
 
+        // 获取实际建造成本（考虑单位卡片强化减少）
+        const actualCost = this.getActualBuildCost('HunterHall', this.hunterHallCost);
+        
         // 消耗金币
         if (this.gameManager) {
-            this.gameManager.spendGold(this.hunterHallCost);
+            this.gameManager.spendGold(actualCost);
         }
 
         // 创建猎手大厅
@@ -1283,7 +1298,20 @@ export class TowerBuilder extends Component {
         // 设置建造成本并检查首次出现
         const hallScript = hall.getComponent(HunterHall);
         if (hallScript) {
-            hallScript.buildCost = this.hunterHallCost;
+            // 先应用配置（如果有）
+            const configManager = UnitConfigManager.getInstance();
+            if (configManager.isConfigLoaded()) {
+                (configManager as any).applyConfigToUnit?.('HunterHall', hallScript, ['buildCost']);
+            }
+            
+            // 应用单位卡片强化
+            const talentEffectManager = TalentEffectManager.getInstance();
+            talentEffectManager.applyUnitEnhancements('HunterHall', hallScript);
+            
+            // 应用公共天赋增幅
+            talentEffectManager.applyTalentEffects(hallScript);
+            
+            hallScript.buildCost = actualCost;
             
             // 记录网格位置并标记占用
             if (this.gridPanel) {
@@ -1312,9 +1340,12 @@ export class TowerBuilder extends Component {
             return;
         }
 
+        // 获取实际建造成本（考虑单位卡片强化减少）
+        const actualCost = this.getActualBuildCost('StoneWall', this.stoneWallCost);
+        
         // 消耗金币
         if (this.gameManager && !skipCost) {
-            this.gameManager.spendGold(this.stoneWallCost);
+            this.gameManager.spendGold(actualCost);
         }
 
         // 创建石墙
@@ -1344,8 +1375,15 @@ export class TowerBuilder extends Component {
                 configManager.applyConfigToUnit('StoneWall', wallScript, ['buildCost']);
             }
             
-            // 然后设置建造成本（覆盖配置中的值）
-            wallScript.buildCost = this.stoneWallCost;
+            // 应用单位卡片强化
+            const talentEffectManager = TalentEffectManager.getInstance();
+            talentEffectManager.applyUnitEnhancements('StoneWall', wallScript);
+            
+            // 应用公共天赋增幅
+            talentEffectManager.applyTalentEffects(wallScript);
+            
+            // 然后设置建造成本（使用实际成本）
+            wallScript.buildCost = actualCost;
             
             // 石墙只能放置在石墙网格内，占用网格
             if (!this.stoneWallGridPanelComponent) {
@@ -1442,9 +1480,12 @@ export class TowerBuilder extends Component {
             return;
         }
 
+        // 获取实际建造成本（考虑单位卡片强化减少）
+        const actualCost = this.getActualBuildCost('SwordsmanHall', this.swordsmanHallCost);
+        
         // 消耗金币
         if (this.gameManager) {
-            this.gameManager.spendGold(this.swordsmanHallCost);
+            this.gameManager.spendGold(actualCost);
         }
 
         // 创建剑士小屋
@@ -1466,7 +1507,20 @@ export class TowerBuilder extends Component {
         // 设置建造成本并检查首次出现
         const hallScript = hall.getComponent(SwordsmanHall);
         if (hallScript) {
-            hallScript.buildCost = this.swordsmanHallCost;
+            // 先应用配置（如果有）
+            const configManager = UnitConfigManager.getInstance();
+            if (configManager.isConfigLoaded()) {
+                (configManager as any).applyConfigToUnit?.('SwordsmanHall', hallScript, ['buildCost']);
+            }
+            
+            // 应用单位卡片强化
+            const talentEffectManager = TalentEffectManager.getInstance();
+            talentEffectManager.applyUnitEnhancements('SwordsmanHall', hallScript);
+            
+            // 应用公共天赋增幅
+            talentEffectManager.applyTalentEffects(hallScript);
+            
+            hallScript.buildCost = actualCost;
             
             // 记录网格位置并标记占用
             if (this.gridPanel) {
@@ -1495,9 +1549,12 @@ export class TowerBuilder extends Component {
             return;
         }
 
+        // 获取实际建造成本（考虑单位卡片强化减少）
+        const actualCost = this.getActualBuildCost('Church', this.churchCost);
+        
         // 消耗金币
         if (this.gameManager) {
-            this.gameManager.spendGold(this.churchCost);
+            this.gameManager.spendGold(actualCost);
         }
 
         const church = instantiate(this.churchPrefab);
@@ -1522,9 +1579,16 @@ export class TowerBuilder extends Component {
             if (configManager.isConfigLoaded()) {
                 (configManager as any).applyConfigToUnit?.('Church', churchScript, ['buildCost']);
             }
+            
+            // 应用单位卡片强化
+            const talentEffectManager = TalentEffectManager.getInstance();
+            talentEffectManager.applyUnitEnhancements('Church', churchScript);
+            
+            // 应用公共天赋增幅
+            talentEffectManager.applyTalentEffects(churchScript);
 
-            // 然后设置建造成本
-            churchScript.buildCost = this.churchCost;
+            // 然后设置建造成本（使用实际成本）
+            churchScript.buildCost = actualCost;
 
             // 记录网格位置并标记占用
             if (this.gridPanel) {
@@ -2349,6 +2413,26 @@ export class TowerBuilder extends Component {
             }
         }
         
+    }
+    
+    /**
+     * 获取实际建造成本（考虑单位卡片强化减少）
+     * @param unitId 单位ID
+     * @param baseCost 基础建造成本
+     * @returns 实际建造成本
+     */
+    private getActualBuildCost(unitId: string, baseCost: number): number {
+        const playerDataManager = PlayerDataManager.getInstance();
+        const enhancement = playerDataManager.getUnitEnhancement(unitId);
+        
+        if (enhancement && enhancement.enhancements && enhancement.enhancements.buildCost !== undefined) {
+            // buildCost 是负数，表示减少的成本
+            const costReduction = enhancement.enhancements.buildCost;
+            const actualCost = Math.max(1, baseCost + costReduction); // 最少1金币
+            return actualCost;
+        }
+        
+        return baseCost;
     }
 }
 

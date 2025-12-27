@@ -1,6 +1,6 @@
 import { _decorator, Component, Node, Button, Label, find, director, UITransform, Color, Graphics, tween, Vec3, UIOpacity, Sprite, SpriteFrame, Prefab, instantiate, assetManager, director as directorModule, resources } from 'cc';
 import { UnitConfigManager } from './UnitConfigManager';
-import { PlayerDataManager } from './PlayerDataManager';
+import { PlayerDataManager, UnitEnhancement } from './PlayerDataManager';
 const { ccclass, property } = _decorator;
 
 // 天赋类型
@@ -39,7 +39,7 @@ export class TalentSystem extends Component {
     detailPanelBorderFrame: SpriteFrame = null!; // 详细信息展示框边框贴图（可在 Cocos Creator 编辑器中配置）
     
     private talents: Map<string, Talent> = new Map();
-    private talentPoints: number = 5; // 初始天赋点
+    private talentPoints: number = 0; // 初始天赋点
     private playerDataManager: PlayerDataManager = null!;
     private expLabelNode: Node = null!; // 经验值标签节点
     
@@ -127,7 +127,7 @@ export class TalentSystem extends Component {
             name: '攻击力提升',
             description: '提升所有友方单位的攻击力',
             type: TalentType.ATTACK_DAMAGE,
-            value: 10,
+            value: 1, // 每级+1%攻击力
             cost: 1,
             level: 0,
             maxLevel: 5
@@ -149,7 +149,7 @@ export class TalentSystem extends Component {
             name: '生命值提升',
             description: '提升所有友方单位的生命值',
             type: TalentType.HEALTH,
-            value: 20,
+            value: 2, // 每级+2%生命值
             cost: 1,
             level: 0,
             maxLevel: 5
@@ -166,16 +166,25 @@ export class TalentSystem extends Component {
             maxLevel: 5
         });
         
-        this.talents.set('armor', {
-            id: 'armor',
-            name: '护甲提升',
-            description: '提升所有友方单位的护甲',
-            type: TalentType.ARMOR,
-            value: 2,
-            cost: 1,
-            level: 0,
-            maxLevel: 5
-        });
+        // 从PlayerDataManager加载已保存的天赋等级
+        this.loadTalentLevels();
+    }
+    
+    /**
+     * 从PlayerDataManager加载已保存的天赋等级
+     */
+    loadTalentLevels() {
+        if (!this.playerDataManager) {
+            return;
+        }
+        
+        // 遍历所有天赋，从持久化数据中加载等级
+        for (const [talentId, talent] of this.talents.entries()) {
+            const savedLevel = this.playerDataManager.getTalentLevel(talentId);
+            if (savedLevel !== undefined && savedLevel >= 0 && savedLevel <= talent.maxLevel) {
+                talent.level = savedLevel;
+            }
+        }
     }
     
     createTalentPanelUI() {
@@ -208,7 +217,7 @@ export class TalentSystem extends Component {
         // 创建标签页容器
         const tabsNode = new Node('TalentTabs');
         tabsNode.setParent(this.talentPanel);
-        tabsNode.setPosition(0, 200, 0); // 调整标签页位置，适应更大的面板
+        tabsNode.setPosition(0, 300, 0); // 调整标签页位置，适应更大的面板（向上移动100）
         
         // 确保标签页容器处于激活状态
         tabsNode.active = true;
@@ -219,12 +228,18 @@ export class TalentSystem extends Component {
             { id: 'units', name: '单位详情' }
         ];
         
-        // 创建标签按钮
-        let xOffset = -100;
-        for (let tab of tabs) {
+        // 创建标签按钮（水平居中）
+        const buttonWidth = 150;
+        const buttonSpacing = 10;
+        const totalWidth = buttonWidth * tabs.length + buttonSpacing * (tabs.length - 1);
+        const startX = -totalWidth / 2 + buttonWidth / 2;
+        
+        for (let i = 0; i < tabs.length; i++) {
+            const tab = tabs[i];
             const tabButton = new Node(`Tab_${tab.id}`);
             tabButton.setParent(tabsNode);
-            tabButton.setPosition(xOffset, 0, 0);
+            const xPos = startX + i * (buttonWidth + buttonSpacing);
+            tabButton.setPosition(xPos, 0, 0);
             
             // 添加按钮背景
             const buttonBackground = tabButton.addComponent(Graphics);
@@ -274,8 +289,6 @@ export class TalentSystem extends Component {
                     this.showUnitCards();
                 }, this);
             }
-            
-            xOffset += 150;
         }
     }
     
@@ -546,15 +559,15 @@ export class TalentSystem extends Component {
         contentNode.setParent(detailPanel);
         contentNode.setPosition(0, 0, 0);
         
-        // 添加内容背景
+        // 添加内容背景（增加高度以容纳强化功能）
         const contentTransform = contentNode.addComponent(UITransform);
-        contentTransform.setContentSize(500, 400);
+        contentTransform.setContentSize(500, 650);
         contentTransform.setAnchorPoint(0.5, 0.5);
         
         // 创建详情面板背景
         const contentBackground = contentNode.addComponent(Graphics);
         contentBackground.fillColor = new Color(70, 70, 90, 255);
-        contentBackground.roundRect(-250, -200, 500, 400, 10);
+        contentBackground.roundRect(-250, -325, 500, 650, 10);
         contentBackground.fill();
         
         // 创建详情面板边框
@@ -566,7 +579,7 @@ export class TalentSystem extends Component {
             borderNode.active = true;
             
             const borderTransform = borderNode.addComponent(UITransform);
-            borderTransform.setContentSize(500, 400);
+            borderTransform.setContentSize(500, 650);
             borderTransform.setAnchorPoint(0.5, 0.5);
             
             const borderSprite = borderNode.addComponent(Sprite);
@@ -577,14 +590,14 @@ export class TalentSystem extends Component {
             // 使用 Graphics 绘制边框（降级方案）
             contentBackground.lineWidth = 2;
             contentBackground.strokeColor = new Color(120, 170, 220, 255);
-            contentBackground.roundRect(-250, -200, 500, 400, 10);
+            contentBackground.roundRect(-250, -325, 500, 650, 10);
             contentBackground.stroke();
         }
         
         // 创建关闭按钮
         const closeButton = new Node('CloseButton');
         closeButton.setParent(contentNode);
-        closeButton.setPosition(220, 170, 0);
+        closeButton.setPosition(220, 295, 0);
         
         // 添加关闭按钮背景
         const closeButtonBackground = closeButton.addComponent(Graphics);
@@ -656,39 +669,257 @@ export class TalentSystem extends Component {
         // 创建属性列表
         const statsNode = new Node('UnitStats');
         statsNode.setParent(contentNode);
-        statsNode.setPosition(0, -30, 0);
+        statsNode.setPosition(0, 50, 0);
         
-        // 从配置文件获取单位属性
-        const unitStats = this.getUnitStats(unit.id);
+        // 从配置文件获取单位基础属性
+        const configManager = UnitConfigManager.getInstance();
+        const unitConfig = configManager.getUnitConfig(unit.id);
+        const baseStats = unitConfig?.baseStats || {};
         
-        // 显示属性
+        // 获取单位卡片强化数据
+        const unitEnhancement = this.playerDataManager.getUnitEnhancement(unit.id);
+        const enhancements = unitEnhancement?.enhancements || {};
+        
+        // 获取公共天赋增幅值（不需要实例化，只需要计算值）
+        
+        // 属性映射：显示名称 -> 属性键名（角色单位不显示护甲）
+        const statMapping: Record<string, { key: string, format?: (val: number) => string }> = {
+            '生命值': { key: 'maxHealth', format: (v) => Math.floor(v).toString() },
+            '攻击力': { key: 'attackDamage', format: (v) => Math.floor(v).toString() },
+            '攻击速度': { key: 'attackInterval', format: (v) => v.toFixed(2) + '秒' },
+            '移动速度': { key: 'moveSpeed', format: (v) => Math.floor(v).toString() }
+        };
+        
+        // 显示属性（只显示基础属性）
         let yOffset = 0;
-        // 使用传统的for...in循环遍历对象属性，兼容更低版本的TypeScript
-        for (const statName in unitStats) {
-            // 只显示自己的属性，不显示继承的属性
-            if (unitStats.hasOwnProperty(statName)) {
-                const statValue = unitStats[statName];
-                // 跳过一些内部属性
-                if (statName !== 'node' && statName !== 'constructor' && typeof statValue !== 'function') {
-                    const statNode = new Node(`Stat_${statName}`);
+        for (const displayName in statMapping) {
+            if (statMapping.hasOwnProperty(displayName)) {
+                const mapping = statMapping[displayName];
+                const statKey = mapping.key;
+                const formatFunc = mapping.format || ((v) => v.toString());
+                
+                // 获取基础值
+                let baseValue = baseStats[statKey] || 0;
+                
+                // 只显示有值的属性
+                if (baseValue > 0) {
+                    const statNode = new Node(`Stat_${statKey}`);
                     statNode.setParent(statsNode);
                     statNode.setPosition(0, yOffset, 0);
                     
+                    // 构建显示文本（只显示基础值）
+                    const displayText = `${displayName}: ${formatFunc(baseValue)}`;
+                    
                     const statLabel = statNode.addComponent(Label);
-                    statLabel.string = `${statName}: ${statValue}`;
-                    statLabel.fontSize = 16;
-                    statLabel.color = Color.WHITE;
+                    statLabel.string = displayText;
+                    statLabel.fontSize = 14;
+                    statLabel.color = Color.WHITE; // 统一使用白色
                     statLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
                     
-                    yOffset -= 30;
+                    yOffset -= 25;
                 }
             }
         }
+        
+        // 创建强化功能区域
+        this.createEnhancementSection(unit, contentNode, detailPanel);
         
         // 创建关闭面板的事件（点击遮罩关闭）
         maskNode.on(Node.EventType.TOUCH_END, () => {
             detailPanel.destroy();
         }, this);
+    }
+    
+    /**
+     * 创建强化功能区域
+     */
+    createEnhancementSection(unit: any, contentNode: Node, detailPanel: Node) {
+        // 创建强化区域标题
+        const enhancementTitleNode = new Node('EnhancementTitle');
+        enhancementTitleNode.setParent(contentNode);
+        enhancementTitleNode.setPosition(0, -120, 0);
+        
+        const enhancementTitleLabel = enhancementTitleNode.addComponent(Label);
+        enhancementTitleLabel.string = '单位强化';
+        enhancementTitleLabel.fontSize = 20;
+        enhancementTitleLabel.color = new Color(255, 200, 100, 255);
+        enhancementTitleLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        
+        // 获取当前单位的强化数据
+        const currentEnhancement = this.playerDataManager.getUnitEnhancement(unit.id);
+        
+        // 显示当前强化状态
+        const enhancementStatusNode = new Node('EnhancementStatus');
+        enhancementStatusNode.setParent(contentNode);
+        enhancementStatusNode.setPosition(0, -150, 0);
+        
+        let statusText = '当前强化：';
+        if (currentEnhancement && currentEnhancement.enhancements) {
+            const enhancements = currentEnhancement.enhancements;
+            const parts: string[] = [];
+            if (enhancements.attackDamage) parts.push(`攻击力+${enhancements.attackDamage}`);
+            if (enhancements.attackSpeed) parts.push(`攻击速度+${enhancements.attackSpeed}%`);
+            if (enhancements.maxHealth) parts.push(`生命值+${enhancements.maxHealth}`);
+            if (enhancements.moveSpeed) parts.push(`移动速度+${enhancements.moveSpeed}`);
+            if (enhancements.buildCost) parts.push(`建造成本-${Math.abs(enhancements.buildCost)}`);
+            statusText += parts.length > 0 ? parts.join(', ') : '无';
+        } else {
+            statusText += '无';
+        }
+        
+        const statusLabel = enhancementStatusNode.addComponent(Label);
+        statusLabel.string = statusText;
+        statusLabel.fontSize = 14;
+        statusLabel.color = Color.WHITE;
+        statusLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        
+        // 创建可强化属性列表
+        const enhancementButtonsNode = new Node('EnhancementButtons');
+        enhancementButtonsNode.setParent(contentNode);
+        enhancementButtonsNode.setPosition(0, -200, 0);
+        
+        // 根据单位类型确定可强化的属性列表
+        let enhancementOptions: Array<{ key: string, name: string, value: number, unit: string }> = [];
+        
+        if (unit.unitType === 'BUILDING') {
+            // 建筑物：除弓箭手小屋外，只能强化生命值和建造成本
+            if (unit.id === 'WarAncientTree') {
+                // 弓箭手小屋：可以强化所有属性（除了护甲和移动速度）
+                enhancementOptions = [
+                    { key: 'attackDamage', name: '攻击力', value: 1, unit: '' },
+                    { key: 'attackSpeed', name: '攻击速度', value: 5, unit: '%' },
+                    { key: 'maxHealth', name: '生命值', value: 2, unit: '' }
+                ];
+            } else {
+                // 其他建筑物：只能强化生命值和建造成本
+                enhancementOptions = [
+                    { key: 'maxHealth', name: '生命值', value: 2, unit: '' },
+                    { key: 'buildCost', name: '建造成本', value: -1, unit: '金币' } // 负数表示减少
+                ];
+            }
+        } else {
+            // 角色单位：只显示基础属性（攻击力、攻击速度、生命值、移动速度），不显示护甲
+            enhancementOptions = [
+                { key: 'attackDamage', name: '攻击力', value: 1, unit: '' },
+                { key: 'attackSpeed', name: '攻击速度', value: 5, unit: '%' },
+                { key: 'maxHealth', name: '生命值', value: 2, unit: '' },
+                { key: 'moveSpeed', name: '移动速度', value: 5, unit: '' }
+            ];
+        }
+        
+        let buttonYOffset = 0;
+        for (const option of enhancementOptions) {
+            const buttonNode = new Node(`EnhanceButton_${option.key}`);
+            buttonNode.setParent(enhancementButtonsNode);
+            buttonNode.setPosition(0, buttonYOffset, 0);
+            
+            // 添加按钮背景
+            const buttonBackground = buttonNode.addComponent(Graphics);
+            buttonBackground.fillColor = new Color(80, 120, 160, 200);
+            buttonBackground.roundRect(-200, -15, 400, 30, 5);
+            buttonBackground.fill();
+            
+            buttonBackground.lineWidth = 1;
+            buttonBackground.strokeColor = new Color(100, 150, 200, 255);
+            buttonBackground.roundRect(-200, -15, 400, 30, 5);
+            buttonBackground.stroke();
+            
+            // 添加UITransform
+            const buttonTransform = buttonNode.addComponent(UITransform);
+            buttonTransform.setContentSize(400, 30);
+            buttonTransform.setAnchorPoint(0.5, 0.5);
+            
+            // 创建按钮文本
+            const buttonTextNode = new Node('ButtonText');
+            buttonTextNode.setParent(buttonNode);
+            buttonTextNode.setPosition(0, 0, 0);
+            
+            const buttonTextLabel = buttonTextNode.addComponent(Label);
+            const currentValue = currentEnhancement?.enhancements?.[option.key as keyof typeof currentEnhancement.enhancements] || 0;
+            
+            // 构建显示文本
+            let displayText = '';
+            if (option.key === 'buildCost') {
+                // 建造成本显示特殊格式
+                const currentCostReduction = currentValue || 0;
+                displayText = `${option.name} ${option.value > 0 ? '+' : ''}${option.value}${option.unit} (当前: ${currentCostReduction > 0 ? '+' : ''}${currentCostReduction}${option.unit}) [消耗1天赋点]`;
+            } else {
+                displayText = `${option.name} +${option.value}${option.unit} (当前: +${currentValue}${option.unit}) [消耗1天赋点]`;
+            }
+            
+            buttonTextLabel.string = displayText;
+            buttonTextLabel.fontSize = 14;
+            buttonTextLabel.color = Color.WHITE;
+            buttonTextLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            
+            // 添加Button组件
+            const buttonComp = buttonNode.addComponent(Button);
+            
+            // 绑定点击事件
+            buttonComp.node.on(Button.EventType.CLICK, () => {
+                this.enhanceUnitProperty(unit.id, option.key, option.value, detailPanel);
+            }, this);
+            
+            buttonYOffset -= 35;
+        }
+    }
+    
+    /**
+     * 强化单位属性
+     */
+    enhanceUnitProperty(unitId: string, propertyKey: string, value: number, detailPanel: Node) {
+        // 检查是否有足够的天赋点
+        if (!this.playerDataManager) {
+            return;
+        }
+        
+        const currentTalentPoints = this.playerDataManager.getTalentPoints();
+        if (currentTalentPoints < 1) {
+            // 显示提示：天赋点不足
+            return;
+        }
+        
+        // 获取当前强化数据
+        let enhancement = this.playerDataManager.getUnitEnhancement(unitId);
+        if (!enhancement) {
+            enhancement = {
+                unitId: unitId,
+                enhancements: {}
+            };
+        }
+        
+        // 更新强化值
+        const currentValue = enhancement.enhancements[propertyKey as keyof typeof enhancement.enhancements] || 0;
+        enhancement.enhancements[propertyKey as keyof typeof enhancement.enhancements] = (currentValue as number) + value;
+        
+        // 保存强化数据
+        this.playerDataManager.setUnitEnhancement(unitId, enhancement);
+        
+        // 消耗天赋点
+        this.playerDataManager.useTalentPoint(1);
+        this.talentPoints = this.playerDataManager.getTalentPoints();
+        
+        // 更新天赋点显示
+        this.updateTalentPointsDisplay();
+        
+        // 重新创建详情面板以显示更新后的数据
+        detailPanel.destroy();
+        // 重新获取unit对象（需要从单位列表中找到）
+        const unitTypes = [
+            { id: 'WarAncientTree', name: '弓箭手小屋', description: '能够训练弓箭手的建筑物，同时拥有远程攻击能力', icon: 'WarAncientTree', unitType: 'BUILDING' },
+            { id: 'HunterHall', name: '猎手大厅', description: '能够生产女猎手的建筑物', icon: 'HunterHall', unitType: 'BUILDING' },
+            { id: 'SwordsmanHall', name: '剑士小屋', description: '能够生产精灵剑士的建筑物，提供强大的近战攻击单位', icon: 'SwordsmanHall', unitType: 'BUILDING' },
+            { id: 'Church', name: '教堂', description: '训练牧师的建筑，可以持续生产为友军治疗的辅助单位', icon: 'Church', unitType: 'BUILDING' },
+            { id: 'StoneWall', name: '石墙', description: '坚固的石墙，可以阻挡敌人的进攻路线', icon: 'StoneWall', unitType: 'BUILDING' },
+            { id: 'Arrower', name: '弓箭手', description: '远程攻击单位，能够攻击远处的敌人，射速较快', icon: 'Arrower', unitType: 'CHARACTER' },
+            { id: 'Hunter', name: '女猎手', description: '远程攻击单位，投掷回旋镖攻击敌人，回旋镖可以反弹多次', icon: 'Hunter', unitType: 'CHARACTER' },
+            { id: 'ElfSwordsman', name: '精灵剑士', description: '近战攻击单位，使用剑进行近距离战斗', icon: 'ElfSwordsman', unitType: 'CHARACTER' },
+            { id: 'Priest', name: '牧师', description: '辅助单位，治疗附近受伤的友军', icon: 'Priest', unitType: 'CHARACTER' },
+        ];
+        const unit = unitTypes.find(u => u.id === unitId);
+        if (unit) {
+            this.showUnitDetail(unit);
+        }
     }
     
     getUnitTypeDisplayName(type: string): string {
@@ -1146,7 +1377,7 @@ export class TalentSystem extends Component {
         // 创建天赋点显示节点
         const talentPointsNode = new Node('TalentPointsDisplay');
         talentPointsNode.setParent(this.talentPanel);
-        talentPointsNode.setPosition(0, 150, 0); // 上移到页签按钮下方，避免被单位卡片遮挡
+        talentPointsNode.setPosition(0, 250, 0); // 上移到页签按钮下方，避免被单位卡片遮挡（向上移动100）
         
         // 添加UITransform
         const talentPointsTransform = talentPointsNode.addComponent(UITransform);
@@ -1177,14 +1408,58 @@ export class TalentSystem extends Component {
         if (this.playerDataManager) {
             const currentExp = this.playerDataManager.getExperience();
             const remainingExp = this.playerDataManager.getRemainingExpForNextLevel();
-            expLabel.string = `经验值: ${currentExp} (下一级还需 ${remainingExp})`;
+            const currentTalentPoints = this.playerDataManager.getTalentPoints();
+            // 计算总经验值：初始天赋点0，每100经验值转换为1天赋点
+            // 总经验值 = 当前经验值 + 当前天赋点数 * 100
+            const totalExp = currentExp + currentTalentPoints * 100;
+            expLabel.string = `经验值: ${currentExp} (下一级还需 ${remainingExp})\n总经验值: ${totalExp}`;
         } else {
-            expLabel.string = `经验值: 0 (下一级还需 100)`;
+            expLabel.string = `经验值: 0 (下一级还需 100)\n总经验值: 0`;
         }
-        expLabel.fontSize = 20;
+        expLabel.fontSize = 18;
         expLabel.color = Color.CYAN;
         expLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         expLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        
+        // 创建重置天赋点按钮（在经验值标签下方）
+        const resetButtonNode = new Node('ResetTalentButton');
+        resetButtonNode.setParent(talentPointsNode);
+        resetButtonNode.setPosition(0, -100, 0); // 在经验值标签下方
+        
+        const resetButtonTransform = resetButtonNode.addComponent(UITransform);
+        resetButtonTransform.setContentSize(150, 35);
+        resetButtonTransform.setAnchorPoint(0.5, 0.5);
+        
+        // 添加按钮背景
+        const resetButtonBackground = resetButtonNode.addComponent(Graphics);
+        resetButtonBackground.fillColor = new Color(150, 60, 60, 200);
+        resetButtonBackground.roundRect(-75, -17.5, 150, 35, 5);
+        resetButtonBackground.fill();
+        
+        resetButtonBackground.lineWidth = 2;
+        resetButtonBackground.strokeColor = new Color(200, 100, 100, 255);
+        resetButtonBackground.roundRect(-75, -17.5, 150, 35, 5);
+        resetButtonBackground.stroke();
+        
+        // 创建按钮文本
+        const resetButtonTextNode = new Node('ResetButtonText');
+        resetButtonTextNode.setParent(resetButtonNode);
+        resetButtonTextNode.setPosition(0, 0, 0);
+        
+        const resetButtonTextLabel = resetButtonTextNode.addComponent(Label);
+        resetButtonTextLabel.string = '重置天赋点';
+        resetButtonTextLabel.fontSize = 16;
+        resetButtonTextLabel.color = Color.WHITE;
+        resetButtonTextLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        resetButtonTextLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        
+        // 添加Button组件
+        const resetButtonComp = resetButtonNode.addComponent(Button);
+        
+        // 绑定点击事件
+        resetButtonComp.node.on(Button.EventType.CLICK, () => {
+            this.resetAllTalents();
+        }, this);
     }
     
     createTalentList() {
@@ -1236,13 +1511,21 @@ export class TalentSystem extends Component {
             descLabelComp.horizontalAlign = Label.HorizontalAlign.LEFT;
             descLabelComp.verticalAlign = Label.VerticalAlign.TOP;
             
-            // 创建天赋效果标签
+            // 创建天赋效果标签（显示当前增幅情况）
             const effectLabel = new Node('EffectLabel');
             effectLabel.setParent(talentItem);
             effectLabel.setPosition(150, 0, 0);
             
             const effectLabelComp = effectLabel.addComponent(Label);
-            effectLabelComp.string = `+${talent.value}%`;
+            // 计算当前增幅：每级增幅值 * 当前等级
+            const currentBonus = talent.value * talent.level;
+            if (talent.type === TalentType.ATTACK_DAMAGE || talent.type === TalentType.HEALTH) {
+                // 攻击力和生命值显示百分比
+                effectLabelComp.string = currentBonus > 0 ? `+${currentBonus}%` : `+${talent.value}%`;
+            } else {
+                // 其他显示数值
+                effectLabelComp.string = currentBonus > 0 ? `+${currentBonus}` : `+${talent.value}`;
+            }
             effectLabelComp.fontSize = 20;
             effectLabelComp.color = Color.GREEN;
             effectLabelComp.horizontalAlign = Label.HorizontalAlign.RIGHT;
@@ -1346,6 +1629,11 @@ export class TalentSystem extends Component {
         // 升级天赋
         talent.level++;
         
+        // 保存天赋等级到PlayerDataManager
+        if (this.playerDataManager) {
+            this.playerDataManager.setTalentLevel(talentId, talent.level);
+        }
+        
         // 应用天赋效果
         this.applyTalentEffect(talent);
         
@@ -1392,9 +1680,80 @@ export class TalentSystem extends Component {
             if (expLabel && this.playerDataManager) {
                 const currentExp = this.playerDataManager.getExperience();
                 const remainingExp = this.playerDataManager.getRemainingExpForNextLevel();
-                expLabel.string = `经验值: ${currentExp} (下一级还需 ${remainingExp})`;
+                const currentTalentPoints = this.playerDataManager.getTalentPoints();
+                const totalExp = currentExp + currentTalentPoints * 100; // 总经验值 = 当前经验值 + 当前天赋点数 * 100
+                expLabel.string = `经验值: ${currentExp} (下一级还需 ${remainingExp})\n总经验值: ${totalExp}`;
             }
         }
+    }
+    
+    /**
+     * 重置所有天赋点
+     */
+    resetAllTalents() {
+        if (!this.playerDataManager) {
+            return;
+        }
+        
+        // 计算已使用的天赋点总数
+        let totalUsedPoints = 0;
+        
+        // 计算天赋升级使用的天赋点
+        for (const talentId of this.talents.keys()) {
+            const talent = this.talents.get(talentId);
+            if (talent) {
+                const currentLevel = this.playerDataManager.getTalentLevel(talentId);
+                totalUsedPoints += currentLevel * talent.cost;
+            }
+        }
+        
+        // 计算单位强化使用的天赋点
+        const unitEnhancements = this.playerDataManager.getPlayerData().unitEnhancements || {};
+        for (const unitId in unitEnhancements) {
+            if (unitEnhancements.hasOwnProperty(unitId)) {
+                const enhancement = unitEnhancements[unitId];
+                if (enhancement && enhancement.enhancements) {
+                    // 每个强化项消耗1天赋点，计算强化项数量
+                    const enhancements = enhancement.enhancements;
+                    let enhancementCount = 0;
+                    if (enhancements.attackDamage) enhancementCount += Math.floor(enhancements.attackDamage / 1); // 1点攻击力=1天赋点
+                    if (enhancements.attackSpeed) enhancementCount += Math.floor(enhancements.attackSpeed / 5);
+                    if (enhancements.maxHealth) enhancementCount += Math.floor(enhancements.maxHealth / 2); // 2点生命值=1天赋点
+                    if (enhancements.moveSpeed) enhancementCount += Math.floor(enhancements.moveSpeed / 5);
+                    if (enhancements.buildCost) enhancementCount += Math.abs(Math.floor(enhancements.buildCost / 1));
+                    totalUsedPoints += enhancementCount;
+                }
+            }
+        }
+        
+        // 重置所有天赋等级
+        for (const talentId of this.talents.keys()) {
+            this.playerDataManager.setTalentLevel(talentId, 0);
+            const talent = this.talents.get(talentId);
+            if (talent) {
+                talent.level = 0;
+            }
+        }
+        
+        // 清空所有单位强化
+        const unitEnhancementsData = this.playerDataManager.getPlayerData().unitEnhancements || {};
+        for (const unitId in unitEnhancementsData) {
+            if (unitEnhancementsData.hasOwnProperty(unitId)) {
+                this.playerDataManager.setUnitEnhancement(unitId, {
+                    unitId: unitId,
+                    enhancements: {}
+                });
+            }
+        }
+        
+        // 恢复天赋点
+        const currentTalentPoints = this.playerDataManager.getTalentPoints();
+        this.playerDataManager.setTalentPoints(currentTalentPoints + totalUsedPoints);
+        this.talentPoints = this.playerDataManager.getTalentPoints();
+        
+        // 更新显示
+        this.updateTalentPointsDisplay();
+        this.updateTalentPanel();
     }
     
     // 获取天赋效果值

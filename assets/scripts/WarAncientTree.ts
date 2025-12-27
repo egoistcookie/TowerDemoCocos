@@ -5,6 +5,7 @@ import { Arrower } from './Arrower';
 import { UnitInfo } from './UnitInfoPanel';
 import { UnitConfigManager } from './UnitConfigManager';
 import { Build } from './Build';
+import { TalentEffectManager } from './TalentEffectManager';
 const { ccclass, property } = _decorator;
 
 // 单位类型枚举
@@ -530,6 +531,13 @@ export class WarAncientTree extends Build {
             if (configManager.isConfigLoaded()) {
                 configManager.applyConfigToUnit('Arrower', towerScript, ['buildCost']);
             }
+            
+            // 应用单位卡片强化
+            const talentEffectManager = TalentEffectManager.getInstance();
+            talentEffectManager.applyUnitEnhancements('Arrower', towerScript);
+            
+            // 应用公共天赋增幅
+            talentEffectManager.applyTalentEffects(towerScript);
             
             // 然后设置建造成本（由战争古树生产的Arrower建造成本为0）
             towerScript.buildCost = 0;

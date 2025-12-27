@@ -24,8 +24,8 @@
     "baseStats": {
       "maxHealth": 50,
       "attackRange": 200,
-      "attackDamage": 10,
-      "attackInterval": 1.0,
+      "attackDamage": 8,
+      "attackInterval": 1.5,
       "buildCost": 5,
       "level": 1
     },
@@ -35,9 +35,9 @@
     },
     "displayStats": {
       "生命值": 50,
-      "攻击力": 10,
+      "攻击力": 8,
       "攻击范围": "200像素",
-      "攻击间隔": "1.0秒",
+      "攻击间隔": "1.5秒",
       "建造成本": "5金币"
     }
   },
@@ -128,7 +128,7 @@
   },
   "ElfSwordsman": {
     "baseStats": {
-      "maxHealth": 50,
+      "maxHealth": 200,
       "attackRange": 60,
       "attackDamage": 10,
       "attackInterval": 1.0,
@@ -140,7 +140,7 @@
       "description": "近战攻击单位，使用剑进行近距离战斗"
     },
     "displayStats": {
-      "生命值": 50,
+      "生命值": 200,
       "攻击力": 10,
       "攻击范围": "60像素",
       "攻击间隔": "1.0秒",

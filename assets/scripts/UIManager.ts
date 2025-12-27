@@ -51,8 +51,12 @@ export class UIManager extends Component {
     private stoneWallGridPanelNode: Node = null!;
     private startGameButtonNode: Node = null!;
     private backToHomeButtonNode: Node = null!;
+    private levelSelectLeftButton: Node = null!; // 向左选择关卡按钮
+    private levelSelectRightButton: Node = null!; // 向右选择关卡按钮
+    private currentLevelLabel: Label = null!; // 当前关卡显示标签
 
     private activePage: 'game' | 'talent' | 'settings' = 'game';
+    private currentLevel: number = 1; // 当前选择的关卡（1-5）
 
     start() {
         // 查找游戏管理器
@@ -165,10 +169,100 @@ export class UIManager extends Component {
         // 移除单独的面板背景，使用底部选区容器的统一背景
         // 这样可以确保面板和底部按钮容器之间没有空白区域
         
-        // 创建开始游戏按钮 - 居中显示在游戏主体面板
+        // 1. 创建关卡选择区域（上方）
+        const levelSelectArea = new Node('LevelSelectArea');
+        levelSelectArea.setParent(gameMainPanel);
+        levelSelectArea.setPosition(0, 80, 0);
+        const levelSelectAreaTransform = levelSelectArea.addComponent(UITransform);
+        levelSelectAreaTransform.setContentSize(400, 80);
+        levelSelectAreaTransform.setAnchorPoint(0.5, 0.5);
+        
+        // 创建关卡显示标签（中间）
+        const levelDisplayLabel = new Node('LevelDisplayLabel');
+        levelDisplayLabel.setParent(levelSelectArea);
+        levelDisplayLabel.setPosition(0, 0, 0);
+        const levelDisplayLabelTransform = levelDisplayLabel.addComponent(UITransform);
+        levelDisplayLabelTransform.setContentSize(200, 60);
+        levelDisplayLabelTransform.setAnchorPoint(0.5, 0.5);
+        const levelDisplayLabelComp = levelDisplayLabel.addComponent(Label);
+        this.currentLevelLabel = levelDisplayLabelComp; // 保存引用用于更新关卡显示
+        this.updateStartButtonText();
+        levelDisplayLabelComp.fontSize = 28;
+        levelDisplayLabelComp.color = Color.WHITE;
+        levelDisplayLabelComp.horizontalAlign = Label.HorizontalAlign.CENTER;
+        levelDisplayLabelComp.verticalAlign = Label.VerticalAlign.CENTER;
+        levelDisplayLabelComp.lineHeight = 60;
+        
+        // 创建关卡选择按钮（向左箭头）
+        const leftArrowButton = new Node('LevelSelectLeftButton');
+        leftArrowButton.setParent(levelSelectArea);
+        leftArrowButton.setPosition(-150, 0, 0);
+        const leftArrowTransform = leftArrowButton.addComponent(UITransform);
+        leftArrowTransform.setContentSize(60, 60);
+        leftArrowTransform.setAnchorPoint(0.5, 0.5);
+        
+        const leftArrowButtonComp = leftArrowButton.addComponent(Button);
+        leftArrowButtonComp.node.on(Button.EventType.CLICK, () => {
+            this.selectPreviousLevel();
+        }, this);
+        
+        this.levelSelectLeftButton = leftArrowButton;
+        
+        const rightArrowGraphics = leftArrowButton.addComponent(Graphics);
+        rightArrowGraphics.fillColor = new Color(100, 100, 100, 255);
+        rightArrowGraphics.circle(0, 0, 30);
+        rightArrowGraphics.fill();
+        rightArrowGraphics.strokeColor = new Color(255, 255, 255, 255);
+        rightArrowGraphics.lineWidth = 2;
+        rightArrowGraphics.circle(0, 0, 30);
+        rightArrowGraphics.stroke();
+        
+        // 绘制向右箭头
+        rightArrowGraphics.strokeColor = new Color(255, 255, 255, 255);
+        rightArrowGraphics.lineWidth = 4;
+        rightArrowGraphics.moveTo(-10, 0);
+        rightArrowGraphics.lineTo(10, -15);
+        rightArrowGraphics.moveTo(-10, 0);
+        rightArrowGraphics.lineTo(10, 15);
+        rightArrowGraphics.stroke();
+        
+        // 创建关卡选择按钮（向右箭头）
+        const rightArrowButton = new Node('LevelSelectRightButton');
+        rightArrowButton.setParent(levelSelectArea);
+        rightArrowButton.setPosition(150, 0, 0);
+        const rightArrowTransform = rightArrowButton.addComponent(UITransform);
+        rightArrowTransform.setContentSize(60, 60);
+        rightArrowTransform.setAnchorPoint(0.5, 0.5);
+        
+        const leftArrowGraphics = rightArrowButton.addComponent(Graphics);
+        leftArrowGraphics.fillColor = new Color(100, 100, 100, 255);
+        leftArrowGraphics.circle(0, 0, 30);
+        leftArrowGraphics.fill();
+        leftArrowGraphics.strokeColor = new Color(255, 255, 255, 255);
+        leftArrowGraphics.lineWidth = 2;
+        leftArrowGraphics.circle(0, 0, 30);
+        leftArrowGraphics.stroke();
+        
+        // 绘制向左箭头
+        leftArrowGraphics.strokeColor = new Color(255, 255, 255, 255);
+        leftArrowGraphics.lineWidth = 4;
+        leftArrowGraphics.moveTo(10, 0);
+        leftArrowGraphics.lineTo(-10, -15);
+        leftArrowGraphics.moveTo(10, 0);
+        leftArrowGraphics.lineTo(-10, 15);
+        leftArrowGraphics.stroke();
+        
+        const rightArrowButtonComp = rightArrowButton.addComponent(Button);
+        rightArrowButtonComp.node.on(Button.EventType.CLICK, () => {
+            this.selectNextLevel();
+        }, this);
+        
+        this.levelSelectRightButton = rightArrowButton;
+        
+        // 2. 创建开始游戏按钮（下方）
         const startButton = new Node('StartGameButton');
         startButton.setParent(gameMainPanel);
-        startButton.setPosition(0, 0, 0);
+        startButton.setPosition(0, -80, 0);
         
         // 确保按钮可见
         startButton.active = true;
@@ -349,7 +443,7 @@ export class UIManager extends Component {
         settingsList.setPosition(0, 0, 0);
         
         // 设置项配置
-        const settingNames = ['背景音乐', '音效', '语音', '振动'];
+        const settingNames = ['背景音乐', '音效', '振动'];
         
         // 计算设置项的最佳位置（往下移，避免被顶部遮挡）
         const settingItemHeight = 90;
@@ -512,7 +606,13 @@ export class UIManager extends Component {
             } else {
             }
             
-            // 3. 调用GameManager的startGame方法（递归查找以防节点命名/层级变化）
+            // 3. 设置当前关卡到EnemySpawner
+            const enemySpawner = this.findComponentInScene('EnemySpawner') as any;
+            if (enemySpawner && enemySpawner.setLevel) {
+                enemySpawner.setLevel(this.currentLevel);
+            }
+            
+            // 4. 调用GameManager的startGame方法（递归查找以防节点命名/层级变化）
             const gmComp = this.findComponentInScene('GameManager') as any;
             if (gmComp && gmComp.startGame) {
                 gmComp.startGame();
@@ -932,7 +1032,151 @@ export class UIManager extends Component {
         this.findGameManager();
         
         if (this.gameManager) {
-            this.gameManager.restartGame();
+            // 先结算经验值
+            this.gameManager.settleGameExperience();
+            
+            // 清理所有敌人和防御塔
+            this.gameManager.cleanupAllUnitsForEndGame();
+            
+            // 回到主界面（隐藏游戏相关UI，显示底部三页签）
+            let bottomSelectionNode = find('Canvas/BottomSelection');
+            if (!bottomSelectionNode) {
+                this.createBottomSelectionUI();
+                bottomSelectionNode = find('Canvas/BottomSelection');
+            }
+            
+            if (bottomSelectionNode) {
+                bottomSelectionNode.active = true;
+                
+                // 确保切换到游戏主体面板
+                const gamePanel = bottomSelectionNode.getChildByName('GameMainPanel');
+                const talentPanel = bottomSelectionNode.getChildByName('TalentPanel');
+                const settingsPanel = bottomSelectionNode.getChildByName('SettingsPanel');
+                
+                if (gamePanel) {
+                    gamePanel.active = true;
+                    gamePanel.setSiblingIndex(bottomSelectionNode.children.length - 2);
+                }
+                if (talentPanel) {
+                    talentPanel.active = false;
+                }
+                if (settingsPanel) {
+                    settingsPanel.active = false;
+                }
+            }
+            
+            // 隐藏游戏结束面板
+            if (this.gameManager.gameOverPanel) {
+                this.gameManager.gameOverPanel.active = false;
+            }
+            
+            // 隐藏所有游戏元素
+            const gameNodes = [
+                'Canvas/Crystal',
+                'Enemies',
+                'Towers',
+                'WarAncientTrees'
+            ];
+            
+            for (const nodePath of gameNodes) {
+                const node = find(nodePath);
+                if (node) {
+                    node.active = false;
+                }
+            }
+            
+            // 延迟一小段时间后自动开始游戏
+            this.scheduleOnce(() => {
+                // 直接执行开始游戏的逻辑
+                // 1. 重置游戏状态为Ready（确保状态正确）
+                if (this.gameManager) {
+                    // 使用类型断言访问gameState属性
+                    const gm = this.gameManager as any;
+                    if (gm.gameState !== undefined) {
+                        // GameState.Ready = 0
+                        gm.gameState = 0;
+                    }
+                    
+                    // 重置游戏时间
+                    if (gm.gameTime !== undefined) {
+                        gm.gameTime = 600; // 10分钟
+                    }
+                    
+                    // 重置金币
+                    if (gm.gold !== undefined) {
+                        gm.gold = 10;
+                    }
+                    
+                    // 重置人口
+                    if (gm.population !== undefined) {
+                        gm.population = 0;
+                    }
+                    if (gm.maxPopulation !== undefined) {
+                        gm.maxPopulation = 10;
+                    }
+                    
+                    // 重置本局经验值
+                    if (gm.currentGameExp !== undefined) {
+                        gm.currentGameExp = 0;
+                    }
+                    
+                    // 重置水晶血量
+                    if (gm.crystalScript) {
+                        const crystal = gm.crystalScript as any;
+                        if (crystal.currentHealth !== undefined && crystal.maxHealth !== undefined) {
+                            crystal.currentHealth = crystal.maxHealth;
+                        }
+                    }
+                    
+                    // 重置敌人波次系统
+                    const enemySpawner = this.findComponentInScene('EnemySpawner') as any;
+                    if (enemySpawner && enemySpawner.reset) {
+                        enemySpawner.reset();
+                    }
+                    
+                    // 更新UI
+                    if (gm.updateUI) {
+                        gm.updateUI();
+                    }
+                }
+                
+                // 2. 隐藏底部三页签
+                if (bottomSelectionNode) {
+                    bottomSelectionNode.active = false;
+                }
+                
+                // 3. 强制显示水晶节点
+                const crystal = find('Canvas/Crystal');
+                if (crystal) {
+                    // 确保水晶节点及其所有父节点都处于激活状态
+                    let current = crystal;
+                    while (current) {
+                        if (!current.active) {
+                            current.active = true;
+                        }
+                        current = current.parent;
+                    }
+                    // 直接设置水晶节点为激活状态
+                    crystal.active = true;
+                }
+                
+                // 4. 设置当前关卡到EnemySpawner
+                const enemySpawner = this.findComponentInScene('EnemySpawner') as any;
+                if (enemySpawner && enemySpawner.setLevel) {
+                    enemySpawner.setLevel(this.currentLevel);
+                }
+                
+                // 5. 调用GameManager的startGame方法
+                if (this.gameManager && this.gameManager.startGame) {
+                    this.gameManager.startGame();
+                } else {
+                    // 如果找不到，尝试递归查找
+                    const gmComp = this.findComponentInScene('GameManager') as any;
+                    if (gmComp && gmComp.startGame) {
+                        gmComp.startGame();
+                    }
+                }
+            }, 0.1); // 延迟0.1秒，确保UI切换完成
         } else {
             // 如果还是找不到，尝试直接重新加载场景
             const scene = director.getScene();
@@ -1201,74 +1445,115 @@ export class UIManager extends Component {
         }, this);
         
     }
+
+    /**
+     * 无需确认，直接退出游戏
+     */
+    onExitGameClick() {
+        // 1. 使用已有的gameManager属性，如果不存在则查找
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        
+        // 2. 在退出前结算经验值
+        if (this.gameManager) {
+            // 直接调用结算方法
+            this.gameManager.settleGameExperience();
+            this.gameManager.restartGame();
+        } else {
+        }
+        
+        // 2. 立即手动重置UI状态，确保游戏立即退出到首页
+        // 查找或创建底部三页签UI
+        let bottomSelectionNode = find('Canvas/BottomSelection');
+        if (!bottomSelectionNode) {
+            this.createBottomSelectionUI();
+            bottomSelectionNode = find('Canvas/BottomSelection');
+        }
+        
+        // 确保底部三页签显示
+        if (bottomSelectionNode) {
+            bottomSelectionNode.active = true;
+            
+            // 确保切换到游戏主体面板
+            const gamePanel = bottomSelectionNode.getChildByName('GameMainPanel');
+            const talentPanel = bottomSelectionNode.getChildByName('TalentPanel');
+            const settingsPanel = bottomSelectionNode.getChildByName('SettingsPanel');
+            
+            if (gamePanel) {
+                gamePanel.active = true;
+                gamePanel.setSiblingIndex(bottomSelectionNode.children.length - 2);
+            }
+            if (talentPanel) {
+                talentPanel.active = false;
+            }
+            if (settingsPanel) {
+                settingsPanel.active = false;
+            }
+        }
+        
+        // 3. 隐藏所有游戏元素
+        const gameNodes = [
+            'Canvas/Crystal',
+            'Enemies',
+            'Towers',
+            'WarAncientTrees'
+        ];
+        
+        for (const nodePath of gameNodes) {
+            const node = find(nodePath);
+            if (node) {
+                node.active = false;
+            }
+        }
+    }
+    
+    /**
+     * 选择上一个关卡
+     */
+    selectPreviousLevel() {
+        if (this.currentLevel > 1) {
+            this.currentLevel--;
+            this.updateStartButtonText();
+        }
+    }
+    
+    /**
+     * 选择下一个关卡
+     */
+    selectNextLevel() {
+        if (this.currentLevel < 5) {
+            this.currentLevel++;
+            this.updateStartButtonText();
+        }
+    }
+    
+    /**
+     * 更新关卡选择区域的文本，显示当前选择的关卡
+     */
+    updateStartButtonText() {
+        if (this.currentLevelLabel) {
+            this.currentLevelLabel.string = `关卡 ${this.currentLevel}`;
+        }
+    }
+    
+    /**
+     * 获取当前选择的关卡
+     */
+    getCurrentLevel(): number {
+        return this.currentLevel;
+    }
     
     /**
      * 返回按钮事件方法，从游戏主体页面返回到三页签首页
      */
     onBackToHome() {
-        
         // 显示确认框
         this.createConfirmDialog(
             '确定要退出游戏并返回首页吗？',
             () => {
                 // 确认退出
-                
-                // 1. 使用已有的gameManager属性，如果不存在则查找
-                if (!this.gameManager) {
-                    this.findGameManager();
-                }
-                
-                // 2. 在退出前结算经验值
-                if (this.gameManager) {
-                    // 直接调用结算方法
-                    this.gameManager.settleGameExperience();
-                    this.gameManager.restartGame();
-                } else {
-                }
-                
-                // 2. 立即手动重置UI状态，确保游戏立即退出到首页
-                // 查找或创建底部三页签UI
-                let bottomSelectionNode = find('Canvas/BottomSelection');
-                if (!bottomSelectionNode) {
-                    this.createBottomSelectionUI();
-                    bottomSelectionNode = find('Canvas/BottomSelection');
-                }
-                
-                // 确保底部三页签显示
-                if (bottomSelectionNode) {
-                    bottomSelectionNode.active = true;
-                    
-                    // 确保切换到游戏主体面板
-                    const gamePanel = bottomSelectionNode.getChildByName('GameMainPanel');
-                    const talentPanel = bottomSelectionNode.getChildByName('TalentPanel');
-                    const settingsPanel = bottomSelectionNode.getChildByName('SettingsPanel');
-                    
-                    if (gamePanel) {
-                        gamePanel.active = true;
-                        gamePanel.setSiblingIndex(bottomSelectionNode.children.length - 2);
-                    }
-                    if (talentPanel) {
-                        talentPanel.active = false;
-                    }
-                    if (settingsPanel) {
-                        settingsPanel.active = false;
-                    }
-                }
-                
-                // 3. 隐藏所有游戏元素
-                const gameNodes = [
-                    'Canvas/Crystal',
-                    'Enemies',
-                    'Towers',
-                    'WarAncientTrees'
-                ];
-                
-                for (const nodePath of gameNodes) {
-                    const node = find(nodePath);
-                    if (node) {
-                        node.active = false;
-                    }
-                }
+                this.onExitGameClick();
             },
             () => {
                 // 取消退出
