@@ -49,7 +49,7 @@ export class GameManager extends Component {
     unitIntroPopup: UnitIntroPopup = null!;
 
     private gameState: GameState = GameState.Ready;
-    private gameTime: number = 600; // 10分钟 = 600秒
+    private gameTime: number = 0; // 已防御时间（累积时间，从0开始）
     private crystalScript: Crystal = null!;
     private gold: number = 10; // 初始金币
     private population: number = 0; // 当前人口
@@ -497,12 +497,8 @@ export class GameManager extends Component {
             return;
         }
 
-        // 更新倒计时
-        this.gameTime -= deltaTime;
-        if (this.gameTime <= 0) {
-            this.gameTime = 0;
-            this.endGame(GameState.Victory);
-        }
+        // 更新已防御时间（累积时间）
+        this.gameTime += deltaTime;
 
         this.updateUI();
     }
@@ -513,12 +509,12 @@ export class GameManager extends Component {
             this.healthLabel.string = `水晶血量: ${Math.max(0, Math.floor(this.crystalScript.getHealth()))}`;
         }
 
-        // 更新倒计时显示
+        // 更新已防御时间显示
         if (this.timerLabel) {
             const minutes = Math.floor(this.gameTime / 60);
             const seconds = Math.floor(this.gameTime % 60);
             const secondsStr = seconds < 10 ? `0${seconds}` : `${seconds}`;
-            this.timerLabel.string = `时间: ${minutes}:${secondsStr}`;
+            this.timerLabel.string = `已防御: ${minutes}:${secondsStr}`;
         }
 
         // 更新金币显示
@@ -539,6 +535,7 @@ export class GameManager extends Component {
     }
 
     endGame(state: GameState) {
+        console.info(`[GameManager.endGame] 游戏结束，状态: ${state === GameState.Victory ? 'Victory' : state === GameState.Defeat ? 'Defeat' : 'Other'}`);
         this.gameState = state;
         
         // 游戏结束时，清理所有单位（敌人直接消失，塔停止移动）
@@ -616,9 +613,13 @@ export class GameManager extends Component {
         // 显示弹窗
         if (this.gameOverDialog) {
             this.gameOverDialog.active = true;
+            console.info('[GameManager.endGame] 游戏结束弹窗已显示');
+        } else {
+            console.warn('[GameManager.endGame] 游戏结束弹窗不存在！');
         }
         
         // 确保游戏状态已更新
+        console.info(`[GameManager.endGame] 游戏状态已更新为: ${this.gameState}`);
     }
     
     /**
@@ -772,15 +773,18 @@ export class GameManager extends Component {
      * 创建游戏结束弹窗容器
      */
     private createGameOverDialog() {
-        if (!this.gameOverPanel) {
-            return;
-        }
-        
         // 如果弹窗已存在，直接返回
         if (this.gameOverDialog && this.gameOverDialog.isValid) {
             // 确保UI元素在弹窗中
-            this.moveUIElementsToDialog();
+            if (this.gameOverPanel) {
+                this.moveUIElementsToDialog();
+            }
             return;
+        }
+        
+        // 如果gameOverPanel不存在，仍然创建弹窗，但需要创建必要的UI元素
+        if (!this.gameOverPanel) {
+            console.warn('[GameManager.createGameOverDialog] gameOverPanel不存在，但仍会创建弹窗');
         }
         
         // 创建弹窗容器 - 直接放到Canvas的最上层，而不是gameOverPanel
@@ -816,7 +820,47 @@ export class GameManager extends Component {
         graphics.stroke();
         
         // 将相关UI元素移动到弹窗中
-        this.moveUIElementsToDialog();
+        if (this.gameOverPanel) {
+            this.moveUIElementsToDialog();
+        } else {
+            // 如果gameOverPanel不存在，创建必要的UI元素
+            this.createGameOverUIElements();
+        }
+    }
+    
+    /**
+     * 创建游戏结束UI元素（当gameOverPanel不存在时）
+     */
+    private createGameOverUIElements() {
+        if (!this.gameOverDialog) {
+            return;
+        }
+        
+        // 创建结果标签（如果不存在）
+        if (!this.gameOverLabel) {
+            const labelNode = new Node('GameOverLabel');
+            labelNode.setParent(this.gameOverDialog);
+            labelNode.setPosition(0, 100, 0);
+            this.gameOverLabel = labelNode.addComponent(Label);
+            this.gameOverLabel.string = '胜利！';
+            this.gameOverLabel.fontSize = 48;
+            this.gameOverLabel.color = new Color(255, 255, 255, 255);
+            this.gameOverLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            this.gameOverLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        }
+        
+        // 创建经验值标签（如果不存在）
+        if (!this.expLabel) {
+            const expNode = new Node('ExpLabel');
+            expNode.setParent(this.gameOverDialog);
+            expNode.setPosition(0, 0, 0);
+            this.expLabel = expNode.addComponent(Label);
+            this.expLabel.string = '';
+            this.expLabel.fontSize = 18;
+            this.expLabel.color = new Color(200, 200, 200, 255);
+            this.expLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            this.expLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        }
     }
     
     /**
@@ -1379,7 +1423,7 @@ export class GameManager extends Component {
         
         // 重置游戏状态
         this.gameState = GameState.Ready;
-        this.gameTime = 600;
+        this.gameTime = 0;
         this.gold = 10;
         this.population = 0;
         this.maxPopulation = 10;

@@ -257,13 +257,22 @@ export class Church extends Build {
 
         this.producedPriests.push(priest);
 
-        const index = this.producedPriests.length - 1;
-        const dirX = index % 2 === 0 ? 1 : -1;
-        const targetPos = new Vec3(
-            spawnPos.x + dirX * this.moveAwayDistance,
-            spawnPos.y,
-            spawnPos.z
-        );
+        // 计算Priest的目标位置
+        // 如果有集结点，先移动到集结点；否则向左右两侧跑开
+        let targetPos: Vec3;
+        if (this.rallyPoint) {
+            // 有集结点，移动到集结点
+            targetPos = this.rallyPoint.clone();
+        } else {
+            // 没有集结点，根据已生产的Priest数量，分散到不同位置
+            const index = this.producedPriests.length - 1;
+            const dirX = index % 2 === 0 ? 1 : -1;
+            targetPos = new Vec3(
+                spawnPos.x + dirX * this.moveAwayDistance,
+                spawnPos.y,
+                spawnPos.z
+            );
+        }
 
         if (priestScript) {
             this.scheduleOnce(() => {
@@ -467,7 +476,9 @@ export class Church extends Build {
                 currentUnitCount: this.producedPriests.length,
                 maxUnitCount: this.maxPriestCount,
                 onUpgradeClick: () => this.onUpgradeClick(),
-                onSellClick: () => this.onSellClick()
+                onSellClick: () => this.onSellClick(),
+                onRallyPointClick: () => this.startSetRallyPoint(),
+                rallyPoint: this.rallyPoint
             };
             this.unitSelectionManager.selectUnit(this.node, info);
         }

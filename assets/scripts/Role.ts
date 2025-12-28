@@ -336,15 +336,11 @@ export class Role extends Component {
             const shouldFindByInterval = !this.hasFoundFirstTarget || this.targetFindTimer >= this.TARGET_FIND_INTERVAL;
             
             if (needFindTarget || shouldFindByInterval) {
-                console.info(`[Role.findTarget] 开始查找目标 - needFindTarget: ${needFindTarget}, shouldFindByInterval: ${shouldFindByInterval}, hasFoundFirstTarget: ${this.hasFoundFirstTarget}, targetFindTimer: ${this.targetFindTimer.toFixed(3)}`);
                 this.targetFindTimer = 0; // 重置计时器
                 this.findTarget();
                 // 如果找到了目标，标记为已找到第一个目标
                 if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
                     this.hasFoundFirstTarget = true;
-                    console.info(`[Role.findTarget] 找到目标: ${this.currentTarget.name}`);
-                } else {
-                    console.info(`[Role.findTarget] 未找到目标`);
                 }
             }
         }

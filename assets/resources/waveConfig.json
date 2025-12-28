@@ -4,7 +4,7 @@
       "id": 1,
       "name": "关卡一",
       "description": "新手试炼",
-  "waves": [
+  "waves": [ 
     {
       "id": 1,
       "name": "第一波",

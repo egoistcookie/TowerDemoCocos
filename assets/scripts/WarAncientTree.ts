@@ -538,18 +538,25 @@ export class WarAncientTree extends Build {
         // 添加到生产的Tower列表
         this.producedTowers.push(tower);
 
-        // 计算Tower的目标位置（向左右两侧跑开）
-        // 根据已生产的Tower数量，分散到不同位置
-        const towerIndex = this.producedTowers.length - 1;
-        // 左右分散：偶数索引向右，奇数索引向左
-        const directionX = (towerIndex % 2 === 0 ? 1 : -1);
-        
-        // 计算目标位置（只改变x坐标，y坐标不变）
-        const targetPos = new Vec3(
-            spawnPos.x + directionX * this.moveAwayDistance,
-            spawnPos.y, // y坐标保持不变
-            spawnPos.z
-        );
+        // 计算Tower的目标位置
+        // 如果有集结点，先移动到集结点；否则向左右两侧跑开
+        let targetPos: Vec3;
+        if (this.rallyPoint) {
+            // 有集结点，移动到集结点
+            targetPos = this.rallyPoint.clone();
+        } else {
+            // 没有集结点，根据已生产的Tower数量，分散到不同位置
+            const towerIndex = this.producedTowers.length - 1;
+            // 左右分散：偶数索引向右，奇数索引向左
+            const directionX = (towerIndex % 2 === 0 ? 1 : -1);
+            
+            // 计算目标位置（只改变x坐标，y坐标不变）
+            targetPos = new Vec3(
+                spawnPos.x + directionX * this.moveAwayDistance,
+                spawnPos.y, // y坐标保持不变
+                spawnPos.z
+            );
+        }
 
         // 让Tower移动到目标位置
         if (towerScript) {
@@ -823,7 +830,8 @@ export class WarAncientTree extends Build {
             collisionRadius: this.collisionRadius,
             attackRange: this.attackRange,
             currentUnitCount: this.producedTowers.length,
-            maxUnitCount: this.maxTowerCount
+            maxUnitCount: this.maxTowerCount,
+            rallyPoint: this.rallyPoint
         };
     }
 

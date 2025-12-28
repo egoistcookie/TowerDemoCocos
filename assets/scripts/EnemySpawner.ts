@@ -77,6 +77,9 @@ export class EnemySpawner extends Component {
     private isCountdownActive: boolean = false; // 倒计时是否激活
     private preWaveDelayTimer: number = 0;
     private isConfigLoaded: boolean = false; // 配置是否已加载完成
+    private isLastWaveCompleted: boolean = false; // 最后一波是否已完成刷新
+    private victoryCheckTimer: number = 0; // 胜利检查计时器
+    private readonly VICTORY_CHECK_INTERVAL: number = 0.5; // 每0.5秒检查一次胜利条件
     
     // 当前敌人配置
     private currentEnemyIndex: number = 0;
@@ -365,6 +368,20 @@ export class EnemySpawner extends Component {
 
         // 只有在游戏进行中时才处理波次
         this.updateWave(deltaTime);
+        
+        // 如果最后一波已完成刷新，检查胜利条件
+        if (this.isLastWaveCompleted && this.gameManager) {
+            this.victoryCheckTimer += deltaTime;
+            if (this.victoryCheckTimer >= this.VICTORY_CHECK_INTERVAL) {
+                this.victoryCheckTimer = 0;
+                if (this.checkVictoryCondition()) {
+                    console.info('[EnemySpawner] 胜利条件满足，调用endGame');
+                    this.gameManager.endGame(GameState.Victory);
+                    // 防止重复调用
+                    this.isLastWaveCompleted = false;
+                }
+            }
+        }
     }
     
     /**
@@ -469,6 +486,7 @@ export class EnemySpawner extends Component {
         if (this.currentEnemyConfig === null) {
             if (!this.getCurrentEnemyConfig()) {
                 // 所有敌人配置都已完成，结束当前波次
+                console.info(`[EnemySpawner.updateWave] 当前波次所有敌人配置已完成，调用endCurrentWave，currentWaveIndex: ${this.currentWaveIndex}`);
                 this.endCurrentWave();
                 return;
             }
@@ -549,7 +567,7 @@ export class EnemySpawner extends Component {
         this.currentEnemyConfig = null;
         
         // 检查是否是第5、10、15波完成，每隔5波出现一次弹窗
-        if (this.waveConfig && (this.currentWaveIndex + 1) % 5 === 0 && (this.currentWaveIndex + 1) < this.waveConfig.waves.length) {
+        if (this.waveConfig && this.waveConfig.waves && (this.currentWaveIndex + 1) % 5 === 0 && (this.currentWaveIndex + 1) < this.waveConfig.waves.length) {
             
             // 设置倒计时激活标志
             this.isCountdownActive = true;
@@ -578,7 +596,12 @@ export class EnemySpawner extends Component {
         // 如果还有下一波，开始下一波的延迟
         if (this.currentLevelConfig && this.currentLevelConfig.waves && 
             this.currentWaveIndex < this.currentLevelConfig.waves.length - 1) {
+            // 还有下一波，继续
+            console.info(`[EnemySpawner] 还有下一波，继续，currentWaveIndex: ${this.currentWaveIndex}, waves.length: ${this.currentLevelConfig?.waves?.length}`);
         } else {
+            // 这是最后一波，标记为已完成刷新
+            console.info(`[EnemySpawner] 最后一波已完成刷新，currentWaveIndex: ${this.currentWaveIndex}, waves.length: ${this.currentLevelConfig?.waves?.length}`);
+            this.isLastWaveCompleted = true;
         }
     }
     
@@ -774,6 +797,60 @@ export class EnemySpawner extends Component {
     }
     
     /**
+     * 检查胜利条件：场上是否还有存活的敌人
+     * @returns 如果所有敌人都被消灭，返回true
+     */
+    private checkVictoryCondition(): boolean {
+        const enemiesNode = find('Canvas/Enemies');
+        if (!enemiesNode || !enemiesNode.isValid) {
+            // 如果Enemies节点不存在，认为没有敌人
+            console.info('[EnemySpawner.checkVictoryCondition] Enemies节点不存在，返回true');
+            return true;
+        }
+        
+        const enemies = enemiesNode.children || [];
+        let aliveCount = 0;
+        
+        for (let i = 0; i < enemies.length; i++) {
+            const enemy = enemies[i];
+            if (!enemy || !enemy.isValid || !enemy.active) {
+                continue;
+            }
+            
+            // 检查敌人是否存活
+            const enemyScript = enemy.getComponent('Enemy') as any || 
+                               enemy.getComponent('OrcWarrior') as any || 
+                               enemy.getComponent('OrcWarlord') as any || 
+                               enemy.getComponent('TrollSpearman') as any;
+            
+            if (enemyScript) {
+                // 检查是否有isAlive方法
+                if (enemyScript.isAlive && typeof enemyScript.isAlive === 'function') {
+                    if (enemyScript.isAlive()) {
+                        aliveCount++;
+                    }
+                } else if (enemyScript.health !== undefined && enemyScript.health > 0) {
+                    aliveCount++;
+                } else if (enemyScript.currentHealth !== undefined && enemyScript.currentHealth > 0) {
+                    aliveCount++;
+                }
+            } else {
+                // 如果没有脚本，认为节点存在就是有敌人
+                aliveCount++;
+            }
+        }
+        
+        if (aliveCount > 0) {
+            console.info(`[EnemySpawner.checkVictoryCondition] 还有 ${aliveCount} 个存活的敌人`);
+            return false;
+        }
+        
+        // 所有敌人都被消灭
+        console.info('[EnemySpawner.checkVictoryCondition] 所有敌人都被消灭，返回true');
+        return true;
+    }
+    
+    /**
      * 重置波次系统
      */
     reset() {
@@ -787,6 +864,8 @@ export class EnemySpawner extends Component {
         this.currentWave = null;
         this.currentEnemyConfig = null;
         this.testEnemySpawned = false; // 重置测试模式标志
+        this.isLastWaveCompleted = false; // 重置最后一波完成标志
+        this.victoryCheckTimer = 0; // 重置胜利检查计时器
         
         // 重新初始化敌人预制体映射表
         this.initEnemyPrefabMap();

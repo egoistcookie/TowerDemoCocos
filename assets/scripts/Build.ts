@@ -67,6 +67,12 @@ export class Build extends Component {
     protected isMoving: boolean = false; // 是否正在移动
     protected moveStartPos: Vec3 = new Vec3(); // 移动起始位置
     protected gridPanel: BuildingGridPanel = null!; // 网格面板组件
+    
+    // 集结点相关
+    public rallyPoint: Vec3 | null = null; // 集结点位置
+    protected isSettingRallyPoint: boolean = false; // 是否正在设置集结点
+    protected rallyPointMarker: Node = null!; // 集结点标记节点（红色圆点）
+    protected rallyPointPreview: Node = null!; // 集结点预览节点（红色圆点虚影）
 
     protected start() {
         this.currentHealth = this.maxHealth;
@@ -242,6 +248,21 @@ export class Build extends Component {
                 canvas.off(Node.EventType.TOUCH_END, this.onMoveTouchEnd, this);
             }
         }
+        
+        // 清理集结点标记
+        if (this.rallyPointMarker) {
+            this.rallyPointMarker.destroy();
+            this.rallyPointMarker = null!;
+        }
+        if (this.rallyPointPreview) {
+            this.rallyPointPreview.destroy();
+            this.rallyPointPreview = null!;
+        }
+        
+        // 取消设置集结点（如果正在设置）
+        if (this.isSettingRallyPoint) {
+            this.cancelSetRallyPoint();
+        }
 
         // 播放爆炸特效
         if (this.explosionEffect) {
@@ -353,9 +374,16 @@ export class Build extends Component {
                 unitInfo.onSellClick = () => {
                     this.onSellClick();
                 };
+                unitInfo.onRallyPointClick = () => {
+                    this.startSetRallyPoint();
+                };
+                unitInfo.rallyPoint = this.rallyPoint;
                 this.unitSelectionManager.selectUnit(this.node, unitInfo);
             }
         }
+        
+        // 显示集结点标记
+        this.updateRallyPointMarker();
 
         // 点击其他地方关闭面板
         this.scheduleOnce(() => {
@@ -411,6 +439,11 @@ export class Build extends Component {
             if (this.unitSelectionManager.isUnitSelected(this.node)) {
                 this.unitSelectionManager.clearSelection();
             }
+        }
+        
+        // 隐藏集结点标记
+        if (this.rallyPointMarker) {
+            this.rallyPointMarker.active = false;
         }
     }
 
@@ -606,6 +639,235 @@ export class Build extends Component {
     /**
      * 查找网格面板
      */
+    /**
+     * 开始设置集结点
+     */
+    public startSetRallyPoint() {
+        this.isSettingRallyPoint = true;
+        
+        // 创建预览标记
+        this.createRallyPointPreview();
+        
+        // 监听全局点击和移动事件
+        const canvas = find('Canvas');
+        if (canvas) {
+            // 移除之前的监听器（如果有）
+            canvas.off(Node.EventType.TOUCH_END, this.onRallyPointTouchEnd, this);
+            canvas.off(Node.EventType.TOUCH_MOVE, this.onRallyPointTouchMove, this);
+            // 添加新的监听器
+            canvas.on(Node.EventType.TOUCH_END, this.onRallyPointTouchEnd, this);
+            canvas.on(Node.EventType.TOUCH_MOVE, this.onRallyPointTouchMove, this);
+        }
+    }
+    
+    /**
+     * 集结点设置触摸移动事件（显示预览）
+     */
+    protected onRallyPointTouchMove(event: EventTouch) {
+        if (!this.isSettingRallyPoint || !this.rallyPointPreview) {
+            return;
+        }
+        
+        // 获取触摸位置并转换为世界坐标
+        const touchLocation = event.getLocation();
+        const cameraNode = find('Canvas/Camera');
+        if (!cameraNode) {
+            return;
+        }
+        
+        const camera = cameraNode.getComponent(Camera);
+        if (!camera) {
+            return;
+        }
+        
+        const screenPos = new Vec3(touchLocation.x, touchLocation.y, 0);
+        const worldPos = new Vec3();
+        camera.screenToWorld(screenPos, worldPos);
+        worldPos.z = 0;
+        
+        // 更新预览位置
+        this.rallyPointPreview.setWorldPosition(worldPos);
+        this.rallyPointPreview.active = true;
+    }
+    
+    /**
+     * 集结点设置触摸结束事件
+     */
+    protected onRallyPointTouchEnd(event: EventTouch) {
+        if (!this.isSettingRallyPoint) {
+            return;
+        }
+        
+        // 检查是否点击在UI元素上
+        const targetNode = event.target as Node;
+        if (targetNode) {
+            const nodeName = targetNode.name.toLowerCase();
+            if (nodeName.includes('button') || 
+                nodeName.includes('panel') || 
+                nodeName.includes('label') ||
+                nodeName.includes('selection') ||
+                nodeName.includes('buildingitem')) {
+                // 点击在UI上，取消设置
+                this.cancelSetRallyPoint();
+                return;
+            }
+        }
+        
+        // 获取触摸位置并转换为世界坐标
+        const touchLocation = event.getLocation();
+        const cameraNode = find('Canvas/Camera');
+        if (!cameraNode) {
+            this.cancelSetRallyPoint();
+            return;
+        }
+        
+        const camera = cameraNode.getComponent(Camera);
+        if (!camera) {
+            this.cancelSetRallyPoint();
+            return;
+        }
+        
+        const screenPos = new Vec3(touchLocation.x, touchLocation.y, 0);
+        const worldPos = new Vec3();
+        camera.screenToWorld(screenPos, worldPos);
+        worldPos.z = 0;
+        
+        // 设置集结点
+        this.rallyPoint = worldPos.clone();
+        this.isSettingRallyPoint = false;
+        
+        // 移除事件监听
+        const canvas = find('Canvas');
+        if (canvas) {
+            canvas.off(Node.EventType.TOUCH_END, this.onRallyPointTouchEnd, this);
+            canvas.off(Node.EventType.TOUCH_MOVE, this.onRallyPointTouchMove, this);
+        }
+        
+        // 隐藏预览，显示实际标记
+        if (this.rallyPointPreview) {
+            this.rallyPointPreview.active = false;
+        }
+        this.updateRallyPointMarker();
+        
+        // 更新单位信息面板（如果有显示）
+        if (this.unitSelectionManager) {
+            const unitInfo = this.getUnitInfo();
+            if (unitInfo) {
+                unitInfo.rallyPoint = this.rallyPoint;
+                this.unitSelectionManager.updateUnitInfo(unitInfo);
+            }
+        }
+    }
+    
+    /**
+     * 取消设置集结点
+     */
+    protected cancelSetRallyPoint() {
+        this.isSettingRallyPoint = false;
+        const canvas = find('Canvas');
+        if (canvas) {
+            canvas.off(Node.EventType.TOUCH_END, this.onRallyPointTouchEnd, this);
+            canvas.off(Node.EventType.TOUCH_MOVE, this.onRallyPointTouchMove, this);
+        }
+        
+        // 隐藏预览
+        if (this.rallyPointPreview) {
+            this.rallyPointPreview.active = false;
+        }
+    }
+    
+    /**
+     * 创建集结点标记
+     */
+    protected createRallyPointMarker() {
+        if (this.rallyPointMarker) {
+            return;
+        }
+        
+        const canvas = find('Canvas');
+        if (!canvas) {
+            return;
+        }
+        
+        // 创建标记节点
+        this.rallyPointMarker = new Node('RallyPointMarker');
+        this.rallyPointMarker.setParent(canvas);
+        
+        // 添加UITransform
+        const uiTransform = this.rallyPointMarker.addComponent(UITransform);
+        uiTransform.setContentSize(20, 20);
+        
+        // 添加Graphics组件绘制红色圆点
+        const graphics = this.rallyPointMarker.addComponent(Graphics);
+        graphics.fillColor = new Color(255, 0, 0, 255); // 红色
+        graphics.circle(0, 0, 10); // 半径10的圆
+        graphics.fill();
+        graphics.strokeColor = new Color(255, 0, 0, 255);
+        graphics.lineWidth = 2;
+        graphics.circle(0, 0, 10);
+        graphics.stroke();
+        
+        // 初始隐藏
+        this.rallyPointMarker.active = false;
+    }
+    
+    /**
+     * 创建集结点预览标记
+     */
+    protected createRallyPointPreview() {
+        if (this.rallyPointPreview) {
+            this.rallyPointPreview.active = true;
+            return;
+        }
+        
+        const canvas = find('Canvas');
+        if (!canvas) {
+            return;
+        }
+        
+        // 创建预览节点
+        this.rallyPointPreview = new Node('RallyPointPreview');
+        this.rallyPointPreview.setParent(canvas);
+        
+        // 添加UITransform
+        const uiTransform = this.rallyPointPreview.addComponent(UITransform);
+        uiTransform.setContentSize(20, 20);
+        
+        // 添加Graphics组件绘制红色圆点虚影（半透明）
+        const graphics = this.rallyPointPreview.addComponent(Graphics);
+        graphics.fillColor = new Color(255, 0, 0, 150); // 红色半透明
+        graphics.circle(0, 0, 10); // 半径10的圆
+        graphics.fill();
+        graphics.strokeColor = new Color(255, 0, 0, 150);
+        graphics.lineWidth = 2;
+        graphics.circle(0, 0, 10);
+        graphics.stroke();
+        
+        // 初始隐藏
+        this.rallyPointPreview.active = false;
+    }
+    
+    /**
+     * 更新集结点标记显示
+     */
+    protected updateRallyPointMarker() {
+        // 创建标记（如果不存在）
+        this.createRallyPointMarker();
+        
+        if (!this.rallyPointMarker) {
+            return;
+        }
+        
+        if (this.rallyPoint) {
+            // 有集结点，显示标记
+            this.rallyPointMarker.setWorldPosition(this.rallyPoint);
+            this.rallyPointMarker.active = true;
+        } else {
+            // 没有集结点，隐藏标记
+            this.rallyPointMarker.active = false;
+        }
+    }
+    
     protected findGridPanel() {
         const gridPanelNode = find('BuildingGridPanel');
         if (gridPanelNode) {

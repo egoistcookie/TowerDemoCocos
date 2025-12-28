@@ -82,9 +82,6 @@ export class BuildingGridPanel extends Component {
         if (this.gridGraphics) {
             this.drawGrid();
         }
-
-        // 调试日志，确认面板开启
-        console.info('[BuildingGridPanel] show called, node.active=', this.node.active);
     }
 
     /**

@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, UITransform, Graphics, Color, Label, Sprite, SpriteFrame, find, EventTouch, Button } from 'cc';
+import { _decorator, Component, Node, UITransform, Graphics, Color, Label, Sprite, SpriteFrame, find, EventTouch, Button, Vec3 } from 'cc';
 const { ccclass, property } = _decorator;
 
 /**
@@ -27,8 +27,11 @@ export interface UnitInfo {
     // 按钮回调
     onUpgradeClick?: () => void; // 升级按钮点击回调
     onSellClick?: () => void; // 回收按钮点击回调
+    onRallyPointClick?: () => void; // 集结点设置按钮点击回调
     // 升级相关
     upgradeCost?: number; // 升级费用（用于显示）
+    // 集结点相关
+    rallyPoint?: Vec3 | null; // 集结点位置（用于显示）
 }
 
 @ccclass('UnitInfoPanel')
@@ -48,6 +51,7 @@ export class UnitInfoPanel extends Component {
     private healSpeedLabel: Label = null!; // 治疗速度标签（建筑物）
     private attackFrequencyLabel: Label = null!; // 攻击频率标签（防御单位）
     private moveSpeedLabel: Label = null!; // 移动速度标签（防御单位）
+    private rallyPointLabel: Label = null!; // 集结点标签（建筑物）
     private buttonGridNode: Node = null!; // 九宫格按钮区域节点
     private buttonNodes: Node[] = []; // 按钮节点数组（9个）
     private currentUnitInfo: UnitInfo | null = null!; // 当前单位信息
@@ -202,6 +206,12 @@ export class UnitInfoPanel extends Component {
         this.moveSpeedLabel.node.setParent(infoNode);
         this.moveSpeedLabel.node.setPosition(labelX, height / 2 - 200, 0);
         this.moveSpeedLabel.node.active = false;
+
+        // 集结点（建筑物）
+        this.rallyPointLabel = this.createLabel('RallyPoint', '集结点: 未设置', 18, new Color(200, 200, 200, 255));
+        this.rallyPointLabel.node.setParent(infoNode);
+        this.rallyPointLabel.node.setPosition(labelX, height / 2 - 260, 0);
+        this.rallyPointLabel.node.active = false;
 
         // 右侧：九宫格按钮区域（33%宽度）
         // 右侧区域范围：从 width/6 到 width/2，中心在 width/2 - areaWidth/2 = width/3
@@ -383,6 +393,17 @@ export class UnitInfoPanel extends Component {
             }
         }
 
+        // 更新集结点显示（建筑物）
+        if (this.rallyPointLabel) {
+            if (unitInfo.rallyPoint !== undefined && unitInfo.rallyPoint !== null) {
+                this.rallyPointLabel.string = `集结点: (${Math.floor(unitInfo.rallyPoint.x)}, ${Math.floor(unitInfo.rallyPoint.y)})`;
+                this.rallyPointLabel.node.active = true;
+            } else {
+                this.rallyPointLabel.string = '集结点: 未设置';
+                this.rallyPointLabel.node.active = true; // 即使未设置也显示
+            }
+        }
+
         // 确保按钮网格节点可见
         if (this.buttonGridNode) {
             this.buttonGridNode.active = true;
@@ -435,6 +456,41 @@ export class UnitInfoPanel extends Component {
             }
         }
 
+        // 设置集结点按钮（位置：左上角，索引0）
+        if (unitInfo.onRallyPointClick && this.buttonNodes[0]) {
+            const rallyButton = this.buttonNodes[0];
+            rallyButton.active = true;
+            
+            const labelNode = rallyButton.getChildByName('Label');
+            if (labelNode) {
+                labelNode.active = true;
+                const label = labelNode.getComponent(Label);
+                if (label) {
+                    label.string = '集结点';
+                    label.fontSize = 12;
+                }
+            }
+            
+            const graphics = rallyButton.getComponent(Graphics);
+            if (graphics) {
+                graphics.clear();
+                const buttonSize = rallyButton.getComponent(UITransform)!.width;
+                graphics.fillColor = new Color(60, 60, 60, 200);
+                graphics.rect(-buttonSize / 2, -buttonSize / 2, buttonSize, buttonSize);
+                graphics.fill();
+                graphics.strokeColor = new Color(150, 150, 150, 255);
+                graphics.lineWidth = 2;
+                graphics.rect(-buttonSize / 2, -buttonSize / 2, buttonSize, buttonSize);
+                graphics.stroke();
+            }
+            
+            rallyButton.on(Node.EventType.TOUCH_END, () => {
+                if (unitInfo.onRallyPointClick) {
+                    unitInfo.onRallyPointClick();
+                }
+            });
+        }
+        
         // 设置升级按钮（位置：右上角，索引2）
         if (unitInfo.onUpgradeClick && this.buttonNodes[2]) {
             const upgradeButton = this.buttonNodes[2];
