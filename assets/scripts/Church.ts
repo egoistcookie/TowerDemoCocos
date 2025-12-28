@@ -400,25 +400,13 @@ export class Church extends Build {
         }
     }
 
-    /**
-     * 建筑点击：沿用战争古树/猎手大厅的交互风格，进入移动/选中逻辑
-     */
-    protected onBuildingClick(event: EventTouch) {
-        // 简化版：如果已有选择面板则关闭，否则显示选择面板
-        event.propagationStopped = true;
-
-        if (this.selectionPanel && this.selectionPanel.isValid) {
-            this.hideSelectionPanel();
-            return;
-        }
-
-        this.showSelectionPanel();
-    }
+    // 移除重写的onBuildingClick方法，使用父类Build的onBuildingClick方法
+    // 父类方法支持长按拖动功能，与弓箭手小屋和猎手大厅保持一致
 
     /**
-     * 显示选择面板（拆除 / 升级 + 信息）
+     * 显示选择面板（重写父类方法，添加教堂特有的信息）
      */
-    showSelectionPanel() {
+    public showSelectionPanel() {
         const canvas = find('Canvas');
         if (!canvas) return;
 

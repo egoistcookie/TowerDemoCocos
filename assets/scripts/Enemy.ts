@@ -1154,7 +1154,16 @@ export class Enemy extends Component {
         // 如果找到目标，设置为当前目标
         // 但是，如果当前目标是石墙（网格最上层没有缺口时设置的），且新找到的目标不是石墙，不要替换
         if (nearestTarget && nearestTarget.isValid) {
-            const currentWallScript = this.currentTarget?.getComponent('StoneWall') as any;
+            // 检查当前目标是否有效，避免访问已销毁的节点
+            let currentWallScript: any = null;
+            if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
+                try {
+                    currentWallScript = this.currentTarget.getComponent('StoneWall') as any;
+                } catch (e) {
+                    // 如果获取组件失败，说明节点可能已被销毁，忽略错误
+                    console.warn('[Enemy.findTarget] Failed to get StoneWall component from currentTarget:', e);
+                }
+            }
             const isCurrentTargetGridTopLayerWall = currentWallScript && this.checkEnemyAboveGrid() && !this.topLayerGapTarget;
             const newTargetIsWall = nearestTarget.isValid ? nearestTarget.getComponent('StoneWall') !== null : false;
             

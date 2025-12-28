@@ -1659,6 +1659,7 @@ export class TowerBuilder extends Component {
             this.warAncientTreeContainer,
             this.hunterHallContainer,
             this.stoneWallContainer,
+            this.swordsmanHallContainer,
             this.churchContainer
         ];
 
@@ -1775,15 +1776,19 @@ export class TowerBuilder extends Component {
             return;
         }
 
-
-
         const hunterHall = building.getComponent(HunterHall);
-        const church = building.getComponent(Church);
         if (hunterHall && hunterHall.showSelectionPanel) {
             hunterHall.showSelectionPanel();
             return;
         }
 
+        const swordsmanHall = building.getComponent(SwordsmanHall);
+        if (swordsmanHall && swordsmanHall.showSelectionPanel) {
+            swordsmanHall.showSelectionPanel();
+            return;
+        }
+
+        const church = building.getComponent(Church);
         if (church && church.showSelectionPanel) {
             church.showSelectionPanel();
             return;

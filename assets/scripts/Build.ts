@@ -73,6 +73,8 @@ export class Build extends Component {
     protected isSettingRallyPoint: boolean = false; // 是否正在设置集结点
     protected rallyPointMarker: Node = null!; // 集结点标记节点（红色圆点）
     protected rallyPointPreview: Node = null!; // 集结点预览节点（红色圆点虚影）
+    protected rallyPointHideTimer: number = 0; // 集结点隐藏定时器
+    protected readonly RALLY_POINT_DISPLAY_DURATION: number = 2; // 集结点显示持续时间（秒）
 
     protected start() {
         this.currentHealth = this.maxHealth;
@@ -249,6 +251,9 @@ export class Build extends Component {
             }
         }
         
+        // 取消集结点隐藏定时器
+        this.unschedule(this.hideRallyPointMarker);
+        
         // 清理集结点标记
         if (this.rallyPointMarker) {
             this.rallyPointMarker.destroy();
@@ -382,8 +387,13 @@ export class Build extends Component {
             }
         }
         
-        // 显示集结点标记
-        this.updateRallyPointMarker();
+        // 显示集结点标记（点击建筑时显示，但不启动自动隐藏定时器）
+        if (this.rallyPoint) {
+            this.updateRallyPointMarker();
+            // 取消自动隐藏定时器（因为用户主动查看）
+            this.unschedule(this.hideRallyPointMarker);
+            this.rallyPointHideTimer = 0;
+        }
 
         // 点击其他地方关闭面板
         this.scheduleOnce(() => {
@@ -749,6 +759,12 @@ export class Build extends Component {
         }
         this.updateRallyPointMarker();
         
+        // 取消之前的定时器（如果存在）
+        this.unschedule(this.hideRallyPointMarker);
+        
+        // 启动2秒定时器，2秒后自动隐藏集结点标记
+        this.scheduleOnce(this.hideRallyPointMarker, this.RALLY_POINT_DISPLAY_DURATION);
+        
         // 更新单位信息面板（如果有显示）
         if (this.unitSelectionManager) {
             const unitInfo = this.getUnitInfo();
@@ -866,6 +882,16 @@ export class Build extends Component {
             // 没有集结点，隐藏标记
             this.rallyPointMarker.active = false;
         }
+    }
+    
+    /**
+     * 隐藏集结点标记（定时器回调）
+     */
+    protected hideRallyPointMarker() {
+        if (this.rallyPointMarker && this.rallyPointMarker.isValid) {
+            this.rallyPointMarker.active = false;
+        }
+        this.rallyPointHideTimer = 0;
     }
     
     protected findGridPanel() {
