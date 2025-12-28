@@ -531,24 +531,7 @@ export class SelectionManager extends Component {
         const maxY = Math.max(this.startPos.y, this.currentPos.y);
 
         // 查找所有防御单位
-        let towersNode = find('Towers');
-        // 如果直接查找失败，尝试递归查找
-        if (!towersNode) {
-            const findNodeRecursive = (node: Node, name: string): Node | null => {
-                if (node.name === name) {
-                    return node;
-                }
-                for (const child of node.children) {
-                    const found = findNodeRecursive(child, name);
-                    if (found) return found;
-                }
-                return null;
-            };
-            const scene = this.node.scene;
-            if (scene) {
-                towersNode = findNodeRecursive(scene, 'Towers');
-            }
-        }
+        const towersNode = find('Canvas/Towers');
         if (!towersNode) {
             return;
         }

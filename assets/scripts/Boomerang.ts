@@ -187,26 +187,8 @@ export class Boomerang extends Component {
         const nearbyEnemies: Node[] = [];
         const centerPos = centerNode.worldPosition;
 
-        // 查找Enemies容器，先尝试直接查找，再尝试递归查找
-        let enemiesNode = find('Enemies');
-        
-        if (!enemiesNode && this.node.scene) {
-            enemiesNode = this.findNodeRecursive(this.node.scene, 'Enemies');
-        }
-        
-        if (!enemiesNode) {
-            // 尝试从场景根节点查找
-            const scene = this.node.scene;
-            if (scene) {
-                // 遍历场景根节点的子节点
-                for (const child of scene.children) {
-                    if (child.name === 'Enemies') {
-                        enemiesNode = child;
-                        break;
-                    }
-                }
-            }
-        }
+        // 查找Enemies容器，使用直接路径
+        const enemiesNode = find('Canvas/Enemies');
         
         if (!enemiesNode) {
             return nearbyEnemies;
@@ -588,25 +570,8 @@ export class Boomerang extends Component {
      * @returns 是否命中尸体
      */
     checkForOrcWarlordCorpse(startPos: Vec3, endPos: Vec3): boolean {
-        // 查找Enemies容器，使用与findNearbyEnemies相同的逻辑
-        let enemiesNode = find('Enemies');
-        
-        if (!enemiesNode && this.node.scene) {
-            enemiesNode = this.findNodeRecursive(this.node.scene, 'Enemies');
-        }
-        
-        if (!enemiesNode) {
-            // 尝试从场景根节点查找
-            const scene = this.node.scene;
-            if (scene) {
-                for (const child of scene.children) {
-                    if (child.name === 'Enemies') {
-                        enemiesNode = child;
-                        break;
-                    }
-                }
-            }
-        }
+        // 查找Enemies容器，使用直接路径
+        const enemiesNode = find('Canvas/Enemies');
         
         if (!enemiesNode) {
             return false;

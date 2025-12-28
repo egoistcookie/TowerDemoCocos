@@ -5,6 +5,7 @@ import { DamageNumber } from './DamageNumber';
 import { AudioManager } from './AudioManager';
 import { UnitType } from './WarAncientTree';
 import { StoneWallGridPanel } from './StoneWallGridPanel';
+import { UnitManager } from './UnitManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('Enemy')
@@ -90,6 +91,9 @@ export class Enemy extends Component {
     protected currentTarget: Node = null!;
     private gameManager: GameManager = null!;
     private detourTarget: Vec3 | null = null; // 绕行目标点，当找到绕行路径时设置
+    private unitManager: UnitManager = null!; // 单位管理器引用（性能优化）
+    private targetFindTimer: number = 0; // 目标查找计时器
+    private readonly TARGET_FIND_INTERVAL: number = 0.2; // 目标查找间隔（秒），不是每帧都查找
     
     // 唯一ID，用于区分不同的敌人实例
     private enemyId: string = "";
@@ -168,6 +172,9 @@ export class Enemy extends Component {
         
         // 查找游戏管理器
         this.findGameManager();
+        
+        // 查找单位管理器（性能优化）
+        this.unitManager = UnitManager.getInstance();
         
         // 如果targetCrystal没有设置，尝试查找
         if (!this.targetCrystal) {
@@ -267,6 +274,8 @@ export class Enemy extends Component {
         // 更新攻击计时器
         const oldAttackTimer = this.attackTimer;
         this.attackTimer += deltaTime;
+        this.targetFindTimer += deltaTime;
+        
         // 如果attackTimer接近或达到attackInterval，添加详细日志
         if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.worldPosition && 
             this.node && this.node.isValid && this.node.worldPosition) {
@@ -277,8 +286,19 @@ export class Enemy extends Component {
             }
         }
 
-        // 查找目标（优先防御塔，然后水晶）
-        this.findTarget();
+        // 查找目标（优先防御塔，然后水晶）- 按间隔查找而不是每帧都查找
+        if (this.targetFindTimer >= this.TARGET_FIND_INTERVAL) {
+            this.targetFindTimer = 0;
+            this.findTarget();
+        }
+        
+        // 如果当前目标已失效，立即重新查找（不等待间隔）
+        if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
+            if (this.targetFindTimer >= 0.1) { // 至少间隔0.1秒
+                this.targetFindTimer = 0;
+                this.findTarget();
+            }
+        }
 
         // 最高优先级：如果在网格中寻路，优先执行网格寻路逻辑
         if (this.isInStoneWallGrid) {
@@ -611,6 +631,7 @@ export class Enemy extends Component {
         
         // 索敌范围：200像素
         const detectionRange = 200;
+        const detectionRangeSq = detectionRange * detectionRange; // 平方距离，避免开方运算
         
         // 检查当前目标是否仍然有效，特别是石墙
         if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
@@ -670,87 +691,58 @@ export class Enemy extends Component {
             }
         }
         
-        // 优先查找附近的防御塔和战争古树（在攻击范围内）
+        // 优先查找附近的防御塔和战争古树（在攻击范围内）- 使用UnitManager优化
         let towers: Node[] = [];
-        let towersNode = find('Towers');
-        
-        // 如果直接查找失败，尝试递归查找
-        if (!towersNode && this.node.scene) {
-            towersNode = findNodeRecursive(this.node.scene, 'Towers');
-        }
-        
-        if (towersNode) {
-            towers = towersNode.children || [];
-        }
-
-        // 查找战争古树
         let trees: Node[] = [];
-        let warAncientTrees = find('WarAncientTrees');
-        if (!warAncientTrees && this.node.scene) {
-            warAncientTrees = findNodeRecursive(this.node.scene, 'WarAncientTrees');
-        }
-        if (warAncientTrees) {
-            trees = warAncientTrees.children || [];
-        }
-
-        // 查找猎手大厅
         let halls: Node[] = [];
-        let hallsNode = find('HunterHalls');
-        if (!hallsNode && this.node.scene) {
-            hallsNode = findNodeRecursive(this.node.scene, 'HunterHalls');
-        }
-        if (hallsNode) {
-            halls = hallsNode.children || [];
-        } else if (this.node.scene) {
-            // 如果没有找到HunterHalls容器，直接从场景中查找所有HunterHall组件
-            const findAllHunterHalls = (node: Node) => {
-                if (!node || !node.isValid) {
-                    return;
-                }
-                const hallScript = node.getComponent('HunterHall') as any;
-                if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
-                    halls.push(node);
-                }
-                const children = node.children || [];
-                for (const child of children) {
-                    if (child && child.isValid) {
-                        findAllHunterHalls(child);
-                    }
-                }
-            };
-            findAllHunterHalls(this.node.scene);
-        }
-
-        // 查找剑士小屋
         let swordsmanHalls: Node[] = [];
-        let swordsmanHallsNode = find('SwordsmanHalls');
-        if (!swordsmanHallsNode && this.node.scene) {
-            swordsmanHallsNode = findNodeRecursive(this.node.scene, 'SwordsmanHalls');
-        }
-        if (swordsmanHallsNode) {
-            swordsmanHalls = swordsmanHallsNode.children || [];
-        } else if (this.node.scene) {
-            // 如果没有找到SwordsmanHalls容器，直接从场景中查找所有SwordsmanHall组件
-            const findAllSwordsmanHalls = (node: Node) => {
-                if (!node || !node.isValid) {
-                    return;
-                }
-                const hallScript = node.getComponent('SwordsmanHall') as any;
-                if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
-                    swordsmanHalls.push(node);
-                }
-                const children = node.children || [];
-                for (const child of children) {
-                    if (child && child.isValid) {
-                        findAllSwordsmanHalls(child);
-                    }
-                }
-            };
-            findAllSwordsmanHalls(this.node.scene);
+        
+        // 使用UnitManager获取单位列表（性能优化）
+        if (this.unitManager) {
+            towers = this.unitManager.getTowers();
+            trees = this.unitManager.getWarAncientTrees();
+            halls = this.unitManager.getBuildings().filter(building => {
+                const hallScript = building.getComponent('HunterHall') as any;
+                return hallScript && hallScript.isAlive && hallScript.isAlive();
+            });
+            swordsmanHalls = this.unitManager.getBuildings().filter(building => {
+                const hallScript = building.getComponent('SwordsmanHall') as any;
+                return hallScript && hallScript.isAlive && hallScript.isAlive();
+            });
+        } else {
+            // 降级方案：如果没有UnitManager，使用直接路径查找
+            const towersNode = find('Canvas/Towers');
+            if (towersNode) {
+                towers = towersNode.children || [];
+            }
+
+            let warAncientTrees = find('WarAncientTrees');
+            if (!warAncientTrees && this.node.scene) {
+                warAncientTrees = findNodeRecursive(this.node.scene, 'WarAncientTrees');
+            }
+            if (warAncientTrees) {
+                trees = warAncientTrees.children || [];
+            }
+
+            let hallsNode = find('HunterHalls');
+            if (!hallsNode && this.node.scene) {
+                hallsNode = findNodeRecursive(this.node.scene, 'HunterHalls');
+            }
+            if (hallsNode) {
+                halls = hallsNode.children || [];
+            }
+
+            let swordsmanHallsNode = find('SwordsmanHalls');
+            if (!swordsmanHallsNode && this.node.scene) {
+                swordsmanHallsNode = findNodeRecursive(this.node.scene, 'SwordsmanHalls');
+            }
+            if (swordsmanHallsNode) {
+                swordsmanHalls = swordsmanHallsNode.children || [];
+            }
         }
 
         let nearestTarget: Node = null!;
-        let minDistance = Infinity;
+        let minDistanceSq = Infinity; // 使用平方距离，避免开方运算
         let targetPriority = Infinity;
         
         // 定义优先级：水晶>石墙（阻挡路径时）>树木>角色>建筑物
@@ -762,15 +754,24 @@ export class Enemy extends Component {
             BUILDING: 4
         };
 
-        // 1. 检查水晶是否在范围内（优先级最高）
-        if (this.targetCrystal && this.targetCrystal.isValid && this.targetCrystal.worldPosition &&
+        const myPos = this.node.worldPosition; // 缓存当前位置，避免重复访问
+
+        // 1. 检查水晶是否在范围内（优先级最高）- 使用UnitManager优化
+        let targetCrystal = this.targetCrystal;
+        if (!targetCrystal && this.unitManager) {
+            targetCrystal = this.unitManager.getCrystal();
+        }
+        
+        if (targetCrystal && targetCrystal.isValid && targetCrystal.worldPosition &&
             this.node && this.node.isValid && this.node.worldPosition) {
-            const crystalScript = this.targetCrystal.getComponent('Crystal') as any;
+            const crystalScript = targetCrystal.getComponent('Crystal') as any;
             if (crystalScript && crystalScript.isAlive && crystalScript.isAlive()) {
-                const distance = Vec3.distance(this.node.worldPosition, this.targetCrystal.worldPosition);
-                if (distance <= detectionRange) {
-                    nearestTarget = this.targetCrystal;
-                    minDistance = distance;
+                const dx = targetCrystal.worldPosition.x - myPos.x;
+                const dy = targetCrystal.worldPosition.y - myPos.y;
+                const distanceSq = dx * dx + dy * dy;
+                if (distanceSq <= detectionRangeSq) {
+                    nearestTarget = targetCrystal;
+                    minDistanceSq = distanceSq;
                     targetPriority = PRIORITY.CRYSTAL;
                 }
             }
@@ -781,67 +782,59 @@ export class Enemy extends Component {
         const blockedStoneWall = this.checkPathBlockedByStoneWall();
         if (blockedStoneWall && blockedStoneWall.isValid && blockedStoneWall.worldPosition &&
             this.node && this.node.isValid && this.node.worldPosition) {
-            const distance = Vec3.distance(this.node.worldPosition, blockedStoneWall.worldPosition);
+            const dx = blockedStoneWall.worldPosition.x - myPos.x;
+            const dy = blockedStoneWall.worldPosition.y - myPos.y;
+            const distanceSq = dx * dx + dy * dy;
             // 如果路径被阻挡且无法绕行，无论距离多远都要攻击石墙
             // 路径被完全阻挡时，石墙的优先级应该高于水晶（除非水晶已经在攻击范围内且敌人正在攻击）
-            if (targetPriority === PRIORITY.CRYSTAL && this.targetCrystal && this.targetCrystal.worldPosition) {
-                const crystalDistance = Vec3.distance(this.node.worldPosition, this.targetCrystal.worldPosition);
+            if (targetPriority === PRIORITY.CRYSTAL && targetCrystal && targetCrystal.worldPosition) {
+                const cx = targetCrystal.worldPosition.x - myPos.x;
+                const cy = targetCrystal.worldPosition.y - myPos.y;
+                const crystalDistanceSq = cx * cx + cy * cy;
+                const attackRangeSq = this.attackRange * this.attackRange;
                 // 如果水晶在攻击范围内且当前目标就是水晶，保持攻击水晶（可能正在攻击中）
                 // 否则，即使水晶在检测范围内，也要优先攻击阻挡路径的石墙
-                if (crystalDistance <= this.attackRange && this.currentTarget === this.targetCrystal) {
+                if (crystalDistanceSq <= attackRangeSq && this.currentTarget === targetCrystal) {
                     // 水晶在攻击范围内且正在攻击，保持水晶为目标
                 } else {
                     // 水晶不在攻击范围内，或当前目标不是水晶，优先攻击阻挡路径的石墙
-                    minDistance = distance;
+                    minDistanceSq = distanceSq;
                     nearestTarget = blockedStoneWall;
                     targetPriority = PRIORITY.STONEWALL;
                 }
             } else {
                 // 当前目标不是水晶，如果路径被阻挡，强制攻击石墙
-                minDistance = distance;
+                minDistanceSq = distanceSq;
                 nearestTarget = blockedStoneWall;
                 targetPriority = PRIORITY.STONEWALL;
             }
         }
 
         // 3. 查找范围内的角色（优先级第三）
-        // 4. 查找范围内的角色（优先级第四）
         // 查找所有角色单位：弓箭手、女猎手、牧师
-        // 1) 弓箭手
+        // 1) 弓箭手和牧师（都在Towers容器中）
         for (const tower of towers) {
-            if (tower && tower.active && tower.isValid) {
-                const towerScript = tower.getComponent('Arrower') as any;
-                // 检查弓箭手是否存活
-                if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
-                    const distance = Vec3.distance(this.node.worldPosition, tower.worldPosition);
-                    // 如果弓箭手在范围内，且优先级更高或距离更近
-                    if (distance <= detectionRange) {
-                        if (PRIORITY.CHARACTER < targetPriority || 
-                            (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
-                            minDistance = distance;
-                            nearestTarget = tower;
-                            targetPriority = PRIORITY.CHARACTER;
-                        }
-                    }
-                }
-            }
-        }
-        // 1.5) 牧师（也在Towers容器中）
-        for (const tower of towers) {
-            if (tower && tower.active && tower.isValid) {
-                const priestScript = tower.getComponent('Priest') as any;
-                // 检查牧师是否存活
-                if (priestScript && priestScript.isAlive && priestScript.isAlive()) {
-                    const distance = Vec3.distance(this.node.worldPosition, tower.worldPosition);
-                    // 如果牧师在范围内，且优先级更高或距离更近
-                    if (distance <= detectionRange) {
-                        if (PRIORITY.CHARACTER < targetPriority || 
-                            (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
-                            minDistance = distance;
-                            nearestTarget = tower;
-                            targetPriority = PRIORITY.CHARACTER;
-                        }
-                    }
+            if (!tower || !tower.active || !tower.isValid) continue;
+            
+            const towerScript = tower.getComponent('Arrower') as any;
+            const priestScript = tower.getComponent('Priest') as any;
+            const characterScript = towerScript || priestScript;
+            
+            // 检查角色是否存活
+            if (!characterScript || !characterScript.isAlive || !characterScript.isAlive()) continue;
+            
+            // 使用平方距离，避免开方运算
+            const dx = tower.worldPosition.x - myPos.x;
+            const dy = tower.worldPosition.y - myPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            
+            // 如果角色在范围内，且优先级更高或距离更近
+            if (distanceSq <= detectionRangeSq) {
+                if (PRIORITY.CHARACTER < targetPriority || 
+                    (PRIORITY.CHARACTER === targetPriority && distanceSq < minDistanceSq)) {
+                    minDistanceSq = distanceSq;
+                    nearestTarget = tower;
+                    targetPriority = PRIORITY.CHARACTER;
                 }
             }
         }
@@ -855,20 +848,21 @@ export class Enemy extends Component {
             hunters = huntersNode.children || [];
         }
         for (const hunter of hunters) {
-            if (hunter && hunter.active && hunter.isValid) {
-                const hunterScript = hunter.getComponent('Hunter') as any;
-                // 检查女猎手是否存活
-                if (hunterScript && hunterScript.isAlive && hunterScript.isAlive()) {
-                    const distance = Vec3.distance(this.node.worldPosition, hunter.worldPosition);
-                    // 如果女猎手在范围内，且优先级更高或距离更近
-                    if (distance <= detectionRange) {
-                        if (PRIORITY.CHARACTER < targetPriority || 
-                            (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
-                            minDistance = distance;
-                            nearestTarget = hunter;
-                            targetPriority = PRIORITY.CHARACTER;
-                        }
-                    }
+            if (!hunter || !hunter.active || !hunter.isValid) continue;
+            
+            const hunterScript = hunter.getComponent('Hunter') as any;
+            if (!hunterScript || !hunterScript.isAlive || !hunterScript.isAlive()) continue;
+            
+            const dx = hunter.worldPosition.x - myPos.x;
+            const dy = hunter.worldPosition.y - myPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            
+            if (distanceSq <= detectionRangeSq) {
+                if (PRIORITY.CHARACTER < targetPriority || 
+                    (PRIORITY.CHARACTER === targetPriority && distanceSq < minDistanceSq)) {
+                    minDistanceSq = distanceSq;
+                    nearestTarget = hunter;
+                    targetPriority = PRIORITY.CHARACTER;
                 }
             }
         }
@@ -882,20 +876,21 @@ export class Enemy extends Component {
             swordsmen = swordsmenNode.children || [];
         }
         for (const swordsman of swordsmen) {
-            if (swordsman && swordsman.active && swordsman.isValid) {
-                const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
-                // 检查精灵剑士是否存活
-                if (swordsmanScript && swordsmanScript.isAlive && swordsmanScript.isAlive()) {
-                    const distance = Vec3.distance(this.node.worldPosition, swordsman.worldPosition);
-                    // 如果精灵剑士在范围内，且优先级更高或距离更近
-                    if (distance <= detectionRange) {
-                        if (PRIORITY.CHARACTER < targetPriority || 
-                            (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
-                            minDistance = distance;
-                            nearestTarget = swordsman;
-                            targetPriority = PRIORITY.CHARACTER;
-                        }
-                    }
+            if (!swordsman || !swordsman.active || !swordsman.isValid) continue;
+            
+            const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
+            if (!swordsmanScript || !swordsmanScript.isAlive || !swordsmanScript.isAlive()) continue;
+            
+            const dx = swordsman.worldPosition.x - myPos.x;
+            const dy = swordsman.worldPosition.y - myPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            
+            if (distanceSq <= detectionRangeSq) {
+                if (PRIORITY.CHARACTER < targetPriority || 
+                    (PRIORITY.CHARACTER === targetPriority && distanceSq < minDistanceSq)) {
+                    minDistanceSq = distanceSq;
+                    nearestTarget = swordsman;
+                    targetPriority = PRIORITY.CHARACTER;
                 }
             }
         }
@@ -903,105 +898,99 @@ export class Enemy extends Component {
         // 5. 查找范围内的建筑物（战争古树和猎手大厅，优先级第五）
         // 战争古树
         for (const tree of trees) {
-            if (tree && tree.active && tree.isValid) {
-                const treeScript = tree.getComponent('WarAncientTree') as any;
-                // 检查战争古树是否存活
-                if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
-                    const distance = Vec3.distance(this.node.worldPosition, tree.worldPosition);
-                    // 如果战争古树在范围内，且优先级更高或距离更近
-                    if (distance <= detectionRange) {
-                        if (PRIORITY.BUILDING < targetPriority || 
-                            (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
-                            minDistance = distance;
-                            nearestTarget = tree;
-                            targetPriority = PRIORITY.BUILDING;
-                        }
-                    }
+            if (!tree || !tree.active || !tree.isValid) continue;
+            
+            const treeScript = tree.getComponent('WarAncientTree') as any;
+            if (!treeScript || !treeScript.isAlive || !treeScript.isAlive()) continue;
+            
+            const dx = tree.worldPosition.x - myPos.x;
+            const dy = tree.worldPosition.y - myPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            
+            if (distanceSq <= detectionRangeSq) {
+                if (PRIORITY.BUILDING < targetPriority || 
+                    (PRIORITY.BUILDING === targetPriority && distanceSq < minDistanceSq)) {
+                    minDistanceSq = distanceSq;
+                    nearestTarget = tree;
+                    targetPriority = PRIORITY.BUILDING;
                 }
             }
         }
         // 猎手大厅
         for (const hall of halls) {
-            if (hall && hall.active && hall.isValid) {
-                const hallScript = hall.getComponent('HunterHall') as any;
-                // 检查猎手大厅是否存活
-                if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
-                    const distance = Vec3.distance(this.node.worldPosition, hall.worldPosition);
-                    // 如果猎手大厅在范围内，且优先级更高或距离更近
-                    if (distance <= detectionRange) {
-                        if (PRIORITY.BUILDING < targetPriority || 
-                            (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
-                            minDistance = distance;
-                            nearestTarget = hall;
-                            targetPriority = PRIORITY.BUILDING;
-                        }
-                    }
+            if (!hall || !hall.active || !hall.isValid) continue;
+            
+            const hallScript = hall.getComponent('HunterHall') as any;
+            if (!hallScript || !hallScript.isAlive || !hallScript.isAlive()) continue;
+            
+            const dx = hall.worldPosition.x - myPos.x;
+            const dy = hall.worldPosition.y - myPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            
+            if (distanceSq <= detectionRangeSq) {
+                if (PRIORITY.BUILDING < targetPriority || 
+                    (PRIORITY.BUILDING === targetPriority && distanceSq < minDistanceSq)) {
+                    minDistanceSq = distanceSq;
+                    nearestTarget = hall;
+                    targetPriority = PRIORITY.BUILDING;
                 }
             }
         }
         // 剑士小屋
         for (const hall of swordsmanHalls) {
-            if (hall && hall.active && hall.isValid) {
-                const hallScript = hall.getComponent('SwordsmanHall') as any;
-                // 检查剑士小屋是否存活
-                if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
-                    const distance = Vec3.distance(this.node.worldPosition, hall.worldPosition);
-                    // 如果剑士小屋在范围内，且优先级更高或距离更近
-                    if (distance <= detectionRange) {
-                        if (PRIORITY.BUILDING < targetPriority || 
-                            (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
-                            minDistance = distance;
-                            nearestTarget = hall;
-                            targetPriority = PRIORITY.BUILDING;
-                        }
-                    }
+            if (!hall || !hall.active || !hall.isValid) continue;
+            
+            const hallScript = hall.getComponent('SwordsmanHall') as any;
+            if (!hallScript || !hallScript.isAlive || !hallScript.isAlive()) continue;
+            
+            const dx = hall.worldPosition.x - myPos.x;
+            const dy = hall.worldPosition.y - myPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            
+            if (distanceSq <= detectionRangeSq) {
+                if (PRIORITY.BUILDING < targetPriority || 
+                    (PRIORITY.BUILDING === targetPriority && distanceSq < minDistanceSq)) {
+                    minDistanceSq = distanceSq;
+                    nearestTarget = hall;
+                    targetPriority = PRIORITY.BUILDING;
                 }
             }
         }
 
-        // 查找教堂
+        // 查找教堂 - 使用UnitManager优化
         let churches: Node[] = [];
-        let churchesNode = find('Churches');
-        if (!churchesNode && this.node.scene) {
-            churchesNode = findNodeRecursive(this.node.scene, 'Churches');
-        }
-        if (churchesNode) {
-            churches = churchesNode.children || [];
-        } else if (this.node.scene) {
-            // 如果没有找到Churches容器，直接从场景中查找所有Church组件
-            const findAllChurches = (node: Node) => {
-                if (!node || !node.isValid) {
-                    return;
-                }
-                const churchScript = node.getComponent('Church') as any;
-                if (churchScript && churchScript.isAlive && churchScript.isAlive()) {
-                    churches.push(node);
-                }
-                const children = node.children || [];
-                for (const child of children) {
-                    if (child && child.isValid) {
-                        findAllChurches(child);
-                    }
-                }
-            };
-            findAllChurches(this.node.scene);
+        if (this.unitManager) {
+            churches = this.unitManager.getBuildings().filter(building => {
+                const churchScript = building.getComponent('Church') as any;
+                return churchScript && churchScript.isAlive && churchScript.isAlive();
+            });
+        } else {
+            // 降级方案
+            let churchesNode = find('Churches');
+            if (!churchesNode && this.node.scene) {
+                churchesNode = findNodeRecursive(this.node.scene, 'Churches');
+            }
+            if (churchesNode) {
+                churches = churchesNode.children || [];
+            }
         }
         // 教堂
         for (const church of churches) {
-            if (church && church.active && church.isValid) {
-                const churchScript = church.getComponent('Church') as any;
-                // 检查教堂是否存活
-                if (churchScript && churchScript.isAlive && churchScript.isAlive()) {
-                    const distance = Vec3.distance(this.node.worldPosition, church.worldPosition);
-                    // 如果教堂在范围内，且优先级更高或距离更近
-                    if (distance <= detectionRange) {
-                        if (PRIORITY.BUILDING < targetPriority || 
-                            (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
-                            minDistance = distance;
-                            nearestTarget = church;
-                            targetPriority = PRIORITY.BUILDING;
-                        }
-                    }
+            if (!church || !church.active || !church.isValid) continue;
+            
+            const churchScript = church.getComponent('Church') as any;
+            if (!churchScript || !churchScript.isAlive || !churchScript.isAlive()) continue;
+            
+            const dx = church.worldPosition.x - myPos.x;
+            const dy = church.worldPosition.y - myPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            
+            if (distanceSq <= detectionRangeSq) {
+                if (PRIORITY.BUILDING < targetPriority || 
+                    (PRIORITY.BUILDING === targetPriority && distanceSq < minDistanceSq)) {
+                    minDistanceSq = distanceSq;
+                    nearestTarget = church;
+                    targetPriority = PRIORITY.BUILDING;
                 }
             }
         }
@@ -3058,10 +3047,7 @@ export class Enemy extends Component {
 
         // 5. 添加角色单位
         // 3.1) 弓箭手
-        let towersNode = find('Towers');
-        if (!towersNode && this.node.scene) {
-            towersNode = findNodeRecursive(this.node.scene, 'Towers');
-        }
+        const towersNode = find('Canvas/Towers');
         if (towersNode) {
             const towers = towersNode.children || [];
             for (const tower of towers) {
@@ -4380,10 +4366,7 @@ export class Enemy extends Component {
         let minDistance = Infinity;
 
         // 1. 查找弓箭手
-        let towersNode = find('Towers');
-        if (!towersNode && this.node.scene) {
-            towersNode = findNodeRecursive(this.node.scene, 'Towers');
-        }
+        const towersNode = find('Canvas/Towers');
         if (towersNode) {
             const towers = towersNode.children || [];
             for (const tower of towers) {
@@ -4705,26 +4688,12 @@ export class Enemy extends Component {
      * @returns 如果与其他敌人碰撞返回true，否则返回false
      */
     private checkCollisionWithEnemy(position: Vec3): boolean {
-        const findNodeRecursive = (node: Node, name: string): Node | null => {
-            if (node.name === name) {
-                return node;
-            }
-            for (const child of node.children) {
-                const found = findNodeRecursive(child, name);
-                if (found) return found;
-            }
-            return null;
-        };
-
-        // 查找所有敌人容器
-        const enemyContainers = ['Enemies', 'Orcs', 'TrollSpearmans', 'OrcWarriors', 'OrcWarlords'];
+        // 查找所有敌人容器，使用直接路径
+        const enemyContainers = ['Canvas/Enemies', 'Canvas/Orcs', 'Canvas/TrollSpearmans', 'Canvas/OrcWarriors', 'Canvas/OrcWarlords'];
         const allEnemies: Node[] = [];
 
         for (const containerName of enemyContainers) {
-            let containerNode = find(containerName);
-            if (!containerNode && this.node.scene) {
-                containerNode = findNodeRecursive(this.node.scene, containerName);
-            }
+            const containerNode = find(containerName);
             if (containerNode) {
                 allEnemies.push(...containerNode.children);
             }

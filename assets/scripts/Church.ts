@@ -146,10 +146,7 @@ export class Church extends Build {
             return null;
         };
 
-        let towersNode = find('Towers');
-        if (!towersNode && this.node.scene) {
-            towersNode = findNodeRecursive(this.node.scene, 'Towers');
-        }
+        const towersNode = find('Canvas/Towers');
 
         if (towersNode) {
             this.priestContainer = towersNode;
@@ -348,10 +345,7 @@ export class Church extends Build {
             return null;
         };
 
-        let towersNode = find('Towers');
-        if (!towersNode && this.node.scene) {
-            towersNode = findNodeRecursive(this.node.scene, 'Towers');
-        }
+        const towersNode = find('Canvas/Towers');
 
         if (towersNode) {
             const towers = towersNode.children || [];

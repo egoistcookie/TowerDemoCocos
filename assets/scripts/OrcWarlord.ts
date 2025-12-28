@@ -357,29 +357,12 @@ export class OrcWarlord extends Component {
     }
 
     findTarget() {
-        // 使用递归查找Towers容器（更可靠）
-        const findNodeRecursive = (node: Node, name: string): Node | null => {
-            if (node.name === name) {
-                return node;
-            }
-            for (const child of node.children) {
-                const found = findNodeRecursive(child, name);
-                if (found) return found;
-            }
-            return null;
-        };
-        
         // 索敌范围：200像素
         const detectionRange = 200;
         
         // 优先查找附近的防御塔和战争古树（在攻击范围内）
         let towers: Node[] = [];
-        let towersNode = find('Towers');
-        
-        // 如果直接查找失败，尝试递归查找
-        if (!towersNode && this.node.scene) {
-            towersNode = findNodeRecursive(this.node.scene, 'Towers');
-        }
+        const towersNode = find('Canvas/Towers');
         
         if (towersNode) {
             towers = towersNode.children;
@@ -387,20 +370,14 @@ export class OrcWarlord extends Component {
 
         // 查找战争古树
         let trees: Node[] = [];
-        let warAncientTrees = find('WarAncientTrees');
-        if (!warAncientTrees && this.node.scene) {
-            warAncientTrees = findNodeRecursive(this.node.scene, 'WarAncientTrees');
-        }
+        const warAncientTrees = find('Canvas/WarAncientTrees');
         if (warAncientTrees) {
             trees = warAncientTrees.children;
         }
 
         // 查找猎手大厅
         let halls: Node[] = [];
-        let hallsNode = find('HunterHalls');
-        if (!hallsNode && this.node.scene) {
-            hallsNode = findNodeRecursive(this.node.scene, 'HunterHalls');
-        }
+        const hallsNode = find('Canvas/HunterHalls');
         if (hallsNode) {
             halls = hallsNode.children;
         } else if (this.node.scene) {
@@ -482,10 +459,7 @@ export class OrcWarlord extends Component {
         }
         // 2) 女猎手
         let hunters: Node[] = [];
-        let huntersNode = find('Hunters');
-        if (!huntersNode && this.node.scene) {
-            huntersNode = findNodeRecursive(this.node.scene, 'Hunters');
-        }
+        const huntersNode = find('Canvas/Hunters');
         if (huntersNode) {
             hunters = huntersNode.children;
         }
@@ -550,10 +524,7 @@ export class OrcWarlord extends Component {
 
         // 3.4) 精灵剑士
         let swordsmen: Node[] = [];
-        let swordsmenNode = find('ElfSwordsmans');
-        if (!swordsmenNode && this.node.scene) {
-            swordsmenNode = findNodeRecursive(this.node.scene, 'ElfSwordsmans');
-        }
+        const swordsmenNode = find('Canvas/ElfSwordsmans');
         if (swordsmenNode) {
             swordsmen = swordsmenNode.children;
         }
@@ -1147,10 +1118,7 @@ export class OrcWarlord extends Component {
 
         // 5. 添加角色单位
         // 3.1) 弓箭手
-        let towersNode = find('Towers');
-        if (!towersNode && this.node.scene) {
-            towersNode = findNodeRecursive(this.node.scene, 'Towers');
-        }
+        const towersNode = find('Canvas/Towers');
         if (towersNode) {
             const towers = towersNode.children || [];
             for (const tower of towers) {
@@ -1884,20 +1852,7 @@ export class OrcWarlord extends Component {
     // 查找附近的敌人并应用战争咆哮效果
     findNearbyEnemies() {
         // 查找Enemies容器
-        let enemiesNode = find('Enemies');
-        if (!enemiesNode && this.node.scene) {
-            const findNodeRecursive = (node: Node, name: string): Node | null => {
-                if (node.name === name) {
-                    return node;
-                }
-                for (const child of node.children) {
-                    const found = findNodeRecursive(child, name);
-                    if (found) return found;
-                }
-                return null;
-            };
-            enemiesNode = findNodeRecursive(this.node.scene, 'Enemies');
-        }
+        const enemiesNode = find('Canvas/Enemies');
         
         if (!enemiesNode) {
             return;

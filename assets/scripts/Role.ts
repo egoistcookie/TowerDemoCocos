@@ -7,6 +7,7 @@ import { Arrow } from './Arrow';
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
 import { UnitType } from './WarAncientTree';
+import { UnitManager } from './UnitManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('Role')
@@ -136,6 +137,10 @@ export class Role extends Component {
     protected isHit: boolean = false; // 是否正在被攻击
     protected animationTimer: number = 0; // 动画计时器
     protected currentAnimationFrameIndex: number = 0; // 当前动画帧索引
+    protected unitManager: UnitManager = null!; // 单位管理器引用（性能优化）
+    protected targetFindTimer: number = 0; // 目标查找计时器
+    protected readonly TARGET_FIND_INTERVAL: number = 0.2; // 目标查找间隔（秒），不是每帧都查找
+    protected hasFoundFirstTarget: boolean = false; // 是否已经找到过第一个目标（用于首次立即查找）
 
     start() {
         this.currentHealth = this.maxHealth;
@@ -143,6 +148,7 @@ export class Role extends Component {
         this.attackTimer = 0;
         this.currentTarget = null!;
         this.isPlayingAttackAnimation = false;
+        this.hasFoundFirstTarget = false; // 初始化首次查找标志
         
         // 获取Sprite组件
         this.sprite = this.node.getComponent(Sprite);
@@ -158,6 +164,9 @@ export class Role extends Component {
         
         // 查找游戏管理器
         this.findGameManager();
+        
+        // 查找单位管理器（性能优化）
+        this.unitManager = UnitManager.getInstance();
         
         // 查找单位选择管理器
         this.findUnitSelectionManager();
@@ -295,6 +304,12 @@ export class Role extends Component {
         }
 
         this.attackTimer += deltaTime;
+        this.targetFindTimer += deltaTime;
+
+        // 确保UnitManager已获取（可能在start时还没初始化）
+        if (!this.unitManager) {
+            this.unitManager = UnitManager.getInstance();
+        }
 
         // 优先处理手动移动目标
         if (this.manualMoveTarget) {
@@ -313,9 +328,25 @@ export class Role extends Component {
             }
         }
 
-        // 查找目标（只有在没有手动移动目标时才执行）
+        // 查找目标逻辑
         if (!this.manualMoveTarget) {
-            this.findTarget();
+            // 如果当前目标已失效，立即重新查找（不等待间隔）
+            const needFindTarget = !this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active;
+            // 首次查找或按间隔查找
+            const shouldFindByInterval = !this.hasFoundFirstTarget || this.targetFindTimer >= this.TARGET_FIND_INTERVAL;
+            
+            if (needFindTarget || shouldFindByInterval) {
+                console.info(`[Role.findTarget] 开始查找目标 - needFindTarget: ${needFindTarget}, shouldFindByInterval: ${shouldFindByInterval}, hasFoundFirstTarget: ${this.hasFoundFirstTarget}, targetFindTimer: ${this.targetFindTimer.toFixed(3)}`);
+                this.targetFindTimer = 0; // 重置计时器
+                this.findTarget();
+                // 如果找到了目标，标记为已找到第一个目标
+                if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
+                    this.hasFoundFirstTarget = true;
+                    console.info(`[Role.findTarget] 找到目标: ${this.currentTarget.name}`);
+                } else {
+                    console.info(`[Role.findTarget] 未找到目标`);
+                }
+            }
         }
 
         // 无论是否移动，都要检查碰撞（防止重叠）
@@ -497,38 +528,42 @@ export class Role extends Component {
     }
     
     /**
-     * 获取所有符合条件的敌人节点
+     * 获取所有符合条件的敌人节点（优化版本，使用UnitManager）
      * @param includeOnlyAlive 是否只包含存活的敌人
      * @param maxDistance 最大距离，超过此距离的敌人将被过滤
      * @returns 符合条件的敌人节点数组
      */
     getEnemies(includeOnlyAlive: boolean = true, maxDistance: number = Infinity): Node[] {
-        // 使用递归查找Enemies容器（更可靠）
-        const findNodeRecursive = (node: Node, name: string): Node | null => {
-            if (node.name === name) {
-                return node;
-            }
-            for (const child of node.children) {
-                const found = findNodeRecursive(child, name);
-                if (found) return found;
-            }
-            return null;
-        };
-        
-        const scene = this.node.scene;
-        let enemiesNode = find('Enemies');
-        
-        // 如果直接查找失败，尝试递归查找
-        if (!enemiesNode && scene) {
-            enemiesNode = findNodeRecursive(scene, 'Enemies');
+        // 优先使用UnitManager（性能优化）
+        // 如果unitManager为null，尝试重新获取（可能UnitManager还没初始化）
+        if (!this.unitManager) {
+            this.unitManager = UnitManager.getInstance();
+            // console.info(`[Role.getEnemies] ${this.node.name} 重新获取UnitManager: ${this.unitManager ? '成功' : '失败'}`);
         }
         
+        if (this.unitManager) {
+            const enemies = this.unitManager.getEnemiesInRange(
+                this.node.worldPosition,
+                maxDistance,
+                includeOnlyAlive
+            );
+            // console.info(`[Role.getEnemies] ${this.node.name} 使用UnitManager获取到 ${enemies.length} 个敌人, maxDistance: ${maxDistance}`);
+            return enemies;
+        }
+        
+        // console.info(`[Role.getEnemies] ${this.node.name} UnitManager不存在，使用降级方案`);
+        // 降级方案：如果没有UnitManager，使用直接路径查找
+        const enemiesNode = find('Canvas/Enemies');
+        
         if (!enemiesNode) {
+            // console.info(`[Role.getEnemies] ${this.node.name} 降级方案: 未找到Enemies节点`);
             return [];
         }
         
         const enemies = enemiesNode.children || [];
+        // console.info(`[Role.getEnemies] ${this.node.name} 降级方案: Enemies节点有 ${enemies.length} 个子节点`);
         const result: Node[] = [];
+        const maxDistanceSq = maxDistance * maxDistance; // 使用平方距离，避免开方
         
         for (const enemy of enemies) {
             if (enemy && enemy.active && enemy.isValid) {
@@ -538,9 +573,11 @@ export class Role extends Component {
                     continue;
                 }
                 
-                // 检查距离
-                const distance = Vec3.distance(this.node.worldPosition, enemy.worldPosition);
-                if (distance > maxDistance) {
+                // 粗略距离检查（使用平方距离，避免开方）
+                const dx = enemy.worldPosition.x - this.node.worldPosition.x;
+                const dy = enemy.worldPosition.y - this.node.worldPosition.y;
+                const distanceSq = dx * dx + dy * dy;
+                if (distanceSq > maxDistanceSq) {
                     continue;
                 }
                 
@@ -553,6 +590,7 @@ export class Role extends Component {
             }
         }
         
+        // console.info(`[Role.getEnemies] ${this.node.name} 降级方案: 最终返回 ${result.length} 个符合条件的敌人`);
         return result;
     }
     
@@ -574,22 +612,69 @@ export class Role extends Component {
     
     findTarget() {
         let nearestEnemy: Node = null!;
-        let minDistance = Infinity;
+        let minDistanceSq = Infinity; // 使用平方距离，避免开方运算
         const detectionRange = this.getDetectionRange(); // 使用可重写的方法获取索敌范围
         
-        // 使用公共函数获取敌人
+        // console.info(`[Role.findTarget] ${this.node.name} 开始查找目标, detectionRange: ${detectionRange}, unitManager: ${this.unitManager ? '存在' : 'null'}`);
+        
+        // 使用公共函数获取敌人（已优化，使用UnitManager）
         const enemies = this.getEnemies(true, detectionRange);
         
+        // console.info(`[Role.findTarget] ${this.node.name} 获取到 ${enemies.length} 个敌人`);
+        
+        // 如果没有找到敌人，可能是UnitManager还没初始化或敌人列表为空，尝试使用降级方案
+        if (enemies.length === 0 && this.unitManager) {
+            // console.info(`[Role.findTarget] ${this.node.name} 敌人列表为空，尝试刷新UnitManager`);
+            // 强制更新一次敌人列表
+            this.unitManager.refreshUnitLists();
+            // 再次尝试获取
+            const enemiesRetry = this.getEnemies(true, detectionRange);
+            // console.info(`[Role.findTarget] ${this.node.name} 刷新后获取到 ${enemiesRetry.length} 个敌人`);
+            if (enemiesRetry.length > 0) {
+                // 使用重新获取的敌人列表
+                const myPos = this.node.worldPosition;
+                for (const enemy of enemiesRetry) {
+                    if (!enemy || !enemy.isValid || !enemy.active) continue;
+                    
+                    // 使用平方距离比较，避免开方运算
+                    const dx = enemy.worldPosition.x - myPos.x;
+                    const dy = enemy.worldPosition.y - myPos.y;
+                    const distanceSq = dx * dx + dy * dy;
+                    
+                    // 选择最近的敌人
+                    if (distanceSq < minDistanceSq) {
+                        minDistanceSq = distanceSq;
+                        nearestEnemy = enemy;
+                    }
+                }
+                this.currentTarget = nearestEnemy;
+                // console.info(`[Role.findTarget] ${this.node.name} 找到目标: ${nearestEnemy ? nearestEnemy.name : 'null'}`);
+                return;
+            }
+        }
+        
+        const myPos = this.node.worldPosition;
         for (const enemy of enemies) {
-            const distance = Vec3.distance(this.node.worldPosition, enemy.worldPosition);
+            if (!enemy || !enemy.isValid || !enemy.active) {
+                // console.info(`[Role.findTarget] ${this.node.name} 跳过无效敌人: ${enemy ? enemy.name : 'null'}`);
+                continue;
+            }
+            
+            // 使用平方距离比较，避免开方运算
+            const dx = enemy.worldPosition.x - myPos.x;
+            const dy = enemy.worldPosition.y - myPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            
             // 选择最近的敌人
-            if (distance < minDistance) {
-                minDistance = distance;
+            if (distanceSq < minDistanceSq) {
+                minDistanceSq = distanceSq;
                 nearestEnemy = enemy;
+                // console.info(`[Role.findTarget] ${this.node.name} 更新最近敌人: ${enemy.name}, 距离: ${Math.sqrt(distanceSq).toFixed(2)}`);
             }
         }
 
         this.currentTarget = nearestEnemy;
+        // console.info(`[Role.findTarget] ${this.node.name} 最终目标: ${nearestEnemy ? nearestEnemy.name : 'null'}`);
     }
 
     moveTowardsTarget(deltaTime: number) {
@@ -802,24 +887,7 @@ export class Role extends Component {
         }
 
         // 检查与其他弓箭手的碰撞
-        let towersNode = find('Towers');
-        // 如果直接查找失败，尝试递归查找
-        if (!towersNode) {
-            const findNodeRecursive = (node: Node, name: string): Node | null => {
-                if (node.name === name) {
-                    return node;
-                }
-                for (const child of node.children) {
-                    const found = findNodeRecursive(child, name);
-                    if (found) return found;
-                }
-                return null;
-            };
-            const scene = this.node.scene;
-            if (scene) {
-                towersNode = findNodeRecursive(scene, 'Towers');
-            }
-        }
+        const towersNode = find('Canvas/Towers');
         
         if (towersNode) {
             const towers = towersNode.children || [];
@@ -2302,10 +2370,7 @@ export class Role extends Component {
         }
 
         // 检查与其他Tower的碰撞
-        let towersNode = find('Towers');
-        if (!towersNode && this.node.scene) {
-            towersNode = findNodeRecursive(this.node.scene, 'Towers');
-        }
+        const towersNode = find('Canvas/Towers');
         
         if (towersNode) {
             const towers = towersNode.children || [];

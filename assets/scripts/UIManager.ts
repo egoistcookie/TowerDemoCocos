@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Button, Label, find, director, UITransform, Color, Graphics, tween, Vec3, UIOpacity, Sprite, SpriteFrame, Prefab, instantiate } from 'cc';
+import { _decorator, Component, Node, Button, Label, find, director, UITransform, Color, Graphics, tween, Vec3, UIOpacity, Sprite, SpriteFrame, Prefab, instantiate, resources, assetManager } from 'cc';
 import { GameManager as GameManagerClass } from './GameManager';
 import { CountdownPopup } from './CountdownPopup';
 // 导入TalentSystem，用于管理天赋系统和单位卡片
@@ -79,6 +79,11 @@ export class UIManager extends Component {
 
         // 默认激活游戏页
         this.setActivePage('game');
+        
+        // 初始化重新开始按钮贴图
+        if (this.restartButton && this.restartButton.node) {
+            this.setupButtonSprite(this.restartButton.node, 'restart.png', 'restart_down.png');
+        }
     }
     
     /**
@@ -208,23 +213,8 @@ export class UIManager extends Component {
         
         this.levelSelectLeftButton = leftArrowButton;
         
-        const rightArrowGraphics = leftArrowButton.addComponent(Graphics);
-        rightArrowGraphics.fillColor = new Color(100, 100, 100, 255);
-        rightArrowGraphics.circle(0, 0, 30);
-        rightArrowGraphics.fill();
-        rightArrowGraphics.strokeColor = new Color(255, 255, 255, 255);
-        rightArrowGraphics.lineWidth = 2;
-        rightArrowGraphics.circle(0, 0, 30);
-        rightArrowGraphics.stroke();
-        
-        // 绘制向右箭头
-        rightArrowGraphics.strokeColor = new Color(255, 255, 255, 255);
-        rightArrowGraphics.lineWidth = 4;
-        rightArrowGraphics.moveTo(-10, 0);
-        rightArrowGraphics.lineTo(10, -15);
-        rightArrowGraphics.moveTo(-10, 0);
-        rightArrowGraphics.lineTo(10, 15);
-        rightArrowGraphics.stroke();
+        // 使用贴图替代Graphics绘制
+        this.setupButtonSprite(leftArrowButton, 'lastLevel.png', 'lastLevel_down.png');
         
         // 创建关卡选择按钮（向右箭头）
         const rightArrowButton = new Node('LevelSelectRightButton');
@@ -234,30 +224,15 @@ export class UIManager extends Component {
         rightArrowTransform.setContentSize(60, 60);
         rightArrowTransform.setAnchorPoint(0.5, 0.5);
         
-        const leftArrowGraphics = rightArrowButton.addComponent(Graphics);
-        leftArrowGraphics.fillColor = new Color(100, 100, 100, 255);
-        leftArrowGraphics.circle(0, 0, 30);
-        leftArrowGraphics.fill();
-        leftArrowGraphics.strokeColor = new Color(255, 255, 255, 255);
-        leftArrowGraphics.lineWidth = 2;
-        leftArrowGraphics.circle(0, 0, 30);
-        leftArrowGraphics.stroke();
-        
-        // 绘制向左箭头
-        leftArrowGraphics.strokeColor = new Color(255, 255, 255, 255);
-        leftArrowGraphics.lineWidth = 4;
-        leftArrowGraphics.moveTo(10, 0);
-        leftArrowGraphics.lineTo(-10, -15);
-        leftArrowGraphics.moveTo(10, 0);
-        leftArrowGraphics.lineTo(-10, 15);
-        leftArrowGraphics.stroke();
-        
         const rightArrowButtonComp = rightArrowButton.addComponent(Button);
         rightArrowButtonComp.node.on(Button.EventType.CLICK, () => {
             this.selectNextLevel();
         }, this);
         
         this.levelSelectRightButton = rightArrowButton;
+        
+        // 使用贴图替代Graphics绘制
+        this.setupButtonSprite(rightArrowButton, 'nextLevel.png', 'nextLevel_down.png');
         
         // 2. 创建开始游戏按钮（下方）
         const startButton = new Node('StartGameButton');
@@ -272,32 +247,11 @@ export class UIManager extends Component {
         startButtonTransform.setContentSize(300, 80); // 增大按钮尺寸，确保可见
         startButtonTransform.setAnchorPoint(0.5, 0.5);
         
-        // 首先创建文本节点，确保文本在最上层
-        const startButtonLabel = startButton.addComponent(Label);
-        startButtonLabel.string = '开始游戏';
-        startButtonLabel.fontSize = 30; // 增大字体，确保可见
-        startButtonLabel.color = Color.WHITE;
-        startButtonLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
-        startButtonLabel.verticalAlign = Label.VerticalAlign.CENTER;
-        startButtonLabel.lineHeight = 80; // 设置行高与按钮高度一致
-        
-        // 使用醒目的颜色，确保可见
-        const startButtonBackground = startButton.addComponent(Graphics);
-        startButtonBackground.fillColor = new Color(0, 200, 0, 255); // 鲜艳的绿色背景
-        startButtonBackground.roundRect(-150, -40, 300, 80, 10); // 圆角矩形
-        startButtonBackground.fill();
-        
-        // 添加边框，增强视觉效果
-        startButtonBackground.lineWidth = 3;
-        startButtonBackground.strokeColor = new Color(255, 255, 255, 255); // 白色边框
-        startButtonBackground.roundRect(-150, -40, 300, 80, 10);
-        startButtonBackground.stroke();
-        
-        // 确保文本在背景之上
-        startButtonLabel.node.setSiblingIndex(startButton.children.length - 1);
-        
         // 添加Button组件
         const startButtonComp = startButton.addComponent(Button);
+        
+        // 使用贴图替代Graphics绘制和Label文本
+        this.setupButtonSprite(startButton, 'start.png', 'start_down.png');
         
         // 确保开始游戏按钮位于gameMainPanel的最上层
         startButton.setSiblingIndex(gameMainPanel.children.length - 1);
@@ -623,6 +577,72 @@ export class UIManager extends Component {
     }
     
     /**
+     * 为按钮加载贴图并设置Sprite组件
+     * @param buttonNode 按钮节点
+     * @param normalPath 正常状态的贴图路径（相对于textures/icon）
+     * @param pressedPath 按下状态的贴图路径（相对于textures/icon）
+     */
+    private setupButtonSprite(buttonNode: Node, normalPath: string, pressedPath: string) {
+        // 移除现有的Graphics组件（如果存在）
+        const graphics = buttonNode.getComponent(Graphics);
+        if (graphics) {
+            graphics.destroy();
+        }
+        
+        // 移除现有的Label组件（如果存在，因为按钮现在使用贴图）
+        const label = buttonNode.getComponent(Label);
+        if (label) {
+            label.destroy();
+        }
+        
+        // 添加Sprite组件（必须在Button之前添加）
+        let sprite = buttonNode.getComponent(Sprite);
+        if (!sprite) {
+            sprite = buttonNode.addComponent(Sprite);
+        }
+        
+        // 获取或添加Button组件，并设置过渡模式
+        let button = buttonNode.getComponent(Button);
+        if (!button) {
+            button = buttonNode.addComponent(Button);
+        }
+        button.transition = Button.Transition.SPRITE;
+        // 设置target为按钮节点本身（包含Sprite组件的节点）
+        button.target = buttonNode;
+        
+        // 加载正常状态贴图（移除文件扩展名，并添加 /spriteFrame 后缀）
+        const normalPathWithoutExt = normalPath.replace(/\.(png|jpg|jpeg)$/i, '');
+        const normalResourcePath = `textures/icon/${normalPathWithoutExt}/spriteFrame`;
+        
+        resources.load(normalResourcePath, SpriteFrame, (err, spriteFrame) => {
+            if (err) {
+                console.error(`Failed to load button sprite: ${normalPath} (path: ${normalResourcePath})`, err);
+                return;
+            }
+            if (sprite && sprite.node && sprite.node.isValid && button && button.node && button.node.isValid) {
+                sprite.spriteFrame = spriteFrame;
+                // 设置Button的normalSprite
+                button.normalSprite = spriteFrame;
+            }
+        });
+        
+        // 加载按下状态贴图（移除文件扩展名，并添加 /spriteFrame 后缀）
+        const pressedPathWithoutExt = pressedPath.replace(/\.(png|jpg|jpeg)$/i, '');
+        const pressedResourcePath = `textures/icon/${pressedPathWithoutExt}/spriteFrame`;
+        
+        resources.load(pressedResourcePath, SpriteFrame, (err, pressedSpriteFrame) => {
+            if (err) {
+                console.error(`Failed to load button pressed sprite: ${pressedPath} (path: ${pressedResourcePath})`, err);
+                return;
+            }
+            if (button && button.node && button.node.isValid && pressedSpriteFrame) {
+                // 设置Button的pressedSprite
+                button.pressedSprite = pressedSpriteFrame;
+            }
+        });
+    }
+    
+    /**
      * 创建选区按钮
      */
     createSelectionButton(parent: Node, text: string, xPos: number) {
@@ -639,31 +659,26 @@ export class UIManager extends Component {
         uiTransform.setContentSize(200, 80); // 增大按钮尺寸，从150x40变为200x80
         uiTransform.setAnchorPoint(0.5, 0.5);
         
-        // 添加背景 - 透明，让底部选区背景显示出来
-        const background = buttonNode.addComponent(Graphics);
-        background.fillColor = new Color(0, 0, 0, 150); // 半透明黑色背景，让底部颜色透出来
-        background.roundRect(-100, -40, 200, 80, 10); // 圆角矩形
-        background.fill();
+        // 根据按钮文本映射到对应的贴图文件名
+        let normalImageName = '';
+        if (text === '游戏') {
+            normalImageName = 'game.png';
+        } else if (text === '天赋') {
+            normalImageName = 'tale.png';
+        } else if (text === '设置') {
+            normalImageName = 'set.png';
+        } else {
+            console.warn(`Unknown button text: ${text}, using default`);
+            normalImageName = 'game.png';
+        }
         
-        // 添加边框 - 增强视觉效果
-        background.lineWidth = 2;
-        background.strokeColor = new Color(100, 150, 255, 255); // 蓝色边框，与天赋面板颜色匹配
-        background.roundRect(-100, -40, 200, 80, 10);
-        background.stroke();
+        const pressedImageName = normalImageName.replace(/\.(png|jpg|jpeg)$/i, '_down.$1');
         
-        // 添加Label - 增大字体大小
-        const labelNode = new Node('Label');
-        labelNode.setParent(buttonNode);
-        
-        const label = labelNode.addComponent(Label);
-        label.string = text;
-        label.fontSize = 24; // 增大字体，从20变为24
-        label.color = Color.WHITE;
-        label.horizontalAlign = Label.HorizontalAlign.CENTER;
-        label.verticalAlign = Label.VerticalAlign.CENTER;
-        
-        // 添加Button组件
+        // 先添加Button组件（setupButtonSprite 需要Button组件存在）
         const button = buttonNode.addComponent(Button);
+        
+        // 使用贴图设置按钮
+        this.setupButtonSprite(buttonNode, normalImageName, pressedImageName);
         
         // 绑定点击事件
         button.node.on(Button.EventType.CLICK, () => {

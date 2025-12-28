@@ -76,6 +76,7 @@ export class EnemySpawner extends Component {
     private isWaveActive: boolean = false;
     private isCountdownActive: boolean = false; // 倒计时是否激活
     private preWaveDelayTimer: number = 0;
+    private isConfigLoaded: boolean = false; // 配置是否已加载完成
     
     // 当前敌人配置
     private currentEnemyIndex: number = 0;
@@ -185,21 +186,98 @@ export class EnemySpawner extends Component {
      * 加载波次配置文件
      */
     private loadWaveConfig() {
-        resources.load('waveConfig', JsonAsset, (err, jsonAsset) => {
-            if (err) {
+        // 尝试多种路径加载配置文件（兼容不同平台）
+        const configPaths = [
+            'waveConfig',           // 默认路径（resources目录下）
+            'config/waveConfig',    // 带config目录的路径
+            'resources/waveConfig'  // 完整路径
+        ];
+        
+        let loadAttempts = 0;
+        const maxRetries = 3; // 最大重试次数
+        let retryCount = 0;
+        
+        const tryLoadConfig = (pathIndex: number) => {
+            if (pathIndex >= configPaths.length) {
+                // 所有路径都失败，尝试重试
+                if (retryCount < maxRetries) {
+                    retryCount++;
+                    console.warn(`[EnemySpawner] 所有配置文件路径加载失败，${1}秒后重试 (${retryCount}/${maxRetries})`);
+                    // 延迟1秒后重试
+                    this.scheduleOnce(() => {
+                        tryLoadConfig(0);
+                    }, 1);
+                    return;
+                }
                 
-                // 尝试使用本地配置作为备用方案
+                // 重试次数用完，使用本地配置作为备用方案
+                console.warn('[EnemySpawner] 所有配置文件路径加载失败，使用本地配置');
                 this.useLocalWaveConfig();
+                // 使用本地配置后也要标记为已加载
+                if (this.currentLevelConfig) {
+                    this.isConfigLoaded = true;
+                    console.log('[EnemySpawner] 本地配置加载成功，配置已就绪');
+                } else {
+                    console.error('[EnemySpawner] 本地配置加载失败');
+                }
                 return;
             }
             
-            this.waveConfig = jsonAsset.json as WaveConfigFile;
+            const configPath = configPaths[pathIndex];
+            console.log(`[EnemySpawner] 尝试加载配置文件: ${configPath} (路径索引: ${pathIndex})`);
             
-            // 更新当前关卡配置
-            this.updateCurrentLevel();
-            
-            // 不立即开始第一波，只在游戏开始后才开始波次系统
-        });
+            resources.load(configPath, JsonAsset, (err, jsonAsset) => {
+                if (err) {
+                    console.warn(`[EnemySpawner] 加载配置文件失败 (${configPath}):`, err.message || err);
+                    // 尝试下一个路径
+                    tryLoadConfig(pathIndex + 1);
+                    return;
+                }
+                
+                if (!jsonAsset || !jsonAsset.json) {
+                    console.warn(`[EnemySpawner] 配置文件内容为空 (${configPath})`);
+                    tryLoadConfig(pathIndex + 1);
+                    return;
+                }
+                
+                console.log(`[EnemySpawner] 成功加载配置文件: ${configPath}`);
+                console.log(`[EnemySpawner] 配置文件内容:`, {
+                    hasLevels: !!jsonAsset.json.levels,
+                    levelsCount: jsonAsset.json.levels?.length || 0,
+                    hasWaves: !!jsonAsset.json.waves,
+                    wavesCount: jsonAsset.json.waves?.length || 0
+                });
+                
+                this.waveConfig = jsonAsset.json as WaveConfigFile;
+                
+                // 验证配置数据
+                if (!this.waveConfig || (!this.waveConfig.levels && !this.waveConfig.waves)) {
+                    console.error('[EnemySpawner] 配置文件格式错误，缺少levels或waves字段');
+                    tryLoadConfig(pathIndex + 1);
+                    return;
+                }
+                
+                // 更新当前关卡配置
+                this.updateCurrentLevel();
+                
+                // 验证关卡配置是否加载成功
+                if (this.currentLevelConfig) {
+                    console.log(`[EnemySpawner] 关卡配置加载成功，当前关卡: ${this.currentLevel}, 波次数: ${this.currentLevelConfig.waves?.length || 0}`);
+                    this.isConfigLoaded = true; // 标记配置已加载
+                    console.log('[EnemySpawner] 配置加载完成，可以开始刷怪');
+                } else {
+                    console.error('[EnemySpawner] 关卡配置加载失败');
+                    this.isConfigLoaded = false;
+                    // 如果关卡配置加载失败，尝试下一个路径
+                    tryLoadConfig(pathIndex + 1);
+                }
+                
+                // 不立即开始第一波，只在游戏开始后才开始波次系统
+            });
+        };
+        
+        // 开始尝试加载
+        tryLoadConfig(0);
     }
     
     /**
@@ -300,6 +378,18 @@ export class EnemySpawner extends Component {
                 // 游戏未开始，完全不处理波次系统（包括初始化和计时）
                 return;
             }
+        }
+        
+        // 检查配置是否已加载，如果没有加载完成，直接返回
+        // 在小程序环境中，配置可能还在加载中，不执行刷怪逻辑
+        if (!this.isConfigLoaded) {
+            // 每5秒输出一次日志，提醒配置还在加载中（用于调试小程序环境）
+            const timerSeconds = Math.floor(this.enemySpawnTimer);
+            if (timerSeconds > 0 && timerSeconds % 5 === 0 && this.enemySpawnTimer - timerSeconds < deltaTime) {
+                console.warn(`[EnemySpawner] 配置尚未加载完成，等待中... (waveConfig: ${this.waveConfig ? '已加载' : '未加载'}, isConfigLoaded: ${this.isConfigLoaded}, currentLevelConfig: ${this.currentLevelConfig ? '已加载' : '未加载'})`);
+            }
+            this.enemySpawnTimer += deltaTime;
+            return;
         }
         
         // 测试模式：只刷新一个敌人
@@ -731,6 +821,12 @@ export class EnemySpawner extends Component {
         
         // 更新当前关卡配置
         this.updateCurrentLevel();
+        
+        // 使用本地配置后也要标记为已加载
+        if (this.currentLevelConfig) {
+            this.isConfigLoaded = true;
+            console.log('[EnemySpawner] 使用本地配置，配置已加载');
+        }
         
         // 不立即开始第一波，只在游戏开始后才开始波次系统
     }

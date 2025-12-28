@@ -92,21 +92,7 @@ export class WarAncientTree extends Build {
     }
 
     findTowerContainer() {
-        const findNodeRecursive = (node: Node, name: string): Node | null => {
-            if (node.name === name) {
-                return node;
-            }
-            for (const child of node.children) {
-                const found = findNodeRecursive(child, name);
-                if (found) return found;
-            }
-            return null;
-        };
-
-        let towersNode = find('Towers');
-        if (!towersNode && this.node.scene) {
-            towersNode = findNodeRecursive(this.node.scene, 'Towers');
-        }
+        const towersNode = find('Canvas/Towers');
         if (towersNode) {
             this.towerContainer = towersNode;
         } else {
@@ -690,21 +676,7 @@ export class WarAncientTree extends Build {
 
         // 检查与其他Tower的碰撞
         // 每次都重新查找Towers节点，确保获取到所有Arrower（包括手动建造的）
-        const findTowersNodeRecursive = (node: Node, name: string): Node | null => {
-            if (node.name === name) {
-                return node;
-            }
-            for (const child of node.children) {
-                const found = findTowersNodeRecursive(child, name);
-                if (found) return found;
-            }
-            return null;
-        };
-
-        let towersNode = find('Towers');
-        if (!towersNode && this.node.scene) {
-            towersNode = findTowersNodeRecursive(this.node.scene, 'Towers');
-        }
+        const towersNode = find('Canvas/Towers');
         
         if (towersNode) {
             const towers = towersNode.children || [];

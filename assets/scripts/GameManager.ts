@@ -1,8 +1,9 @@
-import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3 } from 'cc';
+import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager } from 'cc';
 import { Crystal } from './Crystal';
 import { UnitIntroPopup } from './UnitIntroPopup';
 import { UnitConfigManager } from './UnitConfigManager';
 import { PlayerDataManager } from './PlayerDataManager';
+import { UnitManager } from './UnitManager';
 const { ccclass, property } = _decorator;
 
 export enum GameState {
@@ -199,6 +200,9 @@ export class GameManager extends Component {
     }
 
     start() {
+        // 初始化单位管理器（性能优化）
+        this.initializeUnitManager();
+        
         // 加载单位配置
         const configManager = UnitConfigManager.getInstance();
         configManager.loadConfig().then(() => {
@@ -280,6 +284,30 @@ export class GameManager extends Component {
         
         // 在游戏开始前隐藏所有游戏主体相关内容
         this.hideGameElements();
+    }
+    
+    /**
+     * 初始化单位管理器（性能优化）
+     */
+    private initializeUnitManager() {
+        // 检查是否已存在UnitManager
+        let unitManagerNode = find('UnitManager');
+        if (!unitManagerNode) {
+            // 创建UnitManager节点
+            unitManagerNode = new Node('UnitManager');
+            const scene = director.getScene();
+            if (scene) {
+                unitManagerNode.setParent(scene);
+            } else {
+                // 如果场景不存在，尝试添加到Canvas
+                const canvas = find('Canvas');
+                if (canvas) {
+                    unitManagerNode.setParent(canvas);
+                }
+            }
+            // 添加UnitManager组件
+            unitManagerNode.addComponent(UnitManager);
+        }
     }
     
     /**
@@ -594,6 +622,72 @@ export class GameManager extends Component {
     }
     
     /**
+     * 为按钮加载贴图并设置Sprite组件
+     * @param buttonNode 按钮节点
+     * @param normalPath 正常状态的贴图路径（相对于textures/icon）
+     * @param pressedPath 按下状态的贴图路径（相对于textures/icon）
+     */
+    private setupButtonSprite(buttonNode: Node, normalPath: string, pressedPath: string) {
+        // 移除现有的Graphics组件（如果存在）
+        const graphics = buttonNode.getComponent(Graphics);
+        if (graphics) {
+            graphics.destroy();
+        }
+        
+        // 移除现有的Label组件（如果存在，因为按钮现在使用贴图）
+        const label = buttonNode.getComponent(Label);
+        if (label) {
+            label.destroy();
+        }
+        
+        // 添加Sprite组件（必须在Button之前添加）
+        let sprite = buttonNode.getComponent(Sprite);
+        if (!sprite) {
+            sprite = buttonNode.addComponent(Sprite);
+        }
+        
+        // 获取或添加Button组件，并设置过渡模式
+        let button = buttonNode.getComponent(Button);
+        if (!button) {
+            button = buttonNode.addComponent(Button);
+        }
+        button.transition = Button.Transition.SPRITE;
+        // 设置target为按钮节点本身（包含Sprite组件的节点）
+        button.target = buttonNode;
+        
+        // 加载正常状态贴图（移除文件扩展名，并添加 /spriteFrame 后缀）
+        const normalPathWithoutExt = normalPath.replace(/\.(png|jpg|jpeg)$/i, '');
+        const normalResourcePath = `textures/icon/${normalPathWithoutExt}/spriteFrame`;
+        
+        resources.load(normalResourcePath, SpriteFrame, (err, spriteFrame) => {
+            if (err) {
+                console.error(`Failed to load button sprite: ${normalPath} (path: ${normalResourcePath})`, err);
+                return;
+            }
+            if (sprite && sprite.node && sprite.node.isValid && button && button.node && button.node.isValid) {
+                sprite.spriteFrame = spriteFrame;
+                // 设置Button的normalSprite
+                button.normalSprite = spriteFrame;
+            }
+        });
+        
+        // 加载按下状态贴图（移除文件扩展名，并添加 /spriteFrame 后缀）
+        const pressedPathWithoutExt = pressedPath.replace(/\.(png|jpg|jpeg)$/i, '');
+        const pressedResourcePath = `textures/icon/${pressedPathWithoutExt}/spriteFrame`;
+        
+        resources.load(pressedResourcePath, SpriteFrame, (err, pressedSpriteFrame) => {
+            if (err) {
+                console.error(`Failed to load button pressed sprite: ${pressedPath} (path: ${pressedResourcePath})`, err);
+                return;
+            }
+            if (button && button.node && button.node.isValid && pressedSpriteFrame) {
+                // 设置Button的pressedSprite
+                button.pressedSprite = pressedSpriteFrame;
+            }
+        });
+    }
+    
+    /**
      * 初始化退出游戏按钮（查找场景中的ReturnButton节点）
      */
     private initExitGameButton() {
@@ -608,6 +702,8 @@ export class GameManager extends Component {
             this.exitGameButton.node.on(Button.EventType.CLICK, () => {
                 this.onExitGameClick();
             }, this);
+            // 设置按钮贴图
+            this.setupButtonSprite(this.exitGameButton.node, 'exit.png', 'exit_down.png');
             return;
         }
         
@@ -624,6 +720,8 @@ export class GameManager extends Component {
                     button.node.on(Button.EventType.CLICK, () => {
                         this.onExitGameClick();
                     }, this);
+                    // 设置按钮贴图
+                    this.setupButtonSprite(button.node, 'exit.png', 'exit_down.png');
                     return;
                 }
             }
@@ -640,6 +738,8 @@ export class GameManager extends Component {
                 button.node.on(Button.EventType.CLICK, () => {
                     this.onExitGameClick();
                 }, this);
+                // 设置按钮贴图
+                this.setupButtonSprite(button.node, 'exit.png', 'exit_down.png');
             }
         }
     }
@@ -925,26 +1025,11 @@ export class GameManager extends Component {
     }
 
     cleanupAllUnitsForEndGame() {
-        // 使用递归查找节点
-        const findNodeRecursive = (node: Node, name: string): Node | null => {
-            if (node.name === name) {
-                return node;
-            }
-            for (const child of node.children) {
-                const found = findNodeRecursive(child, name);
-                if (found) return found;
-            }
-            return null;
-        };
-
         const scene = director.getScene();
         if (!scene) return;
 
         // 清理所有敌人（直接销毁）
-        let enemiesNode = find('Enemies');
-        if (!enemiesNode && scene) {
-            enemiesNode = findNodeRecursive(scene, 'Enemies');
-        }
+        const enemiesNode = find('Canvas/Enemies');
         if (enemiesNode) {
             const enemies = enemiesNode.children.slice(); // 复制数组
             for (const enemy of enemies) {
@@ -956,10 +1041,7 @@ export class GameManager extends Component {
         }
 
         // 停止所有防御塔移动
-        let towersNode = find('Towers');
-        if (!towersNode && scene) {
-            towersNode = findNodeRecursive(scene, 'Towers');
-        }
+        const towersNode = find('Canvas/Towers');
         if (towersNode) {
             const towers = towersNode.children; // 不需要复制数组，因为不销毁
             for (const tower of towers) {
@@ -1326,26 +1408,11 @@ export class GameManager extends Component {
     }
 
     cleanupAllUnits() {
-        // 使用递归查找节点
-        const findNodeRecursive = (node: Node, name: string): Node | null => {
-            if (node.name === name) {
-                return node;
-            }
-            for (const child of node.children) {
-                const found = findNodeRecursive(child, name);
-                if (found) return found;
-            }
-            return null;
-        };
-
         const scene = director.getScene();
         if (!scene) return;
 
         // 清理所有敌人
-        let enemiesNode = find('Enemies');
-        if (!enemiesNode && scene) {
-            enemiesNode = findNodeRecursive(scene, 'Enemies');
-        }
+        const enemiesNode = find('Canvas/Enemies');
         if (enemiesNode) {
             const enemies = enemiesNode.children.slice(); // 复制数组，避免在遍历时修改
             for (const enemy of enemies) {
@@ -1361,10 +1428,7 @@ export class GameManager extends Component {
         }
 
         // 清理所有防御塔
-        let towersNode = find('Towers');
-        if (!towersNode && scene) {
-            towersNode = findNodeRecursive(scene, 'Towers');
-        }
+        const towersNode = find('Canvas/Towers');
         if (towersNode) {
             const towers = towersNode.children.slice(); // 复制数组
             for (const tower of towers) {
