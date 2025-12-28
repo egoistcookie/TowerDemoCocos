@@ -23,7 +23,7 @@ export class StoneWall extends Component {
     cardIcon: SpriteFrame = null!; // 单位名片图片
     
     @property
-    collisionRadius: number = 40; // 碰撞半径（像素）
+    collisionRadius: number = 25; // 碰撞半径（像素）
     
     @property(Prefab)
     explosionEffect: Prefab = null!; // 爆炸特效预制体
@@ -331,8 +331,21 @@ export class StoneWall extends Component {
             const graphics = this.highlightNode.addComponent(Graphics);
             graphics.strokeColor = new Color(255, 255, 0, 255); // 黄色边框
             graphics.lineWidth = 3;
-            graphics.circle(0, 0, this.collisionRadius);
+            // 使用当前的 collisionRadius 值（确保使用预制体或配置中的值）
+            const radius = this.collisionRadius ?? 25;
+            graphics.circle(0, 0, radius);
             graphics.stroke();
+        } else if (this.highlightNode && highlight) {
+            // 如果高亮节点已存在，重新绘制以确保使用最新的 collisionRadius 值
+            const graphics = this.highlightNode.getComponent(Graphics);
+            if (graphics) {
+                graphics.clear();
+                graphics.strokeColor = new Color(255, 255, 0, 255); // 黄色边框
+                graphics.lineWidth = 3;
+                const radius = this.collisionRadius ?? 25;
+                graphics.circle(0, 0, radius);
+                graphics.stroke();
+            }
         }
         
         if (this.highlightNode) {

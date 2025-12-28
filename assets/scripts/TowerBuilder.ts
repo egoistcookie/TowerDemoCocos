@@ -1369,10 +1369,10 @@ export class TowerBuilder extends Component {
         // 设置建造成本并检查首次出现
         const wallScript = wall.getComponent(StoneWall);
         if (wallScript) {
-            // 先应用配置（排除 buildCost）
+            // 先应用配置（排除 buildCost 和 collisionRadius，使用预制体中的设置）
             const configManager = UnitConfigManager.getInstance();
             if (configManager.isConfigLoaded()) {
-                configManager.applyConfigToUnit('StoneWall', wallScript, ['buildCost']);
+                configManager.applyConfigToUnit('StoneWall', wallScript, ['buildCost', 'collisionRadius']);
             }
             
             // 应用单位卡片强化

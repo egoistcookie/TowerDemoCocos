@@ -1,4 +1,4 @@
-import { _decorator, SpriteFrame, Prefab, Texture2D, AudioClip, Node, Vec3, find } from 'cc';
+import { _decorator, SpriteFrame, Prefab, Texture2D, AudioClip, Node, Vec3, find, CCString } from 'cc';
 import { Role } from './Role';
 import { GameManager, GameState } from './GameManager';
 const { ccclass, property } = _decorator;
@@ -94,11 +94,17 @@ export class Priest extends Role {
 
     @property({ type: SpriteFrame, override: true })
     unitIcon: SpriteFrame = null!;
+    
+    @property({ type: [CCString], override: true, tooltip: "战斗口号数组，牧师的治疗口号" })
+    battleSlogans: string[] = ['治疗！治疗！治疗！', '尘归尘！', '圣光指引我!', '愿圣光与你同在！', '慢点打，慢点打！'];
 
     update(deltaTime: number) {
         if (this.isDestroyed) {
             return;
         }
+
+        // 只更新对话框系统，不调用父类的完整update方法（避免移动和攻击逻辑重复执行）
+        this.updateDialogSystem(deltaTime);
 
         if (!this.gameManager) {
             this.findGameManager();

@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip, Animation, AnimationState, view, Graphics } from 'cc';
+import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip, Animation, AnimationState, view } from 'cc';
 import { GameManager, GameState } from './GameManager';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
@@ -137,6 +137,16 @@ export class Enemy extends Component {
     // Animation组件相关
     protected animationComponent: Animation = null!; // Animation组件引用
 
+    // 对话框相关属性
+    private dialogNode: Node | null = null; // 对话框节点
+    private dialogLabel: Label | null = null; // 对话框文字标签
+    private dialogTimer: number = 0; // 对话框显示计时器（用于控制显示时间和渐隐）
+    private dialogIntervalTimer: number = 0; // 对话框间隔计时器（用于累计间隔时间）
+    private dialogInterval: number = 0; // 下次显示对话框的间隔时间（5-10秒随机）
+    private readonly DIALOG_MIN_INTERVAL: number = 5; // 最小间隔5秒
+    private readonly DIALOG_MAX_INTERVAL: number = 10; // 最大间隔10秒
+    private readonly DIALOG_DURATION: number = 2; // 对话框显示持续时间2秒
+    private readonly DIALOG_SLOGANS: string[] = ['兽人万岁！', '打下这条防线！', '为了鲜血与荣耀！', '乌拉！', '为了部落！']; // 进攻口号数组
 
     start() {
         // 生成唯一ID（使用时间戳和随机数）
@@ -204,6 +214,9 @@ export class Enemy extends Component {
         // 创建血条
         this.createHealthBar();
         
+        // 初始化对话框系统
+        this.initDialogSystem();
+        
         // 初始播放待机动画
         this.playIdleAnimation();
     }
@@ -219,6 +232,145 @@ export class Enemy extends Component {
         if (this.healthBar) {
             this.healthBar.setMaxHealth(this.maxHealth);
             this.healthBar.setHealth(this.currentHealth);
+        }
+    }
+
+    /**
+     * 初始化对话框系统
+     */
+    initDialogSystem() {
+        this.dialogTimer = 0;
+        this.dialogIntervalTimer = 0;
+        // 随机生成第一次显示对话框的间隔时间（5-10秒）
+        this.dialogInterval = this.DIALOG_MIN_INTERVAL + Math.random() * (this.DIALOG_MAX_INTERVAL - this.DIALOG_MIN_INTERVAL);
+    }
+
+    /**
+     * 创建对话框节点
+     */
+    createDialog() {
+        if (this.dialogNode && this.dialogNode.isValid) {
+            // 如果对话框已存在，先销毁
+            this.dialogNode.destroy();
+        }
+
+        // 创建对话框节点
+        this.dialogNode = new Node('Dialog');
+        this.dialogNode.setParent(this.node);
+        this.dialogNode.setPosition(0, 50, 0); // 在血条上方
+        // 根据当前敌人的朝向设置对话框的scale（与血条保持一致，确保文字从左往右显示）
+        const currentEnemyScaleX = this.node.scale.x;
+        if (currentEnemyScaleX < 0) {
+            this.dialogNode.setScale(-1, 1, 1);
+        } else {
+            this.dialogNode.setScale(1, 1, 1);
+        }
+
+        // 添加UITransform组件
+        const dialogTransform = this.dialogNode.addComponent(UITransform);
+        dialogTransform.setContentSize(150, 30);
+
+        // 创建文字标签（无背景，透明显示）
+        const labelNode = new Node('DialogLabel');
+        labelNode.setParent(this.dialogNode);
+        labelNode.setPosition(0, 0, 0);
+
+        const labelTransform = labelNode.addComponent(UITransform);
+        labelTransform.setContentSize(150, 30);
+
+        this.dialogLabel = labelNode.addComponent(Label);
+        this.dialogLabel.string = this.getRandomSlogan();
+        this.dialogLabel.fontSize = 14;
+        this.dialogLabel.color = new Color(255, 0, 0, 255); // 红色文字
+        this.dialogLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        this.dialogLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        this.dialogLabel.overflow = Label.Overflow.RESIZE_HEIGHT;
+
+        // 初始设置为完全显示
+        this.dialogNode.active = true;
+        if (this.dialogLabel) {
+            this.dialogLabel.color = new Color(255, 0, 0, 255); // 红色文字（敌人单位）
+        }
+    }
+
+    /**
+     * 获取随机口号
+     */
+    getRandomSlogan(): string {
+        const index = Math.floor(Math.random() * this.DIALOG_SLOGANS.length);
+        return this.DIALOG_SLOGANS[index];
+    }
+
+    /**
+     * 更新对话框系统（检查间隔时间，创建对话框）
+     */
+    updateDialogSystem(deltaTime: number) {
+        // 如果对话框正在显示，更新对话框
+        if (this.dialogNode && this.dialogNode.isValid) {
+            this.updateDialog(deltaTime);
+            return;
+        }
+
+        // 如果对话框不存在，检查是否到了显示时间
+        if (!this.dialogNode) {
+            // 累计间隔时间
+            this.dialogIntervalTimer += deltaTime;
+
+            // 如果累计时间达到间隔时间，创建对话框
+            if (this.dialogIntervalTimer >= this.dialogInterval) {
+                this.createDialog();
+                this.dialogIntervalTimer = 0; // 重置间隔计时器
+                this.dialogTimer = 0; // 重置显示计时器
+            }
+        }
+    }
+
+    /**
+     * 更新对话框（位置跟随、渐隐效果）
+     */
+    updateDialog(deltaTime: number) {
+        if (!this.dialogNode || !this.dialogNode.isValid) {
+            return;
+        }
+
+        // 更新对话框位置（跟随敌人，保持在血条上方）
+        this.dialogNode.setPosition(0, 50, 0);
+        // 根据当前敌人的朝向更新对话框的scale（与血条保持一致，确保文字从左往右显示）
+        const currentEnemyScaleX = this.node.scale.x;
+        if (currentEnemyScaleX < 0) {
+            this.dialogNode.setScale(-1, 1, 1);
+        } else {
+            this.dialogNode.setScale(1, 1, 1);
+        }
+
+        // 更新显示计时器
+        this.dialogTimer += deltaTime;
+
+        // 如果显示时间超过持续时间，开始渐隐
+        if (this.dialogTimer > this.DIALOG_DURATION) {
+            const fadeTime = this.dialogTimer - this.DIALOG_DURATION;
+            const fadeDuration = 0.5; // 渐隐持续时间0.5秒
+
+            if (fadeTime < fadeDuration) {
+                // 正在渐隐
+                const alpha = 1 - (fadeTime / fadeDuration);
+                const textAlpha = Math.floor(255 * alpha);
+
+                if (this.dialogLabel) {
+                    this.dialogLabel.color = new Color(255, 0, 0, textAlpha); // 红色文字（敌人单位），渐隐时保持红色
+                }
+            } else {
+                // 渐隐完成，销毁对话框
+                if (this.dialogNode && this.dialogNode.isValid) {
+                    this.dialogNode.destroy();
+                }
+                this.dialogNode = null;
+                this.dialogLabel = null;
+                this.dialogTimer = 0;
+                this.dialogIntervalTimer = 0; // 重置间隔计时器
+                // 重新随机生成下次显示的间隔时间
+                this.dialogInterval = this.DIALOG_MIN_INTERVAL + Math.random() * (this.DIALOG_MAX_INTERVAL - this.DIALOG_MIN_INTERVAL);
+            }
         }
     }
 
@@ -275,6 +427,9 @@ export class Enemy extends Component {
         const oldAttackTimer = this.attackTimer;
         this.attackTimer += deltaTime;
         this.targetFindTimer += deltaTime;
+        
+        // 更新对话框系统
+        this.updateDialogSystem(deltaTime);
         
         // 如果attackTimer接近或达到attackInterval，添加详细日志
         if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.worldPosition && 
@@ -1554,7 +1709,6 @@ export class Enemy extends Component {
         }
 
         const allStoneWalls = findAllStoneWalls(scene);
-        const checkRadius = 25; // 检查半径，约半个格子大小（50/2）
 
         for (const wall of allStoneWalls) {
             if (!wall || !wall.active || !wall.isValid) continue;
@@ -1564,10 +1718,11 @@ export class Enemy extends Component {
             if (wallScript && wallScript.isDestroyed === true) continue;
 
             const wallPos = wall.worldPosition;
+            const wallRadius = wallScript.collisionRadius ?? 25; // 使用预制体设置的值，如果没有设置则默认为25
             const distance = Vec3.distance(position, wallPos);
 
-            // 如果距离小于检查半径，说明该位置有石墙
-            if (distance < checkRadius) {
+            // 如果距离小于碰撞半径，说明该位置有石墙
+            if (distance < wallRadius) {
                 return true;
             }
         }
@@ -1616,7 +1771,7 @@ export class Enemy extends Component {
             if (!wallScript || !wallScript.isAlive || !wallScript.isAlive()) continue;
 
             const wallPos = wall.worldPosition;
-            const wallRadius = wallScript.collisionRadius || 40;
+            const wallRadius = wallScript.collisionRadius ?? 25; // 使用预制体设置的值，如果没有设置则默认为25
             const distanceToWall = Vec3.distance(position, wallPos);
             const minDistance = enemyRadius + wallRadius;
 
@@ -1673,12 +1828,20 @@ export class Enemy extends Component {
             if (this.healthBarNode && this.healthBarNode.isValid) {
                 this.healthBarNode.setScale(-1, 1, 1);
             }
+            // 对话框反向翻转，保持正常朝向（文字从左往右）
+            if (this.dialogNode && this.dialogNode.isValid) {
+                this.dialogNode.setScale(-1, 1, 1);
+            }
         } else {
             // 向右移动，正常朝向
             this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
             // 血条正常朝向
             if (this.healthBarNode && this.healthBarNode.isValid) {
                 this.healthBarNode.setScale(1, 1, 1);
+            }
+            // 对话框正常朝向（文字从左往右）
+            if (this.dialogNode && this.dialogNode.isValid) {
+                this.dialogNode.setScale(1, 1, 1);
             }
         }
     }
@@ -3805,6 +3968,13 @@ export class Enemy extends Component {
         }
 
         this.isDestroyed = true;
+
+        // 清理对话框
+        if (this.dialogNode && this.dialogNode.isValid) {
+            this.dialogNode.destroy();
+        }
+        this.dialogNode = null;
+        this.dialogLabel = null;
         
         // 立即停止所有移动和动画
         this.stopAllAnimations();

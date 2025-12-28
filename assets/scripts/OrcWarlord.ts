@@ -854,7 +854,7 @@ export class OrcWarlord extends Component {
             if (!wallScript || !wallScript.isAlive || !wallScript.isAlive()) continue;
 
             const wallPos = wall.worldPosition;
-            const wallRadius = wallScript.collisionRadius || 40;
+            const wallRadius = wallScript.collisionRadius ?? 25; // 使用预制体设置的值，如果没有设置则默认为25
             const distanceToWall = Vec3.distance(position, wallPos);
             const minDistance = enemyRadius + wallRadius;
 

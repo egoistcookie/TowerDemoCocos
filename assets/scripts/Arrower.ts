@@ -97,4 +97,7 @@ export class Arrower extends Role {
     
     @property({ type: SpriteFrame, override: true })
     unitIcon: SpriteFrame = null!;
+
+    
+    battleSlogans: string[] = ['箭如雨下！', '射击！射击！射击！', '瞄准，射击！', '弓弦紧绷射天狼!', '箭似流星！','射箭！射箭！射箭！', 'Biu! Biu! Biu!'];
 }

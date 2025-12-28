@@ -233,7 +233,7 @@
       "maxHealth": 50,
       "buildCost": 5,
       "goldReward": 1,
-      "collisionRadius": 40,
+      "collisionRadius": 25,
       "level": 1
     },
     "displayInfo": {

@@ -104,6 +104,8 @@ export class Hunter extends Role {
     @property({ type: SpriteFrame, override: true })
     unitIcon: SpriteFrame = null!;
 
+    battleSlogans: string[] = ['我潜行于黑暗之中！', '利爪撕破长夜！', '月神指引我的道路!', '猎杀时刻！', '射击！射击！射击！', '瞄准，射击！']; // 战斗口号数组（可在编辑器中配置）
+
     /**
      * 重写攻击方法，使用回旋镖
      */
