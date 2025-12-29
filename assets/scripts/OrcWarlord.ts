@@ -4,6 +4,7 @@ import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
 import { AudioManager } from './AudioManager';
 import { UnitType } from './WarAncientTree';
+import { EnemyPool } from './EnemyPool';
 const { ccclass, property } = _decorator;
 
 @ccclass('OrcWarlord')
@@ -138,6 +139,9 @@ export class OrcWarlord extends Component {
     private warcryBuffedEnemies: Set<Node> = new Set(); // 被战争咆哮影响的敌人集合
     private warcryBuffEndTime: Map<Node, number> = new Map(); // 每个敌人的buff结束时间
     private wasPlayingAttackBeforeWarcry: boolean = false; // 战争咆哮前是否正在攻击（用于战争咆哮完成后重新开始攻击）
+    
+    // 对象池相关：预制体名称（用于对象池回收）
+    public prefabName: string = "OrcWarlord";
 
     start() {
         this.currentHealth = this.maxHealth;
@@ -2030,12 +2034,71 @@ export class OrcWarlord extends Component {
         // 优先播放死亡动画
         this.playDeathAnimation();
 
-        // 尸体暂留1分钟后销毁
-        setTimeout(() => {
-            if (this.node && this.node.isValid) {
-                this.node.destroy();
+        // 性能优化：使用对象池回收敌人，而不是直接销毁
+        const returnToPool = () => {
+            const enemyPool = EnemyPool.getInstance();
+            if (enemyPool && this.node && this.node.isValid) {
+                // 重置敌人状态（在返回对象池前）
+                this.resetEnemyState();
+                // 返回到对象池
+                enemyPool.release(this.node, this.prefabName);
+            } else {
+                // 如果对象池不存在，直接销毁
+                if (this.node && this.node.isValid) {
+                    this.node.destroy();
+                }
             }
+        };
+        
+        // 尸体暂留1分钟后返回对象池（而不是销毁）
+        setTimeout(() => {
+            returnToPool();
         }, 60000); // 60秒 = 1分钟
+    }
+    
+    /**
+     * 重置敌人状态（用于对象池回收）
+     */
+    private resetEnemyState() {
+        // 重置所有状态变量
+        this.currentHealth = this.maxHealth;
+        this.isDestroyed = false;
+        this.attackTimer = 0;
+        this.attackComplete = false;
+        this.warcryTimer = 0;
+        this.isPlayingWarcryAnimation = false;
+        this.warcryBuffedEnemies.clear();
+        this.warcryBuffEndTime.clear();
+        this.wasPlayingAttackBeforeWarcry = false;
+        this.isHit = false;
+        this.isPlayingAttackAnimation = false;
+        this.isPlayingHitAnimation = false;
+        this.isPlayingDeathAnimation = false;
+        this.isPlayingIdleAnimation = false;
+        this.isPlayingWalkAnimation = false;
+        this.currentTarget = null!;
+        
+        // 重置动画
+        this.currentAnimationFrameIndex = 0;
+        this.animationTimer = 0;
+        
+        // 重置节点状态
+        if (this.node) {
+            this.node.setScale(this.defaultScale);
+            this.node.angle = 0;
+            if (this.sprite) {
+                const color = this.sprite.color.clone();
+                color.a = 255;
+                this.sprite.color = color;
+            }
+        }
+        
+        // 清理血条
+        if (this.healthBarNode && this.healthBarNode.isValid) {
+            this.healthBarNode.destroy();
+        }
+        this.healthBarNode = null!;
+        this.healthBar = null!;
     }
 
     /**

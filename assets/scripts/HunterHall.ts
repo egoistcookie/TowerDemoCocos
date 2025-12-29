@@ -4,6 +4,7 @@ import { GameState } from './GameManager';
 import { UnitInfo } from './UnitInfoPanel';
 import { Build } from './Build';
 import { TalentEffectManager } from './TalentEffectManager';
+import { UnitPool } from './UnitPool';
 const { ccclass, property } = _decorator;
 
 @ccclass('HunterHall')
@@ -239,8 +240,23 @@ export class HunterHall extends Build {
             }
         }
 
-        // 创建Hunter
-        const hunter = instantiate(this.hunterPrefab);
+        // 性能优化：从对象池获取Hunter，而不是直接实例化
+        let hunter: Node | null = null;
+        const unitPool = UnitPool.getInstance();
+        if (unitPool) {
+            // 确保预制体已注册到对象池（如果未注册则注册）
+            const stats = unitPool.getStats();
+            if (!stats['Hunter']) {
+                unitPool.registerPrefab('Hunter', this.hunterPrefab);
+            }
+            hunter = unitPool.get('Hunter');
+        }
+        
+        // 如果对象池没有可用对象，降级使用instantiate
+        if (!hunter) {
+            hunter = instantiate(this.hunterPrefab);
+        }
+        
         hunter.setParent(this.hunterContainer);
         hunter.setWorldPosition(spawnPos);
         hunter.active = true;
@@ -271,6 +287,10 @@ export class HunterHall extends Build {
         // 设置Hunter的建造成本（如果需要）
         const hunterScript = hunter.getComponent('Hunter') as any;
         if (hunterScript) {
+            // 设置prefabName（用于对象池回收）
+            if (hunterScript.prefabName === undefined || hunterScript.prefabName === '') {
+                hunterScript.prefabName = 'Hunter';
+            }
             // 应用配置
             const configManager = UnitConfigManager.getInstance();
             if (configManager.isConfigLoaded()) {

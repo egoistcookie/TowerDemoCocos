@@ -8,6 +8,7 @@ import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
 import { UnitType } from './WarAncientTree';
 import { UnitManager } from './UnitManager';
+import { UnitPool } from './UnitPool';
 const { ccclass, property } = _decorator;
 
 @ccclass('Role')
@@ -141,6 +142,9 @@ export class Role extends Component {
     protected targetFindTimer: number = 0; // 目标查找计时器
     protected readonly TARGET_FIND_INTERVAL: number = 0.2; // 目标查找间隔（秒），不是每帧都查找
     protected hasFoundFirstTarget: boolean = false; // 是否已经找到过第一个目标（用于首次立即查找）
+    
+    // 对象池相关：预制体名称（用于对象池回收）
+    public prefabName: string = ""; // 默认值，子类可以重写
 
     // 对话框相关属性
     @property({ type: [CCString], tooltip: "战斗口号数组，每种单位可以配置自己的战斗口号" })
@@ -2295,17 +2299,148 @@ export class Role extends Component {
         // 移除高亮效果
         this.removeHighlight();
 
-        // 真正销毁弓箭手节点
+        // 性能优化：使用对象池回收单位，而不是直接销毁
+        const returnToPool = () => {
+            const unitPool = UnitPool.getInstance();
+            if (unitPool && this.node && this.node.isValid) {
+                // 重置单位状态（在返回对象池前）
+                this.resetRoleState();
+                // 返回到对象池
+                unitPool.release(this.node, this.prefabName);
+            } else {
+                // 如果对象池不存在，直接销毁
+                if (this.node && this.node.isValid) {
+                    this.node.destroy();
+                }
+            }
+        };
+        
+        // 延迟返回对象池，等待死亡动画播放完成
         this.scheduleOnce(() => {
             // 销毁血条节点
             if (this.healthBarNode && this.healthBarNode.isValid) {
                 this.healthBarNode.destroy();
             }
-            // 销毁弓箭手节点
-            if (this.node && this.node.isValid) {
-                this.node.destroy();
-            }
+            // 返回对象池而不是销毁
+            returnToPool();
         }, this.deathAnimationDuration); // 延迟时间与死亡动画时长相同，确保死亡动画完整播放
+    }
+    
+    /**
+     * 重置单位状态（用于对象池回收）
+     */
+    private resetRoleState() {
+        // 重置所有状态变量
+        this.currentHealth = this.maxHealth;
+        this.isDestroyed = false;
+        this.attackTimer = 0;
+        this.targetFindTimer = 0;
+        this.currentTarget = null!;
+        this.isHit = false;
+        this.isPlayingAttackAnimation = false;
+        this.isPlayingHitAnimation = false;
+        this.isPlayingDeathAnimation = false;
+        this.isPlayingMoveAnimation = false;
+        this.isMoving = false;
+        this.moveTarget = null!;
+        this.manualMoveTarget = null!;
+        this.isManuallyControlled = false;
+        this.hasFoundFirstTarget = false;
+        
+        // 重置动画
+        this.currentAnimationFrameIndex = 0;
+        this.animationTimer = 0;
+        
+        // 重置节点状态
+        if (this.node) {
+            this.node.setScale(this.defaultScale);
+            this.node.angle = 0;
+            if (this.sprite) {
+                const color = this.sprite.color.clone();
+                color.a = 255;
+                this.sprite.color = color;
+            }
+        }
+        
+        // 清理对话框
+        if (this.dialogNode && this.dialogNode.isValid) {
+            this.dialogNode.destroy();
+        }
+        this.dialogNode = null;
+        this.dialogLabel = null;
+        
+        // 清理血条
+        if (this.healthBarNode && this.healthBarNode.isValid) {
+            this.healthBarNode.destroy();
+        }
+        this.healthBarNode = null!;
+        this.healthBar = null!;
+        
+        // 移除高亮效果
+        this.removeHighlight();
+        
+        // 移除点击事件监听（会在onEnable中重新添加）
+        this.node.off(Node.EventType.TOUCH_END, this.onTowerClick, this);
+    }
+    
+    /**
+     * 当单位从对象池激活时调用（用于对象池复用）
+     * 从对象池获取的单位会调用此方法，而不是start方法
+     */
+    onEnable() {
+        // 从对象池获取时，重新初始化状态
+        // 注意：sprite等组件引用在start中已经初始化，这里只需要重置状态
+        if (this.sprite && this.defaultSpriteFrame) {
+            this.sprite.spriteFrame = this.defaultSpriteFrame;
+        }
+        
+        // 重新初始化状态
+        this.currentHealth = this.maxHealth;
+        this.isDestroyed = false;
+        this.attackTimer = 0;
+        this.targetFindTimer = 0;
+        this.currentTarget = null!;
+        this.isHit = false;
+        this.isPlayingAttackAnimation = false;
+        this.isPlayingHitAnimation = false;
+        this.isPlayingDeathAnimation = false;
+        this.isPlayingMoveAnimation = false;
+        this.isMoving = false;
+        this.moveTarget = null!;
+        this.manualMoveTarget = null!;
+        this.isManuallyControlled = false;
+        this.hasFoundFirstTarget = false;
+        
+        // 重置节点状态
+        if (this.node) {
+            this.node.setScale(this.defaultScale);
+            this.node.angle = 0;
+            if (this.sprite) {
+                const color = this.sprite.color.clone();
+                color.a = 255;
+                this.sprite.color = color;
+            }
+        }
+        
+        // 重新查找游戏管理器（可能已变化）
+        this.findGameManager();
+        
+        // 重新查找单位管理器
+        this.unitManager = UnitManager.getInstance();
+        
+        // 重新查找单位选择管理器
+        this.findUnitSelectionManager();
+        
+        // 重新创建血条（如果不存在）
+        if (!this.healthBarNode || !this.healthBarNode.isValid) {
+            this.createHealthBar();
+        }
+        
+        // 重新初始化对话框系统
+        this.initDialogSystem();
+        
+        // 重新监听点击事件
+        this.node.on(Node.EventType.TOUCH_END, this.onTowerClick, this);
     }
 
     getHealth(): number {

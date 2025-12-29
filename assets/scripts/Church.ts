@@ -7,6 +7,7 @@ import { UnitConfigManager } from './UnitConfigManager';
 import { UnitType } from './WarAncientTree';
 import { Priest } from './Priest';
 import { TalentEffectManager } from './TalentEffectManager';
+import { UnitPool } from './UnitPool';
 const { ccclass, property } = _decorator;
 
 @ccclass('Church')
@@ -227,13 +228,33 @@ export class Church extends Build {
             }
         }
 
-        const priest = instantiate(this.priestPrefab);
+        // 性能优化：从对象池获取Priest，而不是直接实例化
+        let priest: Node | null = null;
+        const unitPool = UnitPool.getInstance();
+        if (unitPool) {
+            // 确保预制体已注册到对象池（如果未注册则注册）
+            const stats = unitPool.getStats();
+            if (!stats['Priest']) {
+                unitPool.registerPrefab('Priest', this.priestPrefab);
+            }
+            priest = unitPool.get('Priest');
+        }
+        
+        // 如果对象池没有可用对象，降级使用instantiate
+        if (!priest) {
+            priest = instantiate(this.priestPrefab);
+        }
+        
         priest.setParent(this.priestContainer);
         priest.setWorldPosition(spawnPos);
         priest.active = true;
 
         const priestScript = priest.getComponent(Priest) as Priest | null;
         if (priestScript) {
+            // 设置prefabName（用于对象池回收）
+            if (priestScript.prefabName === undefined || priestScript.prefabName === '') {
+                priestScript.prefabName = 'Priest';
+            }
             const configManager = UnitConfigManager.getInstance();
             if (configManager.isConfigLoaded()) {
                 // 排除 buildCost，由教堂脚本控制

@@ -4,6 +4,7 @@ import { GameState } from './GameManager';
 import { TalentEffectManager } from './TalentEffectManager';
 import { UnitInfo } from './UnitInfoPanel';
 import { Build } from './Build';
+import { UnitPool } from './UnitPool';
 const { ccclass, property } = _decorator;
 
 @ccclass('SwordsmanHall')
@@ -215,8 +216,23 @@ export class SwordsmanHall extends Build {
             }
         }
 
-        // 创建ElfSwordsman
-        const swordsman = instantiate(this.swordsmanPrefab);
+        // 性能优化：从对象池获取ElfSwordsman，而不是直接实例化
+        let swordsman: Node | null = null;
+        const unitPool = UnitPool.getInstance();
+        if (unitPool) {
+            // 确保预制体已注册到对象池（如果未注册则注册）
+            const stats = unitPool.getStats();
+            if (!stats['ElfSwordsman']) {
+                unitPool.registerPrefab('ElfSwordsman', this.swordsmanPrefab);
+            }
+            swordsman = unitPool.get('ElfSwordsman');
+        }
+        
+        // 如果对象池没有可用对象，降级使用instantiate
+        if (!swordsman) {
+            swordsman = instantiate(this.swordsmanPrefab);
+        }
+        
         swordsman.setParent(this.swordsmanContainer);
         swordsman.setWorldPosition(spawnPos);
         swordsman.active = true;
@@ -247,6 +263,10 @@ export class SwordsmanHall extends Build {
         // 设置ElfSwordsman的建造成本（如果需要）
         const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
         if (swordsmanScript) {
+            // 设置prefabName（用于对象池回收）
+            if (swordsmanScript.prefabName === undefined || swordsmanScript.prefabName === '') {
+                swordsmanScript.prefabName = 'ElfSwordsman';
+            }
             // 应用配置
             const configManager = UnitConfigManager.getInstance();
             if (configManager.isConfigLoaded()) {

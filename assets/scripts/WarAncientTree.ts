@@ -6,6 +6,7 @@ import { UnitInfo } from './UnitInfoPanel';
 import { UnitConfigManager } from './UnitConfigManager';
 import { Build } from './Build';
 import { TalentEffectManager } from './TalentEffectManager';
+import { UnitPool } from './UnitPool';
 const { ccclass, property } = _decorator;
 
 // 单位类型枚举
@@ -503,8 +504,23 @@ export class WarAncientTree extends Build {
             }
         }
 
-        // 创建Tower
-        const tower = instantiate(this.towerPrefab);
+        // 性能优化：从对象池获取Tower，而不是直接实例化
+        let tower: Node | null = null;
+        const unitPool = UnitPool.getInstance();
+        if (unitPool) {
+            // 确保预制体已注册到对象池（如果未注册则注册）
+            const stats = unitPool.getStats();
+            if (!stats['Arrower']) {
+                unitPool.registerPrefab('Arrower', this.towerPrefab);
+            }
+            tower = unitPool.get('Arrower');
+        }
+        
+        // 如果对象池没有可用对象，降级使用instantiate
+        if (!tower) {
+            tower = instantiate(this.towerPrefab);
+        }
+        
         tower.setParent(this.towerContainer);
         tower.setWorldPosition(spawnPos);
         tower.active = true;
@@ -512,6 +528,10 @@ export class WarAncientTree extends Build {
         // 设置Tower的建造成本（如果需要）
         const towerScript = tower.getComponent(Arrower);
         if (towerScript) {
+            // 设置prefabName（用于对象池回收）
+            if (towerScript.prefabName === undefined || towerScript.prefabName === '') {
+                towerScript.prefabName = 'Arrower';
+            }
             // 先应用配置（排除 buildCost，因为需要在实例化时动态设置）
             const configManager = UnitConfigManager.getInstance();
             if (configManager.isConfigLoaded()) {

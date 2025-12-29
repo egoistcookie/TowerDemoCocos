@@ -5,6 +5,7 @@ import { Enemy } from './Enemy';
 import { OrcWarrior } from './OrcWarrior';
 import { OrcWarlord } from './OrcWarlord';
 import { TrollSpearman } from './TrollSpearman';
+import { EnemyPool } from './EnemyPool';
 const { ccclass, property } = _decorator;
 
 // 定义波次配置接口
@@ -93,6 +94,9 @@ export class EnemySpawner extends Component {
     
     // 敌人预制体映射表
     private enemyPrefabMap: Map<string, Prefab> = new Map();
+    
+    // 对象池引用
+    private enemyPool: EnemyPool = null!;
 
     start() {
         // 初始化变量
@@ -143,8 +147,42 @@ export class EnemySpawner extends Component {
         // 初始化敌人预制体映射表
         this.initEnemyPrefabMap();
         
+        // 初始化对象池
+        this.initEnemyPool();
+        
         // 加载波次配置
         this.loadWaveConfig();
+    }
+    
+    /**
+     * 初始化敌人对象池
+     */
+    private initEnemyPool() {
+        // 查找或创建对象池节点
+        let poolNode = find('EnemyPool');
+        if (!poolNode) {
+            poolNode = new Node('EnemyPool');
+            const canvas = find('Canvas');
+            if (canvas) {
+                poolNode.setParent(canvas);
+            } else if (this.node.scene) {
+                poolNode.setParent(this.node.scene);
+            }
+            // 添加EnemyPool组件
+            this.enemyPool = poolNode.addComponent(EnemyPool);
+        } else {
+            this.enemyPool = poolNode.getComponent(EnemyPool);
+            if (!this.enemyPool) {
+                this.enemyPool = poolNode.addComponent(EnemyPool);
+            }
+        }
+        
+        // 注册所有敌人预制体到对象池
+        for (const [prefabName, prefab] of this.enemyPrefabMap.entries()) {
+            if (this.enemyPool) {
+                this.enemyPool.registerPrefab(prefabName, prefab);
+            }
+        }
     }
     
     /**
@@ -699,14 +737,26 @@ export class EnemySpawner extends Component {
             0
         );
 
-        // 实例化敌人
-        const enemy = instantiate(enemyPrefab);
+        // 性能优化：从对象池获取敌人，而不是直接实例化
+        let enemy: Node | null = null;
+        if (this.enemyPool) {
+            enemy = this.enemyPool.get(this.testEnemyType);
+        }
+        
+        // 如果对象池没有可用对象，降级使用instantiate
+        if (!enemy) {
+            enemy = instantiate(enemyPrefab);
+        }
+        
         enemy.setParent(this.enemyContainer || this.node);
         enemy.setWorldPosition(spawnPos);
 
         // 设置敌人的目标水晶
         const enemyScript = enemy.getComponent(Enemy) as any || enemy.getComponent(OrcWarrior) as any || enemy.getComponent(OrcWarlord) as any || enemy.getComponent(TrollSpearman) as any;
         if (enemyScript) {
+            // 设置prefabName（用于对象池回收）
+            enemyScript.prefabName = this.testEnemyType;
+            
             if (this.targetCrystal) {
                 enemyScript.targetCrystal = this.targetCrystal;
             }
@@ -762,8 +812,17 @@ export class EnemySpawner extends Component {
             0
         );
 
-        // 实例化敌人
-        const enemy = instantiate(enemyPrefab);
+        // 性能优化：从对象池获取敌人，而不是直接实例化
+        let enemy: Node | null = null;
+        if (this.enemyPool) {
+            enemy = this.enemyPool.get(prefabName);
+        }
+        
+        // 如果对象池没有可用对象，降级使用instantiate
+        if (!enemy) {
+            enemy = instantiate(enemyPrefab);
+        }
+        
         enemy.setParent(this.enemyContainer || this.node);
         enemy.setWorldPosition(spawnPos);
 
@@ -771,6 +830,9 @@ export class EnemySpawner extends Component {
         // 尝试获取不同类型的敌人组件
         const enemyScript = enemy.getComponent(Enemy) as any || enemy.getComponent(OrcWarrior) as any || enemy.getComponent(OrcWarlord) as any || enemy.getComponent(TrollSpearman) as any;
         if (enemyScript) {
+            // 设置prefabName（用于对象池回收）
+            enemyScript.prefabName = prefabName;
+            
             if (this.targetCrystal) {
                 enemyScript.targetCrystal = this.targetCrystal;
             } else {
@@ -869,6 +931,17 @@ export class EnemySpawner extends Component {
         
         // 重新初始化敌人预制体映射表
         this.initEnemyPrefabMap();
+        
+        // 重新初始化对象池（清空并重新注册）
+        if (this.enemyPool) {
+            this.enemyPool.clearAllPools();
+            // 重新注册所有预制体
+            for (const [prefabName, prefab] of this.enemyPrefabMap.entries()) {
+                this.enemyPool.registerPrefab(prefabName, prefab);
+            }
+        } else {
+            this.initEnemyPool();
+        }
         
         // 更新当前关卡配置
         this.updateCurrentLevel();

@@ -4,6 +4,7 @@ import { UnitIntroPopup } from './UnitIntroPopup';
 import { UnitConfigManager } from './UnitConfigManager';
 import { PlayerDataManager } from './PlayerDataManager';
 import { UnitManager } from './UnitManager';
+import { UnitPool } from './UnitPool';
 const { ccclass, property } = _decorator;
 
 export enum GameState {
@@ -202,6 +203,7 @@ export class GameManager extends Component {
     start() {
         // 初始化单位管理器（性能优化）
         this.initializeUnitManager();
+        this.initializeUnitPool();
         
         // 加载单位配置
         const configManager = UnitConfigManager.getInstance();
@@ -307,6 +309,30 @@ export class GameManager extends Component {
             }
             // 添加UnitManager组件
             unitManagerNode.addComponent(UnitManager);
+        }
+    }
+    
+    /**
+     * 初始化单位对象池（性能优化）
+     */
+    private initializeUnitPool() {
+        // 检查是否已存在UnitPool
+        let unitPoolNode = find('UnitPool');
+        if (!unitPoolNode) {
+            // 创建UnitPool节点
+            unitPoolNode = new Node('UnitPool');
+            const scene = director.getScene();
+            if (scene) {
+                unitPoolNode.setParent(scene);
+            } else {
+                // 如果场景不存在，尝试添加到Canvas
+                const canvas = find('Canvas');
+                if (canvas) {
+                    unitPoolNode.setParent(canvas);
+                }
+            }
+            // 添加UnitPool组件
+            unitPoolNode.addComponent(UnitPool);
         }
     }
     
