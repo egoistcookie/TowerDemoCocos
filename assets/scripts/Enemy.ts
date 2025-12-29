@@ -124,6 +124,7 @@ export class Enemy extends Component {
     private cachedTargetComponentType: string = ''; // 缓存的目标组件类型
     private lastComponentCheckTime: number = 0; // 上次组件检查时间
     private readonly COMPONENT_CHECK_INTERVAL: number = 0.1; // 组件检查间隔（秒）
+    private lastFriendlyUnitCheckTime: number = 0; // 上次检测我方单位的时间（性能优化）
     
     // 唯一ID，用于区分不同的敌人实例
     private enemyId: string = "";
@@ -703,29 +704,12 @@ export class Enemy extends Component {
                         const gapTarget = this.topLayerGapTarget;
                         this.topLayerGapTarget = null;
                         
-                        // 进入网格寻路模式
+                        // 进入网格寻路模式（简化：直接进入，不使用A*算法）
                         this.isInStoneWallGrid = true;
-                        const path = this.findPathInStoneWallGrid();
-                        if (path && path.length > 0) {
-                            this.gridPath = path;
-                            this.currentPathIndex = 0;
-                            this.moveInStoneWallGrid(deltaTime);
-                            return;
-                        } else {
-                            // 无路可走，攻击最近的石墙（最高优先级）
-                            this.isInStoneWallGrid = false;
-                            const nearestWall = this.findNearestStoneWall();
-                            if (nearestWall) {
-                                this.currentTarget = nearestWall;
-                                // 清除绕行目标点，因为A*寻路失败后的石墙攻击优先级更高
-                                if (this.detourTarget) {
-                                    this.detourTarget = null;
-                                }
-                                // 不立即return，让后续逻辑处理移动和攻击
-                            } else {
-                                return;
-                            }
-                        }
+                        this.gridPath = [];
+                        this.currentPathIndex = 0;
+                        this.moveInStoneWallGrid(deltaTime);
+                        return;
                         // 继续执行，让后续逻辑处理石墙攻击
                     } else {
                         // 向缺口移动前，优先检测我方单位
@@ -783,34 +767,16 @@ export class Enemy extends Component {
                 this.detourTarget = null;
                 // 直接跳过后续的网格和绕行逻辑，进入向水晶移动的逻辑
             } else if (this.checkStoneWallGridBelowEnemy()) {
-                // checkStoneWallGridBelowEnemy() 已经检查了是否到达最底层，所以这里直接进入网格寻路模式
+                // checkStoneWallGridBelowEnemy() 已经检查了是否到达最底层，所以这里直接进入网格寻路模式（简化：不使用A*算法）
                 this.isInStoneWallGrid = true;
-                const path = this.findPathInStoneWallGrid();
-                if (path && path.length > 0) {
-                    this.gridPath = path;
-                    this.currentPathIndex = 0;
-                    this.moveInStoneWallGrid(deltaTime);
-                    // 如果正在播放攻击动画，停止攻击动画
-                    if (this.isPlayingAttackAnimation) {
-                        this.isPlayingAttackAnimation = false;
-                    }
-                    return;
-                } else {
-                    // 无路可走，攻击最近的石墙（最高优先级）
-                    this.isInStoneWallGrid = false;
-                    const nearestWall = this.findNearestStoneWall();
-                    if (nearestWall) {
-                        this.currentTarget = nearestWall;
-                        // 清除绕行目标点，因为A*寻路失败后的石墙攻击优先级更高
-                        if (this.detourTarget) {
-                            this.detourTarget = null;
-                        }
-                        // 不立即return，让后续逻辑处理移动和攻击
-                    } else {
-                        return;
-                    }
+                this.gridPath = [];
+                this.currentPathIndex = 0;
+                this.moveInStoneWallGrid(deltaTime);
+                // 如果正在播放攻击动画，停止攻击动画
+                if (this.isPlayingAttackAnimation) {
+                    this.isPlayingAttackAnimation = false;
                 }
-                // 继续执行，让后续逻辑处理石墙攻击
+                return;
             }
         }
 
@@ -4638,221 +4604,29 @@ export class Enemy extends Component {
      * 重新规划网格路径（当石墙被摧毁或放置时调用）
      */
     private replanGridPath() {
+        // 简化：不再重新规划路径，直接使用简单移动逻辑
+        // 如果已经在网格中，继续使用moveInStoneWallGrid的简单移动逻辑
         if (!this.isInStoneWallGrid) {
             return;
         }
-
-        // 重新计算路径
-        const path = this.findPathInStoneWallGrid();
-        if (path && path.length > 0) {
-            this.gridPath = path;
-            this.currentPathIndex = 0;
-        } else {
-            // 无路可走，退出网格寻路模式
-            this.isInStoneWallGrid = false;
-            this.gridPath = [];
-            this.currentPathIndex = 0;
-            
-            // 尝试攻击最近的石墙
-            const nearestWall = this.findNearestStoneWall();
-            if (nearestWall) {
-                this.currentTarget = nearestWall;
-            }
-        }
+        // 不需要重新规划，moveInStoneWallGrid会自动处理
     }
 
     /**
-     * A*寻路算法节点
-     */
-    private createAStarNode(x: number, y: number): { x: number; y: number; g: number; h: number; f: number; parent: any } {
-        return {
-            x: x,
-            y: y,
-            g: 0,
-            h: 0,
-            f: 0,
-            parent: null
-        };
-    }
-
-    /**
-     * 在网格中使用A*算法寻路到最底层
+     * 在网格中寻路（已移除A*算法，不再使用）
+     * 性能优化：完全移除A*算法，使用简单的直接向下移动+左右绕行
      */
     private findPathInStoneWallGrid(): Vec3[] | null {
-        this.findStoneWallGridPanel();
-        
-        if (!this.stoneWallGridPanelComponent) {
-            return null;
-        }
-
-        const enemyPos = this.node.worldPosition;
-        const grid = this.stoneWallGridPanelComponent.worldToGrid(enemyPos);
-
-        // 如果敌人不在网格内，尝试找到最近的网格入口点
-        let startGrid: { x: number; y: number } | null = grid;
-        if (!startGrid) {
-            // 敌人不在网格内，找到最近的网格点作为起点
-            // 计算敌人到网格的距离，找到最近的网格边界点
-            const gridMinX = 0;
-            const gridMaxX = 750;
-            const gridMinY = 500;
-            const gridMaxY = 1000;
-            
-            let nearestX = Math.max(gridMinX, Math.min(gridMaxX, enemyPos.x));
-            let nearestY = Math.max(gridMinY, Math.min(gridMaxY, enemyPos.y));
-            
-            // 如果敌人在网格上方，从网格顶部进入
-            if (enemyPos.y > gridMaxY) {
-                nearestY = gridMaxY;
-            }
-            
-            const nearestWorldPos = new Vec3(nearestX, nearestY, 0);
-            startGrid = this.stoneWallGridPanelComponent.worldToGrid(nearestWorldPos);
-            if (!startGrid) {
-                return null;
-            }
-        }
-
-        // 使用A*算法寻路到最底层（gridY=0）
-        const path = this.findPathToBottomLayerAStar(startGrid.x, startGrid.y);
-        
-        if (!path || path.length === 0) {
-            return null;
-        }
-
-        // 将网格坐标路径转换为世界坐标
-        const worldPath: Vec3[] = [];
-        for (let i = 0; i < path.length; i++) {
-            const gridPos = path[i];
-            const worldPos = this.stoneWallGridPanelComponent.gridToWorld(gridPos.x, gridPos.y);
-            if (worldPos) {
-                worldPath.push(worldPos);
-            }
-        }
-
-        return worldPath;
+        // 不再使用A*算法，直接返回null，让moveInStoneWallGrid使用简单移动逻辑
+        return null;
     }
 
     /**
-     * A*寻路核心算法：寻找从起点到最底层（gridY=0）的路径
+     * A*寻路核心算法（已完全移除，不再使用）
+     * 性能优化：移除A*算法以提升性能
      */
     private findPathToBottomLayerAStar(startX: number, startY: number): { x: number; y: number }[] | null {
-        if (!this.stoneWallGridPanelComponent) {
-            return null;
-        }
-
-        // 从组件获取网格尺寸，而不是硬编码
-        const gridWidth = this.stoneWallGridPanelComponent.gridWidth;
-        const gridHeight = this.stoneWallGridPanelComponent.gridHeight;
-        const targetY = 0; // 最底层
-
-        // 如果起点已经在最底层，直接返回
-        if (startY <= targetY) {
-            return [{ x: startX, y: targetY }];
-        }
-
-        // A*算法实现
-        const openList: Array<{ x: number; y: number; g: number; h: number; f: number; parent: any }> = [];
-        const closedList: Set<string> = new Set();
-        
-        const startNode = this.createAStarNode(startX, startY);
-        startNode.g = 0;
-        startNode.h = Math.abs(startY - targetY); // 启发式：到最底层的距离
-        startNode.f = startNode.g + startNode.h;
-        openList.push(startNode);
-
-        // 四个方向的移动（上下左右）
-        const directions = [
-            { x: 0, y: -1 }, // 向下（朝向gridY=0）
-            { x: -1, y: 0 }, // 向左
-            { x: 1, y: 0 },  // 向右
-            { x: 0, y: 1 }   // 向上（远离gridY=0，优先级最低）
-        ];
-
-        while (openList.length > 0) {
-            // 找到f值最小的节点
-            let currentNodeIndex = 0;
-            for (let i = 1; i < openList.length; i++) {
-                if (openList[i].f < openList[currentNodeIndex].f) {
-                    currentNodeIndex = i;
-                }
-            }
-
-            const currentNode = openList.splice(currentNodeIndex, 1)[0];
-            const nodeKey = `${currentNode.x},${currentNode.y}`;
-            closedList.add(nodeKey);
-
-            // 检查是否到达目标层
-            if (currentNode.y <= targetY) {
-                // 重构路径
-                const path: { x: number; y: number }[] = [];
-                let node: any = currentNode;
-                while (node) {
-                    path.unshift({ x: node.x, y: node.y });
-                    node = node.parent;
-                }
-                return path;
-            }
-
-            // 检查相邻节点
-            for (const dir of directions) {
-                const newX = currentNode.x + dir.x;
-                const newY = currentNode.y + dir.y;
-
-                // 检查边界
-                if (newX < 0 || newX >= gridWidth || newY < 0 || newY >= gridHeight) {
-                    continue;
-                }
-
-                // 检查是否已访问
-                const newKey = `${newX},${newY}`;
-                if (closedList.has(newKey)) {
-                    continue;
-                }
-
-                // 检查该格子是否被石墙占用（同时检查网格状态和实际石墙节点）
-                const isOccupied = this.stoneWallGridPanelComponent.isGridOccupied(newX, newY);
-                if (isOccupied) {
-                    // 网格状态显示被占用，跳过
-                    continue;
-                }
-                
-                // 进一步验证：检查该位置是否真的有石墙节点（即使占用状态可能不正确）
-                const worldPos = this.stoneWallGridPanelComponent.gridToWorld(newX, newY);
-                if (worldPos && this.checkStoneWallAtPosition(worldPos)) {
-                    // 实际检测到石墙节点，跳过该格子
-                    continue;
-                }
-
-                // 计算代价
-                const moveCost = 1; // 每个格子的移动代价为1
-                const newG = currentNode.g + moveCost;
-                const newH = Math.abs(newY - targetY); // 到目标层的距离
-                const newF = newG + newH;
-
-                // 检查openList中是否已有该节点
-                let existingNode = openList.find(n => n.x === newX && n.y === newY);
-                if (existingNode) {
-                    // 如果新路径更好，更新节点
-                    if (newF < existingNode.f) {
-                        existingNode.g = newG;
-                        existingNode.h = newH;
-                        existingNode.f = newF;
-                        existingNode.parent = currentNode;
-                    }
-                } else {
-                    // 添加新节点到openList
-                    const newNode = this.createAStarNode(newX, newY);
-                    newNode.g = newG;
-                    newNode.h = newH;
-                    newNode.f = newF;
-                    newNode.parent = currentNode;
-                    openList.push(newNode);
-                }
-            }
-        }
-
-        // 无法找到路径
+        // 已移除A*算法，直接返回null
         return null;
     }
 
@@ -5039,7 +4813,8 @@ export class Enemy extends Component {
     }
 
     /**
-     * 在网格内移动
+     * 在网格内移动（已简化：不再使用A*路径，直接向下移动+左右绕行）
+     * 性能优化：移除A*算法，使用简单的直接移动逻辑
      */
     private moveInStoneWallGrid(deltaTime: number) {
         // 如果正在播放攻击动画，停止攻击动画并切换到移动动画
@@ -5049,151 +4824,120 @@ export class Enemy extends Component {
             this.stopAllAnimations();
         }
         
-        // 优先检测我方单位（弓箭手、女猎手、剑士），如果路径畅通则优先攻击
-        const friendlyUnit = this.checkForFriendlyUnitInGrid();
-        if (friendlyUnit) {
-            // 检测到我方单位且路径畅通，退出网格寻路模式，优先攻击我方单位
-            this.isInStoneWallGrid = false;
-            this.currentTarget = friendlyUnit;
-            this.gridPath = [];
-            this.currentPathIndex = 0;
-            // 清除绕行目标点
-            if (this.detourTarget) {
-                this.detourTarget = null;
-            }
-            // 继续执行后续逻辑处理移动和攻击
-            return;
-        }
-
-        // 定期检查路径是否仍然有效（每0.5秒检查一次，避免频繁检查）
-        const checkInterval = 0.5;
-        const now = Date.now() / 1000;
-        if (!this.lastPathCheckTime) {
-            this.lastPathCheckTime = now;
-        }
-        if (this.gridPath && this.gridPath.length > 0 && now - this.lastPathCheckTime >= checkInterval) {
-            this.lastPathCheckTime = now;
-            if (!this.checkGridPathValid()) {
-                this.replanGridPath();
-                // 如果重新规划后没有路径，继续执行后续逻辑
-                if (!this.gridPath || this.gridPath.length === 0) {
-                    return;
-                }
-            }
-        }
-
-        if (!this.gridPath || this.gridPath.length === 0) {
-            // 没有路径，尝试重新寻路
-            const newPath = this.findPathInStoneWallGrid();
-            if (newPath && newPath.length > 0) {
-                this.gridPath = newPath;
-                this.currentPathIndex = 0;
-            } else {
-                // 无路可走，清除网格寻路状态，尝试攻击石墙
+        // 性能优化：大幅减少检测频率，每2秒检测一次我方单位（而不是每帧）
+        this.lastFriendlyUnitCheckTime += deltaTime;
+        
+        if (this.lastFriendlyUnitCheckTime >= 2.0) {
+            this.lastFriendlyUnitCheckTime = 0;
+            // 优先检测我方单位（弓箭手、女猎手、剑士），如果路径畅通则优先攻击
+            const friendlyUnit = this.checkForFriendlyUnitInGrid();
+            if (friendlyUnit) {
+                // 检测到我方单位且路径畅通，退出网格寻路模式，优先攻击我方单位
                 this.isInStoneWallGrid = false;
-                const nearestWall = this.findNearestStoneWall();
-                if (nearestWall) {
-                    this.currentTarget = nearestWall;
+                this.currentTarget = friendlyUnit;
+                this.gridPath = [];
+                this.currentPathIndex = 0;
+                // 清除绕行目标点
+                if (this.detourTarget) {
+                    this.detourTarget = null;
                 }
+                // 继续执行后续逻辑处理移动和攻击
                 return;
             }
         }
 
-        // 检查是否已经到达最后一个路径点
-        if (this.currentPathIndex >= this.gridPath.length) {
-            // 已到达最底层，清除网格寻路状态
+        // 检查是否已经到达最底层（gridY=0）
+        this.findStoneWallGridPanel();
+        if (!this.stoneWallGridPanelComponent) {
             this.isInStoneWallGrid = false;
-            this.gridPath = [];
-            this.currentPathIndex = 0;
-            
-            // 确认敌人确实在最底层
-            const finalGrid = this.stoneWallGridPanelComponent?.worldToGrid(this.node.worldPosition);
-            if (finalGrid && finalGrid.y <= 0) {
-            } else {
-                const finalGridInfo = finalGrid ? `gridY=${finalGrid.y}` : '不在网格内';
-            }
             return;
         }
 
-        const targetPoint = this.gridPath[this.currentPathIndex];
+        // 性能优化：缓存网格位置，减少worldToGrid调用
         const enemyPos = this.node.worldPosition;
-        const direction = new Vec3();
-        Vec3.subtract(direction, targetPoint, enemyPos);
-        const distance = direction.length();
+        if (!this.cachedCurrentGrid || this.lastGridCheckTime >= this.GRID_CHECK_INTERVAL) {
+            this.cachedCurrentGrid = this.stoneWallGridPanelComponent.worldToGrid(enemyPos);
+            this.lastGridCheckTime = 0;
+        }
+        this.lastGridCheckTime += deltaTime;
+        
+        if (this.cachedCurrentGrid && this.cachedCurrentGrid.y <= 0) {
+            // 已到达最底层，退出网格寻路模式
+            this.isInStoneWallGrid = false;
+            this.gridPath = [];
+            this.currentPathIndex = 0;
+            return;
+        }
 
-        // 如果已经到达当前路径点
-        if (distance < 10) { // 10像素的到达阈值
-            const currentGrid = this.stoneWallGridPanelComponent?.worldToGrid(this.node.worldPosition);
+        // 性能优化：简化移动逻辑，直接向下移动，遇到阻挡时简单左右绕行
+        // 使用网格系统快速检查，而不是递归查找所有石墙
+        const moveDistance = this.moveSpeed * deltaTime;
+        const downDirection = new Vec3(0, -1, 0); // 直接向下
+        
+        // 性能优化：使用网格系统快速检查石墙，而不是递归查找
+        let finalDirection = downDirection;
+        const checkPos = this.tempVec3_1;
+        Vec3.scaleAndAdd(checkPos, enemyPos, downDirection, moveDistance);
+        
+        // 使用网格系统检查（更快）
+        const checkGrid = this.stoneWallGridPanelComponent.worldToGrid(checkPos);
+        const isBlockedDown = checkGrid && this.stoneWallGridPanelComponent.isGridOccupied(checkGrid.x, checkGrid.y);
+        
+        if (isBlockedDown) {
+            // 向下被阻挡，尝试左右绕行
+            // 优先尝试向右（朝向水晶方向）
+            const rightDirection = new Vec3(1, 0, 0);
+            Vec3.scaleAndAdd(checkPos, enemyPos, rightDirection, moveDistance);
+            const checkGridRight = this.stoneWallGridPanelComponent.worldToGrid(checkPos);
+            const isBlockedRight = checkGridRight && this.stoneWallGridPanelComponent.isGridOccupied(checkGridRight.x, checkGridRight.y);
             
-            // 检查是否已经到达最底层（gridY=0）
-            if (currentGrid && currentGrid.y <= 0) {
-                // 已到达最底层，直接退出网格寻路模式
-                this.isInStoneWallGrid = false;
-                this.gridPath = [];
-                this.currentPathIndex = 0;
-                return;
-            }
-            
-            this.currentPathIndex++;
-            
-            // 如果还有下一个路径点，继续移动
-            if (this.currentPathIndex < this.gridPath.length) {
-                const nextPoint = this.gridPath[this.currentPathIndex];
-                const nextGrid = this.stoneWallGridPanelComponent?.worldToGrid(nextPoint);
-                
-                // 正常移动到下一个路径点（包括最底层），不进行闪现
-                return this.moveInStoneWallGrid(deltaTime);
+            if (!isBlockedRight) {
+                finalDirection = rightDirection;
             } else {
-                // 已到达最后一个路径点，检查是否真的在最底层
-                this.isInStoneWallGrid = false;
-                this.gridPath = [];
-                this.currentPathIndex = 0;
+                // 右也被阻挡，尝试向左
+                const leftDirection = new Vec3(-1, 0, 0);
+                Vec3.scaleAndAdd(checkPos, enemyPos, leftDirection, moveDistance);
+                const checkGridLeft = this.stoneWallGridPanelComponent.worldToGrid(checkPos);
+                const isBlockedLeft = checkGridLeft && this.stoneWallGridPanelComponent.isGridOccupied(checkGridLeft.x, checkGridLeft.y);
                 
-                // 确认敌人确实在最底层，避免重新进入网格寻路模式
-                const finalGrid = this.stoneWallGridPanelComponent?.worldToGrid(this.node.worldPosition);
-                if (finalGrid && finalGrid.y <= 0) {
+                if (!isBlockedLeft) {
+                    finalDirection = leftDirection;
                 } else {
-                    const finalGridInfo = finalGrid ? `gridY=${finalGrid.y}` : '不在网格内';
+                    // 左右都被阻挡，尝试攻击最近的石墙
+                    const nearestWall = this.findNearestStoneWall();
+                    if (nearestWall) {
+                        this.isInStoneWallGrid = false;
+                        this.currentTarget = nearestWall;
+                        return;
+                    }
+                    // 如果找不到石墙，继续尝试向下（可能会卡住，但至少不会崩溃）
                 }
-                return;
             }
         }
-
-        // 向当前路径点移动
-        if (distance > 0.1) {
-            direction.normalize();
-            
-            // 在网格移动中，禁用或大幅减少避让逻辑，优先跟随网格路径
-            // 只在非常接近时才应用轻微的避让，避免反复横跳
-            let finalDirection = direction;
-            const moveDistance = this.moveSpeed * deltaTime;
-            const newPos = new Vec3();
-            Vec3.scaleAndAdd(newPos, enemyPos, direction, moveDistance);
-            
-            // 检查移动后是否会与其他敌人碰撞
-            const willCollide = this.checkCollisionWithEnemy(newPos);
-            if (willCollide) {
-                // 如果会碰撞，应用轻微的避让，但保持主要方向向下
-                const avoidanceDir = this.calculateEnemyAvoidanceDirection(enemyPos, direction, deltaTime);
-                // 混合避让方向和原始方向，但优先保持向下移动
-                const avoidanceWeight = 0.2; // 降低避让权重，优先跟随路径
-                Vec3.lerp(finalDirection, direction, avoidanceDir, avoidanceWeight);
-                finalDirection.normalize();
-                Vec3.scaleAndAdd(newPos, enemyPos, finalDirection, moveDistance);
-            } else {
-                // 不会碰撞，直接使用原始方向
-                finalDirection = direction;
-            }
-            
-            const clampedPos = this.clampPositionToScreen(newPos);
-            this.node.setWorldPosition(clampedPos);
-            
-            // 根据移动方向翻转
-            this.flipDirection(finalDirection);
-            
-            // 播放行走动画
-            this.playWalkAnimation();
+        
+        // 执行移动
+        const newPos = new Vec3();
+        Vec3.scaleAndAdd(newPos, enemyPos, finalDirection, moveDistance);
+        
+        // 检查移动后是否会与其他敌人碰撞
+        const willCollide = this.checkCollisionWithEnemy(newPos);
+        if (willCollide) {
+            // 如果会碰撞，应用轻微的避让
+            const avoidanceDir = this.calculateEnemyAvoidanceDirection(enemyPos, finalDirection, deltaTime);
+            const avoidanceWeight = 0.3;
+            Vec3.lerp(finalDirection, finalDirection, avoidanceDir, avoidanceWeight);
+            finalDirection.normalize();
+            Vec3.scaleAndAdd(newPos, enemyPos, finalDirection, moveDistance);
         }
+        
+        const clampedPos = this.clampPositionToScreen(newPos);
+        this.node.setWorldPosition(clampedPos);
+        
+        // 根据移动方向翻转
+        this.flipDirection(finalDirection);
+        
+        // 播放行走动画
+        this.playWalkAnimation();
     }
 
     /**
