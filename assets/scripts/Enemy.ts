@@ -532,192 +532,152 @@ export class Enemy extends Component {
         }
     }
 
-    /**
-     * 敌人的主更新方法，每帧调用一次
-     * 负责处理敌人的所有逻辑：状态检查、LOD优化、目标查找、移动、攻击等
-     * @param deltaTime 上一帧到当前帧的时间间隔（秒）
-     */
     update(deltaTime: number) {
-        // ========== 第一阶段：基础状态检查 ==========
-        
-        // 如果敌人已被销毁，只更新动画（播放死亡动画），不执行其他逻辑
-        // 这样可以确保死亡动画正常播放，同时避免不必要的计算
+        // 如果被销毁，只更新动画，不执行其他逻辑
         if (this.isDestroyed) {
             this.updateAnimation(deltaTime);
-            return; // 提前返回，不执行后续逻辑
+            return;
         }
 
-        // ========== 第二阶段：性能优化 - LOD系统 ==========
-        
-        // LOD（Level of Detail）系统：根据敌人距离摄像机的远近，动态调整更新频率
-        // 距离摄像机较远的敌人更新频率降低，以提升性能
+        // 性能优化：LOD系统 - 根据距离摄像机远近，降低更新频率
         // 使用累计时间而不是Date.now()，避免系统调用开销
-        this.lastDistanceCheckTime += deltaTime; // 累计距离检查时间
-        // 每隔一定时间间隔检查一次距离，更新LOD级别
+        this.lastDistanceCheckTime += deltaTime;
         if (this.lastDistanceCheckTime >= this.DISTANCE_CHECK_INTERVAL) {
-            this.updateLOD(); // 更新LOD级别，根据距离设置updateSkipInterval
-            this.lastDistanceCheckTime = 0; // 重置距离检查计时器
+            this.updateLOD();
+            this.lastDistanceCheckTime = 0;
         }
         
         // 根据LOD级别决定是否跳过本次更新
-        // updateSkipInterval越大，跳过的帧数越多，更新频率越低
-        this.updateSkipCounter++; // 更新跳过计数器
+        this.updateSkipCounter++;
         if (this.updateSkipCounter < this.updateSkipInterval) {
-            // 跳过本次完整更新，但需要更新动画（降低频率）
-            // 即使敌人很远，动画也需要播放，只是频率降低
-            this.animationUpdateTimer += deltaTime; // 累计动画更新时间
-            // 每隔一定时间更新一次动画
+            // 跳过更新，但更新动画（降低频率）
+            this.animationUpdateTimer += deltaTime;
             if (this.animationUpdateTimer >= this.ANIMATION_UPDATE_INTERVAL) {
-                this.animationUpdateTimer = 0; // 重置动画更新计时器
-                this.updateAnimation(deltaTime); // 更新动画帧
+                this.animationUpdateTimer = 0;
+                this.updateAnimation(deltaTime);
             }
-            return; // 跳过后续所有逻辑，提升性能
+            return;
         }
-        this.updateSkipCounter = 0; // 重置跳过计数器，准备下一次计数
+        this.updateSkipCounter = 0;
 
-        // ========== 第三阶段：游戏状态检查 ==========
-        
         // 检查游戏状态 - 如果GameManager不存在，尝试重新查找
-        // 这可以处理GameManager被动态创建或销毁的情况
         if (!this.gameManager) {
-            this.findGameManager(); // 重新查找GameManager组件
+            this.findGameManager();
         }
         
         // 检查游戏状态，只在Playing状态下运行
-        // 如果游戏已结束、暂停或未开始，敌人应该停止所有行动
         if (this.gameManager) {
-            const gameState = this.gameManager.getGameState(); // 获取当前游戏状态
+            const gameState = this.gameManager.getGameState();
             if (gameState !== GameState.Playing) {
                 // 游戏已结束或暂停，停止移动和攻击
-                this.stopMoving(); // 停止移动动画和逻辑
-                this.currentTarget = null!; // 清除当前目标
-                return; // 提前返回，不执行后续逻辑
+                this.stopMoving();
+                this.currentTarget = null!;
+                return;
             }
         }
 
-        // ========== 第四阶段：计时器更新 ==========
-        
         // 更新攻击计时器
-        // oldAttackTimer用于检测攻击间隔是否刚好达到（用于精确触发攻击）
-        const oldAttackTimer = this.attackTimer; // 保存旧的攻击计时器值
-        this.attackTimer += deltaTime; // 累计攻击计时器，用于控制攻击间隔
-        this.targetFindTimer += deltaTime; // 累计目标查找计时器，用于控制目标查找频率
-        
-        // ========== 第五阶段：对话框系统更新 ==========
+        const oldAttackTimer = this.attackTimer;
+        this.attackTimer += deltaTime;
+        this.targetFindTimer += deltaTime;
         
         // 更新对话框系统（降低频率，只在更新时执行）
-        // 对话框系统会在敌人上方显示随机口号，增加游戏趣味性
-        // 对话框会定期显示，然后自动消失
         this.updateDialogSystem(deltaTime);
         
-        // ========== 第六阶段：目标查找 ==========
-        
+        // 性能优化：使用平方距离比较，避免开方运算，并缓存位置
+        if (this.currentTarget && this.currentTarget.isValid) {
+            // 缓存位置，避免重复访问worldPosition属性
+            this.cachedWorldPosition.set(this.node.worldPosition);
+            this.cachedTargetWorldPosition.set(this.currentTarget.worldPosition);
+            const dx = this.cachedTargetWorldPosition.x - this.cachedWorldPosition.x;
+            const dy = this.cachedTargetWorldPosition.y - this.cachedWorldPosition.y;
+            const distanceSq = dx * dx + dy * dy;
+            const attackRangeSq = this.attackRange * this.attackRange;
+            if (distanceSq <= attackRangeSq) {
+                if (this.attackTimer >= this.attackInterval - 0.1 || (oldAttackTimer < this.attackInterval && this.attackTimer >= this.attackInterval)) {
+                }
+            }
+        }
+
         // 查找目标（优先防御塔，然后水晶）- 按间隔查找而不是每帧都查找
-        // 这样可以减少性能开销，因为目标查找涉及遍历所有单位
         if (this.targetFindTimer >= this.TARGET_FIND_INTERVAL) {
-            this.targetFindTimer = 0; // 重置目标查找计时器
-            this.findTarget(); // 执行目标查找逻辑
+            this.targetFindTimer = 0;
+            this.findTarget();
         }
         
         // 如果当前目标已失效，立即重新查找（不等待间隔）
-        // 这确保敌人能够及时响应目标变化（如目标被摧毁）
         if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
-            // 至少间隔0.1秒，避免频繁查找导致性能问题
-            if (this.targetFindTimer >= 0.1) {
-                this.targetFindTimer = 0; // 重置目标查找计时器
-                this.findTarget(); // 立即重新查找目标
+            if (this.targetFindTimer >= 0.1) { // 至少间隔0.1秒
+                this.targetFindTimer = 0;
+                this.findTarget();
             }
         }
 
-        // ========== 第七阶段：网格寻路逻辑（最高优先级） ==========
-        
         // 最高优先级：如果在网格中寻路，优先执行网格寻路逻辑
-        // 当敌人进入石墙网格区域时，需要按照网格路径移动，绕过石墙
         if (this.isInStoneWallGrid) {
             // 如果正在播放攻击动画，停止攻击动画并切换到移动动画
-            // 因为网格寻路模式下，敌人应该专注于移动，而不是攻击
             if (this.isPlayingAttackAnimation) {
-                this.isPlayingAttackAnimation = false; // 停止攻击动画标志
-                this.attackComplete = false; // 重置攻击完成标志
-                this.stopAllAnimations(); // 停止所有动画，准备切换到移动动画
+                this.isPlayingAttackAnimation = false;
+                this.attackComplete = false;
+                this.stopAllAnimations();
             }
-            // 记录进入网格寻路前是否有目标，用于判断是否在寻路过程中发现了新目标
             const hadTargetBefore = !!this.currentTarget;
-            // 执行网格寻路移动逻辑
-            // 这个方法会处理网格内的移动，并可能在移动过程中检测到我方单位
             this.moveInStoneWallGrid(deltaTime);
-            // 如果moveInStoneWallGrid检测到我方单位并设置了currentTarget，且退出了网格寻路模式
-            // 不直接return，让后续逻辑处理目标（移动和攻击）
+            // 如果moveInStoneWallGrid检测到我方单位并设置了currentTarget，且退出了网格寻路模式，不直接return，让后续逻辑处理目标
             if (!this.isInStoneWallGrid && this.currentTarget && !hadTargetBefore) {
                 // 不return，继续执行后续逻辑处理移动和攻击
-                // 这样敌人可以立即攻击在网格内发现的我方单位
             } else {
-                // 仍在网格寻路模式，或没有新目标，只更新动画并返回
-                this.updateAnimation(deltaTime); // 更新动画（移动动画）
-                return; // 提前返回，不执行后续逻辑
+                this.updateAnimation(deltaTime);
+                return;
             }
         }
 
-        // ========== 第八阶段：网格上方缺口处理 ==========
-        
         // 检查敌人是否在网格上方，如果是，先移动到缺口（但前提是还没有到达最底层）
         // 优先级：如果有缺口目标，优先移动到缺口；如果没有，检查是否在网格上方并查找缺口
-        // 这个逻辑确保敌人能够找到进入网格区域的入口
         if (!this.currentTarget && !this.isInStoneWallGrid) {
             // 性能优化：缓存网格位置，减少worldToGrid调用
-            // worldToGrid是一个相对昂贵的操作，需要频繁调用时应该缓存结果
-            this.lastGridCheckTime += deltaTime; // 累计网格检查时间
-            // 每隔一定时间间隔检查一次网格位置，或首次检查时强制更新
+            this.lastGridCheckTime += deltaTime;
             if (this.lastGridCheckTime >= this.GRID_CHECK_INTERVAL || !this.cachedCurrentGrid) {
-                // 将世界坐标转换为网格坐标，用于判断敌人在网格中的位置
                 this.cachedCurrentGrid = this.stoneWallGridPanelComponent?.worldToGrid(this.node.worldPosition) || null;
-                this.lastGridCheckTime = 0; // 重置网格检查计时器
+                this.lastGridCheckTime = 0;
             }
             
             // 先检查是否已经在最底层，如果是，清除所有网格相关状态，直接向水晶移动
-            // 最底层（y <= 0）意味着敌人已经通过了所有石墙，可以直接攻击水晶
             if (this.cachedCurrentGrid && this.cachedCurrentGrid.y <= 0) {
                 // 已在最底层，清除所有网格相关状态，直接向水晶移动
-                this.topLayerGapTarget = null; // 清除顶层缺口目标
-                this.detourTarget = null; // 清除绕行目标点
+                this.topLayerGapTarget = null;
+                this.detourTarget = null;
                 // 直接跳过后续的网格和绕行逻辑，进入向水晶移动的逻辑
             } else {
                 // 性能优化：缓存"是否在网格上方"状态，减少checkEnemyAboveGrid调用
-                // checkEnemyAboveGrid是一个相对昂贵的操作，需要遍历网格
-                this.lastAboveGridCheckTime += deltaTime; // 累计网格上方检查时间
-                // 每隔一定时间间隔检查一次，或首次检查时强制更新
+                this.lastAboveGridCheckTime += deltaTime;
                 if (this.lastAboveGridCheckTime >= this.ABOVE_GRID_CHECK_INTERVAL || this.lastAboveGridCheckTime === deltaTime) {
-                    // 检查敌人是否在网格上方（即敌人位置在网格区域的上方，需要找到缺口进入）
                     this.cachedIsAboveGrid = this.checkEnemyAboveGrid();
-                    this.lastAboveGridCheckTime = 0; // 重置网格上方检查计时器
+                    this.lastAboveGridCheckTime = 0;
                 }
                 
-                // 如果已经有缺口目标，或者敌人在网格上方，且没有当前目标，处理缺口移动逻辑
-                // 这个条件确保敌人会优先寻找并移动到网格的缺口位置
                 if ((this.topLayerGapTarget || this.cachedIsAboveGrid) && !this.currentTarget) {
+                    // 如果已经有缺口目标，或者敌人在网格上方，且没有当前目标，处理缺口移动逻辑
                     // 如果还没有找到缺口目标，寻找缺口
                     if (!this.topLayerGapTarget) {
-                        // 在顶层网格中查找缺口（没有石墙的位置）
                         const gapPos = this.findGapInTopLayer();
                         if (gapPos) {
-                            // 找到缺口，设置缺口目标位置
                             this.topLayerGapTarget = gapPos;
                         } else {
-                            // 找不到缺口，说明顶层被完全封堵，攻击最近的石墙
+                            // 找不到缺口，攻击最近的石墙
                             const nearestWall = this.findNearestStoneWall();
                             if (nearestWall) {
-                                // 找到最近的石墙，设置为攻击目标
                                 this.currentTarget = nearestWall;
                                 // 清除缺口目标，确保不会进入缺口移动逻辑
                                 this.topLayerGapTarget = null;
                                 // 直接跳出缺口处理分支，继续执行后续的"处理当前目标"逻辑
                                 // 不执行return，让后续逻辑处理移动和攻击
                             } else {
-                                // 找不到石墙，可能是异常情况，停止攻击动画并返回
+                                // 如果正在播放攻击动画，停止攻击动画
                                 if (this.isPlayingAttackAnimation) {
                                     this.isPlayingAttackAnimation = false;
                                 }
-                                return; // 提前返回，等待下一帧重新检查
+                                return;
                             }
                         }
                     }
@@ -729,234 +689,189 @@ export class Enemy extends Component {
                         this.topLayerGapTarget = null;
                         // 不执行return，跳出这个else if分支，继续执行后续的"处理当前目标"逻辑
                     } else if (this.topLayerGapTarget) {
-                        // 有缺口目标，计算到缺口的距离
-                        // 性能优化：复用Vec3对象，避免频繁创建新对象
-                        this.cachedWorldPosition.set(this.node.worldPosition); // 缓存敌人当前位置
-                        Vec3.subtract(this.tempVec3_1, this.topLayerGapTarget, this.cachedWorldPosition); // 计算方向向量
-                        const gapDistance = this.tempVec3_1.length(); // 计算到缺口的距离
+                        // 移动到缺口（性能优化：复用Vec3对象）
+                        this.cachedWorldPosition.set(this.node.worldPosition);
+                        Vec3.subtract(this.tempVec3_1, this.topLayerGapTarget, this.cachedWorldPosition);
+                        const gapDistance = this.tempVec3_1.length();
 
-                        // 如果距离小于15像素，认为已到达缺口
                         if (gapDistance < 15) {
-                            // 已到达缺口，清除缺口标记，进入网格寻路模式
-                            
-                            // 确保敌人位置精确对齐到缺口位置，避免位置偏差
-                            const clampedPos = this.clampPositionToScreen(this.topLayerGapTarget);
-                            this.node.setWorldPosition(clampedPos);
-                            
-                            // 保存缺口目标引用，然后清除
-                            const gapTarget = this.topLayerGapTarget;
+                        // 已到达缺口，清除缺口标记，进入网格寻路模式
+                        
+                        // 确保敌人位置精确对齐到缺口位置
+                        const clampedPos = this.clampPositionToScreen(this.topLayerGapTarget);
+                        this.node.setWorldPosition(clampedPos);
+                        
+                        const gapTarget = this.topLayerGapTarget;
+                        this.topLayerGapTarget = null;
+                        
+                        // 进入网格寻路模式（简化：直接进入，不使用A*算法）
+                        this.isInStoneWallGrid = true;
+                        this.gridPath = [];
+                        this.currentPathIndex = 0;
+                        this.moveInStoneWallGrid(deltaTime);
+                        return;
+                        // 继续执行，让后续逻辑处理石墙攻击
+                    } else {
+                        // 向缺口移动前，优先检测我方单位
+                        const friendlyUnit = this.checkForFriendlyUnitInGrid();
+                        if (friendlyUnit) {
+                            // 检测到我方单位且路径畅通，优先攻击我方单位
                             this.topLayerGapTarget = null;
-                            
-                            // 进入网格寻路模式（简化：直接进入，不使用A*算法）
-                            // 网格寻路模式会让敌人按照网格路径移动，绕过石墙
-                            this.isInStoneWallGrid = true; // 设置网格寻路标志
-                            this.gridPath = []; // 清空路径数组
-                            this.currentPathIndex = 0; // 重置路径索引
-                            this.moveInStoneWallGrid(deltaTime); // 执行网格寻路移动
-                            return; // 提前返回，不执行后续逻辑
-                        } else {
-                            // 向缺口移动前，优先检测我方单位
-                            // 如果发现我方单位，优先攻击我方单位而不是移动到缺口
-                            const friendlyUnit = this.checkForFriendlyUnitInGrid();
-                            if (friendlyUnit) {
-                                // 检测到我方单位且路径畅通，优先攻击我方单位
-                                this.topLayerGapTarget = null; // 清除缺口目标
-                                this.currentTarget = friendlyUnit; // 设置我方单位为攻击目标
-                                // 清除绕行目标点
-                                if (this.detourTarget) {
-                                    this.detourTarget = null;
-                                }
-                                // 继续执行后续逻辑处理移动和攻击
-                                return; // 提前返回，让后续逻辑处理目标
+                            this.currentTarget = friendlyUnit;
+                            // 清除绕行目标点
+                            if (this.detourTarget) {
+                                this.detourTarget = null;
                             }
+                            // 继续执行后续逻辑处理移动和攻击
+                            return;
+                        }
 
-                            // 向缺口移动（性能优化：复用Vec3对象）
-                            this.tempVec3_1.normalize(); // 归一化方向向量
-                            const moveDistance = this.moveSpeed * deltaTime; // 计算本帧移动距离
-                            // 计算新位置：当前位置 + 方向 * 距离
-                            Vec3.scaleAndAdd(this.tempVec3_2, this.cachedWorldPosition, this.tempVec3_1, moveDistance);
-                            
-                            // 限制位置在屏幕范围内，避免敌人移出屏幕
-                            const clampedPos = this.clampPositionToScreen(this.tempVec3_2);
-                            this.node.setWorldPosition(clampedPos); // 更新敌人位置
-                            
-                            // 根据移动方向翻转敌人精灵（面向移动方向）
-                            this.flipDirection(this.tempVec3_1);
-                            
-                            // 播放行走动画
-                            this.playWalkAnimation();
-                            
-                            // 如果正在播放攻击动画，停止攻击动画
-                            if (this.isPlayingAttackAnimation) {
-                                this.isPlayingAttackAnimation = false;
-                            }
+                        // 向缺口移动（性能优化：复用Vec3对象）
+                        this.tempVec3_1.normalize();
+                        const moveDistance = this.moveSpeed * deltaTime;
+                        Vec3.scaleAndAdd(this.tempVec3_2, this.cachedWorldPosition, this.tempVec3_1, moveDistance);
+                        
+                        const clampedPos = this.clampPositionToScreen(this.tempVec3_2);
+                        this.node.setWorldPosition(clampedPos);
+                        
+                        // 根据移动方向翻转
+                        this.flipDirection(this.tempVec3_1);
+                        
+                        // 播放行走动画
+                        this.playWalkAnimation();
+                        
+                        // 如果正在播放攻击动画，停止攻击动画
+                        if (this.isPlayingAttackAnimation) {
+                            this.isPlayingAttackAnimation = false;
+                        }
                         }
                         // modify by lf 2025-12-27 fix:修复敌人在网格上方移动时，没有播放行走动画的问题
-                        this.updateAnimation(deltaTime); // 更新动画帧
+                        this.updateAnimation(deltaTime);
                         return; // 优先处理缺口移动，不继续执行后续逻辑
                     }
                 }
             }
         }
 
-        // ========== 第九阶段：自动进入网格寻路模式 ==========
-        
         // 检查是否需要进入网格寻路模式（但前提是还没有到达最底层，且没有缺口目标）
         // 如果正在移动到缺口，不应该进入网格寻路模式
-        // 这个逻辑处理敌人从上方接近网格区域的情况
         if (!this.currentTarget && !this.isInStoneWallGrid && !this.topLayerGapTarget) {
             // 性能优化：使用缓存的网格位置
             if (!this.cachedCurrentGrid) {
-                // 如果缓存不存在，计算并缓存网格位置
                 this.cachedCurrentGrid = this.stoneWallGridPanelComponent?.worldToGrid(this.node.worldPosition) || null;
             }
             // 先检查是否已经在最底层，如果是，清除网格相关状态，直接向水晶移动
             if (this.cachedCurrentGrid && this.cachedCurrentGrid.y <= 0) {
                 // 已在最底层，清除所有网格相关状态，直接向水晶移动
-                this.topLayerGapTarget = null; // 清除顶层缺口目标
-                this.detourTarget = null; // 清除绕行目标点
+                this.topLayerGapTarget = null;
+                this.detourTarget = null;
                 // 直接跳过后续的网格和绕行逻辑，进入向水晶移动的逻辑
             } else if (this.checkStoneWallGridBelowEnemy()) {
                 // checkStoneWallGridBelowEnemy() 已经检查了是否到达最底层，所以这里直接进入网格寻路模式（简化：不使用A*算法）
-                // 如果敌人下方有网格，说明敌人已经进入网格区域，需要按照网格路径移动
-                this.isInStoneWallGrid = true; // 设置网格寻路标志
-                this.gridPath = []; // 清空路径数组
-                this.currentPathIndex = 0; // 重置路径索引
-                this.moveInStoneWallGrid(deltaTime); // 执行网格寻路移动
+                this.isInStoneWallGrid = true;
+                this.gridPath = [];
+                this.currentPathIndex = 0;
+                this.moveInStoneWallGrid(deltaTime);
                 // 如果正在播放攻击动画，停止攻击动画
                 if (this.isPlayingAttackAnimation) {
                     this.isPlayingAttackAnimation = false;
                 }
-                return; // 提前返回，不执行后续逻辑
+                return;
             }
         }
 
-        // ========== 第十阶段：石墙目标优先级处理 ==========
-        
         // 最高优先级：如果当前目标是石墙且不在网格寻路模式（A*寻路失败后设置的），优先攻击石墙
         // 这种情况下应该清除绕行目标点，专注于攻击石墙
         // 性能优化：缓存组件查找结果
         if (this.currentTarget && this.currentTarget.isValid && !this.isInStoneWallGrid) {
             // 缓存组件，避免重复getComponent调用
-            // getComponent是一个相对昂贵的操作，应该缓存结果
-            this.lastComponentCheckTime += deltaTime; // 累计组件检查时间
-            // 每隔一定时间间隔检查一次，或组件类型不匹配时强制更新
+            this.lastComponentCheckTime += deltaTime;
             if (this.lastComponentCheckTime >= this.COMPONENT_CHECK_INTERVAL || !this.cachedTargetComponent || this.cachedTargetComponentType !== 'StoneWall') {
-                // 获取目标的StoneWall组件
                 this.cachedTargetComponent = this.currentTarget.getComponent('StoneWall') as any;
-                this.cachedTargetComponentType = 'StoneWall'; // 记录组件类型
-                this.lastComponentCheckTime = 0; // 重置组件检查计时器
+                this.cachedTargetComponentType = 'StoneWall';
+                this.lastComponentCheckTime = 0;
             }
             
-            // 检查石墙是否还存活
             const currentWallScript = this.cachedTargetComponent;
             if (currentWallScript && currentWallScript.isAlive && currentWallScript.isAlive()) {
                 // A*寻路失败后设置的石墙目标具有最高优先级，清除绕行目标点
-                // 这确保敌人专注于攻击阻挡路径的石墙
                 if (this.detourTarget) {
-                    this.detourTarget = null; // 清除绕行目标点
+                    this.detourTarget = null;
                 }
                 // 继续执行，让后续逻辑处理石墙攻击
             }
         }
 
-        // ========== 第十一阶段：绕行目标点处理 ==========
-        
         // 如果有绕行目标点，直接向绕行目标点移动，忽略当前目标
         // 但前提是敌人还没有到达最底层，且当前目标不是A*寻路失败后的石墙
         // 性能优化：使用缓存的网格位置
         if (this.detourTarget) {
-            // 如果缓存不存在，计算并缓存网格位置
             if (!this.cachedCurrentGrid) {
                 this.cachedCurrentGrid = this.stoneWallGridPanelComponent?.worldToGrid(this.node.worldPosition) || null;
             }
-            // 如果已在最底层，清除绕行目标点，直接向水晶移动
             if (this.cachedCurrentGrid && this.cachedCurrentGrid.y <= 0) {
                 // 已在最底层，清除绕行目标点，直接向水晶移动
-                this.detourTarget = null; // 清除绕行目标点
+                this.detourTarget = null;
                 // 继续执行，进入向水晶移动的逻辑
             } else {
-                // 向绕行目标点移动（这个方法会处理绕行目标点逻辑）
-                this.moveTowardsCrystal(deltaTime);
+                this.moveTowardsCrystal(deltaTime); // 这个方法会处理绕行目标点逻辑
                 // 如果正在播放攻击动画，停止攻击动画
                 if (this.isPlayingAttackAnimation) {
                     this.isPlayingAttackAnimation = false;
                 }
-                return; // 提前返回，不执行后续逻辑
+                return;
             }
         }
 
-        // ========== 第十二阶段：处理当前目标（移动和攻击） ==========
-        
         // 处理当前目标（性能优化：使用平方距离比较，缓存位置和组件）
-        // 这是敌人AI的核心逻辑：根据与目标的距离决定是移动还是攻击
         if (this.currentTarget && this.currentTarget.isValid) {
-            // 缓存位置，避免重复访问worldPosition属性（这是一个相对昂贵的操作）
-            this.cachedWorldPosition.set(this.node.worldPosition); // 缓存敌人当前位置
-            this.cachedTargetWorldPosition.set(this.currentTarget.worldPosition); // 缓存目标位置
-            // 计算X和Y方向的差值
+            // 缓存位置
+            this.cachedWorldPosition.set(this.node.worldPosition);
+            this.cachedTargetWorldPosition.set(this.currentTarget.worldPosition);
             const dx = this.cachedTargetWorldPosition.x - this.cachedWorldPosition.x;
             const dy = this.cachedTargetWorldPosition.y - this.cachedWorldPosition.y;
-            // 计算距离的平方（避免开方运算，提升性能）
             const distanceSq = dx * dx + dy * dy;
-            // 计算攻击范围的平方
             const attackRangeSq = this.attackRange * this.attackRange;
             
             // 性能优化：缓存组件查找，避免重复getComponent调用
-            this.lastComponentCheckTime += deltaTime; // 累计组件检查时间
-            // 每隔一定时间间隔检查一次，或组件不存在时强制更新
+            this.lastComponentCheckTime += deltaTime;
             if (this.lastComponentCheckTime >= this.COMPONENT_CHECK_INTERVAL || !this.cachedTargetComponent) {
-                // 尝试获取目标的StoneWall或Crystal组件
                 const stoneWallComp = this.currentTarget.getComponent('StoneWall') as any;
                 const crystalComp = this.currentTarget.getComponent('Crystal') as any;
-                // 缓存组件（优先石墙，然后是水晶）
                 this.cachedTargetComponent = stoneWallComp || crystalComp;
-                // 记录组件类型，用于后续判断
                 this.cachedTargetComponentType = stoneWallComp ? 'StoneWall' : (crystalComp ? 'Crystal' : '');
-                this.lastComponentCheckTime = 0; // 重置组件检查计时器
+                this.lastComponentCheckTime = 0;
             }
-            // 获取目标类型字符串（用于调试，实际代码中未使用）
             const targetType = this.cachedTargetComponentType === 'StoneWall' ? '石墙' : 
                               this.cachedTargetComponentType === 'Crystal' ? '水晶' : '其他';
 
-            // 判断是否在攻击范围内（使用平方距离比较，避免开方运算）
             if (distanceSq <= attackRangeSq) {
                 // 在攻击范围内，停止移动并攻击
                 // 只有在攻击条件满足时才停止移动并攻击，避免在等待攻击时重置动画状态
                 if (this.attackTimer >= this.attackInterval && !this.isHit && !this.isPlayingAttackAnimation) {
-                    // 攻击条件满足：
-                    // 1. 攻击计时器达到攻击间隔
-                    // 2. 敌人没有被攻击（isHit为false）
-                    // 3. 没有正在播放攻击动画
-                    this.stopMoving(); // 停止移动动画和逻辑
-                    this.attack(); // 执行攻击
-                    this.attackTimer = 0; // 重置攻击计时器
+                    // 攻击条件满足，停止移动并攻击
+                    this.stopMoving();
+                    this.attack();
+                    this.attackTimer = 0;
                 } else {
                     // 攻击条件不满足，不调用移动方法也不调用stopMoving()，保持当前状态等待攻击
                     // 不调用移动方法，敌人自然停止移动，也不调用stopMoving()避免重置动画状态
-                    // 这样可以保持当前的动画状态（如待机动画），不会频繁切换
                 }
             } else {
                 // 不在攻击范围内，只有在没有被攻击时才继续移动
                 if (!this.isHit && !this.isPlayingAttackAnimation) {
-                    // 向目标移动
                     this.moveTowardsTarget(deltaTime);
-                    // 如果正在播放攻击动画，停止攻击动画（切换到移动动画）
+                    // 如果正在播放攻击动画，停止攻击动画
                     if (this.isPlayingAttackAnimation) {
                         this.isPlayingAttackAnimation = false;
                     }
                 } else {
-                    // 敌人被攻击或正在播放攻击动画，不移动
-                    // 这样可以确保攻击动画完整播放，不受移动逻辑干扰
                 }
             }
         } else {
-            // ========== 第十三阶段：没有目标时的处理 ==========
-            
             // 没有目标，检查路径是否被石墙阻挡
             if (this.targetCrystal && this.targetCrystal.isValid && !this.isHit) {
                 // 在移动前先检查路径是否被石墙阻挡
-                // 如果路径被阻挡，敌人应该攻击石墙而不是尝试绕行
                 const blockedStoneWall = this.checkPathBlockedByStoneWall();
                 if (blockedStoneWall) {
                     // 路径被石墙阻挡且无法绕行，立即设置为攻击目标
@@ -973,10 +888,7 @@ export class Enemy extends Component {
             }
         }
         
-        // ========== 第十四阶段：动画更新 ==========
-        
-        // 更新动画（每帧都需要更新，确保动画正常播放）
-        // 这个方法会根据当前状态（移动、攻击、待机等）更新动画帧
+        // 更新动画
         this.updateAnimation(deltaTime);
     }
 
@@ -1252,14 +1164,16 @@ export class Enemy extends Component {
                 }
             }
         }
-        // 2) 女猎手
+        // 2) 女猎手（从对象池容器直接获取，不再使用递归查找）
         let hunters: Node[] = [];
-        let huntersNode = find('Hunters');
-        if (!huntersNode && this.node.scene) {
-            huntersNode = findNodeRecursive(this.node.scene, 'Hunters');
-        }
-        if (huntersNode) {
-            hunters = huntersNode.children || [];
+        if (this.unitManager) {
+            hunters = this.unitManager.getHunters();
+        } else {
+            // 降级方案：直接从容器节点获取
+            const huntersNode = find('Canvas/Hunters');
+            if (huntersNode) {
+                hunters = huntersNode.children || [];
+            }
         }
         for (const hunter of hunters) {
             if (!hunter || !hunter.active || !hunter.isValid) continue;
@@ -1280,14 +1194,16 @@ export class Enemy extends Component {
                 }
             }
         }
-        // 3) 精灵剑士
+        // 3) 精灵剑士（从对象池容器直接获取，不再使用递归查找）
         let swordsmen: Node[] = [];
-        let swordsmenNode = find('ElfSwordsmans');
-        if (!swordsmenNode && this.node.scene) {
-            swordsmenNode = findNodeRecursive(this.node.scene, 'ElfSwordsmans');
-        }
-        if (swordsmenNode) {
-            swordsmen = swordsmenNode.children || [];
+        if (this.unitManager) {
+            swordsmen = this.unitManager.getElfSwordsmans();
+        } else {
+            // 降级方案：直接从容器节点获取
+            const swordsmenNode = find('Canvas/ElfSwordsmans');
+            if (swordsmenNode) {
+                swordsmen = swordsmenNode.children || [];
+            }
         }
         for (const swordsman of swordsmen) {
             if (!swordsman || !swordsman.active || !swordsman.isValid) continue;
@@ -1656,28 +1572,8 @@ export class Enemy extends Component {
         if (!this.isInStoneWallGrid && this.checkStoneWallGridBelowEnemy()) {
             // checkStoneWallGridBelowEnemy() 已经检查了是否到达最底层，所以这里直接进入网格寻路模式
             this.isInStoneWallGrid = true;
-            const path = this.findPathInStoneWallGrid();
-            if (path && path.length > 0) {
-                this.gridPath = path;
-                this.currentPathIndex = 0;
-                this.moveInStoneWallGrid(deltaTime);
-                return;
-            } else {
-                // 无路可走，攻击最近的石墙（最高优先级）
-                this.isInStoneWallGrid = false;
-                const nearestWall = this.findNearestStoneWall();
-                if (nearestWall) {
-                    this.currentTarget = nearestWall;
-                    // 清除绕行目标点，因为A*寻路失败后的石墙攻击优先级更高
-                    if (this.detourTarget) {
-                        this.detourTarget = null;
-                    }
-                    // 不立即return，让调用者知道需要处理石墙攻击
-                    return;
-                } else {
-                    return;
-                }
-            }
+            this.moveInStoneWallGrid(deltaTime);
+            return;
         }
 
         // 如果已经在网格寻路模式中，不需要执行后续逻辑
@@ -3507,36 +3403,42 @@ export class Enemy extends Component {
             }
         }
         
-        // 3.2) 女猎手
-        let huntersNode = find('Hunters');
-        if (!huntersNode && this.node.scene) {
-            huntersNode = findNodeRecursive(this.node.scene, 'Hunters');
+        // 3.2) 女猎手（从对象池容器直接获取，不再使用递归查找）
+        let hunters: Node[] = [];
+        if (this.unitManager) {
+            hunters = this.unitManager.getHunters();
+        } else {
+            // 降级方案：直接从容器节点获取
+            const huntersNode = find('Canvas/Hunters');
+            if (huntersNode) {
+                hunters = huntersNode.children || [];
+            }
         }
-        if (huntersNode) {
-            const hunters = huntersNode.children || [];
-            for (const hunter of hunters) {
-                if (hunter && hunter.active && hunter.isValid) {
-                    const hunterScript = hunter.getComponent('Hunter') as any;
-                    if (hunterScript && hunterScript.isAlive && hunterScript.isAlive()) {
-                        allPotentialTargets.push(hunter);
-                    }
+        for (const hunter of hunters) {
+            if (hunter && hunter.active && hunter.isValid) {
+                const hunterScript = hunter.getComponent('Hunter') as any;
+                if (hunterScript && hunterScript.isAlive && hunterScript.isAlive()) {
+                    allPotentialTargets.push(hunter);
                 }
             }
         }
         
-        // 3.3) 精灵剑士
-        let swordsmenNode = find('ElfSwordsmans');
-        if (!swordsmenNode && this.node.scene) {
-            swordsmenNode = findNodeRecursive(this.node.scene, 'ElfSwordsmans');
+        // 3.3) 精灵剑士（从对象池容器直接获取，不再使用递归查找）
+        let swordsmen: Node[] = [];
+        if (this.unitManager) {
+            swordsmen = this.unitManager.getElfSwordsmans();
+        } else {
+            // 降级方案：直接从容器节点获取
+            const swordsmenNode = find('Canvas/ElfSwordsmans');
+            if (swordsmenNode) {
+                swordsmen = swordsmenNode.children || [];
+            }
         }
-        if (swordsmenNode) {
-            const swordsmen = swordsmenNode.children || [];
-            for (const swordsman of swordsmen) {
-                if (swordsman && swordsman.active && swordsman.isValid) {
-                    const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
-                    if (swordsmanScript && swordsmanScript.isAlive && swordsmanScript.isAlive()) {
-                        allPotentialTargets.push(swordsman);
-                    }
+        for (const swordsman of swordsmen) {
+            if (swordsman && swordsman.active && swordsman.isValid) {
+                const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
+                if (swordsmanScript && swordsmanScript.isAlive && swordsmanScript.isAlive()) {
+                    allPotentialTargets.push(swordsman);
                 }
             }
         }
@@ -4700,23 +4602,6 @@ export class Enemy extends Component {
         // 不需要重新规划，moveInStoneWallGrid会自动处理
     }
 
-    /**
-     * 在网格中寻路（已移除A*算法，不再使用）
-     * 性能优化：完全移除A*算法，使用简单的直接向下移动+左右绕行
-     */
-    private findPathInStoneWallGrid(): Vec3[] | null {
-        // 不再使用A*算法，直接返回null，让moveInStoneWallGrid使用简单移动逻辑
-        return null;
-    }
-
-    /**
-     * A*寻路核心算法（已完全移除，不再使用）
-     * 性能优化：移除A*算法以提升性能
-     */
-    private findPathToBottomLayerAStar(startX: number, startY: number): { x: number; y: number }[] | null {
-        // 已移除A*算法，直接返回null
-        return null;
-    }
 
     /**
      * 在网格内或网格上方检测我方单位（弓箭手、女猎手、剑士），如果路径畅通则返回单位
@@ -4726,22 +4611,10 @@ export class Enemy extends Component {
         const enemyPos = this.node.worldPosition;
         const detectionRange = 200; // 索敌范围：200像素
 
-        // 使用递归查找容器节点
-        const findNodeRecursive = (node: Node, name: string): Node | null => {
-            if (node.name === name) {
-                return node;
-            }
-            for (const child of node.children) {
-                const found = findNodeRecursive(child, name);
-                if (found) return found;
-            }
-            return null;
-        };
-
         let nearestUnit: Node | null = null;
         let minDistance = Infinity;
 
-        // 1. 查找弓箭手
+        // 1. 查找弓箭手（从对象池容器直接获取）
         const towersNode = find('Canvas/Towers');
         if (towersNode) {
             const towers = towersNode.children || [];
@@ -4762,11 +4635,8 @@ export class Enemy extends Component {
             }
         }
 
-        // 2. 查找女猎手
-        let huntersNode = find('Hunters');
-        if (!huntersNode && this.node.scene) {
-            huntersNode = findNodeRecursive(this.node.scene, 'Hunters');
-        }
+        // 2. 查找女猎手（从对象池容器直接获取，不再使用递归查找）
+        const huntersNode = find('Canvas/Hunters');
         if (huntersNode) {
             const hunters = huntersNode.children || [];
             for (const hunter of hunters) {
@@ -4786,11 +4656,8 @@ export class Enemy extends Component {
             }
         }
 
-        // 3. 查找精灵剑士
-        let swordsmenNode = find('ElfSwordsmans');
-        if (!swordsmenNode && this.node.scene) {
-            swordsmenNode = findNodeRecursive(this.node.scene, 'ElfSwordsmans');
-        }
+        // 3. 查找精灵剑士（从对象池容器直接获取，不再使用递归查找）
+        const swordsmenNode = find('Canvas/ElfSwordsmans');
         if (swordsmenNode) {
             const swordsmen = swordsmenNode.children || [];
             for (const swordsman of swordsmen) {
@@ -4808,9 +4675,6 @@ export class Enemy extends Component {
                     }
                 }
             }
-        }
-
-        if (nearestUnit) {
         }
 
         return nearestUnit;

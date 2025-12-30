@@ -238,7 +238,6 @@ export class Build extends Component {
             this.findGridPanel();
         }
         if (this.gridPanel && this.gridX >= 0 && this.gridY >= 0) {
-            console.info('[Build] releaseGrid on die', this.node.name, 'grid=', this.gridX, this.gridY);
             this.gridPanel.releaseGrid(this.gridX, this.gridY);
         }
 
@@ -293,7 +292,6 @@ export class Build extends Component {
                 this.findGridPanel();
             }
             if (this.gridPanel) {
-                console.info('[Build] onDestroy releaseGrid safeguard', this.node.name, 'grid=', this.gridX, this.gridY);
                 this.gridPanel.releaseGrid(this.gridX, this.gridY);
             }
         }

@@ -717,7 +717,6 @@ export class TowerBuilder extends Component {
 
     enableBuildingMode() {
         this.isBuildingMode = true;
-        console.info('[TowerBuilder] enableBuildingMode: isBuildingMode 已设置为 true');
         // 显示建筑物选择面板
         if (this.buildingPanel) {
             this.buildingPanel.show();
@@ -750,7 +749,6 @@ export class TowerBuilder extends Component {
         // 隐藏建筑物选择面板
         if (this.buildingPanel) {
             this.buildingPanel.hide();
-            console.info('[TowerBuilder] disableBuildingMode: 建筑物面板已隐藏');
         }
 
         if (this.previewTower) {
@@ -979,7 +977,6 @@ export class TowerBuilder extends Component {
     }
 
     canBuildAt(position: Vec3, building: BuildingType): boolean {
-        console.info('[TowerBuilder] canBuildAt start', building?.name, 'pos=', position);
         if (!this.targetCrystal || !building) {
             console.info('[TowerBuilder] canBuildAt fail: missing targetCrystal or building');
             return false;

@@ -143,35 +143,68 @@ export class OrcWarlord extends Component {
     // 对象池相关：预制体名称（用于对象池回收）
     public prefabName: string = "OrcWarlord";
 
-    start() {
+    onEnable() {
+        // 从对象池获取时，重新初始化状态
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
         this.attackTimer = 0;
         this.attackComplete = false;
         this.warcryTimer = 0;
+        this.isPlayingWarcryAnimation = false;
+        this.warcryBuffedEnemies.clear();
+        this.warcryBuffEndTime.clear();
+        this.wasPlayingAttackBeforeWarcry = false;
+        this.isHit = false;
+        this.isPlayingAttackAnimation = false;
+        this.isPlayingHitAnimation = false;
+        this.isPlayingDeathAnimation = false;
+        this.isPlayingIdleAnimation = false;
+        this.isPlayingWalkAnimation = false;
+        this.currentTarget = null!;
         
-        // 保存默认缩放比例
-        this.defaultScale = this.node.scale.clone();
+        // 重置动画
+        this.currentAnimationFrameIndex = 0;
+        this.animationTimer = 0;
         
-        // 初始化动画相关属性
-        this.sprite = this.node.getComponent(Sprite);
-        this.uiTransform = this.node.getComponent(UITransform);
+        // 初始化动画相关属性（如果还没有初始化）
+        if (!this.sprite) {
+            this.sprite = this.node.getComponent(Sprite);
+        }
+        if (!this.uiTransform) {
+            this.uiTransform = this.node.getComponent(UITransform);
+        }
         
         if (this.sprite) {
-            this.defaultSpriteFrame = this.sprite.spriteFrame;
+            if (!this.defaultSpriteFrame) {
+                this.defaultSpriteFrame = this.sprite.spriteFrame;
+            }
+            this.sprite.spriteFrame = this.defaultSpriteFrame;
             // 设置Sprite的sizeMode为CUSTOM，以便适配UITransform大小
             this.sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        }
+        
+        // 保存默认缩放比例
+        if (!this.defaultScale) {
+            this.defaultScale = this.node.scale.clone();
+        }
+        
+        // 重置节点状态
+        if (this.node) {
+            this.node.setScale(this.defaultScale);
+            this.node.angle = 0;
+            if (this.sprite) {
+                const color = this.sprite.color.clone();
+                color.a = 255;
+                this.sprite.color = color;
+            }
         }
         
         // 查找游戏管理器
         this.findGameManager();
         
         // 如果targetCrystal没有设置，尝试查找
-        if (!this.targetCrystal) {
-            // 使用 find 函数查找节点
+        if (!this.targetCrystal || !this.targetCrystal.isValid) {
             let crystalNode = find('Crystal');
-            
-            // 如果找不到，尝试从场景根节点递归查找
             if (!crystalNode && this.node.scene) {
                 const findInScene = (node: Node, name: string): Node | null => {
                     if (node.name === name) {
@@ -185,18 +218,76 @@ export class OrcWarlord extends Component {
                 };
                 crystalNode = findInScene(this.node.scene, 'Crystal');
             }
-            
             if (crystalNode) {
                 this.targetCrystal = crystalNode;
             }
         }
         
-        // 创建血条
-        this.createHealthBar();
+        // 重新创建血条（如果不存在）
+        if (!this.healthBarNode || !this.healthBarNode.isValid) {
+            this.createHealthBar();
+        } else {
+            // 如果血条已存在，更新血条状态
+            if (this.healthBar) {
+                this.healthBar.setMaxHealth(this.maxHealth);
+                this.healthBar.setHealth(this.currentHealth);
+            }
+        }
         
         // 初始播放待机动画
         this.playIdleAnimation();
+    }
+
+    start() {
+        // start 方法只在首次创建时调用，onEnable 会在每次从对象池获取时调用
+        // 如果 onEnable 已经初始化了，这里就不需要重复初始化
+        if (!this.defaultScale) {
+            this.defaultScale = this.node.scale.clone();
+        }
         
+        if (!this.sprite) {
+            this.sprite = this.node.getComponent(Sprite);
+        }
+        if (!this.uiTransform) {
+            this.uiTransform = this.node.getComponent(UITransform);
+        }
+        
+        if (this.sprite && !this.defaultSpriteFrame) {
+            this.defaultSpriteFrame = this.sprite.spriteFrame;
+            this.sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        }
+        
+        // 查找游戏管理器
+        this.findGameManager();
+        
+        // 如果targetCrystal没有设置，尝试查找
+        if (!this.targetCrystal) {
+            let crystalNode = find('Crystal');
+            if (!crystalNode && this.node.scene) {
+                const findInScene = (node: Node, name: string): Node | null => {
+                    if (node.name === name) {
+                        return node;
+                    }
+                    for (const child of node.children) {
+                        const found = findInScene(child, name);
+                        if (found) return found;
+                    }
+                    return null;
+                };
+                crystalNode = findInScene(this.node.scene, 'Crystal');
+            }
+            if (crystalNode) {
+                this.targetCrystal = crystalNode;
+            }
+        }
+        
+        // 创建血条（如果不存在）
+        if (!this.healthBarNode || !this.healthBarNode.isValid) {
+            this.createHealthBar();
+        }
+        
+        // 初始播放待机动画
+        this.playIdleAnimation();
     }
 
     createHealthBar() {
@@ -2060,6 +2151,32 @@ export class OrcWarlord extends Component {
      * 重置敌人状态（用于对象池回收）
      */
     private resetEnemyState() {
+        // 清理所有不需要的子节点（箭矢、长矛等）
+        const childrenToRemove: Node[] = [];
+        if (this.node) {
+            const children = this.node.children || [];
+            for (const child of children) {
+                if (child && child.isValid) {
+                    const arrowScript = child.getComponent('Arrow') as any;
+                    const childName = child.name.toLowerCase();
+                    // 保留血条节点，清理其他子节点
+                    if (childName !== 'healthbar' && childName !== 'health bar') {
+                        if (arrowScript || childName.includes('arrow') || childName.includes('spear') || childName.includes('长矛') || childName.includes('箭矢')) {
+                            // 是箭矢或长矛，需要清理
+                            childrenToRemove.push(child);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 销毁箭矢和长矛子节点
+        for (const child of childrenToRemove) {
+            if (child && child.isValid) {
+                child.destroy();
+            }
+        }
+        
         // 重置所有状态变量
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;

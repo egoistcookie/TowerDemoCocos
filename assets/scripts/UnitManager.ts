@@ -19,6 +19,8 @@ export class UnitManager extends Component {
     private swordsmanHalls: Node[] = [];
     private churches: Node[] = [];
     private stoneWalls: Node[] = [];
+    private hunters: Node[] = []; // 女猎手列表
+    private elfSwordsmans: Node[] = []; // 精灵剑士列表
     private crystal: Node = null!;
     
     // 节点引用缓存
@@ -29,6 +31,8 @@ export class UnitManager extends Component {
     private swordsmanHallsNode: Node = null!;
     private churchesNode: Node = null!;
     private stoneWallsNode: Node = null!;
+    private huntersNode: Node = null!; // 女猎手容器节点
+    private elfSwordsmansNode: Node = null!; // 精灵剑士容器节点
     
     // 更新频率控制
     private updateTimer: number = 0;
@@ -55,6 +59,8 @@ export class UnitManager extends Component {
         this.swordsmanHallsNode = find('Canvas/SwordsmanHalls');
         this.churchesNode = find('Canvas/Churches');
         this.stoneWallsNode = find('Canvas/StoneWalls');
+        this.huntersNode = find('Canvas/Hunters');
+        this.elfSwordsmansNode = find('Canvas/ElfSwordsmans');
         this.crystal = find('Canvas/Crystal');
     }
     
@@ -150,6 +156,24 @@ export class UnitManager extends Component {
             this.stoneWalls = [];
         }
         
+        // 更新女猎手列表（从对象池容器直接获取）
+        if (this.huntersNode && this.huntersNode.isValid) {
+            this.hunters = this.huntersNode.children.filter(node => 
+                node && node.isValid && node.active
+            );
+        } else {
+            this.hunters = [];
+        }
+        
+        // 更新精灵剑士列表（从对象池容器直接获取）
+        if (this.elfSwordsmansNode && this.elfSwordsmansNode.isValid) {
+            this.elfSwordsmans = this.elfSwordsmansNode.children.filter(node => 
+                node && node.isValid && node.active
+            );
+        } else {
+            this.elfSwordsmans = [];
+        }
+        
         // 更新水晶引用
         if (!this.crystal || !this.crystal.isValid) {
             this.crystal = find('Canvas/Crystal');
@@ -173,6 +197,12 @@ export class UnitManager extends Component {
         }
         if (!this.stoneWallsNode || !this.stoneWallsNode.isValid) {
             this.stoneWallsNode = find('Canvas/StoneWalls');
+        }
+        if (!this.huntersNode || !this.huntersNode.isValid) {
+            this.huntersNode = find('Canvas/Hunters');
+        }
+        if (!this.elfSwordsmansNode || !this.elfSwordsmansNode.isValid) {
+            this.elfSwordsmansNode = find('Canvas/ElfSwordsmans');
         }
     }
     
@@ -214,6 +244,20 @@ export class UnitManager extends Component {
      */
     getStoneWalls(): Node[] {
         return this.stoneWalls.filter(node => node && node.isValid && node.active);
+    }
+    
+    /**
+     * 获取所有女猎手（已缓存，从对象池容器直接获取）
+     */
+    getHunters(): Node[] {
+        return this.hunters.filter(node => node && node.isValid && node.active);
+    }
+    
+    /**
+     * 获取所有精灵剑士（已缓存，从对象池容器直接获取）
+     */
+    getElfSwordsmans(): Node[] {
+        return this.elfSwordsmans.filter(node => node && node.isValid && node.active);
     }
     
     /**

@@ -132,7 +132,6 @@ export class UnitPool extends Component {
             const count = this.activeCount.get(prefabName) || 0;
             this.activeCount.set(prefabName, count + 1);
             
-            console.info(`[UnitPool] 获取 ${prefabName}: ${source}, 池大小: ${pool.length} -> ${poolSizeBefore - 1}, 活跃数: ${activeCountBefore} -> ${activeCountBefore + 1}`);
         }
         
         return unit;
@@ -207,7 +206,6 @@ export class UnitPool extends Component {
             const count = this.activeCount.get(prefabName) || 0;
             this.activeCount.set(prefabName, Math.max(0, count - 1));
             
-            console.info(`[UnitPool] 释放 ${prefabName}: 已放回池中, 池大小: ${poolSizeBefore} -> ${pool.length}, 活跃数: ${activeCountBefore} -> ${Math.max(0, activeCountBefore - 1)}`);
         } else {
             // 池已满，直接销毁
             console.info(`[UnitPool] 释放 ${prefabName}: 池已满(${pool.length}/${this.MAX_POOL_SIZE}), 销毁对象: ${unit.name}`);

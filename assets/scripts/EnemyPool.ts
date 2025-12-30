@@ -125,6 +125,55 @@ export class EnemyPool extends Component {
         }
         
         if (enemy) {
+            // 清理所有不需要的子节点（箭矢、长矛等）
+            const childrenToRemove: Node[] = [];
+            const children = enemy.children || [];
+            for (const child of children) {
+                if (child && child.isValid) {
+                    const arrowScript = child.getComponent('Arrow') as any;
+                    const childName = child.name.toLowerCase();
+                    // 检查是否是箭矢或长矛
+                    if (arrowScript || childName.includes('arrow') || childName.includes('spear') || childName.includes('长矛') || childName.includes('箭矢')) {
+                        childrenToRemove.push(child);
+                    }
+                }
+            }
+            
+            // 销毁箭矢和长矛子节点
+            for (const child of childrenToRemove) {
+                if (child && child.isValid) {
+                    child.destroy();
+                }
+            }
+            
+            // 重置敌人脚本状态（如果存在）
+            const enemyScript = enemy.getComponent('Enemy') as any;
+            const orcWarlordScript = enemy.getComponent('OrcWarlord') as any;
+            const orcWarriorScript = enemy.getComponent('OrcWarrior') as any;
+            const trollSpearmanScript = enemy.getComponent('TrollSpearman') as any;
+            
+            const script = enemyScript || orcWarlordScript || orcWarriorScript || trollSpearmanScript;
+            if (script) {
+                // 重置状态
+                if (script.resetEnemyState) {
+                    script.resetEnemyState();
+                } else if (script.onEnable) {
+                    // 如果脚本有 onEnable，会在激活时自动调用
+                }
+                
+                // 确保血条存在（如果脚本有 createHealthBar 方法）
+                if (script.createHealthBar) {
+                    // 检查血条是否已存在
+                    const healthBarNode = enemy.children.find(child => {
+                        const name = child.name.toLowerCase();
+                        return name === 'healthbar' || name === 'health bar';
+                    });
+                    if (!healthBarNode || !healthBarNode.isValid) {
+                        script.createHealthBar();
+                    }
+                }
+            }
+            
             // 激活对象
             enemy.active = true;
             
@@ -132,7 +181,9 @@ export class EnemyPool extends Component {
             const count = this.activeCount.get(prefabName) || 0;
             this.activeCount.set(prefabName, count + 1);
             
-            console.info(`[EnemyPool] 获取 ${prefabName}: ${source}, 池大小: ${pool.length} -> ${poolSizeBefore - 1}, 活跃数: ${activeCountBefore} -> ${activeCountBefore + 1}`);
+            if (childrenToRemove.length > 0) {
+                console.info(`[EnemyPool] 获取 ${prefabName}: 已清理 ${childrenToRemove.length} 个子节点（箭矢/长矛）`);
+            }
         }
         
         return enemy;
@@ -189,6 +240,32 @@ export class EnemyPool extends Component {
         const poolSizeBefore = pool.length;
         const activeCountBefore = this.activeCount.get(prefabName) || 0;
         
+        // 清理所有不需要的子节点（箭矢、长矛等），但保留血条节点
+        const childrenToRemove: Node[] = [];
+        const children = enemy.children || [];
+        for (const child of children) {
+            if (child && child.isValid) {
+                // 检查是否是箭矢或长矛（通过组件或名称判断）
+                const arrowScript = child.getComponent('Arrow') as any;
+                const childName = child.name.toLowerCase();
+                // 保留血条节点，清理其他子节点
+                if (childName !== 'healthbar' && childName !== 'health bar' && !arrowScript) {
+                    // 如果不是血条，检查是否是其他需要保留的节点
+                    // 这里可以根据需要添加更多需要保留的节点类型
+                } else if (arrowScript || childName.includes('arrow') || childName.includes('spear') || childName.includes('长矛') || childName.includes('箭矢')) {
+                    // 是箭矢或长矛，需要清理
+                    childrenToRemove.push(child);
+                }
+            }
+        }
+        
+        // 销毁箭矢和长矛子节点
+        for (const child of childrenToRemove) {
+            if (child && child.isValid) {
+                child.destroy();
+            }
+        }
+        
         // 重置敌人状态
         enemy.active = false;
         enemy.setParent(this.poolContainer); // 移回对象池容器节点
@@ -201,7 +278,9 @@ export class EnemyPool extends Component {
             const count = this.activeCount.get(prefabName) || 0;
             this.activeCount.set(prefabName, Math.max(0, count - 1));
             
-            console.info(`[EnemyPool] 释放 ${prefabName}: 已放回池中, 池大小: ${poolSizeBefore} -> ${pool.length}, 活跃数: ${activeCountBefore} -> ${Math.max(0, activeCountBefore - 1)}`);
+            if (childrenToRemove.length > 0) {
+                console.info(`[EnemyPool] 释放 ${prefabName}: 已清理 ${childrenToRemove.length} 个子节点（箭矢/长矛）`);
+            }
         } else {
             // 池已满，直接销毁
             console.info(`[EnemyPool] 释放 ${prefabName}: 池已满(${pool.length}/${this.MAX_POOL_SIZE}), 销毁对象: ${enemy.name}`);

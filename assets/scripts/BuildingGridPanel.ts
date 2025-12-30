@@ -297,7 +297,6 @@ export class BuildingGridPanel extends Component {
         if (cell.occupied) {
             const node = cell.buildingNode;
             if (!node || !node.isValid || !node.active) {
-                console.info('[BuildingGridPanel] isGridOccupied auto-release zombie cell', gridX, gridY);
                 cell.occupied = false;
                 cell.buildingNode = null;
                 return false;
@@ -314,7 +313,6 @@ export class BuildingGridPanel extends Component {
             return;
         }
         
-        console.info('[BuildingGridPanel] occupyGrid', gridX, gridY, 'node=', buildingNode?.name);
         this.gridCells[gridY][gridX].occupied = true;
         this.gridCells[gridY][gridX].buildingNode = buildingNode;
     }
@@ -327,7 +325,6 @@ export class BuildingGridPanel extends Component {
             return;
         }
         
-        console.info('[BuildingGridPanel] releaseGrid', gridX, gridY);
         this.gridCells[gridY][gridX].occupied = false;
         this.gridCells[gridY][gridX].buildingNode = null;
     }

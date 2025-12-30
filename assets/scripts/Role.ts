@@ -713,60 +713,54 @@ export class Role extends Component {
         // 如果unitManager为null，尝试重新获取（可能UnitManager还没初始化）
         if (!this.unitManager) {
             this.unitManager = UnitManager.getInstance();
-            // console.info(`[Role.getEnemies] ${this.node.name} 重新获取UnitManager: ${this.unitManager ? '成功' : '失败'}`);
         }
         
+        let enemies: Node[] = [];
+        
         if (this.unitManager) {
-            const enemies = this.unitManager.getEnemiesInRange(
+            enemies = this.unitManager.getEnemiesInRange(
                 this.node.worldPosition,
                 maxDistance,
                 includeOnlyAlive
             );
-            // console.info(`[Role.getEnemies] ${this.node.name} 使用UnitManager获取到 ${enemies.length} 个敌人, maxDistance: ${maxDistance}`);
-            return enemies;
-        }
-        
-        // console.info(`[Role.getEnemies] ${this.node.name} UnitManager不存在，使用降级方案`);
-        // 降级方案：如果没有UnitManager，使用直接路径查找
-        const enemiesNode = find('Canvas/Enemies');
-        
-        if (!enemiesNode) {
-            // console.info(`[Role.getEnemies] ${this.node.name} 降级方案: 未找到Enemies节点`);
-            return [];
-        }
-        
-        const enemies = enemiesNode.children || [];
-        // console.info(`[Role.getEnemies] ${this.node.name} 降级方案: Enemies节点有 ${enemies.length} 个子节点`);
-        const result: Node[] = [];
-        const maxDistanceSq = maxDistance * maxDistance; // 使用平方距离，避免开方
-        
-        for (const enemy of enemies) {
-            if (enemy && enemy.active && enemy.isValid) {
-                // 检查是否是敌人
-                const enemyScript = this.getEnemyScript(enemy);
-                if (!enemyScript) {
-                    continue;
+        } else {
+            // 降级方案：如果没有UnitManager，从对象池容器直接获取（不再使用递归查找）
+            const enemiesNode = find('Canvas/Enemies');
+            
+            if (!enemiesNode) {
+                return [];
+            }
+            
+            const allEnemies = enemiesNode.children || [];
+            const maxDistanceSq = maxDistance * maxDistance; // 使用平方距离，避免开方
+            
+            for (const enemy of allEnemies) {
+                if (enemy && enemy.active && enemy.isValid) {
+                    // 检查是否是敌人
+                    const enemyScript = this.getEnemyScript(enemy);
+                    if (!enemyScript) {
+                        continue;
+                    }
+                    
+                    // 粗略距离检查（使用平方距离，避免开方）
+                    const dx = enemy.worldPosition.x - this.node.worldPosition.x;
+                    const dy = enemy.worldPosition.y - this.node.worldPosition.y;
+                    const distanceSq = dx * dx + dy * dy;
+                    if (distanceSq > maxDistanceSq) {
+                        continue;
+                    }
+                    
+                    // 检查是否需要包含存活检查
+                    if (includeOnlyAlive && !this.isAliveEnemy(enemy)) {
+                        continue;
+                    }
+                    
+                    enemies.push(enemy);
                 }
-                
-                // 粗略距离检查（使用平方距离，避免开方）
-                const dx = enemy.worldPosition.x - this.node.worldPosition.x;
-                const dy = enemy.worldPosition.y - this.node.worldPosition.y;
-                const distanceSq = dx * dx + dy * dy;
-                if (distanceSq > maxDistanceSq) {
-                    continue;
-                }
-                
-                // 检查是否需要包含存活检查
-                if (includeOnlyAlive && !this.isAliveEnemy(enemy)) {
-                    continue;
-                }
-                
-                result.push(enemy);
             }
         }
         
-        // console.info(`[Role.getEnemies] ${this.node.name} 降级方案: 最终返回 ${result.length} 个符合条件的敌人`);
-        return result;
+        return enemies;
     }
     
     /**
@@ -831,7 +825,6 @@ export class Role extends Component {
         const myPos = this.node.worldPosition;
         for (const enemy of enemies) {
             if (!enemy || !enemy.isValid || !enemy.active) {
-                // console.info(`[Role.findTarget] ${this.node.name} 跳过无效敌人: ${enemy ? enemy.name : 'null'}`);
                 continue;
             }
             
@@ -844,12 +837,10 @@ export class Role extends Component {
             if (distanceSq < minDistanceSq) {
                 minDistanceSq = distanceSq;
                 nearestEnemy = enemy;
-                // console.info(`[Role.findTarget] ${this.node.name} 更新最近敌人: ${enemy.name}, 距离: ${Math.sqrt(distanceSq).toFixed(2)}`);
             }
         }
 
         this.currentTarget = nearestEnemy;
-        // console.info(`[Role.findTarget] ${this.node.name} 最终目标: ${nearestEnemy ? nearestEnemy.name : 'null'}`);
     }
 
     moveTowardsTarget(deltaTime: number) {

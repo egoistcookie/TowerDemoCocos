@@ -388,7 +388,6 @@ export class BuildingSelectionPanel extends Component {
 
             // 如果拖拽距离超过5像素，检查是否可以建造
             if (dragDistance > 5) {
-                console.info('[BuildingSelectionPanel] onCanvasTouchEnd drag>5, selectedBuilding=', this.selectedBuilding?.name);
                 // 检查触摸结束位置是否在建筑物选择面板区域内
                 let isInPanelArea = false;
                 const panelOpacity = this.node.getComponent(UIOpacity);
@@ -523,7 +522,6 @@ export class BuildingSelectionPanel extends Component {
                 }
                 
                 if (worldPos && this.onBuildCallback) {
-                console.info('[BuildingSelectionPanel] onBuildCallback fire', this.selectedBuilding?.name, 'pos=', worldPos);
                 this.onBuildCallback(this.selectedBuilding, worldPos);
                 
                 // 清除拖拽预览和状态
