@@ -13,6 +13,7 @@ import { UnitConfigManager } from './UnitConfigManager';
 import { PlayerDataManager } from './PlayerDataManager';
 import { BuildingGridPanel } from './BuildingGridPanel';
 import { StoneWallGridPanel } from './StoneWallGridPanel';
+import { BuildingPool } from './BuildingPool';
 const { ccclass, property } = _decorator;
 
 @ccclass('TowerBuilder')
@@ -1201,8 +1202,22 @@ export class TowerBuilder extends Component {
             this.gameManager.spendGold(actualCost);
         }
 
-        // 创建战争古树
-        const tree = instantiate(this.warAncientTreePrefab);
+        // 性能优化：从对象池获取建筑物，而不是直接实例化
+        const buildingPool = BuildingPool.getInstance();
+        let tree: Node | null = null;
+        if (buildingPool) {
+            // 确保预制体已注册到对象池（如果未注册则注册）
+            const stats = buildingPool.getStats();
+            if (!stats['WarAncientTree']) {
+                buildingPool.registerPrefab('WarAncientTree', this.warAncientTreePrefab);
+            }
+            tree = buildingPool.get('WarAncientTree');
+        }
+        
+        // 如果对象池没有可用对象，降级使用instantiate
+        if (!tree) {
+            tree = instantiate(this.warAncientTreePrefab);
+        }
         
         // 设置父节点
         const parent = this.warAncientTreeContainer || this.node;
@@ -1220,6 +1235,8 @@ export class TowerBuilder extends Component {
         // 设置建造成本并检查首次出现
         const treeScript = tree.getComponent(WarAncientTree);
         if (treeScript) {
+            // 设置prefabName（用于对象池回收）
+            treeScript.prefabName = 'WarAncientTree';
             // 先应用配置（排除 buildCost，因为需要在实例化时动态设置）
             const configManager = UnitConfigManager.getInstance();
             if (configManager.isConfigLoaded()) {
@@ -1276,8 +1293,22 @@ export class TowerBuilder extends Component {
             this.gameManager.spendGold(actualCost);
         }
 
-        // 创建猎手大厅
-        const hall = instantiate(this.hunterHallPrefab);
+        // 性能优化：从对象池获取建筑物，而不是直接实例化
+        const buildingPool = BuildingPool.getInstance();
+        let hall: Node | null = null;
+        if (buildingPool) {
+            // 确保预制体已注册到对象池（如果未注册则注册）
+            const stats = buildingPool.getStats();
+            if (!stats['HunterHall']) {
+                buildingPool.registerPrefab('HunterHall', this.hunterHallPrefab);
+            }
+            hall = buildingPool.get('HunterHall');
+        }
+        
+        // 如果对象池没有可用对象，降级使用instantiate
+        if (!hall) {
+            hall = instantiate(this.hunterHallPrefab);
+        }
         
         // 设置父节点
         const parent = this.hunterHallContainer || this.node;
@@ -1295,6 +1326,8 @@ export class TowerBuilder extends Component {
         // 设置建造成本并检查首次出现
         const hallScript = hall.getComponent(HunterHall);
         if (hallScript) {
+            // 设置prefabName（用于对象池回收）
+            hallScript.prefabName = 'HunterHall';
             // 先应用配置（如果有）
             const configManager = UnitConfigManager.getInstance();
             if (configManager.isConfigLoaded()) {
@@ -1345,8 +1378,22 @@ export class TowerBuilder extends Component {
             this.gameManager.spendGold(actualCost);
         }
 
-        // 创建石墙
-        const wall = instantiate(this.stoneWallPrefab);
+        // 性能优化：从对象池获取建筑物，而不是直接实例化
+        const buildingPool = BuildingPool.getInstance();
+        let wall: Node | null = null;
+        if (buildingPool) {
+            // 确保预制体已注册到对象池（如果未注册则注册）
+            const stats = buildingPool.getStats();
+            if (!stats['StoneWall']) {
+                buildingPool.registerPrefab('StoneWall', this.stoneWallPrefab);
+            }
+            wall = buildingPool.get('StoneWall');
+        }
+        
+        // 如果对象池没有可用对象，降级使用instantiate
+        if (!wall) {
+            wall = instantiate(this.stoneWallPrefab);
+        }
         
         // 设置父节点
         const parent = this.stoneWallContainer || this.node;
@@ -1366,6 +1413,8 @@ export class TowerBuilder extends Component {
         // 设置建造成本并检查首次出现
         const wallScript = wall.getComponent(StoneWall);
         if (wallScript) {
+            // 设置prefabName（用于对象池回收）
+            wallScript.prefabName = 'StoneWall';
             // 先应用配置（排除 buildCost 和 collisionRadius，使用预制体中的设置）
             const configManager = UnitConfigManager.getInstance();
             if (configManager.isConfigLoaded()) {
@@ -1485,8 +1534,22 @@ export class TowerBuilder extends Component {
             this.gameManager.spendGold(actualCost);
         }
 
-        // 创建剑士小屋
-        const hall = instantiate(this.swordsmanHallPrefab);
+        // 性能优化：从对象池获取建筑物，而不是直接实例化
+        const buildingPool = BuildingPool.getInstance();
+        let hall: Node | null = null;
+        if (buildingPool) {
+            // 确保预制体已注册到对象池（如果未注册则注册）
+            const stats = buildingPool.getStats();
+            if (!stats['SwordsmanHall']) {
+                buildingPool.registerPrefab('SwordsmanHall', this.swordsmanHallPrefab);
+            }
+            hall = buildingPool.get('SwordsmanHall');
+        }
+        
+        // 如果对象池没有可用对象，降级使用instantiate
+        if (!hall) {
+            hall = instantiate(this.swordsmanHallPrefab);
+        }
         
         // 设置父节点
         const parent = this.swordsmanHallContainer || this.node;
@@ -1504,6 +1567,8 @@ export class TowerBuilder extends Component {
         // 设置建造成本并检查首次出现
         const hallScript = hall.getComponent(SwordsmanHall);
         if (hallScript) {
+            // 设置prefabName（用于对象池回收）
+            hallScript.prefabName = 'SwordsmanHall';
             // 先应用配置（如果有）
             const configManager = UnitConfigManager.getInstance();
             if (configManager.isConfigLoaded()) {
@@ -1554,7 +1619,22 @@ export class TowerBuilder extends Component {
             this.gameManager.spendGold(actualCost);
         }
 
-        const church = instantiate(this.churchPrefab);
+        // 性能优化：从对象池获取建筑物，而不是直接实例化
+        const buildingPool = BuildingPool.getInstance();
+        let church: Node | null = null;
+        if (buildingPool) {
+            // 确保预制体已注册到对象池（如果未注册则注册）
+            const stats = buildingPool.getStats();
+            if (!stats['Church']) {
+                buildingPool.registerPrefab('Church', this.churchPrefab);
+            }
+            church = buildingPool.get('Church');
+        }
+        
+        // 如果对象池没有可用对象，降级使用instantiate
+        if (!church) {
+            church = instantiate(this.churchPrefab);
+        }
 
         // 设置父节点
         const parent = this.churchContainer || this.node;
@@ -1571,6 +1651,8 @@ export class TowerBuilder extends Component {
 
         const churchScript = church.getComponent(Church);
         if (churchScript) {
+            // 设置prefabName（用于对象池回收）
+            churchScript.prefabName = 'Church';
             // 先应用配置（排除 buildCost）
             const configManager = UnitConfigManager.getInstance();
             if (configManager.isConfigLoaded()) {

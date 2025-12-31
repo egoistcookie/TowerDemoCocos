@@ -1287,22 +1287,13 @@ export class Enemy extends Component {
             }
         }
 
-        // 查找教堂 - 使用UnitManager优化
+        // 查找教堂 - 从UnitManager获取，不再使用递归查找
         let churches: Node[] = [];
         if (this.unitManager) {
             churches = this.unitManager.getBuildings().filter(building => {
                 const churchScript = building.getComponent('Church') as any;
                 return churchScript && churchScript.isAlive && churchScript.isAlive();
             });
-        } else {
-            // 降级方案
-            let churchesNode = find('Churches');
-            if (!churchesNode && this.node.scene) {
-                churchesNode = findNodeRecursive(this.node.scene, 'Churches');
-            }
-            if (churchesNode) {
-                churches = churchesNode.children || [];
-            }
         }
         // 教堂
         for (const church of churches) {

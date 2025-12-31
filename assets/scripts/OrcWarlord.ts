@@ -5,6 +5,7 @@ import { DamageNumber } from './DamageNumber';
 import { AudioManager } from './AudioManager';
 import { UnitType } from './WarAncientTree';
 import { EnemyPool } from './EnemyPool';
+import { UnitManager } from './UnitManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('OrcWarlord')
@@ -85,6 +86,7 @@ export class OrcWarlord extends Component {
     private attackTimer: number = 0;
     private currentTarget: Node = null!;
     private gameManager: GameManager = null!;
+    private unitManager: UnitManager = null!;
     
     @property
     goldReward: number = 5; // 消灭敌人获得的金币
@@ -201,6 +203,9 @@ export class OrcWarlord extends Component {
         
         // 查找游戏管理器
         this.findGameManager();
+        
+        // 查找单位管理器（性能优化）
+        this.unitManager = UnitManager.getInstance();
         
         // 如果targetCrystal没有设置，尝试查找
         if (!this.targetCrystal || !this.targetCrystal.isValid) {
@@ -456,37 +461,18 @@ export class OrcWarlord extends Component {
         const detectionRange = 200;
         
         // 优先查找附近的防御塔和战争古树（在攻击范围内）
+        // 性能优化：从UnitManager获取建筑物列表，不再使用递归查找
         let towers: Node[] = [];
-        const towersNode = find('Canvas/Towers');
-        
-        if (towersNode) {
-            towers = towersNode.children;
-        }
-
-        // 查找战争古树
         let trees: Node[] = [];
-        const warAncientTrees = find('Canvas/WarAncientTrees');
-        if (warAncientTrees) {
-            trees = warAncientTrees.children;
-        }
-
-        // 查找猎手大厅
         let halls: Node[] = [];
-        const hallsNode = find('Canvas/HunterHalls');
-        if (hallsNode) {
-            halls = hallsNode.children;
-        } else if (this.node.scene) {
-            // 如果没有找到HunterHalls容器，直接从场景中查找所有HunterHall组件
-            const findAllHunterHalls = (node: Node) => {
-                const hallScript = node.getComponent('HunterHall') as any;
-                if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
-                    halls.push(node);
-                }
-                for (const child of node.children) {
-                    findAllHunterHalls(child);
-                }
-            };
-            findAllHunterHalls(this.node.scene);
+        
+        if (this.unitManager) {
+            towers = this.unitManager.getTowers();
+            trees = this.unitManager.getWarAncientTrees();
+            halls = this.unitManager.getBuildings().filter(building => {
+                const hallScript = building.getComponent('HunterHall') as any;
+                return hallScript && hallScript.isAlive && hallScript.isAlive();
+            });
         }
 
         let nearestTarget: Node = null!;

@@ -7,6 +7,7 @@ import { UnitInfo } from './UnitInfoPanel';
 import { SelectionManager } from './SelectionManager';
 import { BuildingGridPanel } from './BuildingGridPanel';
 import { UnitType } from './WarAncientTree';
+import { BuildingPool } from './BuildingPool';
 const { ccclass, property } = _decorator;
 
 @ccclass('Build')
@@ -66,7 +67,7 @@ export class Build extends Component {
     public gridY: number = -1; // 网格Y坐标
     protected isMoving: boolean = false; // 是否正在移动
     protected moveStartPos: Vec3 = new Vec3(); // 移动起始位置
-    protected gridPanel: BuildingGridPanel = null!; // 网格面板组件
+    protected gridPanel: any = null!; // 网格面板组件（支持BuildingGridPanel和StoneWallGridPanel）
     
     // 集结点相关
     public rallyPoint: Vec3 | null = null; // 集结点位置
@@ -75,6 +76,42 @@ export class Build extends Component {
     protected rallyPointPreview: Node = null!; // 集结点预览节点（红色圆点虚影）
     protected rallyPointHideTimer: number = 0; // 集结点隐藏定时器
     protected readonly RALLY_POINT_DISPLAY_DURATION: number = 2; // 集结点显示持续时间（秒）
+    
+    // 对象池相关：预制体名称（用于对象池回收）
+    public prefabName: string = '';
+
+    /**
+     * 当建筑物从对象池激活时调用（用于对象池复用）
+     * 从对象池获取的建筑物会调用此方法，而不是start方法
+     */
+    onEnable() {
+        // 从对象池获取时，重新初始化状态
+        this.currentHealth = this.maxHealth;
+        this.isDestroyed = false;
+        this.gridX = -1;
+        this.gridY = -1;
+        this.isMoving = false;
+        
+        // 重新查找游戏管理器（可能已变化）
+        this.findGameManager();
+        
+        // 重新查找单位选择管理器
+        this.findUnitSelectionManager();
+        
+        // 重新查找网格面板
+        this.findGridPanel();
+        
+        // 重新创建血条（如果不存在）
+        if (!this.healthBarNode || !this.healthBarNode.isValid) {
+            this.createHealthBar();
+        } else {
+            // 如果血条已存在，更新血条状态
+            if (this.healthBar) {
+                this.healthBar.setMaxHealth(this.maxHealth);
+                this.healthBar.setHealth(this.currentHealth);
+            }
+        }
+    }
 
     protected start() {
         this.currentHealth = this.maxHealth;
@@ -281,8 +318,84 @@ export class Build extends Component {
             explosion.active = true;
         }
 
-        // 销毁节点
-        this.node.destroy();
+        // 性能优化：使用对象池回收建筑物，而不是直接销毁
+        const returnToPool = () => {
+            const buildingPool = BuildingPool.getInstance();
+            if (buildingPool && this.node && this.node.isValid) {
+                // 重置建筑物状态（在返回对象池前）
+                this.resetBuildingState();
+                // 返回到对象池
+                buildingPool.release(this.node, this.prefabName);
+            } else {
+                // 如果对象池不存在，直接销毁
+                if (this.node && this.node.isValid) {
+                    this.node.destroy();
+                }
+            }
+        };
+        
+        // 延迟返回对象池，等待爆炸特效播放
+        this.scheduleOnce(() => {
+            returnToPool();
+        }, 0.1);
+    }
+    
+    /**
+     * 重置建筑物状态（用于对象池回收）
+     */
+    protected resetBuildingState() {
+        // 重置基础状态
+        this.currentHealth = this.maxHealth;
+        this.isDestroyed = false;
+        this.gridX = -1;
+        this.gridY = -1;
+        this.isMoving = false;
+        this.rallyPoint = null;
+        this.isSettingRallyPoint = false;
+        
+        // 重置血条（如果血条节点存在，尝试更新；否则重新创建）
+        if (this.healthBarNode && this.healthBarNode.isValid) {
+            // 血条节点存在，尝试获取或重新获取HealthBar组件
+            if (!this.healthBar) {
+                this.healthBar = this.healthBarNode.getComponent(HealthBar);
+            }
+            if (this.healthBar) {
+                this.healthBar.setMaxHealth(this.maxHealth);
+                this.healthBar.setHealth(this.currentHealth);
+            } else {
+                // 如果HealthBar组件丢失，重新创建
+                this.createHealthBar();
+            }
+        } else {
+            // 血条节点不存在，重新创建
+            this.healthBarNode = null!;
+            this.healthBar = null!;
+            if (this.node && this.node.isValid) {
+                this.createHealthBar();
+            }
+        }
+        
+        // 重置节点状态
+        if (this.node) {
+            this.node.setScale(this.defaultScale);
+            this.node.angle = 0;
+            if (this.sprite && this.defaultSpriteFrame) {
+                this.sprite.spriteFrame = this.defaultSpriteFrame;
+            }
+        }
+        
+        // 清理集结点标记
+        if (this.rallyPointMarker) {
+            this.rallyPointMarker.destroy();
+            this.rallyPointMarker = null!;
+        }
+        if (this.rallyPointPreview) {
+            this.rallyPointPreview.destroy();
+            this.rallyPointPreview = null!;
+        }
+        
+        // 隐藏选择面板
+        this.hideSelectionPanel();
     }
 
     onDestroy() {
