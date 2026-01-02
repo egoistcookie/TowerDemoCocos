@@ -442,6 +442,7 @@ export class TowerBuilder extends Component {
      * 查找石墙网格面板
      */
     findStoneWallGridPanel() {
+        // 优先使用属性绑定的节点
         if (this.stoneWallGridPanel) {
             this.stoneWallGridPanelComponent = this.stoneWallGridPanel.getComponent(StoneWallGridPanel);
             if (this.stoneWallGridPanelComponent) {
@@ -449,23 +450,13 @@ export class TowerBuilder extends Component {
             }
         }
         
-        // 尝试查找场景中的石墙网格面板
-        const stoneWallGridPanelNode = find('StoneWallGridPanel');
+        // 从编辑器节点获取（Canvas/StoneWallGridPanel）
+        const stoneWallGridPanelNode = find('Canvas/StoneWallGridPanel');
         if (stoneWallGridPanelNode) {
             this.stoneWallGridPanelComponent = stoneWallGridPanelNode.getComponent(StoneWallGridPanel);
             if (this.stoneWallGridPanelComponent) {
                 this.stoneWallGridPanel = stoneWallGridPanelNode;
-                return;
             }
-        }
-        
-        // 如果找不到，创建一个
-        const canvas = find('Canvas');
-        if (canvas) {
-            const stoneWallGridNode = new Node('StoneWallGridPanel');
-            stoneWallGridNode.setParent(canvas);
-            this.stoneWallGridPanelComponent = stoneWallGridNode.addComponent(StoneWallGridPanel);
-            this.stoneWallGridPanel = stoneWallGridNode;
         }
     }
 
