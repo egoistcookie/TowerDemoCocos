@@ -446,17 +446,56 @@ export class StoneWallGridPanel extends Component {
 
     /**
      * 检查网格是否被占用
+     * 判断网格中是否存在石墙节点，并且石墙节点的状态是存活
      */
     isGridOccupied(gridX: number, gridY: number): boolean {
         if (gridX < 0 || gridX >= this.gridWidth || gridY < 0 || gridY >= this.gridHeight) {
             return false;
         }
         this.ensureGridInitialized();
-        return this.gridCells[gridY][gridX].occupied;
+        const cell = this.gridCells[gridY][gridX];
+        
+        // 如果标记为未占用，直接返回false
+        if (!cell.occupied) {
+            return false;
+        }
+        
+        // 如果标记为占用，检查石墙节点是否存在且存活
+        if (cell.buildingNode) {
+            // 检查节点是否有效
+            if (!cell.buildingNode.isValid || !cell.buildingNode.active) {
+                // 节点无效，更新占用状态
+                cell.occupied = false;
+                cell.buildingNode = null;
+                return false;
+            }
+            
+            // 检查石墙是否存活
+            const stoneWallScript = cell.buildingNode.getComponent('StoneWall') as any;
+            if (stoneWallScript) {
+                // 检查石墙是否存活（通过isAlive方法）
+                if (stoneWallScript.isAlive && !stoneWallScript.isAlive()) {
+                    // 石墙已死亡，更新占用状态
+                    cell.occupied = false;
+                    cell.buildingNode = null;
+                    return false;
+                }
+                // 石墙存活，返回true
+                return true;
+            } else {
+                // 没有石墙脚本，可能是其他类型的建筑物，保持占用状态
+                return true;
+            }
+        } else {
+            // 没有建筑物节点，但标记为占用，更新状态
+            cell.occupied = false;
+            return false;
+        }
     }
 
     /**
      * 检查网格是否被其他建筑物占用（排除指定建筑物）
+     * 判断网格中是否存在石墙节点，并且石墙节点的状态是存活，且不是排除的建筑物
      */
     isGridOccupiedByOther(gridX: number, gridY: number, excludeBuilding: Node): boolean {
         if (gridX < 0 || gridX >= this.gridWidth || gridY < 0 || gridY >= this.gridHeight) {
@@ -464,7 +503,48 @@ export class StoneWallGridPanel extends Component {
         }
         this.ensureGridInitialized();
         const cell = this.gridCells[gridY][gridX];
-        return cell.occupied && cell.buildingNode !== excludeBuilding;
+        
+        // 如果标记为未占用，直接返回false
+        if (!cell.occupied) {
+            return false;
+        }
+        
+        // 如果标记为占用，检查石墙节点是否存在且存活
+        if (cell.buildingNode) {
+            // 如果是排除的建筑物，返回false
+            if (cell.buildingNode === excludeBuilding) {
+                return false;
+            }
+            
+            // 检查节点是否有效
+            if (!cell.buildingNode.isValid || !cell.buildingNode.active) {
+                // 节点无效，更新占用状态
+                cell.occupied = false;
+                cell.buildingNode = null;
+                return false;
+            }
+            
+            // 检查石墙是否存活
+            const stoneWallScript = cell.buildingNode.getComponent('StoneWall') as any;
+            if (stoneWallScript) {
+                // 检查石墙是否存活（通过isAlive方法）
+                if (stoneWallScript.isAlive && !stoneWallScript.isAlive()) {
+                    // 石墙已死亡，更新占用状态
+                    cell.occupied = false;
+                    cell.buildingNode = null;
+                    return false;
+                }
+                // 石墙存活，返回true
+                return true;
+            } else {
+                // 没有石墙脚本，可能是其他类型的建筑物，保持占用状态
+                return true;
+            }
+        } else {
+            // 没有建筑物节点，但标记为占用，更新状态
+            cell.occupied = false;
+            return false;
+        }
     }
 
     /**

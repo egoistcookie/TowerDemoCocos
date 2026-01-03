@@ -279,12 +279,14 @@ export class BuildingSelectionPanel extends Component {
             const location = event.getLocation();
             const screenPos = new Vec3(location.x, location.y, 0);
             
-            // 判断是否是石墙
+            // 判断是否是石墙或哨塔（都使用石墙网格）
             const isStoneWall = this.selectedBuilding.name === '石墙';
+            const isWatchTower = this.selectedBuilding.name === '哨塔';
+            const useStoneWallGrid = isStoneWall || isWatchTower;
             
             // 根据建筑类型选择对应的网格面板
-            if (isStoneWall) {
-                // 石墙使用石墙网格面板（现在使用世界坐标，与BuildingGridPanel一致）
+            if (useStoneWallGrid) {
+                // 石墙和哨塔使用石墙网格面板（现在使用世界坐标，与BuildingGridPanel一致）
                 if (!this.stoneWallGridPanel) {
                     this.findStoneWallGridPanel();
                 }
@@ -444,13 +446,15 @@ export class BuildingSelectionPanel extends Component {
                     worldPos = this.getWorldPositionFromScreen(new Vec3(location.x, location.y, 0));
                 }
                 
-                // 判断是否是石墙
+                // 判断是否是石墙或哨塔（都使用石墙网格）
                 const isStoneWall = this.selectedBuilding.name === '石墙';
+                const isWatchTower = this.selectedBuilding.name === '哨塔';
+                const useStoneWallGrid = isStoneWall || isWatchTower;
                 
                 // 根据建筑类型选择对应的网格面板进行对齐
                 if (worldPos) {
-                    if (isStoneWall) {
-                        // 石墙使用石墙网格面板
+                    if (useStoneWallGrid) {
+                        // 石墙和哨塔使用石墙网格面板
                         if (!this.stoneWallGridPanel) {
                             this.findStoneWallGridPanel();
                         }
@@ -473,7 +477,7 @@ export class BuildingSelectionPanel extends Component {
                                     return;
                                 }
                             } else {
-                                // 石墙必须建造在石墙网格内，否则建造失败
+                                // 石墙和哨塔必须建造在石墙网格内，否则建造失败
                                 this.clearDragPreview();
                                 this.selectedBuilding = null;
                                 // 确保清除网格高亮
@@ -631,15 +635,11 @@ export class BuildingSelectionPanel extends Component {
         this.node.setScale(0, 1, 1);
         tween(this.node)
             .to(0.2, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
-            .call(() => {
-                console.info('[BuildingSelectionPanel] show: 面板显示动画完成');
-            })
             .start();
         
         // 0.5秒后清除保护标记（给足够的时间让按钮点击事件处理完成）
         this.scheduleOnce(() => {
             (this.node as any)._justShown = false;
-            console.info('[BuildingSelectionPanel] show: 面板显示保护期结束');
         }, 0.5);
     }
 
@@ -647,17 +647,13 @@ export class BuildingSelectionPanel extends Component {
      * 隐藏面板
      */
     hide() {
-        console.info('[BuildingSelectionPanel] hide: 开始隐藏面板, _justShown =', !!(this.node as any)._justShown, ', node.active =', this.node.active);
-        
         // 检查是否在保护期内，如果是，不隐藏
         if ((this.node as any)._justShown) {
-            console.info('[BuildingSelectionPanel] hide: 面板在保护期内，取消隐藏操作');
             return;
         }
         
         // 如果面板已经隐藏，不需要再次隐藏
         if (!this.node.active) {
-            console.info('[BuildingSelectionPanel] hide: 面板已经隐藏，不需要再次隐藏');
             return;
         }
         
@@ -667,16 +663,13 @@ export class BuildingSelectionPanel extends Component {
                 this.node.active = false;
                 this.selectedBuilding = null;
                 this.clearDragPreview();
-                console.info('[BuildingSelectionPanel] hide: 面板已隐藏完成');
             })
             .start();
         
         // 关闭建造模式// 如果找不到节点或组件，尝试从TowerBuilder获取
         const towerBuilderNode = find('Canvas/TowerBuilder');
-        console.info('[BuildingSelectionPanel] hide: TowerBuilder node =', towerBuilderNode);
         if (towerBuilderNode) {
             const towerBuilder = towerBuilderNode.getComponent('TowerBuilder') as any;
-            console.info('[BuildingSelectionPanel] hide: TowerBuilder =', towerBuilder);
             if (towerBuilder) {
                 towerBuilder.isBuildingMode = false;
                 towerBuilder.currentSelectedBuilding = null;
@@ -998,8 +991,10 @@ export class BuildingSelectionPanel extends Component {
             // 优先使用拖拽预览的当前位置（已经对齐到网格中心）
             let buildPos: Vec3 | null = null;
             
-            // 判断是否是石墙
+            // 判断是否是石墙或哨塔（都使用石墙网格）
             const isStoneWall = this.selectedBuilding && this.selectedBuilding.name === '石墙';
+            const isWatchTower = this.selectedBuilding && this.selectedBuilding.name === '哨塔';
+            const useStoneWallGrid = isStoneWall || isWatchTower;
             
             // 对于所有建筑（包括石墙），统一使用世界坐标
             if (this.dragPreview) {
@@ -1010,21 +1005,43 @@ export class BuildingSelectionPanel extends Component {
             
             // 根据建筑类型选择对应的网格面板进行对齐
             if (buildPos) {
-                if (isStoneWall) {
-                    // 石墙使用石墙网格面板
+                if (useStoneWallGrid) {
+                    // 石墙和哨塔使用石墙网格面板
                     if (!this.stoneWallGridPanel) {
                         this.findStoneWallGridPanel();
                     }
                     
                     if (this.stoneWallGridPanel) {
-                        const gridCenter = this.stoneWallGridPanel.getNearestGridCenter(buildPos);
+                        // 先尝试使用拖拽预览位置获取网格中心
+                        let gridCenter = this.stoneWallGridPanel.getNearestGridCenter(buildPos);
+                        
+                        // 如果拖拽预览位置不在网格内，尝试使用触摸结束位置
+                        if (!gridCenter) {
+                            const touchWorldPos = this.getWorldPositionFromScreen(new Vec3(location.x, location.y, 0));
+                            if (touchWorldPos) {
+                                gridCenter = this.stoneWallGridPanel.getNearestGridCenter(touchWorldPos);
+                            }
+                        }
+                        
                         if (gridCenter) {
                             // 检查目标网格是否被占用
                             const grid = this.stoneWallGridPanel.worldToGrid(gridCenter);
-                            if (grid && !this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y)) {
-                                buildPos = gridCenter;
+                            if (grid) {
+                                const isOccupied = this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y);
+                                if (!isOccupied) {
+                                    buildPos = gridCenter;
+                                } else {
+                                    // 网格被占用，建造失败
+                                    this.clearDragPreview();
+                                    this.selectedBuilding = null;
+                                    this.clearGridHighlight();
+                                    if (this.onBuildCancelCallback) {
+                                        this.onBuildCancelCallback();
+                                    }
+                                    event.propagationStopped = true;
+                                    return;
+                                }
                             } else {
-                                // 网格被占用，建造失败
                                 this.clearDragPreview();
                                 this.selectedBuilding = null;
                                 this.clearGridHighlight();
@@ -1035,7 +1052,7 @@ export class BuildingSelectionPanel extends Component {
                                 return;
                             }
                         } else {
-                            // 石墙必须建造在石墙网格内，否则建造失败
+                            // 石墙和哨塔必须建造在石墙网格内，否则建造失败
                             this.clearDragPreview();
                             this.selectedBuilding = null;
                             this.clearGridHighlight();
@@ -1208,18 +1225,30 @@ export class BuildingSelectionPanel extends Component {
                     worldPos = this.getWorldPositionFromScreen(new Vec3(location.x, location.y, 0));
                 }
                 
-                // 判断是否是石墙
+                // 判断是否是石墙或哨塔（都使用石墙网格）
                 const isStoneWall = this.selectedBuilding && this.selectedBuilding.name === '石墙';
+                const isWatchTower = this.selectedBuilding && this.selectedBuilding.name === '哨塔';
+                const useStoneWallGrid = isStoneWall || isWatchTower;
                 
                 // 根据建筑类型选择对应的网格面板进行对齐
                 if (worldPos) {
-                    if (isStoneWall) {
+                    if (useStoneWallGrid) {
                         if (!this.stoneWallGridPanel) {
                             this.findStoneWallGridPanel();
                         }
 
                         if (this.stoneWallGridPanel) {
-                            const gridCenter = this.stoneWallGridPanel.getNearestGridCenter(worldPos);
+                            // 先尝试使用拖拽预览位置获取网格中心
+                            let gridCenter = this.stoneWallGridPanel.getNearestGridCenter(worldPos);
+                            
+                            // 如果拖拽预览位置不在网格内，尝试使用触摸结束位置
+                            if (!gridCenter) {
+                                const touchWorldPos = this.getWorldPositionFromScreen(new Vec3(location.x, location.y, 0));
+                                if (touchWorldPos) {
+                                    gridCenter = this.stoneWallGridPanel.getNearestGridCenter(touchWorldPos);
+                                }
+                            }
+                            
                             if (gridCenter) {
                                 // 检查目标网格是否被占用
                                 const grid = this.stoneWallGridPanel.worldToGrid(gridCenter);
@@ -1236,7 +1265,7 @@ export class BuildingSelectionPanel extends Component {
                                     return;
                                 }
                             } else {
-                                // 石墙必须建造在石墙网格内
+                                // 石墙和哨塔必须建造在石墙网格内
                                 this.clearDragPreview();
                                 this.selectedBuilding = null;
                                 this.clearGridHighlight();
@@ -1411,11 +1440,13 @@ export class BuildingSelectionPanel extends Component {
             this.findStoneWallGridPanel();
         }
         
-        // 判断是否是石墙
+        // 判断是否是石墙或哨塔（都使用石墙网格）
         const isStoneWall = this.selectedBuilding.name === '石墙';
+        const isWatchTower = this.selectedBuilding.name === '哨塔';
+        const useStoneWallGrid = isStoneWall || isWatchTower;
         
-        if (isStoneWall) {
-            // 对于石墙，使用世界坐标（与普通建筑物一致）
+        if (useStoneWallGrid) {
+            // 对于石墙和哨塔，使用世界坐标（与普通建筑物一致）
             const worldPos = this.getWorldPositionFromScreen(screenPos);
             if (!worldPos) {
                 return;

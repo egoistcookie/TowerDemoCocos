@@ -6,6 +6,7 @@ import { UnitSelectionManager } from './UnitSelectionManager';
 import { WarAncientTree } from './WarAncientTree';
 import { HunterHall } from './HunterHall';
 import { StoneWall } from './StoneWall';
+import { WatchTower } from './WatchTower';
 import { SwordsmanHall } from './SwordsmanHall';
 import { TalentEffectManager } from './TalentEffectManager';
 import { Church } from './Church';
@@ -37,6 +38,12 @@ export class TowerBuilder extends Component {
 
     @property(SpriteFrame)
     stoneWallIcon: SpriteFrame = null!; // 石墙图标
+
+    @property(Prefab)
+    watchTowerPrefab: Prefab = null!; // 哨塔预制体
+
+    @property(SpriteFrame)
+    watchTowerIcon: SpriteFrame = null!; // 哨塔图标
 
     @property(Prefab)
     swordsmanHallPrefab: Prefab = null!; // 剑士小屋预制体
@@ -77,6 +84,9 @@ export class TowerBuilder extends Component {
     stoneWallContainer: Node = null!; // 石墙容器
 
     @property(Node)
+    watchTowerContainer: Node = null!; // 哨塔容器
+
+    @property(Node)
     swordsmanHallContainer: Node = null!; // 剑士小屋容器
 
     @property(Node)
@@ -98,6 +108,9 @@ export class TowerBuilder extends Component {
 
     @property
     stoneWallCost: number = 5; // 石墙建造成本（5金币）
+
+    @property
+    watchTowerCost: number = 5; // 哨塔建造成本（5金币）
 
     @property
     swordsmanHallCost: number = 10; // 剑士小屋建造成本（10金币）
@@ -211,6 +224,22 @@ export class TowerBuilder extends Component {
                     this.churchContainer.setParent(canvas);
                 } else if (this.node.scene) {
                     this.churchContainer.setParent(this.node.scene);
+                }
+            }
+        }
+
+        // 创建哨塔容器
+        if (!this.watchTowerContainer) {
+            const existingWatchTowers = find('WatchTowers');
+            if (existingWatchTowers) {
+                this.watchTowerContainer = existingWatchTowers;
+            } else {
+                this.watchTowerContainer = new Node('WatchTowers');
+                const canvas = find('Canvas');
+                if (canvas) {
+                    this.watchTowerContainer.setParent(canvas);
+                } else if (this.node.scene) {
+                    this.watchTowerContainer.setParent(this.node.scene);
                 }
             }
         }
@@ -370,6 +399,15 @@ export class TowerBuilder extends Component {
                 cost: this.stoneWallCost,
                 icon: this.stoneWallIcon || null!,
                 description: '坚固的障碍物，阻挡敌人进攻路线'
+            });
+        }
+        if (this.watchTowerPrefab) {
+            buildingTypes.push({
+                name: '哨塔',
+                prefab: this.watchTowerPrefab,
+                cost: this.watchTowerCost,
+                icon: this.watchTowerIcon || null!,
+                description: '可以攻击敌人的防御塔，使用弓箭攻击'
             });
         }
         if (this.swordsmanHallPrefab) {
@@ -757,7 +795,6 @@ export class TowerBuilder extends Component {
         if (this.stoneWallGridPanelComponent) {
             this.stoneWallGridPanelComponent.clearHighlight();
         }
-        console.info('[TowerBuilder] disableBuildingMode: 建造模式已关闭完成');
     }
 
     /**
@@ -970,53 +1007,47 @@ export class TowerBuilder extends Component {
 
     canBuildAt(position: Vec3, building: BuildingType): boolean {
         if (!this.targetCrystal || !building) {
-            console.info('[TowerBuilder] canBuildAt fail: missing targetCrystal or building');
             return false;
         }
 
-        // 判断是否是石墙
+        // 判断是否是石墙或哨塔（都使用石墙网格）
         const isStoneWall = building.name === '石墙' || building.prefab === this.stoneWallPrefab;
+        const isWatchTower = building.name === '哨塔' || building.prefab === this.watchTowerPrefab;
+        const useStoneWallGrid = isStoneWall || isWatchTower;
 
-        // 石墙必须放置在石墙网格内
-        if (isStoneWall) {
+        // 石墙和哨塔必须放置在石墙网格内
+        if (useStoneWallGrid) {
             if (!this.stoneWallGridPanelComponent) {
                 this.findStoneWallGridPanel();
             }
             const stonePanel = this.stoneWallGridPanelComponent;
             if (!stonePanel) {
-                console.info('[TowerBuilder] canBuildAt fail: stoneWall panel null');
                 return false;
             }
 
             if (!stonePanel.isPositionInGrid(position)) {
-                console.info('[TowerBuilder] canBuildAt fail: stoneWall pos not in grid');
                 return false;
             }
 
             const grid = stonePanel.worldToGrid(position);
             if (!grid || stonePanel.isGridOccupied(grid.x, grid.y)) {
-                console.info('[TowerBuilder] canBuildAt fail: stoneWall grid invalid or occupied', grid?.x, grid?.y);
                 return false;
             }
 
-            console.info('[TowerBuilder] canBuildAt ok: stoneWall grid', grid.x, grid.y);
             return true;
         }
 
-        // 非石墙：需要在普通网格内并满足距离
+        // 非石墙/哨塔：需要在普通网格内并满足距离
         if (this.gridPanel) {
             if (!this.gridPanel.isPositionInGrid(position)) {
-                console.info('[TowerBuilder] canBuildAt fail: pos not in normal grid');
                 return false;
             }
             
             // 检查目标网格是否已被占用
             const grid = this.gridPanel.worldToGrid(position);
             if (grid && this.gridPanel.isGridOccupied(grid.x, grid.y)) {
-                console.info('[TowerBuilder] canBuildAt fail: grid occupied', grid.x, grid.y);
                 return false;
             }
-            console.info('[TowerBuilder] canBuildAt ok: normal grid', grid?.x, grid?.y);
         }
 
         // 检查距离水晶的距离（保留原有逻辑作为备用检查）
@@ -1024,7 +1055,6 @@ export class TowerBuilder extends Component {
         const distance = Vec3.distance(position, crystalPos);
         
         if (distance < this.minBuildDistance || distance > this.buildRange) {
-            console.info('[TowerBuilder] canBuildAt fail: distance', distance, 'min', this.minBuildDistance, 'max', this.buildRange);
             return false;
         }
 
@@ -1035,7 +1065,6 @@ export class TowerBuilder extends Component {
             if (tower.active) {
                 const towerDistance = Vec3.distance(position, tower.worldPosition);
                 if (towerDistance < 60) { // 弓箭手之间的最小距离
-                    console.info('[TowerBuilder] canBuildAt fail: overlap tower', towerDistance);
                     return false;
                 }
             }
@@ -1047,7 +1076,6 @@ export class TowerBuilder extends Component {
             if (tree.active) {
                 const treeDistance = Vec3.distance(position, tree.worldPosition);
                 if (treeDistance < 80) { // 战争古树之间的最小距离（稍大一些）
-                    console.info('[TowerBuilder] canBuildAt fail: overlap war tree', treeDistance);
                     return false;
                 }
             }
@@ -1059,7 +1087,6 @@ export class TowerBuilder extends Component {
             if (hall.active) {
                 const hallDistance = Vec3.distance(position, hall.worldPosition);
                 if (hallDistance < 80) { // 猎手大厅之间的最小距离
-                    console.info('[TowerBuilder] canBuildAt fail: overlap hunter hall', hallDistance);
                     return false;
                 }
             }
@@ -1071,7 +1098,6 @@ export class TowerBuilder extends Component {
             if (c.active) {
                 const d = Vec3.distance(position, c.worldPosition);
                 if (d < 80) { // 教堂之间/与其他建筑的最小距离
-                    console.info('[TowerBuilder] canBuildAt fail: overlap church', d);
                     return false;
                 }
             }
@@ -1083,13 +1109,11 @@ export class TowerBuilder extends Component {
             if (wall.active) {
                 const wallDistance = Vec3.distance(position, wall.worldPosition);
                 if (wallDistance < 80) { // 其他建筑物与石墙的最小距离
-                    console.info('[TowerBuilder] canBuildAt fail: overlap stonewall', wallDistance);
                     return false;
                 }
             }
         }
 
-        console.info('[TowerBuilder] canBuildAt success');
         return true;
     }
 
@@ -1097,7 +1121,6 @@ export class TowerBuilder extends Component {
      * 建造建筑物（通用方法）
      */
     buildBuilding(building: BuildingType, worldPosition: Vec3) {
-        console.info('[TowerBuilder] buildBuilding start', building?.name, 'pos=', worldPosition);
         // 检查金币是否足够
         if (!this.gameManager) {
             this.findGameManager();
@@ -1131,14 +1154,13 @@ export class TowerBuilder extends Component {
             this.buildHunterHall(worldPosition);
         } else if (building.name === '石墙' || building.prefab === this.stoneWallPrefab) {
             this.buildStoneWall(worldPosition);
+        } else if (building.name === '哨塔' || building.prefab === this.watchTowerPrefab) {
+            this.buildWatchTower(worldPosition);
         } else if (building.name === '剑士小屋' || building.prefab === this.swordsmanHallPrefab) {
             this.buildSwordsmanHall(worldPosition);
         } else if (building.name === '教堂' || building.prefab === this.churchPrefab) {
             this.buildChurch(worldPosition);
-        } else {
-            // 可以扩展其他建筑物类型
         }
-        console.info('[TowerBuilder] buildBuilding done (may have built), disabling building mode');
 
         // 只有在成功建造后才退出建造模式
         this.disableBuildingMode();
@@ -1248,15 +1270,10 @@ export class TowerBuilder extends Component {
             if (this.gridPanel) {
                 const grid = this.gridPanel.worldToGrid(worldPosition);
                 if (grid) {
-                    console.info('[TowerBuilder] buildWarAncientTree occupy', grid.x, grid.y, 'worldPos=', worldPosition);
                     treeScript.gridX = grid.x;
                     treeScript.gridY = grid.y;
                     this.gridPanel.occupyGrid(grid.x, grid.y, tree);
-                } else {
-                    console.info('[TowerBuilder] buildWarAncientTree worldToGrid returned null, worldPos=', worldPosition);
                 }
-            } else {
-                console.info('[TowerBuilder] buildWarAncientTree gridPanel is null, cannot occupy grid');
             }
             
             // 检查单位是否首次出现
@@ -1460,6 +1477,112 @@ export class TowerBuilder extends Component {
             }
         }
 
+    }
+
+    /**
+     * 建造哨塔
+     */
+    buildWatchTower(worldPosition: Vec3, skipCost: boolean = false) {
+        if (!this.watchTowerPrefab) {
+            return;
+        }
+
+        // 获取实际建造成本（考虑单位卡片强化减少）
+        const actualCost = this.getActualBuildCost('WatchTower', this.watchTowerCost);
+        
+        // 消耗金币
+        if (this.gameManager && !skipCost) {
+            this.gameManager.spendGold(actualCost);
+        }
+
+        // 性能优化：从对象池获取建筑物，而不是直接实例化
+        const buildingPool = BuildingPool.getInstance();
+        let tower: Node | null = null;
+        if (buildingPool) {
+            // 确保预制体已注册到对象池（如果未注册则注册）
+            const stats = buildingPool.getStats();
+            if (!stats['WatchTower']) {
+                buildingPool.registerPrefab('WatchTower', this.watchTowerPrefab);
+            }
+            tower = buildingPool.get('WatchTower');
+        }
+        
+        // 如果对象池没有可用对象，降级使用instantiate
+        if (!tower) {
+            tower = instantiate(this.watchTowerPrefab);
+        }
+        
+        // 设置父节点
+        const parent = this.watchTowerContainer || this.node;
+        if (parent && !parent.active) {
+            parent.active = true;
+        }
+        
+        tower.setParent(parent);
+        tower.active = true;
+        tower.setPosition(0, 0, 0);
+        tower.setRotationFromEuler(0, 0, 0);
+        tower.setScale(1, 1, 1);
+        tower.setWorldPosition(worldPosition);
+
+        // 设置建造成本并检查首次出现
+        const towerScript = tower.getComponent(WatchTower);
+        if (towerScript) {
+            // 设置prefabName（用于对象池回收）
+            towerScript.prefabName = 'WatchTower';
+            // 先应用配置（排除 buildCost 和 collisionRadius，使用预制体中的设置）
+            const configManager = UnitConfigManager.getInstance();
+            if (configManager.isConfigLoaded()) {
+                configManager.applyConfigToUnit('WatchTower', towerScript, ['buildCost', 'collisionRadius']);
+            }
+            
+            // 应用单位卡片强化
+            const talentEffectManager = TalentEffectManager.getInstance();
+            talentEffectManager.applyUnitEnhancements('WatchTower', towerScript);
+            
+            // 应用公共天赋增幅
+            talentEffectManager.applyTalentEffects(towerScript);
+            
+            // 然后设置建造成本（使用实际成本）
+            towerScript.buildCost = actualCost;
+            
+            // 哨塔只能放置在石墙网格内，占用网格
+            if (!this.stoneWallGridPanelComponent) {
+                this.findStoneWallGridPanel();
+            }
+            
+            if (this.stoneWallGridPanelComponent) {
+                const grid = this.stoneWallGridPanelComponent.worldToGrid(worldPosition);
+                if (grid) {
+                    // 检查网格是否被占用
+                    if (this.stoneWallGridPanelComponent.isGridOccupied(grid.x, grid.y)) {
+                        // 网格已被占用，不应该发生这种情况（应该在放置前检查）
+                    } else {
+                        // 占用网格
+                        if (this.stoneWallGridPanelComponent.occupyGrid(grid.x, grid.y, tower)) {
+                            towerScript.gridX = grid.x;
+                            towerScript.gridY = grid.y;
+                        } else {
+                            towerScript.gridX = -1;
+                            towerScript.gridY = -1;
+                        }
+                    }
+                } else {
+                    // 哨塔不在石墙网格内，不应该发生这种情况（应该在放置前检查）
+                    towerScript.gridX = -1;
+                    towerScript.gridY = -1;
+                }
+            } else {
+                towerScript.gridX = -1;
+                towerScript.gridY = -1;
+            }
+            
+            // 检查单位是否首次出现
+            if (this.gameManager) {
+                const unitType = towerScript.unitType || 'WatchTower';
+                this.gameManager.checkUnitFirstAppearance(unitType, towerScript);
+            }
+        }
     }
 
     /**
@@ -1681,10 +1804,8 @@ export class TowerBuilder extends Component {
 
     // 可以通过按钮调用
     onBuildButtonClick() {
-        console.info('[TowerBuilder] onBuildButtonClick: 建造按钮被点击');
         // 检查warAncientTreePrefab是否设置
         if (!this.warAncientTreePrefab) {
-            console.info('[TowerBuilder] onBuildButtonClick: warAncientTreePrefab 未设置，返回');
             return;
         }
         
@@ -1692,7 +1813,6 @@ export class TowerBuilder extends Component {
         if (!this.targetCrystal) {
             this.targetCrystal = find('Crystal');
             if (!this.targetCrystal) {
-                console.info('[TowerBuilder] onBuildButtonClick: targetCrystal 未找到，返回');
                 return;
             }
         }
@@ -1702,7 +1822,6 @@ export class TowerBuilder extends Component {
         
         // 如果已经在建造模式且面板显示，切换为关闭建造模式
         if (this.isBuildingMode && isPanelVisible) {
-            console.info('[TowerBuilder] onBuildButtonClick: 关闭建造模式');
             this.disableBuildingMode();
             return;
         }
@@ -1716,7 +1835,6 @@ export class TowerBuilder extends Component {
             }
         }
         
-        console.info('[TowerBuilder] onBuildButtonClick: 开启建造模式');
         this.enableBuildingMode();
     }
     
