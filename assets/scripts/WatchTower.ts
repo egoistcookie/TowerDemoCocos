@@ -1,4 +1,4 @@
-import { _decorator, Node, Vec3, find, Prefab, instantiate, SpriteFrame, AudioClip } from 'cc';
+import { _decorator, Node, Vec3, find, Prefab, instantiate, SpriteFrame, AudioClip, Graphics, UITransform, Color } from 'cc';
 import { Build } from './Build';
 import { UnitInfo } from './UnitInfoPanel';
 import { StoneWallGridPanel } from './StoneWallGridPanel';
@@ -7,7 +7,15 @@ import { BuildingPool } from './BuildingPool';
 import { GameManager, GameState } from './GameManager';
 import { Arrow } from './Arrow';
 import { AudioManager } from './AudioManager';
+import { UnitManager } from './UnitManager';
 const { ccclass, property } = _decorator;
+
+// 占领状态枚举
+enum CaptureState {
+    Neutral = 0,  // 中立
+    Friendly = 1, // 我方
+    Enemy = 2     // 敌方
+}
 
 @ccclass('WatchTower')
 export class WatchTower extends Build {
@@ -41,6 +49,17 @@ export class WatchTower extends Build {
     protected readonly TARGET_FIND_INTERVAL: number = 0.2; // 目标查找间隔（秒）
     protected hasFoundFirstTarget: boolean = false; // 是否已经找到过第一个目标
 
+    // 占领相关属性
+    private captureState: CaptureState = CaptureState.Neutral; // 当前占领状态
+    private captureProgress: number = 0; // 占领进度（0-5秒）
+    private readonly CAPTURE_TIME: number = 5.0; // 占领所需时间（秒）
+    private captureIndicator: Node = null!; // 占领指示器节点（圆弧）
+    private captureIndicatorGraphics: Graphics = null!; // 占领指示器Graphics组件
+    private lastFriendlyCount: number = 0; // 上次检测到的我方单位数量
+    private lastEnemyCount: number = 0; // 上次检测到的敌方单位数量
+    private lastAdvantage: 'friendly' | 'enemy' | 'balanced' = 'balanced'; // 上次的优势方
+    private unitManager: UnitManager = null!; // 单位管理器引用
+
     /**
      * 当哨塔从对象池激活时调用（用于对象池复用）
      */
@@ -53,6 +72,17 @@ export class WatchTower extends Build {
         this.currentTarget = null!;
         this.targetFindTimer = 0;
         this.hasFoundFirstTarget = false;
+        
+        // 初始化占领相关属性
+        this.captureState = CaptureState.Neutral;
+        this.captureProgress = 0;
+        this.lastFriendlyCount = 0;
+        this.lastEnemyCount = 0;
+        this.lastAdvantage = 'balanced';
+        this.hideCaptureIndicator();
+        
+        // 获取UnitManager
+        this.unitManager = UnitManager.getInstance();
     }
 
     protected start() {
@@ -67,6 +97,17 @@ export class WatchTower extends Build {
         this.currentTarget = null!;
         this.targetFindTimer = 0;
         this.hasFoundFirstTarget = false;
+        
+        // 初始化占领相关属性
+        this.captureState = CaptureState.Neutral;
+        this.captureProgress = 0;
+        this.lastFriendlyCount = 0;
+        this.lastEnemyCount = 0;
+        this.lastAdvantage = 'balanced';
+        this.hideCaptureIndicator();
+        
+        // 获取UnitManager
+        this.unitManager = UnitManager.getInstance();
     }
 
     /**
@@ -101,7 +142,7 @@ export class WatchTower extends Build {
     }
 
     /**
-     * 更新逻辑（处理攻击）
+     * 更新逻辑（处理攻击和占领）
      */
     update(deltaTime: number) {
         if (this.isDestroyed) {
@@ -116,12 +157,17 @@ export class WatchTower extends Build {
         if (this.gameManager) {
             const gameState = this.gameManager.getGameState();
             if (gameState !== GameState.Playing) {
-                // 游戏已结束或暂停，停止攻击
+                // 游戏已结束或暂停，停止攻击和占领
                 this.currentTarget = null!;
+                this.hideCaptureIndicator();
                 return;
             }
         }
 
+        // 处理占领逻辑
+        this.updateCapture(deltaTime);
+
+        // 处理攻击逻辑（占领时仍然可以攻击）
         this.attackTimer += deltaTime;
         this.targetFindTimer += deltaTime;
 
@@ -159,7 +205,275 @@ export class WatchTower extends Build {
     }
 
     /**
-     * 查找攻击目标
+     * 更新占领逻辑
+     */
+    private updateCapture(deltaTime: number) {
+        // 获取范围内的单位数量
+        const myPos = this.node.worldPosition;
+        const friendlyCount = this.getFriendlyUnitsInRange(myPos, this.attackRange);
+        const enemyCount = this.getEnemyUnitsInRange(myPos, this.attackRange);
+
+        // 判断当前优势方
+        const friendlyAdvantage = friendlyCount > enemyCount;
+        const enemyAdvantage = enemyCount > friendlyCount;
+        const isBalanced = friendlyCount === enemyCount;
+
+        // 确定当前优势方
+        let currentAdvantage: 'friendly' | 'enemy' | 'balanced' = 'balanced';
+        if (friendlyAdvantage) {
+            currentAdvantage = 'friendly';
+        } else if (enemyAdvantage) {
+            currentAdvantage = 'enemy';
+        }
+
+        // 如果数量差距颠倒，重置进度
+        if (this.captureProgress > 0 && this.lastAdvantage !== 'balanced') {
+            if (currentAdvantage !== this.lastAdvantage && currentAdvantage !== 'balanced') {
+                // 优势方改变，重置进度
+                this.captureProgress = 0;
+            } else if (currentAdvantage === 'balanced') {
+                // 变为平衡状态，重置进度
+                this.captureProgress = 0;
+            }
+        }
+
+        // 更新上次检测到的数量和优势方
+        this.lastFriendlyCount = friendlyCount;
+        this.lastEnemyCount = enemyCount;
+        this.lastAdvantage = currentAdvantage;
+
+        // 处理占领进度
+        if (friendlyAdvantage && this.captureState !== CaptureState.Friendly) {
+            // 我方优势，增加占领进度
+            this.captureProgress += deltaTime;
+            this.showCaptureIndicator(true); // 显示绿色圆弧（我方）
+            this.updateCaptureIndicator(this.captureProgress / this.CAPTURE_TIME, true);
+
+            if (this.captureProgress >= this.CAPTURE_TIME) {
+                // 占领完成，设置为我方
+                this.captureState = CaptureState.Friendly;
+                this.captureProgress = 0;
+                this.hideCaptureIndicator();
+            }
+        } else if (enemyAdvantage && this.captureState !== CaptureState.Enemy) {
+            // 敌方优势，增加占领进度
+            this.captureProgress += deltaTime;
+            this.showCaptureIndicator(false); // 显示红色圆弧（敌方）
+            this.updateCaptureIndicator(this.captureProgress / this.CAPTURE_TIME, false);
+
+            if (this.captureProgress >= this.CAPTURE_TIME) {
+                // 占领完成，设置为敌方
+                this.captureState = CaptureState.Enemy;
+                this.captureProgress = 0;
+                this.hideCaptureIndicator();
+            }
+        } else {
+            // 平衡状态或已占领，隐藏指示器并重置进度
+            if (isBalanced || (this.captureState === CaptureState.Friendly && !friendlyAdvantage) || (this.captureState === CaptureState.Enemy && !enemyAdvantage)) {
+                this.captureProgress = 0;
+                this.hideCaptureIndicator();
+            }
+        }
+    }
+
+    /**
+     * 获取范围内的友好单位数量
+     */
+    private getFriendlyUnitsInRange(center: Vec3, range: number): number {
+        let count = 0;
+        const rangeSq = range * range;
+
+        // 查找弓箭手（在Towers容器中）
+        const towersNode = find('Canvas/Towers');
+        if (towersNode) {
+            for (const tower of towersNode.children) {
+                if (!tower || !tower.isValid || !tower.active) continue;
+                const arrowerScript = tower.getComponent('Arrower') as any;
+                if (arrowerScript && arrowerScript.isAlive && arrowerScript.isAlive()) {
+                    const dx = tower.worldPosition.x - center.x;
+                    const dy = tower.worldPosition.y - center.y;
+                    if (dx * dx + dy * dy <= rangeSq) {
+                        count++;
+                    }
+                }
+            }
+        }
+
+        // 查找女猎手
+        const huntersNode = find('Canvas/Hunters');
+        if (huntersNode) {
+            for (const hunter of huntersNode.children) {
+                if (!hunter || !hunter.isValid || !hunter.active) continue;
+                const hunterScript = hunter.getComponent('Hunter') as any;
+                if (hunterScript && hunterScript.isAlive && hunterScript.isAlive()) {
+                    const dx = hunter.worldPosition.x - center.x;
+                    const dy = hunter.worldPosition.y - center.y;
+                    if (dx * dx + dy * dy <= rangeSq) {
+                        count++;
+                    }
+                }
+            }
+        }
+
+        // 查找精灵剑士
+        const swordsmansNode = find('Canvas/ElfSwordsmans');
+        if (swordsmansNode) {
+            for (const swordsman of swordsmansNode.children) {
+                if (!swordsman || !swordsman.isValid || !swordsman.active) continue;
+                const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
+                if (swordsmanScript && swordsmanScript.isAlive && swordsmanScript.isAlive()) {
+                    const dx = swordsman.worldPosition.x - center.x;
+                    const dy = swordsman.worldPosition.y - center.y;
+                    if (dx * dx + dy * dy <= rangeSq) {
+                        count++;
+                    }
+                }
+            }
+        }
+
+        // 查找牧师
+        const priestsNode = find('Canvas/Priests');
+        if (priestsNode) {
+            for (const priest of priestsNode.children) {
+                if (!priest || !priest.isValid || !priest.active) continue;
+                const priestScript = priest.getComponent('Priest') as any;
+                if (priestScript && priestScript.isAlive && priestScript.isAlive()) {
+                    const dx = priest.worldPosition.x - center.x;
+                    const dy = priest.worldPosition.y - center.y;
+                    if (dx * dx + dy * dy <= rangeSq) {
+                        count++;
+                    }
+                }
+            }
+        }
+
+        return count;
+    }
+
+    /**
+     * 获取范围内的敌方单位数量
+     */
+    private getEnemyUnitsInRange(center: Vec3, range: number): number {
+        if (!this.unitManager) {
+            this.unitManager = UnitManager.getInstance();
+        }
+
+        if (this.unitManager) {
+            const enemies = this.unitManager.getEnemiesInRange(center, range, true);
+            return enemies.length;
+        }
+
+        // 降级方案：直接查找
+        let count = 0;
+        const rangeSq = range * range;
+        const enemyContainers = ['Canvas/Enemies', 'Canvas/Orcs', 'Canvas/TrollSpearmans', 'Canvas/OrcWarriors', 'Canvas/OrcWarlords'];
+        
+        for (const containerName of enemyContainers) {
+            const containerNode = find(containerName);
+            if (containerNode) {
+                for (const enemy of containerNode.children) {
+                    if (!enemy || !enemy.isValid || !enemy.active) continue;
+                    const enemyScript = enemy.getComponent('Enemy') as any || 
+                                       enemy.getComponent('OrcWarlord') as any ||
+                                       enemy.getComponent('OrcWarrior') as any ||
+                                       enemy.getComponent('TrollSpearman') as any;
+                    if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
+                        const dx = enemy.worldPosition.x - center.x;
+                        const dy = enemy.worldPosition.y - center.y;
+                        if (dx * dx + dy * dy <= rangeSq) {
+                            count++;
+                        }
+                    }
+                }
+            }
+        }
+
+        return count;
+    }
+
+    /**
+     * 显示占领指示器
+     */
+    private showCaptureIndicator(isFriendly: boolean) {
+        if (this.captureIndicator && this.captureIndicator.isValid) {
+            return; // 已经显示
+        }
+
+        // 隐藏之前的指示器
+        this.hideCaptureIndicator();
+
+        // 创建指示器节点
+        this.captureIndicator = new Node('CaptureIndicator');
+        this.captureIndicator.setParent(this.node);
+        this.captureIndicator.setPosition(0, 0, 0);
+
+        // 添加UITransform
+        const uiTransform = this.captureIndicator.addComponent(UITransform);
+        uiTransform.setContentSize(this.attackRange * 2, this.attackRange * 2);
+
+        // 创建Graphics组件用于绘制圆弧
+        this.captureIndicatorGraphics = this.captureIndicator.addComponent(Graphics);
+    }
+
+    /**
+     * 更新占领指示器进度
+     */
+    private updateCaptureIndicator(progress: number, isFriendly: boolean) {
+        if (!this.captureIndicator || !this.captureIndicator.isValid || !this.captureIndicatorGraphics) {
+            return;
+        }
+
+        // 清除之前的绘制
+        this.captureIndicatorGraphics.clear();
+
+        // 设置绘制参数
+        const radius = this.attackRange; // 使用攻击范围作为半径
+        const lineWidth = 6; // 线条宽度
+        const centerX = 0;
+        const centerY = 0;
+
+        // 确保进度在0-1之间
+        const clampedProgress = Math.max(0, Math.min(1, progress));
+
+        // 如果进度为0，不绘制任何内容
+        if (clampedProgress <= 0) {
+            return;
+        }
+
+        // 计算圆弧的起始角度和结束角度（使用弧度制）
+        // 从顶部（-90度）开始，顺时针绘制
+        const endAngle = -Math.PI / 2; // 从顶部开始（-90度 = -π/2）
+        // 结束角度 = 起始角度 + 进度 * 360度（顺时针）
+        const startAngle = endAngle + clampedProgress * Math.PI * 2;
+
+        // 根据占领方设置颜色
+        if (isFriendly) {
+            // 我方：绿色
+            this.captureIndicatorGraphics.strokeColor = new Color(100, 255, 100, 200);
+        } else {
+            // 敌方：红色
+            this.captureIndicatorGraphics.strokeColor = new Color(255, 100, 100, 200);
+        }
+        this.captureIndicatorGraphics.lineWidth = lineWidth;
+
+        // 绘制圆弧（从startAngle到endAngle，顺时针）
+        this.captureIndicatorGraphics.arc(centerX, centerY, radius, startAngle, endAngle, false);
+        this.captureIndicatorGraphics.stroke();
+    }
+
+    /**
+     * 隐藏占领指示器
+     */
+    private hideCaptureIndicator() {
+        if (this.captureIndicator && this.captureIndicator.isValid) {
+            this.captureIndicator.destroy();
+            this.captureIndicator = null!;
+            this.captureIndicatorGraphics = null!;
+        }
+    }
+
+    /**
+     * 查找攻击目标（根据占领状态攻击不同目标）
      */
     private findTarget() {
         if (this.isDestroyed) {
@@ -170,37 +484,16 @@ export class WatchTower extends Build {
         let nearestTarget: Node | null = null;
         let minDistance = this.attackRange;
 
-        // 查找所有敌人容器
-        const enemyContainers = ['Canvas/Enemies', 'Canvas/Orcs', 'Canvas/TrollSpearmans', 'Canvas/OrcWarriors', 'Canvas/OrcWarlords'];
-        const allEnemies: Node[] = [];
-
-        for (const containerName of enemyContainers) {
-            const containerNode = find(containerName);
-            if (containerNode) {
-                allEnemies.push(...containerNode.children);
-            }
-        }
-
-        // 查找最近的敌人
-        for (const enemy of allEnemies) {
-            if (!enemy || !enemy.isValid || !enemy.active) continue;
-
-            const enemyScript = enemy.getComponent('Enemy') as any || 
-                               enemy.getComponent('OrcWarlord') as any ||
-                               enemy.getComponent('OrcWarrior') as any ||
-                               enemy.getComponent('TrollSpearman') as any;
-            
-            if (!enemyScript) continue;
-
-            // 检查敌人是否存活
-            if (enemyScript.isAlive && !enemyScript.isAlive()) continue;
-
-            const distance = Vec3.distance(myPos, enemy.worldPosition);
-            
-            if (distance <= this.attackRange && distance < minDistance) {
-                minDistance = distance;
-                nearestTarget = enemy;
-            }
+        // 根据占领状态选择目标
+        if (this.captureState === CaptureState.Friendly) {
+            // 我方占领，攻击敌人
+            nearestTarget = this.findNearestEnemy(myPos, minDistance);
+        } else if (this.captureState === CaptureState.Enemy) {
+            // 敌方占领，攻击我方单位
+            nearestTarget = this.findNearestFriendlyUnit(myPos, minDistance);
+        } else {
+            // 中立状态，攻击敌人（默认行为）
+            nearestTarget = this.findNearestEnemy(myPos, minDistance);
         }
 
         // 设置当前目标
@@ -209,6 +502,85 @@ export class WatchTower extends Build {
         } else {
             this.currentTarget = null!;
         }
+    }
+
+    /**
+     * 查找最近的敌人
+     */
+    private findNearestEnemy(center: Vec3, maxRange: number): Node | null {
+        let nearestTarget: Node | null = null;
+        let minDistance = maxRange;
+
+        // 使用UnitManager优化
+        if (this.unitManager) {
+            const enemies = this.unitManager.getEnemiesInRange(center, maxRange, true);
+            for (const enemy of enemies) {
+                const distance = Vec3.distance(center, enemy.worldPosition);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestTarget = enemy;
+                }
+            }
+            return nearestTarget;
+        }
+
+        // 降级方案：直接查找
+        const enemyContainers = ['Canvas/Enemies', 'Canvas/Orcs', 'Canvas/TrollSpearmans', 'Canvas/OrcWarriors', 'Canvas/OrcWarlords'];
+        
+        for (const containerName of enemyContainers) {
+            const containerNode = find(containerName);
+            if (containerNode) {
+                for (const enemy of containerNode.children) {
+                    if (!enemy || !enemy.isValid || !enemy.active) continue;
+                    const enemyScript = enemy.getComponent('Enemy') as any || 
+                                       enemy.getComponent('OrcWarlord') as any ||
+                                       enemy.getComponent('OrcWarrior') as any ||
+                                       enemy.getComponent('TrollSpearman') as any;
+                    if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) continue;
+                    const distance = Vec3.distance(center, enemy.worldPosition);
+                    if (distance <= maxRange && distance < minDistance) {
+                        minDistance = distance;
+                        nearestTarget = enemy;
+                    }
+                }
+            }
+        }
+
+        return nearestTarget;
+    }
+
+    /**
+     * 查找最近的我方单位
+     */
+    private findNearestFriendlyUnit(center: Vec3, maxRange: number): Node | null {
+        let nearestTarget: Node | null = null;
+        let minDistance = maxRange;
+
+        // 查找所有友好单位容器
+        const friendlyContainers = [
+            { path: 'Canvas/Towers', component: 'Arrower' },
+            { path: 'Canvas/Hunters', component: 'Hunter' },
+            { path: 'Canvas/ElfSwordsmans', component: 'ElfSwordsman' },
+            { path: 'Canvas/Priests', component: 'Priest' }
+        ];
+
+        for (const container of friendlyContainers) {
+            const containerNode = find(container.path);
+            if (containerNode) {
+                for (const unit of containerNode.children) {
+                    if (!unit || !unit.isValid || !unit.active) continue;
+                    const unitScript = unit.getComponent(container.component) as any;
+                    if (!unitScript || !unitScript.isAlive || !unitScript.isAlive()) continue;
+                    const distance = Vec3.distance(center, unit.worldPosition);
+                    if (distance <= maxRange && distance < minDistance) {
+                        minDistance = distance;
+                        nearestTarget = unit;
+                    }
+                }
+            }
+        }
+
+        return nearestTarget;
     }
 
     /**
@@ -225,13 +597,23 @@ export class WatchTower extends Build {
             return;
         }
 
-        // 获取敌人脚本
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || 
+        // 根据占领状态获取不同的脚本
+        let targetScript: any = null;
+        if (this.captureState === CaptureState.Enemy) {
+            // 敌方占领，攻击我方单位
+            targetScript = this.currentTarget.getComponent('Arrower') as any ||
+                          this.currentTarget.getComponent('Hunter') as any ||
+                          this.currentTarget.getComponent('ElfSwordsman') as any ||
+                          this.currentTarget.getComponent('Priest') as any;
+        } else {
+            // 我方占领或中立，攻击敌人
+            targetScript = this.currentTarget.getComponent('Enemy') as any || 
                            this.currentTarget.getComponent('OrcWarlord') as any ||
                            this.currentTarget.getComponent('OrcWarrior') as any ||
                            this.currentTarget.getComponent('TrollSpearman') as any;
+        }
         
-        if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
+        if (!targetScript || !targetScript.isAlive || !targetScript.isAlive()) {
             this.currentTarget = null!;
             return;
         }
@@ -246,8 +628,8 @@ export class WatchTower extends Build {
             this.createArrow();
         } else {
             // 如果没有弓箭预制体，直接造成伤害
-            if (enemyScript.takeDamage) {
-                enemyScript.takeDamage(this.attackDamage);
+            if (targetScript.takeDamage) {
+                targetScript.takeDamage(this.attackDamage);
             }
         }
     }
@@ -307,14 +689,22 @@ export class WatchTower extends Build {
                 
                 // 检查目标是否仍然有效
                 if (targetNode && targetNode.isValid && targetNode.active) {
-                    // 获取敌人脚本
-                    const enemyScript = targetNode.getComponent('Enemy') as any || 
+                    // 根据占领状态获取不同的脚本
+                    let targetScript: any = null;
+                    if (this.captureState === CaptureState.Enemy) {
+                        targetScript = targetNode.getComponent('Arrower') as any ||
+                                      targetNode.getComponent('Hunter') as any ||
+                                      targetNode.getComponent('ElfSwordsman') as any ||
+                                      targetNode.getComponent('Priest') as any;
+                    } else {
+                        targetScript = targetNode.getComponent('Enemy') as any || 
                                        targetNode.getComponent('OrcWarlord') as any ||
                                        targetNode.getComponent('OrcWarrior') as any ||
                                        targetNode.getComponent('TrollSpearman') as any;
+                    }
                     
-                    if (enemyScript && enemyScript.takeDamage) {
-                        enemyScript.takeDamage(damage);
+                    if (targetScript && targetScript.takeDamage) {
+                        targetScript.takeDamage(damage);
                     }
                 }
             }
@@ -330,6 +720,9 @@ export class WatchTower extends Build {
         }
 
         this.isDestroyed = true;
+
+        // 隐藏占领指示器
+        this.hideCaptureIndicator();
 
         // 释放网格占用（确保能找到网格面板）
         if (!this.gridPanel) {
@@ -365,6 +758,8 @@ export class WatchTower extends Build {
             this.attackTimer = 0;
             this.targetFindTimer = 0;
             this.hasFoundFirstTarget = false;
+            this.captureState = CaptureState.Neutral;
+            this.captureProgress = 0;
             
             // 回收到对象池
             buildingPool.release(this.node, this.prefabName);
@@ -381,4 +776,3 @@ export class WatchTower extends Build {
         return !this.isDestroyed && this.currentHealth > 0;
     }
 }
-
