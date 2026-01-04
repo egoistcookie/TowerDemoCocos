@@ -577,21 +577,42 @@ export class Enemy extends Component {
         }
 
         // 最高优先级：如果在网格中寻路，优先执行网格寻路逻辑
+        // 但如果当前目标是我方单位，放弃网格寻路，直接朝我方单位移动
         if (this.isInStoneWallGrid) {
-            // 如果正在播放攻击动画，停止攻击动画并切换到移动动画
-            if (this.isPlayingAttackAnimation) {
-                this.isPlayingAttackAnimation = false;
-                this.attackComplete = false;
-                this.stopAllAnimations();
+            // 检查当前目标是否是我方单位
+            let isFriendlyUnit = false;
+            if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
+                const arrowerScript = this.currentTarget.getComponent('Arrower') as any;
+                const hunterScript = this.currentTarget.getComponent('Hunter') as any;
+                const swordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
+                const priestScript = this.currentTarget.getComponent('Priest') as any;
+                if (arrowerScript || hunterScript || swordsmanScript || priestScript) {
+                    isFriendlyUnit = true;
+                }
             }
-            const hadTargetBefore = !!this.currentTarget;
-            this.moveInStoneWallGrid(deltaTime);
-            // 如果moveInStoneWallGrid检测到我方单位并设置了currentTarget，且退出了网格寻路模式，不直接return，让后续逻辑处理目标
-            if (!this.isInStoneWallGrid && this.currentTarget && !hadTargetBefore) {
-                // 不return，继续执行后续逻辑处理移动和攻击
+            
+            // 如果当前目标是我方单位，退出网格寻路模式，直接朝我方单位移动
+            if (isFriendlyUnit) {
+                this.isInStoneWallGrid = false;
+                this.gridMoveState = null;
+                this.gridMoveTargetX = null;
+                // 继续执行后续逻辑，直接朝我方单位移动
             } else {
-                this.updateAnimation(deltaTime);
-                return;
+                // 如果正在播放攻击动画，停止攻击动画并切换到移动动画
+                if (this.isPlayingAttackAnimation) {
+                    this.isPlayingAttackAnimation = false;
+                    this.attackComplete = false;
+                    this.stopAllAnimations();
+                }
+                const hadTargetBefore = !!this.currentTarget;
+                this.moveInStoneWallGrid(deltaTime);
+                // 如果moveInStoneWallGrid检测到我方单位并设置了currentTarget，且退出了网格寻路模式，不直接return，让后续逻辑处理目标
+                if (!this.isInStoneWallGrid && this.currentTarget && !hadTargetBefore) {
+                    // 不return，继续执行后续逻辑处理移动和攻击
+                } else {
+                    this.updateAnimation(deltaTime);
+                    return;
+                }
             }
         }
 

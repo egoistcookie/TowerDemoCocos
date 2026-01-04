@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, UITransform, Graphics, Color, Label, Sprite, SpriteFrame, find, EventTouch, Button, Vec3 } from 'cc';
+import { _decorator, Component, Node, UITransform, Graphics, Color, Label, Sprite, SpriteFrame, find, EventTouch, Button, Vec3, resources } from 'cc';
 const { ccclass, property } = _decorator;
 
 /**
@@ -28,10 +28,13 @@ export interface UnitInfo {
     onUpgradeClick?: () => void; // 升级按钮点击回调
     onSellClick?: () => void; // 回收按钮点击回调
     onRallyPointClick?: () => void; // 集结点设置按钮点击回调
+    onDefendClick?: () => void; // 防御按钮点击回调
     // 升级相关
     upgradeCost?: number; // 升级费用（用于显示）
     // 集结点相关
     rallyPoint?: Vec3 | null; // 集结点位置（用于显示）
+    // 防御状态
+    isDefending?: boolean; // 是否处于防御状态（用于按钮显示）
 }
 
 @ccclass('UnitInfoPanel')
@@ -55,6 +58,10 @@ export class UnitInfoPanel extends Component {
     private buttonGridNode: Node = null!; // 九宫格按钮区域节点
     private buttonNodes: Node[] = []; // 按钮节点数组（9个）
     private currentUnitInfo: UnitInfo | null = null!; // 当前单位信息
+    private buttonSprites: Map<number, Sprite> = new Map(); // 按钮的Sprite组件映射（按钮索引 -> Sprite）
+    private buttonNormalSprites: Map<number, SpriteFrame> = new Map(); // 按钮正常状态的贴图（按钮索引 -> SpriteFrame）
+    private buttonDownSprites: Map<number, SpriteFrame> = new Map(); // 按钮按下状态的贴图（按钮索引 -> SpriteFrame）
+    private defendButtonPressed: boolean = false; // 防御按钮是否处于按下状态
 
     start() {
         this.initPanel();
@@ -251,23 +258,19 @@ export class UnitInfoPanel extends Component {
                 const y = startY - row * (buttonSize + spacing);
                 buttonNode.setPosition(x, y, 0);
 
-                // 添加按钮背景
-                const buttonGraphics = buttonNode.addComponent(Graphics);
-                buttonGraphics.fillColor = new Color(60, 60, 60, 200); // 半透明深灰色
-                buttonGraphics.rect(-buttonSize / 2, -buttonSize / 2, buttonSize, buttonSize);
-                buttonGraphics.fill();
-                buttonGraphics.strokeColor = new Color(150, 150, 150, 255); // 边框
-                buttonGraphics.lineWidth = 2;
-                buttonGraphics.rect(-buttonSize / 2, -buttonSize / 2, buttonSize, buttonSize);
-                buttonGraphics.stroke();
+                // 添加按钮Sprite组件（用于显示贴图）
+                const buttonSprite = buttonNode.addComponent(Sprite);
+                buttonSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+                this.buttonSprites.set(buttonIndex, buttonSprite);
 
                 // 添加按钮组件（用于点击检测）
                 const button = buttonNode.addComponent(Button);
                 button.transition = Button.Transition.NONE; // 不使用默认过渡
 
-                // 添加标签（暂时为空，后续可以设置图标）
+                // 添加标签节点（隐藏，不显示文字）
                 const labelNode = new Node('Label');
                 labelNode.setParent(buttonNode);
+                labelNode.active = false; // 隐藏标签，因为使用贴图
                 const label = labelNode.addComponent(Label);
                 label.string = '';
                 label.fontSize = 14;
@@ -276,6 +279,64 @@ export class UnitInfoPanel extends Component {
                 this.buttonNodes.push(buttonNode);
             }
         }
+    }
+
+    /**
+     * 加载按钮贴图
+     * @param buttonIndex 按钮索引
+     * @param normalPath 正常状态贴图路径（相对于textures/icon目录，如 "up.png"）
+     * @param downPath 按下状态贴图路径（如 "up_down.png"）
+     */
+    private loadButtonSprite(buttonIndex: number, normalPath: string, downPath: string) {
+        const sprite = this.buttonSprites.get(buttonIndex);
+        if (!sprite) {
+            return;
+        }
+
+        // 移除文件扩展名，构建资源路径
+        const normalPathWithoutExt = normalPath.replace(/\.(png|jpg|jpeg)$/i, '');
+        const normalResourcePath = `textures/icon/${normalPathWithoutExt}/spriteFrame`;
+        
+        resources.load(normalResourcePath, SpriteFrame, (err, spriteFrame) => {
+            if (err) {
+                console.error(`Failed to load button sprite: ${normalPath} (path: ${normalResourcePath})`, err);
+                return;
+            }
+            if (sprite && sprite.node && sprite.node.isValid && spriteFrame) {
+                this.buttonNormalSprites.set(buttonIndex, spriteFrame);
+                // 根据按钮类型设置初始贴图
+                if (buttonIndex === 1 && this.defendButtonPressed) {
+                    // 防御按钮且处于按下状态，使用按下贴图（按下贴图会在加载后设置）
+                    // 如果按下贴图已经加载，立即设置
+                    const downSprite = this.buttonDownSprites.get(buttonIndex);
+                    if (downSprite) {
+                        sprite.spriteFrame = downSprite;
+                    } else {
+                        sprite.spriteFrame = spriteFrame; // 临时使用正常贴图，等按下贴图加载后切换
+                    }
+                } else {
+                    sprite.spriteFrame = spriteFrame;
+                }
+            }
+        });
+
+        // 加载按下状态贴图
+        const downPathWithoutExt = downPath.replace(/\.(png|jpg|jpeg)$/i, '');
+        const downResourcePath = `textures/icon/${downPathWithoutExt}/spriteFrame`;
+        
+        resources.load(downResourcePath, SpriteFrame, (err, downSpriteFrame) => {
+            if (err) {
+                console.error(`Failed to load button down sprite: ${downPath} (path: ${downResourcePath})`, err);
+                return;
+            }
+            if (downSpriteFrame) {
+                this.buttonDownSprites.set(buttonIndex, downSpriteFrame);
+                // 如果是防御按钮且处于按下状态，设置按下贴图
+                if (buttonIndex === 1 && this.defendButtonPressed && sprite && sprite.node && sprite.node.isValid) {
+                    sprite.spriteFrame = downSpriteFrame;
+                }
+            }
+        });
     }
 
     /**
@@ -424,35 +485,15 @@ export class UnitInfoPanel extends Component {
             return;
         }
 
-        // 清除所有按钮的点击事件
-        for (const buttonNode of this.buttonNodes) {
-            buttonNode.active = true; // 确保按钮可见
+        // 清除所有按钮的点击事件和隐藏所有按钮
+        for (let i = 0; i < this.buttonNodes.length; i++) {
+            const buttonNode = this.buttonNodes[i];
+            buttonNode.active = false; // 默认隐藏
             buttonNode.off(Node.EventType.TOUCH_END);
+            buttonNode.off(Node.EventType.TOUCH_START); // 也清除TOUCH_START事件
             const labelNode = buttonNode.getChildByName('Label');
             if (labelNode) {
-                labelNode.active = true; // 确保标签可见
-                const label = labelNode.getComponent(Label);
-                if (label) {
-                    label.string = '';
-                }
-            }
-            // 重置按钮背景
-            const graphics = buttonNode.getComponent(Graphics);
-            if (graphics) {
-                graphics.clear();
-                graphics.fillColor = new Color(60, 60, 60, 200);
-                graphics.rect(-buttonNode.getComponent(UITransform)!.width / 2, 
-                             -buttonNode.getComponent(UITransform)!.height / 2,
-                             buttonNode.getComponent(UITransform)!.width,
-                             buttonNode.getComponent(UITransform)!.height);
-                graphics.fill();
-                graphics.strokeColor = new Color(150, 150, 150, 255);
-                graphics.lineWidth = 2;
-                graphics.rect(-buttonNode.getComponent(UITransform)!.width / 2,
-                             -buttonNode.getComponent(UITransform)!.height / 2,
-                             buttonNode.getComponent(UITransform)!.width,
-                             buttonNode.getComponent(UITransform)!.height);
-                graphics.stroke();
+                labelNode.active = false; // 隐藏标签
             }
         }
 
@@ -461,32 +502,79 @@ export class UnitInfoPanel extends Component {
             const rallyButton = this.buttonNodes[0];
             rallyButton.active = true;
             
-            const labelNode = rallyButton.getChildByName('Label');
-            if (labelNode) {
-                labelNode.active = true;
-                const label = labelNode.getComponent(Label);
-                if (label) {
-                    label.string = '集结点';
-                    label.fontSize = 12;
+            // 加载集结点按钮贴图
+            this.loadButtonSprite(0, 'uni.png', 'uni_down.png');
+            
+            // 设置点击事件，点击时切换贴图
+            rallyButton.on(Node.EventType.TOUCH_START, () => {
+                const sprite = this.buttonSprites.get(0);
+                const downSprite = this.buttonDownSprites.get(0);
+                if (sprite && downSprite && sprite.node && sprite.node.isValid) {
+                    sprite.spriteFrame = downSprite;
+                }
+            });
+            
+            rallyButton.on(Node.EventType.TOUCH_END, () => {
+                const sprite = this.buttonSprites.get(0);
+                const normalSprite = this.buttonNormalSprites.get(0);
+                if (sprite && normalSprite && sprite.node && sprite.node.isValid) {
+                    sprite.spriteFrame = normalSprite;
+                }
+                if (unitInfo.onRallyPointClick) {
+                    unitInfo.onRallyPointClick();
+                }
+            });
+        }
+
+        // 设置防御按钮（位置：第一行第二列，索引1）
+        if (unitInfo.onDefendClick && this.buttonNodes[1]) {
+            const defendButton = this.buttonNodes[1];
+            defendButton.active = true;
+            
+            // 根据isDefending状态设置初始按下状态
+            this.defendButtonPressed = unitInfo.isDefending === true;
+            
+            // 加载防御按钮贴图
+            this.loadButtonSprite(1, 'defense.png', 'defense_down.png');
+            
+            // 如果贴图已经加载，立即设置正确的状态
+            const sprite = this.buttonSprites.get(1);
+            if (sprite && sprite.node && sprite.node.isValid) {
+                if (this.defendButtonPressed) {
+                    const downSprite = this.buttonDownSprites.get(1);
+                    if (downSprite) {
+                        sprite.spriteFrame = downSprite;
+                    }
+                } else {
+                    const normalSprite = this.buttonNormalSprites.get(1);
+                    if (normalSprite) {
+                        sprite.spriteFrame = normalSprite;
+                    }
                 }
             }
             
-            const graphics = rallyButton.getComponent(Graphics);
-            if (graphics) {
-                graphics.clear();
-                const buttonSize = rallyButton.getComponent(UITransform)!.width;
-                graphics.fillColor = new Color(60, 60, 60, 200);
-                graphics.rect(-buttonSize / 2, -buttonSize / 2, buttonSize, buttonSize);
-                graphics.fill();
-                graphics.strokeColor = new Color(150, 150, 150, 255);
-                graphics.lineWidth = 2;
-                graphics.rect(-buttonSize / 2, -buttonSize / 2, buttonSize, buttonSize);
-                graphics.stroke();
-            }
-            
-            rallyButton.on(Node.EventType.TOUCH_END, () => {
-                if (unitInfo.onRallyPointClick) {
-                    unitInfo.onRallyPointClick();
+            // 设置点击事件，点击后切换状态并保持
+            defendButton.on(Node.EventType.TOUCH_END, () => {
+                // 切换防御按钮的按下状态
+                this.defendButtonPressed = !this.defendButtonPressed;
+                
+                const sprite = this.buttonSprites.get(1);
+                if (sprite && sprite.node && sprite.node.isValid) {
+                    if (this.defendButtonPressed) {
+                        const downSprite = this.buttonDownSprites.get(1);
+                        if (downSprite) {
+                            sprite.spriteFrame = downSprite;
+                        }
+                    } else {
+                        const normalSprite = this.buttonNormalSprites.get(1);
+                        if (normalSprite) {
+                            sprite.spriteFrame = normalSprite;
+                        }
+                    }
+                }
+                
+                if (unitInfo.onDefendClick) {
+                    unitInfo.onDefendClick();
                 }
             });
         }
@@ -494,40 +582,26 @@ export class UnitInfoPanel extends Component {
         // 设置升级按钮（位置：右上角，索引2）
         if (unitInfo.onUpgradeClick && this.buttonNodes[2]) {
             const upgradeButton = this.buttonNodes[2];
-            upgradeButton.active = true; // 确保按钮可见
+            upgradeButton.active = true;
             
-            const labelNode = upgradeButton.getChildByName('Label');
-            if (labelNode) {
-                labelNode.active = true; // 确保标签可见
-                const label = labelNode.getComponent(Label);
-                if (label) {
-                    // 显示升级和金币数量，换行显示
-                    if (unitInfo.upgradeCost !== undefined) {
-                        label.string = `升级\n${unitInfo.upgradeCost}`;
-                        // 调整字体大小以适应两行文字
-                        label.fontSize = 12;
-                    } else {
-                        label.string = '升级';
-                        label.fontSize = 14;
-                    }
+            // 加载升级按钮贴图
+            this.loadButtonSprite(2, 'up.png', 'up_down.png');
+            
+            // 设置点击事件，点击时切换贴图
+            upgradeButton.on(Node.EventType.TOUCH_START, () => {
+                const sprite = this.buttonSprites.get(2);
+                const downSprite = this.buttonDownSprites.get(2);
+                if (sprite && downSprite && sprite.node && sprite.node.isValid) {
+                    sprite.spriteFrame = downSprite;
                 }
-            }
-            
-            // 确保按钮背景可见
-            const graphics = upgradeButton.getComponent(Graphics);
-            if (graphics) {
-                graphics.clear();
-                const buttonSize = upgradeButton.getComponent(UITransform)!.width;
-                graphics.fillColor = new Color(60, 60, 60, 200);
-                graphics.rect(-buttonSize / 2, -buttonSize / 2, buttonSize, buttonSize);
-                graphics.fill();
-                graphics.strokeColor = new Color(150, 150, 150, 255);
-                graphics.lineWidth = 2;
-                graphics.rect(-buttonSize / 2, -buttonSize / 2, buttonSize, buttonSize);
-                graphics.stroke();
-            }
+            });
             
             upgradeButton.on(Node.EventType.TOUCH_END, () => {
+                const sprite = this.buttonSprites.get(2);
+                const normalSprite = this.buttonNormalSprites.get(2);
+                if (sprite && normalSprite && sprite.node && sprite.node.isValid) {
+                    sprite.spriteFrame = normalSprite;
+                }
                 if (unitInfo.onUpgradeClick) {
                     unitInfo.onUpgradeClick();
                 }
@@ -537,14 +611,26 @@ export class UnitInfoPanel extends Component {
         // 设置回收按钮（位置：右下，索引8）
         if (unitInfo.onSellClick && this.buttonNodes[8]) {
             const sellButton = this.buttonNodes[8];
-            const labelNode = sellButton.getChildByName('Label');
-            if (labelNode) {
-                const label = labelNode.getComponent(Label);
-                if (label) {
-                    label.string = '回收';
+            sellButton.active = true;
+            
+            // 加载回收按钮贴图
+            this.loadButtonSprite(8, 'cancel.png', 'cancel_down.png');
+            
+            // 设置点击事件，点击时切换贴图
+            sellButton.on(Node.EventType.TOUCH_START, () => {
+                const sprite = this.buttonSprites.get(8);
+                const downSprite = this.buttonDownSprites.get(8);
+                if (sprite && downSprite && sprite.node && sprite.node.isValid) {
+                    sprite.spriteFrame = downSprite;
                 }
-            }
+            });
+            
             sellButton.on(Node.EventType.TOUCH_END, () => {
+                const sprite = this.buttonSprites.get(8);
+                const normalSprite = this.buttonNormalSprites.get(8);
+                if (sprite && normalSprite && sprite.node && sprite.node.isValid) {
+                    sprite.spriteFrame = normalSprite;
+                }
                 if (unitInfo.onSellClick) {
                     unitInfo.onSellClick();
                 }

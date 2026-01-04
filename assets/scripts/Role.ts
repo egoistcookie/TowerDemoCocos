@@ -131,6 +131,7 @@ export class Role extends Component {
     protected collisionCheckCount: number = 0; // 碰撞检测调用计数（用于调试）
     protected manualMoveTarget: Vec3 | null = null!; // 手动移动目标位置
     protected isManuallyControlled: boolean = false; // 是否正在手动控制
+    protected isDefending: boolean = false; // 是否处于防御状态（停止移动但仍攻击）
     protected globalTouchHandler: ((event: EventTouch) => void) | null = null!; // 全局触摸事件处理器
     protected isHighlighted: boolean = false; // 是否高亮显示
     protected highlightNode: Node = null!; // 高亮效果节点
@@ -480,6 +481,48 @@ export class Role extends Component {
         // 确保UnitManager已获取（可能在start时还没初始化）
         if (!this.unitManager) {
             this.unitManager = UnitManager.getInstance();
+        }
+
+        // 防御状态下，不进行移动，但仍可攻击
+        if (this.isDefending) {
+            // 防御状态下，仍然需要查找目标并攻击
+            // 如果当前目标已失效，立即重新查找（不等待间隔）
+            const needFindTarget = !this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active;
+            // 首次查找或按间隔查找
+            const shouldFindByInterval = !this.hasFoundFirstTarget || this.targetFindTimer >= this.TARGET_FIND_INTERVAL;
+            
+            if (needFindTarget || shouldFindByInterval) {
+                this.targetFindTimer = 0; // 重置计时器
+                this.findTarget();
+                // 如果找到了目标，标记为已找到第一个目标
+                if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
+                    this.hasFoundFirstTarget = true;
+                }
+            }
+            
+            // 防御状态下，只攻击范围内的敌人，不移动
+            if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
+                const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
+                
+                if (distance <= this.attackRange) {
+                    // 在攻击范围内，攻击敌人
+                    this.stopMoving();
+                    if (this.attackTimer >= this.attackInterval) {
+                        // 再次检查游戏状态，确保游戏仍在进行
+                        if (this.gameManager && this.gameManager.getGameState() === GameState.Playing) {
+                            this.attack();
+                            this.attackTimer = 0;
+                        }
+                    }
+                } else {
+                    // 不在攻击范围内，停止移动（防御状态下不移动）
+                    this.stopMoving();
+                }
+            } else {
+                // 没有目标，停止移动
+                this.stopMoving();
+            }
+            return; // 防御状态下，不执行后续的移动逻辑
         }
 
         // 优先处理手动移动目标
@@ -1763,15 +1806,42 @@ export class Role extends Component {
         if (this.sprite && this.sprite.isValid && this.defaultSpriteFrame) {
             this.sprite.spriteFrame = this.defaultSpriteFrame;
         }
-        // 恢复默认缩放（取消翻转）
-        if (this.node && this.node.isValid) {
-            this.node.setScale(this.defaultScale.x, this.defaultScale.y, this.defaultScale.z);
-        }
-        // 恢复血条的正常朝向
-        if (this.healthBarNode && this.healthBarNode.isValid) {
-            this.healthBarNode.setScale(1, 1, 1);
-        }
         this.isPlayingAttackAnimation = false;
+        
+        // 如果当前目标存在，保持朝向敌人；否则恢复默认缩放
+        if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
+            // 根据敌人位置决定是否翻转，保持朝向敌人
+            const towerPos = this.node.worldPosition;
+            const enemyPos = this.currentTarget.worldPosition;
+            const shouldFlip = enemyPos.x < towerPos.x;
+            
+            if (shouldFlip) {
+                // 水平翻转：scale.x = -1
+                this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+                // 血条需要反向翻转，保持正常朝向
+                if (this.healthBarNode && this.healthBarNode.isValid) {
+                    const healthBarScale = this.healthBarNode.scale.clone();
+                    this.healthBarNode.setScale(-Math.abs(healthBarScale.x), healthBarScale.y, healthBarScale.z);
+                }
+            } else {
+                // 保持原样：scale.x = 1
+                this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+                // 血条保持正常朝向
+                if (this.healthBarNode && this.healthBarNode.isValid) {
+                    const healthBarScale = this.healthBarNode.scale.clone();
+                    this.healthBarNode.setScale(Math.abs(healthBarScale.x), healthBarScale.y, healthBarScale.z);
+                }
+            }
+        } else {
+            // 没有目标，恢复默认缩放（取消翻转）
+            if (this.node && this.node.isValid) {
+                this.node.setScale(this.defaultScale.x, this.defaultScale.y, this.defaultScale.z);
+            }
+            // 恢复血条的正常朝向
+            if (this.healthBarNode && this.healthBarNode.isValid) {
+                this.healthBarNode.setScale(1, 1, 1);
+            }
+        }
         
         // 如果正在移动，恢复移动动画
         if (this.isMoving) {
@@ -2336,6 +2406,7 @@ export class Role extends Component {
         this.moveTarget = null!;
         this.manualMoveTarget = null!;
         this.isManuallyControlled = false;
+        this.isDefending = false; // 重置防御状态
         this.hasFoundFirstTarget = false;
         
         // 重置动画
@@ -2400,6 +2471,7 @@ export class Role extends Component {
         this.moveTarget = null!;
         this.manualMoveTarget = null!;
         this.isManuallyControlled = false;
+        this.isDefending = false; // 重置防御状态
         this.hasFoundFirstTarget = false;
         
         // 重置节点状态
@@ -2443,7 +2515,7 @@ export class Role extends Component {
     }
 
     onTowerClick(event: EventTouch) {
-        // 如果游戏已结束，不显示选择面板
+        // 如果游戏已结束，不显示信息面板
         if (this.gameManager && this.gameManager.getGameState() !== GameState.Playing) {
             return;
         }
@@ -2451,67 +2523,20 @@ export class Role extends Component {
         // 阻止事件冒泡
         event.propagationStopped = true;
 
-        // 如果已有选择面板，先关闭
-        if (this.selectionPanel) {
-            this.hideSelectionPanel();
+        // 如果已选中此单位，先取消选择
+        if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            this.unitSelectionManager.clearSelection();
             return;
         }
 
-        // 显示选择面板和信息面板
-        this.showSelectionPanel();
+        // 只显示单位信息面板，不显示头顶的选择面板
+        this.showUnitInfoPanel();
     }
 
-    showSelectionPanel() {
-        // 创建选择面板
-        const canvas = find('Canvas');
-        if (!canvas) return;
-
-        this.selectionPanel = new Node('TowerSelectionPanel');
-        this.selectionPanel.setParent(canvas);
-
-        // 添加UITransform
-        const uiTransform = this.selectionPanel.addComponent(UITransform);
-        uiTransform.setContentSize(120, 40);
-
-        // 设置位置（在弓箭手上方）
-        const worldPos = this.node.worldPosition.clone();
-        worldPos.y += 50;
-        this.selectionPanel.setWorldPosition(worldPos);
-
-        // 添加半透明背景
-        const graphics = this.selectionPanel.addComponent(Graphics);
-        graphics.fillColor = new Color(0, 0, 0, 180); // 半透明黑色
-        graphics.rect(-60, -20, 120, 40);
-        graphics.fill();
-
-        // 创建回收按钮
-        const sellBtn = new Node('SellButton');
-        sellBtn.setParent(this.selectionPanel);
-        const sellBtnTransform = sellBtn.addComponent(UITransform);
-        sellBtnTransform.setContentSize(50, 30);
-        sellBtn.setPosition(-35, 0);
-
-        const sellLabel = sellBtn.addComponent(Label);
-        sellLabel.string = '回收';
-        sellLabel.fontSize = 16;
-        sellLabel.color = Color.WHITE;
-
-        // 创建升级按钮
-        const upgradeBtn = new Node('UpgradeButton');
-        upgradeBtn.setParent(this.selectionPanel);
-        const upgradeBtnTransform = upgradeBtn.addComponent(UITransform);
-        upgradeBtnTransform.setContentSize(50, 30);
-        upgradeBtn.setPosition(35, 0);
-
-        const upgradeLabel = upgradeBtn.addComponent(Label);
-        upgradeLabel.string = '升级';
-        upgradeLabel.fontSize = 16;
-        upgradeLabel.color = Color.WHITE;
-
-        // 添加按钮点击事件
-        sellBtn.on(Node.EventType.TOUCH_END, this.onSellClick, this);
-        upgradeBtn.on(Node.EventType.TOUCH_END, this.onUpgradeClick, this);
-
+    /**
+     * 显示单位信息面板（不显示头顶的选择面板）
+     */
+    showUnitInfoPanel() {
         // 显示单位信息面板和范围
         if (!this.unitSelectionManager) {
             this.findUnitSelectionManager();
@@ -2529,38 +2554,52 @@ export class Role extends Component {
                 attackRange: this.attackRange,
                 attackFrequency: 1.0 / this.attackInterval, // 攻击频率（次/秒）
                 moveSpeed: this.moveSpeed,
+                isDefending: this.isDefending, // 传递防御状态
                 onUpgradeClick: () => {
                     this.onUpgradeClick();
                 },
                 onSellClick: () => {
                     this.onSellClick();
+                },
+                onDefendClick: () => {
+                    this.onDefendClick();
                 }
             };
             this.unitSelectionManager.selectUnit(this.node, unitInfo);
         }
 
-        // 点击其他地方关闭面板或设置移动目标
+        // 点击其他地方设置移动目标
+        const canvas = find('Canvas');
         this.scheduleOnce(() => {
             if (canvas) {
                 // 创建全局触摸事件处理器
                 this.globalTouchHandler = (event: EventTouch) => {
-                    // 检查点击是否在选择面板或其子节点上
-                    if (this.selectionPanel && this.selectionPanel.isValid) {
-                        const targetNode = event.target as Node;
-                        if (targetNode) {
-                            // 检查目标节点是否是选择面板或其子节点
-                            let currentNode: Node | null = targetNode;
-                            while (currentNode) {
-                                if (currentNode === this.selectionPanel) {
-                                    // 点击在选择面板上，不处理移动
-                                    return;
-                                }
-                                currentNode = currentNode.parent;
+                    // 检查点击是否在信息面板上（通过节点名称和路径检查）
+                    const targetNode = event.target as Node;
+                    if (targetNode) {
+                        // 检查目标节点或其父节点是否是信息面板
+                        let currentNode: Node | null = targetNode;
+                        while (currentNode) {
+                            // 检查节点名称是否包含 UnitInfoPanel（信息面板的节点名称）
+                            if (currentNode.name === 'UnitInfoPanel' || currentNode.name.includes('UnitInfoPanel')) {
+                                // 点击在信息面板上，不设置移动目标
+                                return;
+                            }
+                            // 检查节点的路径是否包含 UnitInfoPanel
+                            const nodePath = currentNode.getPathInHierarchy();
+                            if (nodePath && nodePath.includes('UnitInfoPanel')) {
+                                // 点击在信息面板上，不设置移动目标
+                                return;
+                            }
+                            currentNode = currentNode.parent;
+                            // 如果到达根节点，停止检查
+                            if (!currentNode) {
+                                break;
                             }
                         }
                     }
                     
-                    // 点击不在选择面板上，设置移动目标
+                    // 点击不在信息面板上，设置移动目标
                     this.setManualMoveTarget(event);
                 };
                 
@@ -2772,11 +2811,6 @@ export class Role extends Component {
             }
             this.globalTouchHandler = null!;
         }
-        
-        if (this.selectionPanel && this.selectionPanel.isValid) {
-            this.selectionPanel.destroy();
-            this.selectionPanel = null!;
-        }
 
         // 清除单位信息面板和范围显示
         if (this.unitSelectionManager) {
@@ -2854,6 +2888,58 @@ export class Role extends Component {
 
         // 隐藏面板
         this.hideSelectionPanel();
+    }
+
+    /**
+     * 防御按钮点击事件
+     */
+    onDefendClick(event?: EventTouch) {
+        if (event) {
+            event.propagationStopped = true;
+        }
+        
+        // 切换防御状态
+        this.isDefending = !this.isDefending;
+        
+        if (this.isDefending) {
+            // 如果进入防御状态，清除手动移动目标并停止移动
+            this.manualMoveTarget = null!;
+            this.isManuallyControlled = false;
+            this.stopMoving();
+        } else {
+            // 如果取消防御状态，清除手动移动目标，让单位进入正常索敌模式
+            this.manualMoveTarget = null!;
+            this.isManuallyControlled = false;
+        }
+        
+        // 更新单位信息面板（刷新按钮显示）
+        if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            // 通过重新显示单位信息来刷新按钮状态
+            const unitInfo: UnitInfo = {
+                name: this.unitName || '角色',
+                level: this.level,
+                currentHealth: this.currentHealth,
+                maxHealth: this.maxHealth,
+                attackDamage: this.attackDamage,
+                populationCost: 1,
+                icon: this.cardIcon || this.defaultSpriteFrame,
+                collisionRadius: this.collisionRadius,
+                attackRange: this.attackRange,
+                attackFrequency: 1.0 / this.attackInterval,
+                moveSpeed: this.moveSpeed,
+                isDefending: this.isDefending, // 传递防御状态
+                onUpgradeClick: () => {
+                    this.onUpgradeClick();
+                },
+                onSellClick: () => {
+                    this.onSellClick();
+                },
+                onDefendClick: () => {
+                    this.onDefendClick();
+                }
+            };
+            this.unitSelectionManager.selectUnit(this.node, unitInfo);
+        }
     }
 
     /**

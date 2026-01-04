@@ -425,93 +425,22 @@ export class Church extends Build {
     // 父类方法支持长按拖动功能，与弓箭手小屋和猎手大厅保持一致
 
     /**
-     * 显示选择面板（重写父类方法，添加教堂特有的信息）
+     * 获取单位信息（重写父类方法）
      */
-    public showSelectionPanel() {
-        const canvas = find('Canvas');
-        if (!canvas) return;
-
-        this.selectionPanel = new Node('ChurchSelectionPanel');
-        this.selectionPanel.setParent(canvas);
-
-        const uiTransform = this.selectionPanel.addComponent(UITransform);
-        uiTransform.setContentSize(120, 40);
-
-        const worldPos = this.node.worldPosition.clone();
-        worldPos.y += 50;
-        this.selectionPanel.setWorldPosition(worldPos);
-
-        const graphics = this.selectionPanel.addComponent(Graphics);
-        graphics.fillColor = new Color(0, 0, 0, 180);
-        graphics.rect(-60, -20, 120, 40);
-        graphics.fill();
-
-        const sellBtn = new Node('SellButton');
-        sellBtn.setParent(this.selectionPanel);
-        const sellTf = sellBtn.addComponent(UITransform);
-        sellTf.setContentSize(50, 30);
-        sellBtn.setPosition(-35, 0);
-        const sellLabel = sellBtn.addComponent(Label);
-        sellLabel.string = '拆除';
-        sellLabel.fontSize = 16;
-        sellLabel.color = Color.WHITE;
-
-        const upgradeBtn = new Node('UpgradeButton');
-        upgradeBtn.setParent(this.selectionPanel);
-        const upTf = upgradeBtn.addComponent(UITransform);
-        upTf.setContentSize(50, 30);
-        upgradeBtn.setPosition(35, 0);
-        const upLabel = upgradeBtn.addComponent(Label);
-        upLabel.string = '升级';
-        upLabel.fontSize = 16;
-        upLabel.color = Color.WHITE;
-
-        sellBtn.on(Node.EventType.TOUCH_END, this.onSellClick, this);
-        upgradeBtn.on(Node.EventType.TOUCH_END, this.onUpgradeClick, this);
-
-        if (!this.unitSelectionManager) {
-            this.findUnitSelectionManager();
-        }
-        if (this.unitSelectionManager) {
-            const info: UnitInfo = {
-                name: this.unitName || '教堂',
-                level: this.level,
-                currentHealth: this.currentHealth,
-                maxHealth: this.maxHealth,
-                attackDamage: 0, // 教堂不攻击
-                populationCost: 0,
-                icon: this.cardIcon || this.defaultSpriteFrame,
-                collisionRadius: this.collisionRadius,
-                currentUnitCount: this.producedPriests.length,
-                maxUnitCount: this.maxPriestCount,
-                onUpgradeClick: () => this.onUpgradeClick(),
-                onSellClick: () => this.onSellClick(),
-                onRallyPointClick: () => this.startSetRallyPoint(),
-                rallyPoint: this.rallyPoint
-            };
-            this.unitSelectionManager.selectUnit(this.node, info);
-        }
-
-        // 点击画布空白关闭面板
-        this.scheduleOnce(() => {
-            if (!canvas) return;
-            this.globalTouchHandler = (e: EventTouch) => {
-                if (this.selectionPanel && this.selectionPanel.isValid) {
-                    const target = e.target as Node;
-                    if (target) {
-                        let cur: Node | null = target;
-                        while (cur) {
-                            if (cur === this.selectionPanel) {
-                                return;
-                            }
-                            cur = cur.parent;
-                        }
-                    }
-                }
-                this.hideSelectionPanel();
-            };
-            canvas.on(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
-        }, 0.1);
+    protected getUnitInfo(): UnitInfo | null {
+        return {
+            name: this.unitName || '教堂',
+            level: this.level,
+            currentHealth: this.currentHealth,
+            maxHealth: this.maxHealth,
+            attackDamage: 0, // 教堂不攻击
+            populationCost: 0,
+            icon: this.cardIcon || this.defaultSpriteFrame,
+            collisionRadius: this.collisionRadius,
+            currentUnitCount: this.producedPriests.length,
+            maxUnitCount: this.maxPriestCount,
+            rallyPoint: this.rallyPoint
+        };
     }
 
     /**

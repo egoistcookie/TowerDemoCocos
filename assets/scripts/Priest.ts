@@ -120,6 +120,33 @@ export class Priest extends Role {
 
         this.attackTimer += deltaTime;
 
+        // 防御状态下，不进行移动，但仍可治疗
+        if (this.isDefending) {
+            // 防御状态下，仍然需要查找治疗目标
+            this.findHealTarget();
+            
+            // 防御状态下，只在治疗范围内治疗，不移动
+            if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
+                const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
+                
+                if (distance <= this.attackRange) {
+                    // 在治疗范围内，执行治疗
+                    this.stopMoving();
+                    if (this.attackTimer >= this.attackInterval) {
+                        this.healCurrentTarget();
+                        this.attackTimer = 0;
+                    }
+                } else {
+                    // 不在治疗范围内，停止移动（防御状态下不移动）
+                    this.stopMoving();
+                }
+            } else {
+                // 没有目标，停止移动
+                this.stopMoving();
+            }
+            return; // 防御状态下，不执行后续的移动逻辑
+        }
+
         // 先做位置碰撞与推开逻辑，直接复用父类能力
         const currentPos = this.node.worldPosition.clone();
         const hasCollisionNow = this.checkCollisionAtPosition(currentPos);

@@ -425,57 +425,10 @@ export class Build extends Component {
     /**
      * 显示选择面板（通用实现）
      */
+    /**
+     * 显示单位信息面板（不显示头顶的选择面板）
+     */
     public showSelectionPanel() {
-        // 创建选择面板
-        const canvas = find('Canvas');
-        if (!canvas) return;
-
-        this.selectionPanel = new Node('BuildingSelectionPanel');
-        this.selectionPanel.setParent(canvas);
-
-        // 添加UITransform
-        const uiTransform = this.selectionPanel.addComponent(UITransform);
-        uiTransform.setContentSize(120, 40);
-
-        // 设置位置（在建筑物上方）
-        const worldPos = this.node.worldPosition.clone();
-        worldPos.y += 50;
-        this.selectionPanel.setWorldPosition(worldPos);
-
-        // 添加半透明背景
-        const graphics = this.selectionPanel.addComponent(Graphics);
-        graphics.fillColor = new Color(0, 0, 0, 180); // 半透明黑色
-        graphics.rect(-60, -20, 120, 40);
-        graphics.fill();
-
-        // 创建拆除按钮
-        const sellBtn = new Node('SellButton');
-        sellBtn.setParent(this.selectionPanel);
-        const sellBtnTransform = sellBtn.addComponent(UITransform);
-        sellBtnTransform.setContentSize(50, 30);
-        sellBtn.setPosition(-35, 0);
-
-        const sellLabel = sellBtn.addComponent(Label);
-        sellLabel.string = '拆除';
-        sellLabel.fontSize = 16;
-        sellLabel.color = Color.WHITE;
-
-        // 创建升级按钮
-        const upgradeBtn = new Node('UpgradeButton');
-        upgradeBtn.setParent(this.selectionPanel);
-        const upgradeBtnTransform = upgradeBtn.addComponent(UITransform);
-        upgradeBtnTransform.setContentSize(50, 30);
-        upgradeBtn.setPosition(35, 0);
-
-        const upgradeLabel = upgradeBtn.addComponent(Label);
-        upgradeLabel.string = '升级';
-        upgradeLabel.fontSize = 16;
-        upgradeLabel.color = Color.WHITE;
-
-        // 添加按钮点击事件
-        sellBtn.on(Node.EventType.TOUCH_END, this.onSellClick, this);
-        upgradeBtn.on(Node.EventType.TOUCH_END, this.onUpgradeClick, this);
-
         // 显示单位信息面板和范围
         if (!this.unitSelectionManager) {
             this.findUnitSelectionManager();
@@ -507,27 +460,12 @@ export class Build extends Component {
         }
 
         // 点击其他地方关闭面板
+        const canvas = find('Canvas');
         this.scheduleOnce(() => {
             if (canvas) {
                 // 创建全局触摸事件处理器
                 this.globalTouchHandler = (event: EventTouch) => {
-                    // 检查点击是否在选择面板或其子节点上
-                    if (this.selectionPanel && this.selectionPanel.isValid) {
-                        const targetNode = event.target as Node;
-                        if (targetNode) {
-                            // 检查目标节点是否是选择面板或其子节点
-                            let currentNode: Node | null = targetNode;
-                            while (currentNode) {
-                                if (currentNode === this.selectionPanel) {
-                                    // 点击在选择面板上，不关闭
-                                    return;
-                                }
-                                currentNode = currentNode.parent;
-                            }
-                        }
-                    }
-                    
-                    // 点击不在选择面板上，关闭面板
+                    // 点击不在信息面板上，关闭面板
                     this.hideSelectionPanel();
                 };
                 
@@ -547,11 +485,6 @@ export class Build extends Component {
                 canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
             }
             this.globalTouchHandler = null;
-        }
-        
-        if (this.selectionPanel && this.selectionPanel.isValid) {
-            this.selectionPanel.destroy();
-            this.selectionPanel = null!;
         }
 
         // 清除单位信息面板和范围显示
@@ -1110,8 +1043,8 @@ export class Build extends Component {
             return;
         }
 
-        // 如果已经显示选择面板，先隐藏
-        if (this.selectionPanel && this.selectionPanel.isValid) {
+        // 如果已经选中此单位，先取消选择
+        if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
             this.hideSelectionPanel();
             return;
         }

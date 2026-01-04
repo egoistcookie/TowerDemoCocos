@@ -283,13 +283,20 @@ export class WatchTower extends Build {
         let count = 0;
         const rangeSq = range * range;
 
-        // 查找弓箭手（在Towers容器中）
+        // 查找弓箭手和牧师（在Towers容器中）
         const towersNode = find('Canvas/Towers');
         if (towersNode) {
             for (const tower of towersNode.children) {
                 if (!tower || !tower.isValid || !tower.active) continue;
                 const arrowerScript = tower.getComponent('Arrower') as any;
+                const priestScript = tower.getComponent('Priest') as any;
                 if (arrowerScript && arrowerScript.isAlive && arrowerScript.isAlive()) {
+                    const dx = tower.worldPosition.x - center.x;
+                    const dy = tower.worldPosition.y - center.y;
+                    if (dx * dx + dy * dy <= rangeSq) {
+                        count++;
+                    }
+                } else if (priestScript && priestScript.isAlive && priestScript.isAlive()) {
                     const dx = tower.worldPosition.x - center.x;
                     const dy = tower.worldPosition.y - center.y;
                     if (dx * dx + dy * dy <= rangeSq) {
@@ -331,21 +338,6 @@ export class WatchTower extends Build {
             }
         }
 
-        // 查找牧师
-        const priestsNode = find('Canvas/Priests');
-        if (priestsNode) {
-            for (const priest of priestsNode.children) {
-                if (!priest || !priest.isValid || !priest.active) continue;
-                const priestScript = priest.getComponent('Priest') as any;
-                if (priestScript && priestScript.isAlive && priestScript.isAlive()) {
-                    const dx = priest.worldPosition.x - center.x;
-                    const dy = priest.worldPosition.y - center.y;
-                    if (dx * dx + dy * dy <= rangeSq) {
-                        count++;
-                    }
-                }
-            }
-        }
 
         return count;
     }
@@ -556,26 +548,49 @@ export class WatchTower extends Build {
         let nearestTarget: Node | null = null;
         let minDistance = maxRange;
 
-        // 查找所有友好单位容器
-        const friendlyContainers = [
-            { path: 'Canvas/Towers', component: 'Arrower' },
-            { path: 'Canvas/Hunters', component: 'Hunter' },
-            { path: 'Canvas/ElfSwordsmans', component: 'ElfSwordsman' },
-            { path: 'Canvas/Priests', component: 'Priest' }
-        ];
+        // 查找Towers容器（包含Arrower和Priest）
+        const towersNode = find('Canvas/Towers');
+        if (towersNode) {
+            for (const unit of towersNode.children) {
+                if (!unit || !unit.isValid || !unit.active) continue;
+                const arrowerScript = unit.getComponent('Arrower') as any;
+                const priestScript = unit.getComponent('Priest') as any;
+                const unitScript = arrowerScript || priestScript;
+                if (!unitScript || !unitScript.isAlive || !unitScript.isAlive()) continue;
+                const distance = Vec3.distance(center, unit.worldPosition);
+                if (distance <= maxRange && distance < minDistance) {
+                    minDistance = distance;
+                    nearestTarget = unit;
+                }
+            }
+        }
 
-        for (const container of friendlyContainers) {
-            const containerNode = find(container.path);
-            if (containerNode) {
-                for (const unit of containerNode.children) {
-                    if (!unit || !unit.isValid || !unit.active) continue;
-                    const unitScript = unit.getComponent(container.component) as any;
-                    if (!unitScript || !unitScript.isAlive || !unitScript.isAlive()) continue;
-                    const distance = Vec3.distance(center, unit.worldPosition);
-                    if (distance <= maxRange && distance < minDistance) {
-                        minDistance = distance;
-                        nearestTarget = unit;
-                    }
+        // 查找Hunters容器
+        const huntersNode = find('Canvas/Hunters');
+        if (huntersNode) {
+            for (const unit of huntersNode.children) {
+                if (!unit || !unit.isValid || !unit.active) continue;
+                const unitScript = unit.getComponent('Hunter') as any;
+                if (!unitScript || !unitScript.isAlive || !unitScript.isAlive()) continue;
+                const distance = Vec3.distance(center, unit.worldPosition);
+                if (distance <= maxRange && distance < minDistance) {
+                    minDistance = distance;
+                    nearestTarget = unit;
+                }
+            }
+        }
+
+        // 查找ElfSwordsmans容器
+        const swordsmansNode = find('Canvas/ElfSwordsmans');
+        if (swordsmansNode) {
+            for (const unit of swordsmansNode.children) {
+                if (!unit || !unit.isValid || !unit.active) continue;
+                const unitScript = unit.getComponent('ElfSwordsman') as any;
+                if (!unitScript || !unitScript.isAlive || !unitScript.isAlive()) continue;
+                const distance = Vec3.distance(center, unit.worldPosition);
+                if (distance <= maxRange && distance < minDistance) {
+                    minDistance = distance;
+                    nearestTarget = unit;
                 }
             }
         }
