@@ -12,7 +12,8 @@ export class UnitSelectionManager extends Component {
     unitInfoPanelNode: Node = null!; // 单位信息面板节点
 
     private unitInfoPanel: UnitInfoPanel = null!; // 单位信息面板组件
-    private currentSelectedUnit: Node = null!; // 当前选中的单位节点
+    private currentSelectedUnit: Node = null!; // 当前选中的单位节点（单选）
+    private currentSelectedUnits: Node[] = []; // 当前选中的单位节点数组（多选）
     private currentRangeDisplayNode: Node = null!; // 当前范围显示节点
 
     start() {
@@ -35,8 +36,8 @@ export class UnitSelectionManager extends Component {
      * 全局触摸结束事件处理
      */
     onGlobalTouchEnd(event: EventTouch) {
-        // 如果没有选中任何单位，直接返回
-        if (!this.currentSelectedUnit) {
+        // 如果没有选中任何单位（单选或多选），直接返回
+        if (!this.currentSelectedUnit && this.currentSelectedUnits.length === 0) {
             return;
         }
         
@@ -52,21 +53,9 @@ export class UnitSelectionManager extends Component {
             return;
         }
         
-        // 检查点击位置是否在当前选中的单位上
-        const unitWorldPos = this.currentSelectedUnit.worldPosition;
-        const unitScreenPos = new Vec3();
-        camera.worldToScreen(unitWorldPos, unitScreenPos);
-        
-        // 计算点击位置与单位屏幕位置的距离
-        const distanceToUnit = Math.sqrt(
-            Math.pow(touchLocation.x - unitScreenPos.x, 2) +
-            Math.pow(touchLocation.y - unitScreenPos.y, 2)
-        );
-        
-        // 检查点击位置是否在单位的碰撞范围内
+        // 检查点击位置是否在信息面板上
         const unitInfoPanel = this.unitInfoPanel;
         if (unitInfoPanel) {
-            // 检查点击位置是否在信息面板上
             const panelNode = unitInfoPanel.panelNode;
             if (panelNode && panelNode.active) {
                 const panelTransform = panelNode.getComponent(UITransform);
@@ -95,12 +84,42 @@ export class UnitSelectionManager extends Component {
             }
         }
         
-        // 检查点击位置是否在当前选中的单位上
-        // 假设单位的碰撞半径为50像素（可以根据实际情况调整）
-        const collisionRadius = 50;
-        if (distanceToUnit <= collisionRadius) {
-            // 点击在单位上，不取消选择
-            return;
+        // 检查点击位置是否在选中的单位上（单选或多选）
+        if (this.currentSelectedUnit) {
+            const unitWorldPos = this.currentSelectedUnit.worldPosition;
+            const unitScreenPos = new Vec3();
+            camera.worldToScreen(unitWorldPos, unitScreenPos);
+            
+            const distanceToUnit = Math.sqrt(
+                Math.pow(touchLocation.x - unitScreenPos.x, 2) +
+                Math.pow(touchLocation.y - unitScreenPos.y, 2)
+            );
+            
+            const collisionRadius = 50;
+            if (distanceToUnit <= collisionRadius) {
+                // 点击在单位上，不取消选择
+                return;
+            }
+        } else if (this.currentSelectedUnits.length > 0) {
+            // 多选模式：检查是否点击在任何一个选中的单位上
+            for (const unitNode of this.currentSelectedUnits) {
+                if (!unitNode || !unitNode.isValid) continue;
+                
+                const unitWorldPos = unitNode.worldPosition;
+                const unitScreenPos = new Vec3();
+                camera.worldToScreen(unitWorldPos, unitScreenPos);
+                
+                const distanceToUnit = Math.sqrt(
+                    Math.pow(touchLocation.x - unitScreenPos.x, 2) +
+                    Math.pow(touchLocation.y - unitScreenPos.y, 2)
+                );
+                
+                const collisionRadius = 50;
+                if (distanceToUnit <= collisionRadius) {
+                    // 点击在单位上，不取消选择
+                    return;
+                }
+            }
         }
         
         // 点击不在单位和信息面板上，取消选择
@@ -135,7 +154,7 @@ export class UnitSelectionManager extends Component {
     }
 
     /**
-     * 选中单位
+     * 选中单位（单选）
      * @param unitNode 单位节点
      * @param unitInfo 单位信息
      */
@@ -145,6 +164,7 @@ export class UnitSelectionManager extends Component {
 
         // 设置当前选中的单位
         this.currentSelectedUnit = unitNode;
+        this.currentSelectedUnits = []; // 清除多选
 
         // 显示单位信息面板
         if (this.unitInfoPanel) {
@@ -153,6 +173,188 @@ export class UnitSelectionManager extends Component {
 
         // 显示范围
         this.showRangeDisplay(unitNode, unitInfo);
+    }
+
+    /**
+     * 选中多个单位（多选）
+     * @param unitNodes 单位节点数组
+     */
+    selectMultipleUnits(unitNodes: Node[]) {
+        console.info('[UnitSelectionManager] selectMultipleUnits: 开始，传入单位数量 =', unitNodes.length);
+        if (unitNodes.length === 0) {
+            console.info('[UnitSelectionManager] selectMultipleUnits: 传入单位数量为0，清除选择');
+            this.clearSelection();
+            return;
+        }
+
+        // 清除之前的选择
+        console.info('[UnitSelectionManager] selectMultipleUnits: 清除之前的选择');
+        this.clearSelection();
+
+        // 设置当前选中的单位数组
+        this.currentSelectedUnits = unitNodes.filter(node => node && node.isValid && node.active);
+        console.info('[UnitSelectionManager] selectMultipleUnits: 过滤后的单位数量 =', this.currentSelectedUnits.length);
+        this.currentSelectedUnit = null!; // 清除单选
+
+        if (this.currentSelectedUnits.length === 0) {
+            console.info('[UnitSelectionManager] selectMultipleUnits: 过滤后没有有效单位，返回');
+            return;
+        }
+
+        // 获取第一个单位的信息
+        const firstUnit = this.currentSelectedUnits[0];
+        console.info('[UnitSelectionManager] selectMultipleUnits: 第一个单位节点名称 =', firstUnit?.name);
+        const unitInfo = this.getUnitInfo(firstUnit);
+        if (!unitInfo) {
+            console.info('[UnitSelectionManager] selectMultipleUnits: 无法获取单位信息，返回');
+            return;
+        }
+        console.info('[UnitSelectionManager] selectMultipleUnits: 成功获取单位信息，单位名称 =', unitInfo.name);
+
+        // 确保unitInfoPanel已初始化
+        if (!this.unitInfoPanel) {
+            console.info('[UnitSelectionManager] selectMultipleUnits: unitInfoPanel未初始化，初始化中');
+            this.initUnitInfoPanel();
+        }
+
+        // 显示单位信息面板（使用第一个单位的信息，但标记为多选模式）
+        if (this.unitInfoPanel) {
+            console.info('[UnitSelectionManager] selectMultipleUnits: 调用showMultipleUnitsInfo');
+            this.unitInfoPanel.showMultipleUnitsInfo(unitInfo, this.currentSelectedUnits);
+            console.info('[UnitSelectionManager] selectMultipleUnits: showMultipleUnitsInfo调用完成');
+        } else {
+            console.info('[UnitSelectionManager] selectMultipleUnits: unitInfoPanel仍然为null，无法显示');
+        }
+
+        // 显示第一个单位的范围
+        console.info('[UnitSelectionManager] selectMultipleUnits: 显示范围');
+        this.showRangeDisplay(firstUnit, unitInfo);
+        console.info('[UnitSelectionManager] selectMultipleUnits: 完成');
+    }
+
+    /**
+     * 获取单位信息（辅助方法）
+     */
+    private getUnitInfo(unitNode: Node): UnitInfo | null {
+        console.info('[UnitSelectionManager] getUnitInfo: 开始获取单位信息，节点名称 =', unitNode?.name);
+        if (!unitNode || !unitNode.isValid) {
+            console.info('[UnitSelectionManager] getUnitInfo: 节点无效');
+            return null;
+        }
+
+        // 首先尝试使用Role组件（所有单位都继承自Role）
+        // 使用字符串 'Role' 避免循环引用（Role.ts 导入了 UnitSelectionManager）
+        const roleScript = unitNode.getComponent('Role') as any;
+        if (roleScript) {
+            console.info('[UnitSelectionManager] getUnitInfo: 找到Role组件，单位名称 =', roleScript.unitName);
+            return {
+                name: roleScript.unitName || '单位',
+                level: roleScript.level !== undefined ? roleScript.level : 1,
+                currentHealth: roleScript.currentHealth !== undefined ? roleScript.currentHealth : (roleScript.maxHealth || 0),
+                maxHealth: roleScript.maxHealth || 0,
+                attackDamage: roleScript.attackDamage !== undefined ? roleScript.attackDamage : 0,
+                populationCost: 1,
+                icon: roleScript.cardIcon || roleScript.defaultSpriteFrame,
+                collisionRadius: roleScript.collisionRadius,
+                attackRange: roleScript.attackRange,
+                attackFrequency: roleScript.attackInterval ? 1.0 / roleScript.attackInterval : 0,
+                moveSpeed: roleScript.moveSpeed,
+                isDefending: roleScript.isDefending !== undefined ? roleScript.isDefending : false,
+                onUpgradeClick: () => roleScript.onUpgradeClick && roleScript.onUpgradeClick(),
+                onSellClick: () => roleScript.onSellClick && roleScript.onSellClick(),
+                onDefendClick: () => roleScript.onDefendClick && roleScript.onDefendClick()
+            };
+        }
+
+        // 备用方案：尝试从各种单位类型获取信息
+        const arrowerScript = unitNode.getComponent('Arrower') as any;
+        if (arrowerScript) {
+            console.info('[UnitSelectionManager] getUnitInfo: 找到Arrower组件');
+            return {
+                name: arrowerScript.unitName || '弓箭手',
+                level: arrowerScript.level || 1,
+                currentHealth: arrowerScript.currentHealth || arrowerScript.maxHealth || 0,
+                maxHealth: arrowerScript.maxHealth || 0,
+                attackDamage: arrowerScript.attackDamage || 0,
+                populationCost: 1,
+                icon: arrowerScript.cardIcon || arrowerScript.defaultSpriteFrame,
+                collisionRadius: arrowerScript.collisionRadius,
+                attackRange: arrowerScript.attackRange,
+                attackFrequency: arrowerScript.attackInterval ? 1.0 / arrowerScript.attackInterval : 0,
+                moveSpeed: arrowerScript.moveSpeed,
+                isDefending: arrowerScript.isDefending,
+                onUpgradeClick: () => arrowerScript.onUpgradeClick && arrowerScript.onUpgradeClick(),
+                onSellClick: () => arrowerScript.onSellClick && arrowerScript.onSellClick(),
+                onDefendClick: () => arrowerScript.onDefendClick && arrowerScript.onDefendClick()
+            };
+        }
+
+        const hunterScript = unitNode.getComponent('Hunter') as any;
+        if (hunterScript) {
+            console.info('[UnitSelectionManager] getUnitInfo: 找到Hunter组件');
+            return {
+                name: hunterScript.unitName || '女猎手',
+                level: hunterScript.level || 1,
+                currentHealth: hunterScript.currentHealth || hunterScript.maxHealth || 0,
+                maxHealth: hunterScript.maxHealth || 0,
+                attackDamage: hunterScript.attackDamage || 0,
+                populationCost: 1,
+                icon: hunterScript.cardIcon || hunterScript.defaultSpriteFrame,
+                collisionRadius: hunterScript.collisionRadius,
+                attackRange: hunterScript.attackRange,
+                attackFrequency: hunterScript.attackInterval ? 1.0 / hunterScript.attackInterval : 0,
+                moveSpeed: hunterScript.moveSpeed,
+                isDefending: hunterScript.isDefending,
+                onUpgradeClick: () => hunterScript.onUpgradeClick && hunterScript.onUpgradeClick(),
+                onSellClick: () => hunterScript.onSellClick && hunterScript.onSellClick(),
+                onDefendClick: () => hunterScript.onDefendClick && hunterScript.onDefendClick()
+            };
+        }
+
+        const swordsmanScript = unitNode.getComponent('ElfSwordsman') as any;
+        if (swordsmanScript) {
+            console.info('[UnitSelectionManager] getUnitInfo: 找到ElfSwordsman组件');
+            return {
+                name: swordsmanScript.unitName || '精灵剑士',
+                level: swordsmanScript.level || 1,
+                currentHealth: swordsmanScript.currentHealth || swordsmanScript.maxHealth || 0,
+                maxHealth: swordsmanScript.maxHealth || 0,
+                attackDamage: swordsmanScript.attackDamage || 0,
+                populationCost: 1,
+                icon: swordsmanScript.cardIcon || swordsmanScript.defaultSpriteFrame,
+                collisionRadius: swordsmanScript.collisionRadius,
+                attackRange: swordsmanScript.attackRange,
+                attackFrequency: swordsmanScript.attackInterval ? 1.0 / swordsmanScript.attackInterval : 0,
+                moveSpeed: swordsmanScript.moveSpeed,
+                isDefending: swordsmanScript.isDefending,
+                onUpgradeClick: () => swordsmanScript.onUpgradeClick && swordsmanScript.onUpgradeClick(),
+                onSellClick: () => swordsmanScript.onSellClick && swordsmanScript.onSellClick(),
+                onDefendClick: () => swordsmanScript.onDefendClick && swordsmanScript.onDefendClick()
+            };
+        }
+
+        const priestScript = unitNode.getComponent('Priest') as any;
+        if (priestScript) {
+            return {
+                name: priestScript.unitName || '牧师',
+                level: priestScript.level || 1,
+                currentHealth: priestScript.currentHealth || priestScript.maxHealth || 0,
+                maxHealth: priestScript.maxHealth || 0,
+                attackDamage: priestScript.attackDamage || 0,
+                populationCost: 1,
+                icon: priestScript.cardIcon || priestScript.defaultSpriteFrame,
+                collisionRadius: priestScript.collisionRadius,
+                attackRange: priestScript.attackRange,
+                attackFrequency: priestScript.attackInterval ? 1.0 / priestScript.attackInterval : 0,
+                moveSpeed: priestScript.moveSpeed,
+                isDefending: priestScript.isDefending,
+                onUpgradeClick: () => priestScript.onUpgradeClick && priestScript.onUpgradeClick(),
+                onSellClick: () => priestScript.onSellClick && priestScript.onSellClick(),
+                onDefendClick: () => priestScript.onDefendClick && priestScript.onDefendClick()
+            };
+        }
+
+        return null;
     }
 
     /**
@@ -169,8 +371,10 @@ export class UnitSelectionManager extends Component {
 
         // 先保存当前选中的单位，然后清除选中状态
         const selectedUnit = this.currentSelectedUnit;
+        const selectedUnits = this.currentSelectedUnits;
         // 清除当前选中单位
         this.currentSelectedUnit = null!;
+        this.currentSelectedUnits = [];
         
         // 如果有选中的单位，调用setHighlight(false)清除高亮
         if (selectedUnit && selectedUnit.isValid) {

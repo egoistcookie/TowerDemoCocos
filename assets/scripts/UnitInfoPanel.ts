@@ -1,4 +1,5 @@
 import { _decorator, Component, Node, UITransform, Graphics, Color, Label, Sprite, SpriteFrame, find, EventTouch, Button, Vec3, resources } from 'cc';
+import { GameManager } from './GameManager';
 const { ccclass, property } = _decorator;
 
 /**
@@ -58,6 +59,8 @@ export class UnitInfoPanel extends Component {
     private buttonGridNode: Node = null!; // 九宫格按钮区域节点
     private buttonNodes: Node[] = []; // 按钮节点数组（9个）
     private currentUnitInfo: UnitInfo | null = null!; // 当前单位信息
+    private currentSelectedUnits: Node[] = []; // 当前选中的多个单位节点（多选模式）
+    private isMultiSelection: boolean = false; // 是否为多选模式
     private buttonSprites: Map<number, Sprite> = new Map(); // 按钮的Sprite组件映射（按钮索引 -> Sprite）
     private buttonNormalSprites: Map<number, SpriteFrame> = new Map(); // 按钮正常状态的贴图（按钮索引 -> SpriteFrame）
     private buttonDownSprites: Map<number, SpriteFrame> = new Map(); // 按钮按下状态的贴图（按钮索引 -> SpriteFrame）
@@ -354,7 +357,7 @@ export class UnitInfoPanel extends Component {
     }
 
     /**
-     * 显示单位信息
+     * 显示单位信息（单选）
      */
     showUnitInfo(unitInfo: UnitInfo) {
         if (!this.panelNode) {
@@ -363,6 +366,8 @@ export class UnitInfoPanel extends Component {
 
         // 保存当前单位信息
         this.currentUnitInfo = unitInfo;
+        this.currentSelectedUnits = [];
+        this.isMultiSelection = false;
 
         // 更新图标
         if (this.iconNode) {
@@ -475,6 +480,106 @@ export class UnitInfoPanel extends Component {
 
         // 显示面板
         this.show();
+    }
+
+    /**
+     * 显示多个单位信息（多选）
+     * @param firstUnitInfo 第一个单位的信息（用于显示）
+     * @param selectedUnits 所有选中的单位节点数组
+     */
+    showMultipleUnitsInfo(firstUnitInfo: UnitInfo, selectedUnits: Node[]) {
+        console.info('[UnitInfoPanel] showMultipleUnitsInfo: 开始，传入单位数量 =', selectedUnits.length);
+        if (!this.panelNode) {
+            console.info('[UnitInfoPanel] showMultipleUnitsInfo: panelNode不存在，初始化面板');
+            this.initPanel();
+        }
+
+        // 保存当前单位信息和多选状态
+        this.currentUnitInfo = firstUnitInfo;
+        this.currentSelectedUnits = selectedUnits.filter(node => node && node.isValid && node.active);
+        this.isMultiSelection = this.currentSelectedUnits.length > 1;
+        console.info('[UnitInfoPanel] showMultipleUnitsInfo: 过滤后单位数量 =', this.currentSelectedUnits.length, '，是否多选 =', this.isMultiSelection);
+
+        // 更新图标（使用第一个单位的图标）
+        if (this.iconNode) {
+            const iconSprite = this.iconNode.getComponent(Sprite);
+            if (iconSprite && firstUnitInfo.icon) {
+                iconSprite.spriteFrame = firstUnitInfo.icon;
+            }
+        }
+
+        // 更新名称（显示第一个单位名称 + 多选数量）
+        if (this.nameLabel) {
+            if (this.isMultiSelection) {
+                this.nameLabel.string = `${firstUnitInfo.name} (${this.currentSelectedUnits.length}个)`;
+            } else {
+                this.nameLabel.string = firstUnitInfo.name;
+            }
+        }
+
+        // 更新等级（显示第一个单位的等级）
+        if (this.levelLabel) {
+            this.levelLabel.string = `等级: ${firstUnitInfo.level}`;
+        }
+
+        // 更新生命值（显示第一个单位的生命值）
+        if (this.healthLabel) {
+            this.healthLabel.string = `生命值: ${firstUnitInfo.currentHealth}/${firstUnitInfo.maxHealth}`;
+        }
+
+        // 更新攻击力（显示第一个单位的攻击力）
+        if (this.attackLabel) {
+            if (firstUnitInfo.attackDamage !== undefined && firstUnitInfo.attackDamage > 0) {
+                this.attackLabel.string = `攻击力: ${firstUnitInfo.attackDamage}`;
+                this.attackLabel.node.active = true;
+            } else {
+                this.attackLabel.node.active = false;
+            }
+        }
+
+        // 更新人口（显示第一个单位的人口）
+        if (this.populationLabel) {
+            if (firstUnitInfo.populationCost !== undefined && firstUnitInfo.populationCost > 0) {
+                this.populationLabel.string = `占用人口: ${firstUnitInfo.populationCost}`;
+                this.populationLabel.node.active = true;
+            } else {
+                this.populationLabel.node.active = false;
+            }
+        }
+
+        // 隐藏建筑物特有属性（多选时通常不显示）
+        if (this.unitCountLabel) {
+            this.unitCountLabel.node.active = false;
+        }
+        if (this.healAmountLabel) {
+            this.healAmountLabel.node.active = false;
+        }
+        if (this.healSpeedLabel) {
+            this.healSpeedLabel.node.active = false;
+        }
+        if (this.attackFrequencyLabel) {
+            this.attackFrequencyLabel.node.active = false;
+        }
+        if (this.moveSpeedLabel) {
+            this.moveSpeedLabel.node.active = false;
+        }
+        if (this.rallyPointLabel) {
+            this.rallyPointLabel.node.active = false;
+        }
+
+        // 确保按钮网格节点可见
+        if (this.buttonGridNode) {
+            this.buttonGridNode.active = true;
+        }
+
+        // 更新按钮（支持批量操作）
+        console.info('[UnitInfoPanel] showMultipleUnitsInfo: 更新按钮');
+        this.updateButtonsForMultiSelection(firstUnitInfo);
+
+        // 显示面板
+        console.info('[UnitInfoPanel] showMultipleUnitsInfo: 调用show()显示面板');
+        this.show();
+        console.info('[UnitInfoPanel] showMultipleUnitsInfo: 完成');
     }
 
     /**
@@ -642,11 +747,287 @@ export class UnitInfoPanel extends Component {
     }
 
     /**
+     * 更新按钮显示和功能（多选模式）
+     */
+    updateButtonsForMultiSelection(firstUnitInfo: UnitInfo) {
+        if (!this.buttonNodes || this.buttonNodes.length < 9) {
+            return;
+        }
+
+        // 清除所有按钮的点击事件和隐藏所有按钮
+        for (let i = 0; i < this.buttonNodes.length; i++) {
+            const buttonNode = this.buttonNodes[i];
+            buttonNode.active = false; // 默认隐藏
+            buttonNode.off(Node.EventType.TOUCH_END);
+            buttonNode.off(Node.EventType.TOUCH_START);
+            const labelNode = buttonNode.getChildByName('Label');
+            if (labelNode) {
+                labelNode.active = false;
+            }
+        }
+
+        // 设置防御按钮（位置：第一行第二列，索引1）
+        if (firstUnitInfo.onDefendClick && this.buttonNodes[1]) {
+            const defendButton = this.buttonNodes[1];
+            defendButton.active = true;
+            
+            // 检查所有单位是否都处于防御状态
+            let allDefending = true;
+            for (const unitNode of this.currentSelectedUnits) {
+                if (!unitNode || !unitNode.isValid) continue;
+                const unitScript = unitNode.getComponent('Arrower') as any ||
+                                  unitNode.getComponent('Hunter') as any ||
+                                  unitNode.getComponent('ElfSwordsman') as any ||
+                                  unitNode.getComponent('Priest') as any;
+                if (unitScript && unitScript.isDefending !== undefined && !unitScript.isDefending) {
+                    allDefending = false;
+                    break;
+                }
+            }
+            
+            this.defendButtonPressed = allDefending;
+            
+            // 加载防御按钮贴图
+            this.loadButtonSprite(1, 'defense.png', 'defense_down.png');
+            
+            // 如果贴图已经加载，立即设置正确的状态
+            const sprite = this.buttonSprites.get(1);
+            if (sprite && sprite.node && sprite.node.isValid) {
+                if (this.defendButtonPressed) {
+                    const downSprite = this.buttonDownSprites.get(1);
+                    if (downSprite) {
+                        sprite.spriteFrame = downSprite;
+                    }
+                } else {
+                    const normalSprite = this.buttonNormalSprites.get(1);
+                    if (normalSprite) {
+                        sprite.spriteFrame = normalSprite;
+                    }
+                }
+            }
+            
+            // 设置点击事件，批量切换防御状态
+            defendButton.on(Node.EventType.TOUCH_END, () => {
+                // 切换防御按钮的按下状态
+                this.defendButtonPressed = !this.defendButtonPressed;
+                
+                const sprite = this.buttonSprites.get(1);
+                if (sprite && sprite.node && sprite.node.isValid) {
+                    if (this.defendButtonPressed) {
+                        const downSprite = this.buttonDownSprites.get(1);
+                        if (downSprite) {
+                            sprite.spriteFrame = downSprite;
+                        }
+                    } else {
+                        const normalSprite = this.buttonNormalSprites.get(1);
+                        if (normalSprite) {
+                            sprite.spriteFrame = normalSprite;
+                        }
+                    }
+                }
+                
+                // 批量设置防御状态
+                this.batchDefend(this.defendButtonPressed);
+            });
+        }
+        
+        // 设置升级按钮（位置：右上角，索引2）
+        if (firstUnitInfo.onUpgradeClick && this.buttonNodes[2]) {
+            const upgradeButton = this.buttonNodes[2];
+            upgradeButton.active = true;
+            
+            // 加载升级按钮贴图
+            this.loadButtonSprite(2, 'up.png', 'up_down.png');
+            
+            // 设置点击事件，批量升级
+            upgradeButton.on(Node.EventType.TOUCH_START, () => {
+                const sprite = this.buttonSprites.get(2);
+                const downSprite = this.buttonDownSprites.get(2);
+                if (sprite && downSprite && sprite.node && sprite.node.isValid) {
+                    sprite.spriteFrame = downSprite;
+                }
+            });
+            
+            upgradeButton.on(Node.EventType.TOUCH_END, () => {
+                const sprite = this.buttonSprites.get(2);
+                const normalSprite = this.buttonNormalSprites.get(2);
+                if (sprite && normalSprite && sprite.node && sprite.node.isValid) {
+                    sprite.spriteFrame = normalSprite;
+                }
+                // 批量升级
+                this.batchUpgrade();
+            });
+        }
+
+        // 设置回收按钮（位置：右下，索引8）
+        if (firstUnitInfo.onSellClick && this.buttonNodes[8]) {
+            const sellButton = this.buttonNodes[8];
+            sellButton.active = true;
+            
+            // 加载回收按钮贴图
+            this.loadButtonSprite(8, 'cancel.png', 'cancel_down.png');
+            
+            // 设置点击事件，批量回收
+            sellButton.on(Node.EventType.TOUCH_START, () => {
+                const sprite = this.buttonSprites.get(8);
+                const downSprite = this.buttonDownSprites.get(8);
+                if (sprite && downSprite && sprite.node && sprite.node.isValid) {
+                    sprite.spriteFrame = downSprite;
+                }
+            });
+            
+            sellButton.on(Node.EventType.TOUCH_END, () => {
+                const sprite = this.buttonSprites.get(8);
+                const normalSprite = this.buttonNormalSprites.get(8);
+                if (sprite && normalSprite && sprite.node && sprite.node.isValid) {
+                    sprite.spriteFrame = normalSprite;
+                }
+                // 批量回收
+                this.batchSell();
+            });
+        }
+    }
+
+    /**
+     * 批量升级（金币不足时先升级先选中的单位）
+     */
+    private batchUpgrade() {
+        if (this.currentSelectedUnits.length === 0) {
+            return;
+        }
+
+        // 获取GameManager
+        const gameManagerNode = find('GameManager');
+        if (!gameManagerNode) {
+            return;
+        }
+        const gameManager = gameManagerNode.getComponent('GameManager') as any;
+        if (!gameManager) {
+            return;
+        }
+
+        // 按选择顺序升级（先选中的先升级）
+        for (const unitNode of this.currentSelectedUnits) {
+            if (!unitNode || !unitNode.isValid || !unitNode.active) {
+                continue;
+            }
+
+            const unitScript = unitNode.getComponent('Arrower') as any ||
+                              unitNode.getComponent('Hunter') as any ||
+                              unitNode.getComponent('ElfSwordsman') as any ||
+                              unitNode.getComponent('Priest') as any;
+            
+            if (!unitScript || !unitScript.onUpgradeClick) {
+                continue;
+            }
+
+            // 检查是否有足够的金币（如果单位有buildCost属性）
+            const upgradeCost = unitScript.buildCost ? unitScript.buildCost * 2 : 0;
+            if (upgradeCost > 0 && gameManager.canAfford && !gameManager.canAfford(upgradeCost)) {
+                // 金币不足，跳过这个单位，继续下一个
+                continue;
+            }
+
+            // 执行升级
+            if (unitScript.onUpgradeClick) {
+                unitScript.onUpgradeClick();
+            }
+        }
+    }
+
+    /**
+     * 批量回收
+     */
+    private batchSell() {
+        if (this.currentSelectedUnits.length === 0) {
+            return;
+        }
+
+        // 按选择顺序回收所有单位
+        for (const unitNode of this.currentSelectedUnits) {
+            if (!unitNode || !unitNode.isValid || !unitNode.active) {
+                continue;
+            }
+
+            const unitScript = unitNode.getComponent('Arrower') as any ||
+                              unitNode.getComponent('Hunter') as any ||
+                              unitNode.getComponent('ElfSwordsman') as any ||
+                              unitNode.getComponent('Priest') as any;
+            
+            if (unitScript && unitScript.onSellClick) {
+                unitScript.onSellClick();
+            }
+        }
+
+        // 回收完成后，隐藏面板
+        this.hide();
+    }
+
+    /**
+     * 批量设置防御状态
+     */
+    private batchDefend(defend: boolean) {
+        if (this.currentSelectedUnits.length === 0) {
+            return;
+        }
+
+        // 批量设置所有单位的防御状态
+        for (const unitNode of this.currentSelectedUnits) {
+            if (!unitNode || !unitNode.isValid || !unitNode.active) {
+                continue;
+            }
+
+            const unitScript = unitNode.getComponent('Arrower') as any ||
+                              unitNode.getComponent('Hunter') as any ||
+                              unitNode.getComponent('ElfSwordsman') as any ||
+                              unitNode.getComponent('Priest') as any;
+            
+            if (unitScript) {
+                // 如果当前状态与目标状态不一致，才切换
+                if (unitScript.isDefending !== undefined && unitScript.isDefending !== defend) {
+                    // 直接设置防御状态
+                    unitScript.isDefending = defend;
+                    
+                    if (defend) {
+                        // 如果进入防御状态，清除手动移动目标并停止移动
+                        if (unitScript.manualMoveTarget !== undefined) {
+                            unitScript.manualMoveTarget = null!;
+                        }
+                        if (unitScript.isManuallyControlled !== undefined) {
+                            unitScript.isManuallyControlled = false;
+                        }
+                        if (unitScript.stopMoving) {
+                            unitScript.stopMoving();
+                        }
+                    } else {
+                        // 如果取消防御状态，清除手动移动目标，让单位进入正常索敌模式
+                        if (unitScript.manualMoveTarget !== undefined) {
+                            unitScript.manualMoveTarget = null!;
+                        }
+                        if (unitScript.isManuallyControlled !== undefined) {
+                            unitScript.isManuallyControlled = false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * 显示面板
      */
     show() {
+        console.info('[UnitInfoPanel] show: 开始显示面板');
+        if (!this.panelNode) {
+            console.info('[UnitInfoPanel] show: panelNode不存在，初始化面板');
+            this.initPanel();
+        }
         if (this.panelNode) {
+            console.info('[UnitInfoPanel] show: panelNode存在，设置active = true');
             this.panelNode.active = true;
+            console.info('[UnitInfoPanel] show: panelNode.active =', this.panelNode.active);
+        } else {
+            console.info('[UnitInfoPanel] show: panelNode不存在，无法显示面板');
         }
     }
 

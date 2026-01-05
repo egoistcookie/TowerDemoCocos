@@ -311,6 +311,9 @@ export class SelectionManager extends Component {
         if (dragDistance > 10) { // 至少拖动10像素才认为是有效的选择
             this.updateSelectedTowers();
             
+            // 框选完成后，显示多选信息面板
+            this.showMultiSelectionInfo();
+            
             // 框选完成后，不立即注册移动命令，等待下一次点击
             // 保留选中状态，不清除选择
             return;
@@ -1140,6 +1143,72 @@ export class SelectionManager extends Component {
         }
         
         return null;
+    }
+
+    /**
+     * 获取所有选中的单位节点（按选择顺序）
+     */
+    getAllSelectedUnitNodes(): Node[] {
+        const allNodes: Node[] = [];
+        
+        // 按选择顺序添加：弓箭手、女猎手、精灵剑士、牧师
+        for (const tower of this.selectedTowers) {
+            if (tower && tower.node && tower.node.isValid && tower.node.active) {
+                allNodes.push(tower.node);
+            }
+        }
+        for (const hunter of this.selectedHunters) {
+            if (hunter && hunter.node && hunter.node.isValid && hunter.node.active) {
+                allNodes.push(hunter.node);
+            }
+        }
+        for (const swordsman of this.selectedSwordsmen) {
+            if (swordsman && swordsman.node && swordsman.node.isValid && swordsman.node.active) {
+                allNodes.push(swordsman.node);
+            }
+        }
+        for (const priest of this.selectedPriests) {
+            if (priest && priest.node && priest.node.isValid && priest.node.active) {
+                allNodes.push(priest.node);
+            }
+        }
+        
+        return allNodes;
+    }
+
+    /**
+     * 显示多选信息面板
+     */
+    private showMultiSelectionInfo() {
+        console.info('[SelectionManager] showMultiSelectionInfo: 开始显示多选信息面板');
+        const allNodes = this.getAllSelectedUnitNodes();
+        console.info('[SelectionManager] showMultiSelectionInfo: 选中的单位数量 =', allNodes.length);
+        if (allNodes.length === 0) {
+            console.info('[SelectionManager] showMultiSelectionInfo: 没有选中的单位，返回');
+            return;
+        }
+
+        // 获取UnitSelectionManager（在Canvas下）
+        let unitSelectionManagerNode = find('Canvas/UnitSelectionManager');
+        if (!unitSelectionManagerNode) {
+            // 备用方案：尝试从场景根节点查找
+            unitSelectionManagerNode = find('UnitSelectionManager');
+        }
+        if (!unitSelectionManagerNode) {
+            console.info('[SelectionManager] showMultiSelectionInfo: 找不到UnitSelectionManager节点');
+            return;
+        }
+        console.info('[SelectionManager] showMultiSelectionInfo: 找到UnitSelectionManager节点');
+        const unitSelectionManager = unitSelectionManagerNode.getComponent('UnitSelectionManager') as any;
+        if (!unitSelectionManager) {
+            console.info('[SelectionManager] showMultiSelectionInfo: UnitSelectionManager节点没有组件');
+            return;
+        }
+        console.info('[SelectionManager] showMultiSelectionInfo: 找到UnitSelectionManager组件，调用selectMultipleUnits');
+
+        // 显示多选信息（使用第一个单位的信息）
+        unitSelectionManager.selectMultipleUnits(allNodes);
+        console.info('[SelectionManager] showMultiSelectionInfo: selectMultipleUnits调用完成');
     }
 
     /**
