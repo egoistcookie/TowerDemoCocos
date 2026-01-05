@@ -1,7 +1,8 @@
 import { _decorator, Component, Node, EventTarget, instantiate, EventTouch, Sprite, SpriteFrame, find, Graphics, UITransform, Color } from 'cc';
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
-import { GameManager, GameState } from './GameManager';
+import { GameState } from './GameState';
+import { GameManager } from './GameManager';
 import { GamePopup } from './GamePopup';
 const { ccclass, property } = _decorator;
 

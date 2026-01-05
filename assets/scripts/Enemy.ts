@@ -1,5 +1,6 @@
 import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip, Animation, AnimationState, view } from 'cc';
-import { GameManager, GameState } from './GameManager';
+import { GameManager } from './GameManager';
+import { GameState } from './GameState';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
 import { AudioManager } from './AudioManager';

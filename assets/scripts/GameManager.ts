@@ -6,15 +6,11 @@ import { PlayerDataManager } from './PlayerDataManager';
 import { UnitManager } from './UnitManager';
 import { UnitPool } from './UnitPool';
 import { BuildingPool } from './BuildingPool';
+import { GameState } from './GameState';
 const { ccclass, property } = _decorator;
 
-export enum GameState {
-    Ready,       // 准备就绪
-    Playing,     // 游戏进行中
-    Victory,     // 胜利
-    Defeat,      // 失败
-    Paused       // 暂停
-}
+// 重新导出 GameState 以保持向后兼容
+export { GameState };
 
 @ccclass('GameManager')
 export class GameManager extends Component {
@@ -1155,6 +1151,76 @@ export class GameManager extends Component {
         }
     }
 
+    /**
+     * 清理所有单位（用于重置游戏）
+     */
+    cleanupAllUnitsForReset() {
+        const scene = director.getScene();
+        if (!scene) return;
+
+        // 清理所有敌人
+        const enemiesNode = find('Canvas/Enemies');
+        if (enemiesNode) {
+            const enemies = enemiesNode.children.slice();
+            for (const enemy of enemies) {
+                if (enemy && enemy.isValid) {
+                    enemy.destroy();
+                }
+            }
+        }
+
+        // 清理所有我方单位
+        // 注意：Priests和Towers共用Canvas/Towers容器
+        const unitContainers = [
+            'Canvas/Towers',  // 包含Towers和Priests
+            'Canvas/Hunters',
+            'Canvas/Swordsmen'
+        ];
+
+        for (const containerPath of unitContainers) {
+            const containerNode = find(containerPath);
+            if (containerNode) {
+                const units = containerNode.children.slice();
+                for (const unit of units) {
+                    if (unit && unit.isValid) {
+                        const roleScript = unit.getComponent('Role') as any;
+                        if (roleScript && roleScript.destroyRole) {
+                            roleScript.destroyRole();
+                        } else {
+                            unit.destroy();
+                        }
+                    }
+                }
+            }
+        }
+
+        // 清理所有建筑物
+        const buildingContainers = [
+            'Canvas/WarAncientTrees',
+            'Canvas/HunterHalls',
+            'Canvas/SwordsmanHalls',
+            'Canvas/Churches',
+            'Canvas/StoneWalls'
+        ];
+
+        for (const containerPath of buildingContainers) {
+            const containerNode = find(containerPath);
+            if (containerNode) {
+                const buildings = containerNode.children.slice();
+                for (const building of buildings) {
+                    if (building && building.isValid) {
+                        const buildScript = building.getComponent('Build') as any;
+                        if (buildScript && buildScript.destroyBuild) {
+                            buildScript.destroyBuild();
+                        } else {
+                            building.destroy();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     getGameState(): GameState {
         return this.gameState;
     }
@@ -1194,6 +1260,14 @@ export class GameManager extends Component {
      */
     startGame() {
         console.log('startGame'+this.gameState.toString());
+        
+        // 确保时间缩放正常（防止退出时暂停导致的问题）
+        const currentTimeScale = director.getScheduler().getTimeScale();
+        if (currentTimeScale === 0) {
+            director.getScheduler().setTimeScale(1);
+            this.originalTimeScale = 1;
+        }
+        
         if (this.gameState === GameState.Paused) {
             // 如果游戏已暂停，恢复游戏
             this.resumeGame();
@@ -1420,6 +1494,10 @@ export class GameManager extends Component {
     }
 
     restartGame() {
+        // 恢复时间缩放（确保游戏时间正常，避免退出时暂停导致的问题）
+        director.getScheduler().setTimeScale(1);
+        this.originalTimeScale = 1;
+        
         // 在重新开始游戏前，结算当前游戏的经验值
         this.settleGameExperience();
         
@@ -1473,12 +1551,32 @@ export class GameManager extends Component {
      */
     manualResetGame() {
         
+        // 恢复时间缩放（确保游戏时间正常）
+        director.getScheduler().setTimeScale(1);
+        this.originalTimeScale = 1;
+        
         // 重置游戏状态
         this.gameState = GameState.Ready;
         this.gameTime = 0;
         this.gold = 10;
         this.population = 0;
         this.maxPopulation = 10;
+        
+        // 重置水晶状态
+        if (this.crystalScript) {
+            const crystal = this.crystalScript as any;
+            if (crystal.currentHealth !== undefined && crystal.maxHealth !== undefined) {
+                crystal.currentHealth = crystal.maxHealth;
+            }
+            // 重置水晶的isDestroyed状态
+            if (crystal.isDestroyed !== undefined) {
+                crystal.isDestroyed = false;
+            }
+            // 确保水晶节点是激活的
+            if (crystal.node && crystal.node.isValid) {
+                crystal.node.active = true;
+            }
+        }
         
         // 隐藏所有游戏元素
         this.hideGameElements();

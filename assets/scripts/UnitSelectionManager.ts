@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, find, Graphics, UITransform, Color, EventTouch, Camera, Vec3 } from 'cc';
+import { _decorator, Component, Node, find, Graphics, UITransform, Color, EventTouch, Camera, Vec3, Sprite, SpriteFrame, resources } from 'cc';
 import { UnitInfoPanel, UnitInfo } from './UnitInfoPanel';
 const { ccclass, property } = _decorator;
 
@@ -226,9 +226,9 @@ export class UnitSelectionManager extends Component {
             console.info('[UnitSelectionManager] selectMultipleUnits: unitInfoPanel仍然为null，无法显示');
         }
 
-        // 显示第一个单位的范围
-        console.info('[UnitSelectionManager] selectMultipleUnits: 显示范围');
-        this.showRangeDisplay(firstUnit, unitInfo);
+        // 多选时不显示攻击范围
+        // console.info('[UnitSelectionManager] selectMultipleUnits: 显示范围');
+        // this.showRangeDisplay(firstUnit, unitInfo);
         console.info('[UnitSelectionManager] selectMultipleUnits: 完成');
     }
 
@@ -448,19 +448,36 @@ export class UnitSelectionManager extends Component {
             collisionGraphics.stroke();
         }
 
-        // 绘制攻击范围（如果有）
+        // 绘制攻击范围（如果有）- 使用背景图
         if (unitInfo.attackRange && unitInfo.attackRange > 0) {
             const attackNode = new Node('AttackRange');
             attackNode.setParent(this.currentRangeDisplayNode);
             attackNode.setPosition(0, 0, 0);
-            const attackGraphics = attackNode.addComponent(Graphics);
-            attackGraphics.fillColor = new Color(255, 0, 0, 100); // 红色半透明
-            attackGraphics.circle(0, 0, unitInfo.attackRange);
-            attackGraphics.fill();
-            attackGraphics.strokeColor = new Color(255, 0, 0, 200); // 红色边框
-            attackGraphics.lineWidth = 2;
-            attackGraphics.circle(0, 0, unitInfo.attackRange);
-            attackGraphics.stroke();
+            
+            // 添加UITransform设置大小
+            const attackTransform = attackNode.addComponent(UITransform);
+            const attackRangeSize = unitInfo.attackRange * 2; // 直径为攻击范围的两倍
+            attackTransform.setContentSize(attackRangeSize, attackRangeSize);
+            
+            // 添加Sprite组件显示背景图
+            const attackSprite = attackNode.addComponent(Sprite);
+            attackSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+            
+            // 设置50%透明度（alpha = 128，255的一半）
+            attackSprite.color = new Color(255, 255, 255, 128);
+            
+            // 加载背景图
+            resources.load('textures/mofazhen/spriteFrame', SpriteFrame, (err, spriteFrame) => {
+                if (err) {
+                    console.error('[UnitSelectionManager] 加载攻击范围背景图失败:', err);
+                    return;
+                }
+                if (attackSprite && attackSprite.node && attackSprite.node.isValid && spriteFrame) {
+                    attackSprite.spriteFrame = spriteFrame;
+                    // 确保透明度设置生效
+                    attackSprite.color = new Color(255, 255, 255, 128);
+                }
+            });
         }
 
         // 绘制治疗范围（如果有）

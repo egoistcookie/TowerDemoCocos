@@ -1050,8 +1050,18 @@ export class UIManager extends Component {
             // 先结算经验值
             this.gameManager.settleGameExperience();
             
-            // 清理所有敌人和防御塔
-            this.gameManager.cleanupAllUnitsForEndGame();
+            // 清理所有单位（包括敌人、我方单位和建筑物）
+            this.gameManager.cleanupAllUnitsForReset();
+            
+            // 关闭结算弹窗
+            if (this.gameManager.gameOverPanel) {
+                this.gameManager.gameOverPanel.active = false;
+            }
+            // 关闭游戏结束弹窗
+            const gm = this.gameManager as any;
+            if (gm.gameOverDialog) {
+                gm.gameOverDialog.active = false;
+            }
             
             // 回到主界面（隐藏游戏相关UI，显示底部三页签）
             let bottomSelectionNode = find('Canvas/BottomSelection');
@@ -1078,11 +1088,6 @@ export class UIManager extends Component {
                 if (settingsPanel) {
                     settingsPanel.active = false;
                 }
-            }
-            
-            // 隐藏游戏结束面板
-            if (this.gameManager.gameOverPanel) {
-                this.gameManager.gameOverPanel.active = false;
             }
             
             // 隐藏所有游戏元素
@@ -1135,11 +1140,19 @@ export class UIManager extends Component {
                         gm.currentGameExp = 0;
                     }
                     
-                    // 重置水晶血量
+                    // 重置水晶状态
                     if (gm.crystalScript) {
                         const crystal = gm.crystalScript as any;
                         if (crystal.currentHealth !== undefined && crystal.maxHealth !== undefined) {
                             crystal.currentHealth = crystal.maxHealth;
+                        }
+                        // 重置水晶的isDestroyed状态
+                        if (crystal.isDestroyed !== undefined) {
+                            crystal.isDestroyed = false;
+                        }
+                        // 确保水晶节点是激活的
+                        if (crystal.node && crystal.node.isValid) {
+                            crystal.node.active = true;
                         }
                     }
                     
@@ -1563,15 +1576,45 @@ export class UIManager extends Component {
      * 返回按钮事件方法，从游戏主体页面返回到三页签首页
      */
     onBackToHome() {
+        // 重新查找GameManager
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        
+        // 保存游戏状态，用于恢复
+        let wasPlaying = false;
+        if (this.gameManager) {
+            const gm = this.gameManager as any;
+            wasPlaying = gm.gameState === 1; // GameState.Playing = 1
+            // 如果游戏正在运行，暂停游戏
+            if (wasPlaying && gm.pauseGame) {
+                gm.pauseGame();
+            }
+        }
+        
         // 显示确认框
         this.createConfirmDialog(
             '确定要退出游戏并返回首页吗？',
             () => {
+                // 确认退出前，先恢复游戏时间缩放（如果之前暂停了）
+                if (wasPlaying && this.gameManager) {
+                    const gm = this.gameManager as any;
+                    // 恢复时间缩放，但不改变游戏状态（因为即将退出）
+                    if (gm.originalTimeScale !== undefined) {
+                        director.getScheduler().setTimeScale(gm.originalTimeScale || 1);
+                    }
+                }
                 // 确认退出
                 this.onExitGameClick();
             },
             () => {
-                // 取消退出
+                // 取消退出，恢复游戏（如果之前是Playing状态）
+                if (wasPlaying && this.gameManager) {
+                    const gm = this.gameManager as any;
+                    if (gm.resumeGame) {
+                        gm.resumeGame();
+                    }
+                }
             }
         );
     }

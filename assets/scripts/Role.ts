@@ -1,6 +1,7 @@
 import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, tween, EventTouch, input, Input, resources, Sprite, SpriteFrame, Texture2D, Camera, AudioClip, view, CCString } from 'cc';
 import { AudioManager } from './AudioManager';
-import { GameManager, GameState } from './GameManager';
+import { GameManager } from './GameManager';
+import { GameState } from './GameState';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
 import { Arrow } from './Arrow';
@@ -2859,8 +2860,9 @@ export class Role extends Component {
             return;
         }
 
-        // 升级成本是建造成本的2倍
-        const upgradeCost = this.buildCost * 2;
+        // 升级费用：1到2级是10金币，此后每次升级多10金币
+        // 公式：10 + (level - 1) * 10
+        const upgradeCost = 10 + (this.level - 1) * 10;
         
         if (!this.gameManager.canAfford(upgradeCost)) {
             return;

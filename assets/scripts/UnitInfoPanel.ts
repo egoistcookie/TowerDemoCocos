@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, UITransform, Graphics, Color, Label, Sprite, SpriteFrame, find, EventTouch, Button, Vec3, resources } from 'cc';
+import { _decorator, Component, Node, UITransform, Graphics, Color, Label, Sprite, SpriteFrame, find, EventTouch, Button, Vec3, resources, director } from 'cc';
 import { GameManager } from './GameManager';
 const { ccclass, property } = _decorator;
 
@@ -165,27 +165,36 @@ export class UnitInfoPanel extends Component {
         // 名称
         this.nameLabel = this.createLabel('Name', '单位名称', 24, new Color(255, 255, 255, 255));
         this.nameLabel.node.setParent(infoNode);
-        this.nameLabel.node.setPosition(labelX, height / 2 - 20, 0);
+        // 设置名称标签支持多行显示
+        const nameLabelTransform = this.nameLabel.node.getComponent(UITransform);
+        if (nameLabelTransform) {
+            // 设置宽度，高度限制为从当前位置到面板底部的距离
+            const maxHeight = height / 2 + 20 - 10; // 从当前位置向下到面板底部，留出10像素边距
+            nameLabelTransform.setContentSize(areaWidth - labelLeftPadding * 2, maxHeight);
+            // 设置锚点为顶部中心(0.5, 1)，这样文本从顶部开始显示，向下扩展
+            nameLabelTransform.setAnchorPoint(0.5, 1);
+        }
+        // 位置设置为居中（x=0相对于infoNode中心），和属性标签的x坐标对齐方式一致
+        this.nameLabel.node.setPosition(0, height / 2 - 20, 0);
+        // 设置水平居中对齐
+        this.nameLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        this.nameLabel.overflow = Label.Overflow.RESIZE_HEIGHT; // 允许高度自适应
+        this.nameLabel.verticalAlign = Label.VerticalAlign.TOP; // 文本顶部对齐
 
         // 等级
         this.levelLabel = this.createLabel('Level', '等级: 1', 18, new Color(200, 200, 200, 255));
         this.levelLabel.node.setParent(infoNode);
-        this.levelLabel.node.setPosition(labelX, height / 2 - 50, 0);
+        this.levelLabel.node.setPosition(labelX, height / 2 - 80, 0);
 
         // 生命值
         this.healthLabel = this.createLabel('Health', '生命值: 100/100', 18, new Color(200, 200, 200, 255));
         this.healthLabel.node.setParent(infoNode);
-        this.healthLabel.node.setPosition(labelX, height / 2 - 80, 0);
+        this.healthLabel.node.setPosition(labelX, height / 2 - 110, 0);
 
         // 攻击力
         this.attackLabel = this.createLabel('Attack', '攻击力: 10', 18, new Color(200, 200, 200, 255));
         this.attackLabel.node.setParent(infoNode);
-        this.attackLabel.node.setPosition(labelX, height / 2 - 110, 0);
-
-        // 人口
-        this.populationLabel = this.createLabel('Population', '占用人口: 1', 18, new Color(200, 200, 200, 255));
-        this.populationLabel.node.setParent(infoNode);
-        this.populationLabel.node.setPosition(labelX, height / 2 - 140, 0);
+        this.attackLabel.node.setPosition(labelX, height / 2 - 140, 0);
 
         // 训练单位数量（建筑物）
         this.unitCountLabel = this.createLabel('UnitCount', '训练单位: 0/0', 18, new Color(200, 200, 200, 255));
@@ -385,6 +394,7 @@ export class UnitInfoPanel extends Component {
         // 更新等级
         if (this.levelLabel) {
             this.levelLabel.string = `等级: ${unitInfo.level}`;
+            this.levelLabel.node.active = true; // 确保等级标签显示
         }
 
         // 更新生命值
@@ -402,15 +412,7 @@ export class UnitInfoPanel extends Component {
             }
         }
 
-        // 更新人口
-        if (this.populationLabel) {
-            if (unitInfo.populationCost !== undefined && unitInfo.populationCost > 0) {
-                this.populationLabel.string = `占用人口: ${unitInfo.populationCost}`;
-                this.populationLabel.node.active = true;
-            } else {
-                this.populationLabel.node.active = false;
-            }
-        }
+        // 占用人口标签已移除，不再显示
 
         // 更新建筑物属性
         if (this.unitCountLabel) {
@@ -483,6 +485,44 @@ export class UnitInfoPanel extends Component {
     }
 
     /**
+     * 获取单位名称（辅助方法）
+     */
+    private getUnitName(unitNode: Node): string {
+        if (!unitNode || !unitNode.isValid) {
+            return '未知单位';
+        }
+
+        // 尝试从Role组件获取单位名称
+        const roleScript = unitNode.getComponent('Role') as any;
+        if (roleScript && roleScript.unitName) {
+            return roleScript.unitName;
+        }
+
+        // 备用方案：尝试从各种单位类型获取名称
+        const arrowerScript = unitNode.getComponent('Arrower') as any;
+        if (arrowerScript && arrowerScript.unitName) {
+            return arrowerScript.unitName;
+        }
+
+        const hunterScript = unitNode.getComponent('Hunter') as any;
+        if (hunterScript && hunterScript.unitName) {
+            return hunterScript.unitName;
+        }
+
+        const swordsmanScript = unitNode.getComponent('ElfSwordsman') as any;
+        if (swordsmanScript && swordsmanScript.unitName) {
+            return swordsmanScript.unitName;
+        }
+
+        const priestScript = unitNode.getComponent('Priest') as any;
+        if (priestScript && priestScript.unitName) {
+            return priestScript.unitName;
+        }
+
+        return '未知单位';
+    }
+
+    /**
      * 显示多个单位信息（多选）
      * @param firstUnitInfo 第一个单位的信息（用于显示）
      * @param selectedUnits 所有选中的单位节点数组
@@ -508,43 +548,39 @@ export class UnitInfoPanel extends Component {
             }
         }
 
-        // 更新名称（显示第一个单位名称 + 多选数量）
+        // 统计每种单位的数量
+        const unitCountMap = new Map<string, number>();
+        for (const unitNode of this.currentSelectedUnits) {
+            const unitName = this.getUnitName(unitNode);
+            unitCountMap.set(unitName, (unitCountMap.get(unitName) || 0) + 1);
+        }
+
+        // 更新名称显示
         if (this.nameLabel) {
-            if (this.isMultiSelection) {
-                this.nameLabel.string = `${firstUnitInfo.name} (${this.currentSelectedUnits.length}个)`;
+            if (unitCountMap.size === 1) {
+                // 只有一种单位，显示：单位名称（数量）
+                const unitName = Array.from(unitCountMap.keys())[0];
+                const count = unitCountMap.get(unitName) || 0;
+                this.nameLabel.string = `${unitName} (${count})`;
             } else {
-                this.nameLabel.string = firstUnitInfo.name;
+                // 多种单位，换行显示每种单位的名称和数量
+                const lines: string[] = [];
+                for (const [unitName, count] of unitCountMap.entries()) {
+                    lines.push(`${unitName} (${count})`);
+                }
+                this.nameLabel.string = lines.join('\n');
             }
         }
 
-        // 更新等级（显示第一个单位的等级）
+        // 隐藏等级、生命值、攻击力
         if (this.levelLabel) {
-            this.levelLabel.string = `等级: ${firstUnitInfo.level}`;
+            this.levelLabel.node.active = false;
         }
-
-        // 更新生命值（显示第一个单位的生命值）
         if (this.healthLabel) {
-            this.healthLabel.string = `生命值: ${firstUnitInfo.currentHealth}/${firstUnitInfo.maxHealth}`;
+            this.healthLabel.node.active = false;
         }
-
-        // 更新攻击力（显示第一个单位的攻击力）
         if (this.attackLabel) {
-            if (firstUnitInfo.attackDamage !== undefined && firstUnitInfo.attackDamage > 0) {
-                this.attackLabel.string = `攻击力: ${firstUnitInfo.attackDamage}`;
-                this.attackLabel.node.active = true;
-            } else {
-                this.attackLabel.node.active = false;
-            }
-        }
-
-        // 更新人口（显示第一个单位的人口）
-        if (this.populationLabel) {
-            if (firstUnitInfo.populationCost !== undefined && firstUnitInfo.populationCost > 0) {
-                this.populationLabel.string = `占用人口: ${firstUnitInfo.populationCost}`;
-                this.populationLabel.node.active = true;
-            } else {
-                this.populationLabel.node.active = false;
-            }
+            this.attackLabel.node.active = false;
         }
 
         // 隐藏建筑物特有属性（多选时通常不显示）
@@ -892,47 +928,137 @@ export class UnitInfoPanel extends Component {
      * 批量升级（金币不足时先升级先选中的单位）
      */
     private batchUpgrade() {
+        console.info('[UnitInfoPanel] batchUpgrade: 开始批量升级，选中单位数量 =', this.currentSelectedUnits.length);
         if (this.currentSelectedUnits.length === 0) {
+            console.info('[UnitInfoPanel] batchUpgrade: 没有选中的单位');
             return;
         }
 
-        // 获取GameManager
-        const gameManagerNode = find('GameManager');
+        // 保存当前选中的单位列表（防止升级时被清除）
+        const unitsToUpgrade = this.currentSelectedUnits.slice();
+        
+        // 获取GameManager（尝试多种路径）
+        let gameManagerNode = find('Canvas/GameManager') || find('GameManager');
+        // }
+        
         if (!gameManagerNode) {
+            console.error('[UnitInfoPanel] batchUpgrade: 找不到GameManager节点');
             return;
         }
         const gameManager = gameManagerNode.getComponent('GameManager') as any;
         if (!gameManager) {
+            console.error('[UnitInfoPanel] batchUpgrade: 找不到GameManager组件');
             return;
         }
 
+        // 获取UnitSelectionManager，用于恢复多选状态（尝试多种路径）
+        let unitSelectionManagerNode = find('Canvas/UnitSelectionManager') || find('UnitSelectionManager');
+        
+        let unitSelectionManager: any = null;
+        if (unitSelectionManagerNode) {
+            unitSelectionManager = unitSelectionManagerNode.getComponent('UnitSelectionManager');
+        }
+
         // 按选择顺序升级（先选中的先升级）
-        for (const unitNode of this.currentSelectedUnits) {
+        let upgradedCount = 0;
+        const upgradedUnits: Node[] = [];
+        
+        for (const unitNode of unitsToUpgrade) {
             if (!unitNode || !unitNode.isValid || !unitNode.active) {
+                console.info('[UnitInfoPanel] batchUpgrade: 单位节点无效，跳过');
                 continue;
             }
 
-            const unitScript = unitNode.getComponent('Arrower') as any ||
-                              unitNode.getComponent('Hunter') as any ||
-                              unitNode.getComponent('ElfSwordsman') as any ||
-                              unitNode.getComponent('Priest') as any;
+            // 所有单位都继承自Role，直接获取Role组件
+            let unitScript = unitNode.getComponent('Role') as any;
             
-            if (!unitScript || !unitScript.onUpgradeClick) {
+            // 如果获取不到Role组件，尝试获取具体的子类组件（Arrower、Hunter等都继承自Role）
+            if (!unitScript) {
+                unitScript = unitNode.getComponent('Arrower') as any ||
+                             unitNode.getComponent('Hunter') as any ||
+                             unitNode.getComponent('ElfSwordsman') as any ||
+                             unitNode.getComponent('Priest') as any;
+            }
+            
+            if (!unitScript) {
+                console.info('[UnitInfoPanel] batchUpgrade: 无法获取单位脚本，单位名称 =', unitNode.name);
+                continue;
+            }
+            
+            if (!unitScript.onUpgradeClick) {
+                console.info('[UnitInfoPanel] batchUpgrade: 单位没有onUpgradeClick方法，单位名称 =', unitNode.name);
                 continue;
             }
 
-            // 检查是否有足够的金币（如果单位有buildCost属性）
-            const upgradeCost = unitScript.buildCost ? unitScript.buildCost * 2 : 0;
-            if (upgradeCost > 0 && gameManager.canAfford && !gameManager.canAfford(upgradeCost)) {
-                // 金币不足，跳过这个单位，继续下一个
-                continue;
+            // 检查是否有足够的金币
+            // 升级费用：1到2级是10金币，此后每次升级多10金币
+            // 公式：10 + (level - 1) * 10
+            const currentLevel = unitScript.level || 1;
+            const upgradeCost = 10 + (currentLevel - 1) * 10;
+            if (upgradeCost > 0) {
+                // 检查gameManager是否存在canAfford方法
+                if (!gameManager.canAfford) {
+                    console.error('[UnitInfoPanel] batchUpgrade: GameManager没有canAfford方法');
+                    continue;
+                }
+                
+                // 检查金币是否足够
+                if (!gameManager.canAfford(upgradeCost)) {
+                    console.info('[UnitInfoPanel] batchUpgrade: 金币不足，跳过单位，单位名称 =', unitNode.name, '，升级费用 =', upgradeCost, '，当前金币 =', gameManager.gold);
+                    // 金币不足，跳过这个单位，继续下一个
+                    continue;
+                }
             }
 
-            // 执行升级
-            if (unitScript.onUpgradeClick) {
+            // 执行升级（不传递event参数，避免触发hideSelectionPanel）
+            console.info('[UnitInfoPanel] batchUpgrade: 执行升级，单位名称 =', unitNode.name, '，升级费用 =', upgradeCost, '，当前金币 =', gameManager.gold);
+            
+            // 保存升级前的等级，用于判断是否真的升级了
+            const levelBeforeUpgrade = unitScript.level || 1;
+            
+            try {
+                // 临时保存unitSelectionManager的引用，防止hideSelectionPanel清除选择
+                const originalUnitSelectionManager = unitScript.unitSelectionManager;
+                
+                // 执行升级（onUpgradeClick内部会检查金币并消耗）
                 unitScript.onUpgradeClick();
+                
+                // 检查是否真的升级了（通过等级变化判断）
+                const levelAfterUpgrade = unitScript.level || 1;
+                if (levelAfterUpgrade > levelBeforeUpgrade) {
+                    console.info('[UnitInfoPanel] batchUpgrade: 升级成功，单位名称 =', unitNode.name, '，等级从', levelBeforeUpgrade, '升级到', levelAfterUpgrade);
+                    upgradedCount++;
+                    upgradedUnits.push(unitNode);
+                } else {
+                    console.warn('[UnitInfoPanel] batchUpgrade: 升级失败，单位名称 =', unitNode.name, '，等级未变化');
+                }
+                
+                // 如果升级后选择被清除，恢复多选状态
+                if (unitSelectionManager && this.currentSelectedUnits.length === 0) {
+                    // 重新选择所有单位（包括已升级的）
+                    const allUnits = unitsToUpgrade.filter(u => u && u.isValid && u.active);
+                    if (allUnits.length > 0) {
+                        unitSelectionManager.selectMultipleUnits(allUnits);
+                    }
+                }
+                
+                upgradedCount++;
+                upgradedUnits.push(unitNode);
+            } catch (error) {
+                console.error('[UnitInfoPanel] batchUpgrade: 升级失败，单位名称 =', unitNode.name, '，错误 =', error);
             }
         }
+        
+        // 如果升级后选择被清除，恢复多选状态
+        if (unitSelectionManager && this.currentSelectedUnits.length === 0 && upgradedUnits.length > 0) {
+            // 重新选择所有单位（包括已升级的和未升级的）
+            const allUnits = unitsToUpgrade.filter(u => u && u.isValid && u.active);
+            if (allUnits.length > 0) {
+                unitSelectionManager.selectMultipleUnits(allUnits);
+            }
+        }
+        
+        console.info('[UnitInfoPanel] batchUpgrade: 批量升级完成，成功升级单位数量 =', upgradedCount);
     }
 
     /**

@@ -1,5 +1,5 @@
 import { _decorator, Node, Vec3, Prefab, instantiate, find, Sprite, SpriteFrame, Color, Graphics, UITransform, Label, EventTouch } from 'cc';
-import { GameState } from './GameManager';
+import { GameState } from './GameState';
 import { Arrow } from './Arrow';
 import { Arrower } from './Arrower';
 import { UnitInfo } from './UnitInfoPanel';

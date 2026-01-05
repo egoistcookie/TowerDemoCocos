@@ -1,5 +1,6 @@
 import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Sprite, SpriteFrame, Color, Graphics, UITransform, Label, EventTouch, Camera } from 'cc';
-import { GameManager, GameState } from './GameManager';
+import { GameManager } from './GameManager';
+import { GameState } from './GameState';
 import { HealthBar } from './HealthBar';
 import { DamageNumber } from './DamageNumber';
 import { UnitSelectionManager } from './UnitSelectionManager';
