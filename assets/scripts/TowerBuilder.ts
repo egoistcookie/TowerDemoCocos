@@ -126,6 +126,7 @@ export class TowerBuilder extends Component {
     private gridPanel: BuildingGridPanel = null!; // 网格面板组件
     private stoneWallGridPanelComponent: StoneWallGridPanel = null!; // 石墙网格面板组件
     private initialStoneWallsPlaced: boolean = false; // 是否已生成初始石墙
+    private initialWatchTowersPlaced: boolean = false; // 是否已生成初始哨塔
     
     // 建筑物拖拽相关
     private isDraggingBuilding: boolean = false; // 是否正在拖拽建筑物
@@ -495,6 +496,8 @@ export class TowerBuilder extends Component {
             if (this.stoneWallGridPanelComponent) {
                 this.stoneWallGridPanel = stoneWallGridPanelNode;
             }
+        } else {
+            console.info('[TowerBuilder] findStoneWallGridPanel: 找不到Canvas/StoneWallGridPanel节点');
         }
     }
 
@@ -1630,6 +1633,100 @@ export class TowerBuilder extends Component {
         }
 
         this.initialStoneWallsPlaced = true;
+    }
+
+    /**
+     * 在石墙网格中随机生成指定数量的哨塔（仅在游戏开始时调用一次）
+     * 确保x坐标相差至少3格，避免太密集
+     * 不生成在最上层网格（y=9）
+     */
+    spawnInitialWatchTowers(count: number = 3) {
+        console.info('[TowerBuilder] spawnInitialWatchTowers: 开始生成初始哨塔，数量=', count);
+        if (this.initialWatchTowersPlaced) {
+            console.info('[TowerBuilder] spawnInitialWatchTowers: 哨塔已生成，跳过');
+            return;
+        }
+        if (!this.stoneWallGridPanelComponent) {
+            console.info('[TowerBuilder] spawnInitialWatchTowers: 查找石墙网格面板');
+            this.findStoneWallGridPanel();
+        }
+        const panel = this.stoneWallGridPanelComponent;
+        if (!panel) {
+            console.info('[TowerBuilder] spawnInitialWatchTowers: 找不到石墙网格面板');
+            return;
+        }
+        console.info('[TowerBuilder] spawnInitialWatchTowers: 找到石墙网格面板，gridWidth=', panel.gridWidth, 'gridHeight=', panel.gridHeight);
+
+        // 排除最上层（y=9），在其他行中随机选择
+        const availableYs: number[] = [];
+        for (let y = 0; y < panel.gridHeight - 1; y++) { // 排除最上层（y=9）
+            availableYs.push(y);
+        }
+        console.info('[TowerBuilder] spawnInitialWatchTowers: 可用y坐标范围=', availableYs);
+
+        // 生成所有可能的x坐标
+        const availableXs: number[] = [];
+        for (let x = 0; x < panel.gridWidth; x++) {
+            availableXs.push(x);
+        }
+
+        // 打乱y坐标
+        for (let i = availableYs.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [availableYs[i], availableYs[j]] = [availableYs[j], availableYs[i]];
+        }
+
+        // 打乱x坐标
+        for (let i = availableXs.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [availableXs[i], availableXs[j]] = [availableXs[j], availableXs[i]];
+        }
+
+        const placedPositions: { x: number; y: number }[] = [];
+        let placed = 0;
+        const minXDistance = 3; // x坐标最小间距
+        console.info('[TowerBuilder] spawnInitialWatchTowers: 开始尝试放置哨塔，最小x间距=', minXDistance);
+
+        // 尝试放置哨塔
+        for (const y of availableYs) {
+            if (placed >= count) break;
+            
+            for (const x of availableXs) {
+                if (placed >= count) break;
+                
+                // 跳过已占用的格子
+                if (panel.isGridOccupied(x, y)) {
+                    continue;
+                }
+
+                // 检查与已放置的哨塔x坐标距离是否足够
+                let canPlace = true;
+                for (const pos of placedPositions) {
+                    if (Math.abs(x - pos.x) < minXDistance) {
+                        canPlace = false;
+                        break;
+                    }
+                }
+
+                if (canPlace) {
+                    const worldPos = panel.gridToWorld(x, y);
+                    if (!worldPos) {
+                        console.info('[TowerBuilder] spawnInitialWatchTowers: 格子(', x, ',', y, ')无法转换为世界坐标，跳过');
+                        continue;
+                    }
+                    console.info('[TowerBuilder] spawnInitialWatchTowers: 在格子(', x, ',', y, ')生成哨塔，世界坐标=', worldPos);
+                    // 使用buildWatchTower方法建造哨塔（skipCost=true，不消耗金币）
+                    this.buildWatchTower(worldPos, true);
+                    
+                    // 记录已放置的位置
+                    placedPositions.push({ x, y });
+                    placed++;
+                }
+            }
+        }
+
+        console.info('[TowerBuilder] spawnInitialWatchTowers: 完成，共生成', placed, '个哨塔');
+        this.initialWatchTowersPlaced = true;
     }
 
     /**

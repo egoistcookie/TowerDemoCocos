@@ -1284,6 +1284,13 @@ export class GameManager extends Component {
                 // 等待一帧，确保网格面板初始化完成
                 this.scheduleOnce(() => {
                     towerBuilder.spawnInitialStoneWalls(14);
+                    // 生成初始哨塔（在石墙网格中随机生成3个）
+                    if (towerBuilder.spawnInitialWatchTowers) {
+                        console.info('[GameManager] 开始生成初始哨塔');
+                        towerBuilder.spawnInitialWatchTowers(3);
+                    } else {
+                        console.info('[GameManager] TowerBuilder没有spawnInitialWatchTowers方法');
+                    }
                 }, 0);
             } else {
             }
