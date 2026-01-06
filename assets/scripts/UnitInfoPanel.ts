@@ -393,7 +393,9 @@ export class UnitInfoPanel extends Component {
 
         // 更新等级
         if (this.levelLabel) {
-            this.levelLabel.string = `等级: ${unitInfo.level}`;
+            // 如果等级达到3级，显示（满级）后缀
+            const levelText = unitInfo.level >= 3 ? `等级: ${unitInfo.level}（满级）` : `等级: ${unitInfo.level}`;
+            this.levelLabel.string = levelText;
             this.levelLabel.node.active = true; // 确保等级标签显示
         }
 

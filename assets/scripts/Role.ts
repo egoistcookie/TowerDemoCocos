@@ -2852,6 +2852,12 @@ export class Role extends Component {
             event.propagationStopped = true;
         }
         
+        // 限制最高等级为3级
+        if (this.level >= 3) {
+            // 已经是最高等级，不再升级（可以在这里添加提示）
+            return;
+        }
+
         if (!this.gameManager) {
             this.findGameManager();
         }
@@ -2871,10 +2877,10 @@ export class Role extends Component {
         // 消耗金币
         this.gameManager.spendGold(upgradeCost);
 
-        // 升级弓箭手
+        // 升级单位
         this.level++;
-        this.attackDamage = Math.floor(this.attackDamage * 1.5); // 攻击力增加50%
-        this.attackInterval = this.attackInterval / 1.5; // 攻击速度增加50%（间隔减少）
+        this.attackDamage = Math.floor(this.attackDamage * 1.25); // 攻击力增加25%
+        this.attackInterval = this.attackInterval / 1.1; // 攻击速度增加10%（间隔减少10%）
 
         // 更新单位信息面板
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {

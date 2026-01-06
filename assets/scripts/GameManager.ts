@@ -1281,13 +1281,16 @@ export class GameManager extends Component {
             // 开局在石墙网格顶行生成初始石墙
             const towerBuilder = this.findComponentInScene('TowerBuilder') as any;
             if (towerBuilder && towerBuilder.spawnInitialStoneWalls) {
-                // 等待一帧，确保网格面板初始化完成
+                // 0 帧延迟，等于等待一帧，确保网格面板初始化完成
                 this.scheduleOnce(() => {
                     towerBuilder.spawnInitialStoneWalls(14);
                     // 生成初始哨塔（在石墙网格中随机生成3个）
+                    // 延迟执行，确保所有组件的start方法都已执行完毕，避免影响其他组件的初始化
                     if (towerBuilder.spawnInitialWatchTowers) {
                         console.info('[GameManager] 开始生成初始哨塔');
-                        towerBuilder.spawnInitialWatchTowers(3);
+                        this.scheduleOnce(() => {
+                            towerBuilder.spawnInitialWatchTowers(3);
+                        }, 0.1); // 延迟0.1秒，确保所有组件初始化完成
                     } else {
                         console.info('[GameManager] TowerBuilder没有spawnInitialWatchTowers方法');
                     }
