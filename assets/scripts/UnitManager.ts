@@ -1,5 +1,5 @@
 import { _decorator, Component, Node, find, Vec3 } from 'cc';
-import { UnitType } from './WarAncientTree';
+import { UnitType } from './UnitType';
 
 const { ccclass, property } = _decorator;
 

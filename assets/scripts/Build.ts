@@ -7,12 +7,12 @@ import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
 import { SelectionManager } from './SelectionManager';
 import { BuildingGridPanel } from './BuildingGridPanel';
-import { UnitType } from './WarAncientTree';
+import { UnitType } from './UnitType';
 import { BuildingPool } from './BuildingPool';
 const { ccclass, property } = _decorator;
 
 @ccclass('Build')
-export class Build extends Component {
+export class Build extends Component { 
     // 基础属性（protected）
     @property
     protected maxHealth: number = 100;

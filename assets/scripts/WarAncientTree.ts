@@ -1,22 +1,16 @@
 import { _decorator, Node, Vec3, Prefab, instantiate, find, Sprite, SpriteFrame, Color, Graphics, UITransform, Label, EventTouch } from 'cc';
 import { GameState } from './GameState';
 import { Arrow } from './Arrow';
-import { Arrower } from './Arrower';
 import { UnitInfo } from './UnitInfoPanel';
 import { UnitConfigManager } from './UnitConfigManager';
 import { Build } from './Build';
 import { TalentEffectManager } from './TalentEffectManager';
 import { UnitPool } from './UnitPool';
+import { UnitType } from './UnitType';
 const { ccclass, property } = _decorator;
 
-// 单位类型枚举
-export enum UnitType {
-    BUILDING = 'BUILDING',
-    CHARACTER = 'CHARACTER',
-    TREE = 'TREE',
-    CRYSTAL = 'CRYSTAL',
-    ENEMY = 'ENEMY' // 敌方单位类型
-}
+// 重新导出 UnitType 以保持向后兼容
+export { UnitType };
 
 @ccclass('WarAncientTree')
 export class WarAncientTree extends Build {
@@ -525,8 +519,8 @@ export class WarAncientTree extends Build {
         tower.setWorldPosition(spawnPos);
         tower.active = true;
 
-        // 设置Tower的建造成本（如果需要）
-        const towerScript = tower.getComponent(Arrower);
+        // 设置Tower的建造成本（如果需要）（使用字符串避免循环依赖）
+        const towerScript = tower.getComponent('Arrower' as any) as any;
         if (towerScript) {
             // 设置prefabName（用于对象池回收）
             if (towerScript.prefabName === undefined || towerScript.prefabName === '') {

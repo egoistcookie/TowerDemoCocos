@@ -7,7 +7,7 @@ import { DamageNumber } from './DamageNumber';
 import { Arrow } from './Arrow';
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
-import { UnitType } from './WarAncientTree';
+import { UnitType } from './UnitType';
 import { UnitManager } from './UnitManager';
 import { UnitPool } from './UnitPool';
 const { ccclass, property } = _decorator;

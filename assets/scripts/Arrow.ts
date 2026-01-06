@@ -1,5 +1,5 @@
 import { _decorator, Component, Node, Vec3, Sprite, tween, find } from 'cc';
-import { GameManager, GameState } from './GameManager';
+import { GameState } from './GameState';
 const { ccclass, property } = _decorator;
 
 @ccclass('Arrow')
@@ -14,14 +14,14 @@ export class Arrow extends Component {
     damage: number = 10; // 伤害值
 
     private targetNode: Node = null!;
-    private startPos: Vec3 = new Vec3();
+    private startPos: Vec3 = new Vec3(); 
     private targetPos: Vec3 = new Vec3();
     private travelTime: number = 0;
     private elapsedTime: number = 0;
     private onHitCallback: ((damage: number) => void) | null = null;
     private isFlying: boolean = false;
     private lastPos: Vec3 = new Vec3();
-    private gameManager: GameManager | null = null;
+    private gameManager: any = null; // GameManager引用（使用any避免循环依赖）
 
     /**
      * 初始化弓箭
@@ -134,13 +134,16 @@ export class Arrow extends Component {
             return;
         }
 
-        // 检查游戏状态 - 如果GameManager不存在，尝试重新查找
+        // 检查游戏状态 - 如果GameManager不存在，尝试重新查找（使用字符串避免循环依赖）
         if (!this.gameManager) {
-            this.gameManager = find('GameManager')?.getComponent(GameManager);
+            const gmNode = find('GameManager') || find('Canvas/GameManager');
+            if (gmNode) {
+                this.gameManager = gmNode.getComponent('GameManager' as any);
+            }
         }
         
         // 检查游戏状态，如果不是Playing状态，停止飞行
-        if (this.gameManager) {
+        if (this.gameManager && this.gameManager.getGameState) {
             const gameState = this.gameManager.getGameState();
             if (gameState !== GameState.Playing) {
                 // 游戏已暂停或结束，停止飞行

@@ -1,5 +1,4 @@
 import { _decorator, Component, Node, Sprite, Label, Button, EventTouch, find, UITransform, Vec3 } from 'cc';
-import { GameManager } from './GameManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('UnitIntroPopup')
@@ -19,32 +18,15 @@ export class UnitIntroPopup extends Component {
     @property(Button)
     closeButton: Button = null!;
     
-    private gameManager: GameManager = null!;
+    private gameManager: any = null!; // GameManager引用（使用any避免循环依赖）
     private buildButton: Button = null!; // 建造按钮引用
     
     start() {
-        // 尝试多种方式查找GameManager
-        let gmNode = find('GameManager');
+        // 尝试多种方式查找GameManager（使用字符串避免循环依赖）
+        let gmNode = find('Canvas/GameManager');
         if (gmNode) {
-            this.gameManager = gmNode.getComponent(GameManager) as GameManager;
+            this.gameManager = gmNode.getComponent('GameManager' as any);
         } else {
-            // 从场景根节点查找
-            const scene = this.node.scene;
-            if (scene) {
-                const findInScene = (node: Node, componentType: any): any => {
-                    const comp = node.getComponent(componentType);
-                    if (comp) return comp;
-                    for (const child of node.children) {
-                        const found = findInScene(child, componentType);
-                        if (found) return found;
-                    }
-                    return null;
-                };
-                this.gameManager = findInScene(scene, GameManager) as GameManager;
-                if (this.gameManager) {
-                } else {
-                }
-            }
         }
         
         // 查找建造按钮

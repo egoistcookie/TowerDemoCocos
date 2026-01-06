@@ -2,7 +2,6 @@ import { _decorator, Component, Node, EventTarget, instantiate, EventTouch, Spri
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { UnitInfo } from './UnitInfoPanel';
 import { GameState } from './GameState';
-import { GameManager } from './GameManager';
 import { GamePopup } from './GamePopup';
 const { ccclass, property } = _decorator;
 
@@ -39,7 +38,7 @@ export class Crystal extends Component {
     private unitSelectionManager: UnitSelectionManager = null!; // 单位选择管理器
     private sprite: Sprite = null!; // Sprite组件引用
     private defaultSpriteFrame: SpriteFrame = null!; // 默认SpriteFrame
-    private gameManager: GameManager = null!; // 游戏管理器
+    private gameManager: any = null!; // 游戏管理器（使用 any，避免与 GameManager 形成循环依赖）
     
     // 升级相关
     private isUpgrading: boolean = false; // 是否正在升级
@@ -206,28 +205,17 @@ export class Crystal extends Component {
 
     /**
      * 查找游戏管理器
+     * 使用字符串组件名，避免直接导入 GameManager 造成循环依赖：
+     * GameManager.ts -> Crystal.ts -> GameManager.ts
      */
     findGameManager() {
-        let gmNode = find('GameManager');
+        // 方法1：通过名称直接查找 GameManager 节点
+        let gmNode = find('Canvas/GameManager');
         if (gmNode) {
-            this.gameManager = gmNode.getComponent(GameManager);
+            this.gameManager = gmNode.getComponent('GameManager' as any);
             if (this.gameManager) {
                 return;
             }
-        }
-        
-        const scene = this.node.scene;
-        if (scene) {
-            const findInScene = (node: Node, componentType: any): any => {
-                const comp = node.getComponent(componentType);
-                if (comp) return comp;
-                for (const child of node.children) {
-                    const found = findInScene(child, componentType);
-                    if (found) return found;
-                }
-                return null;
-            };
-            this.gameManager = findInScene(scene, GameManager);
         }
     }
 
