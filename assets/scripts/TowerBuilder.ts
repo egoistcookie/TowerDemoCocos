@@ -402,15 +402,16 @@ export class TowerBuilder extends Component {
                 description: '坚固的障碍物，阻挡敌人进攻路线'
             });
         }
-        if (this.watchTowerPrefab) {
-            buildingTypes.push({
-                name: '哨塔',
-                prefab: this.watchTowerPrefab,
-                cost: this.watchTowerCost,
-                icon: this.watchTowerIcon || null!,
-                description: '可以攻击敌人的防御塔，使用弓箭攻击'
-            });
-        }
+        // 哨塔不在建造面板中显示，只能通过初始化生成
+        // if (this.watchTowerPrefab) {
+        //     buildingTypes.push({
+        //         name: '哨塔',
+        //         prefab: this.watchTowerPrefab,
+        //         cost: this.watchTowerCost,
+        //         icon: this.watchTowerIcon || null!,
+        //         description: '可以攻击敌人的防御塔，使用弓箭攻击'
+        //     });
+        // }
         if (this.swordsmanHallPrefab) {
             buildingTypes.push({
                 name: '剑士小屋',
