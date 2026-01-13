@@ -187,8 +187,13 @@ export class UnitIntroPopup extends Component {
             this.unitName.string = unitInfo.unitName;
         }
         
-        if (unitInfo.unitDescription && this.unitDescription) {
-            this.unitDescription.string = unitInfo.unitDescription;
+        // 设置单位描述，即使为空字符串也要设置（因为可能是预制体中配置的）
+        if (this.unitDescription) {
+            // 如果 unitDescription 存在（包括空字符串），就设置它
+            // 如果不存在或为 undefined/null，则使用默认值
+            this.unitDescription.string = unitInfo.unitDescription !== undefined && unitInfo.unitDescription !== null 
+                ? unitInfo.unitDescription 
+                : '暂无描述';
         }
         
         // 设置容器为最上层

@@ -58,6 +58,13 @@ export class UIManager extends Component {
     private activePage: 'game' | 'talent' | 'settings' = 'game';
     private currentLevel: number = 1; // 当前选择的关卡（1-5）
 
+    // 分包资源相关
+    private isSubpackageLoaded: boolean = false; // 是否已加载分包资源
+    private isSubpackageLoading: boolean = false; // 是否正在加载分包资源
+    private backgroundSprites: Map<number, SpriteFrame> = new Map(); // 缓存已加载的背景图片（关卡号 -> SpriteFrame）
+    private otherBundle: any = null; // other bundle 引用
+    private defaultBackgroundSprite: SpriteFrame | null = null; // 记录初始背景图，用于切回第一关
+
     start() {
         // 查找游戏管理器
         this.findGameManager();
@@ -1537,12 +1544,144 @@ export class UIManager extends Component {
     }
     
     /**
+     * 加载分包资源（背景图片）
+     * 只加载一次，后续调用会直接返回
+     */
+    private async loadSubpackageResources(): Promise<void> {
+        if (this.isSubpackageLoaded) {
+            return Promise.resolve();
+        }
+
+        // 如果正在加载，等待加载完成
+        if (this.isSubpackageLoading) {
+            // 轮询等待加载完成
+            return new Promise<void>((resolve) => {
+                const checkInterval = setInterval(() => {
+                    if (this.isSubpackageLoaded) {
+                        clearInterval(checkInterval);
+                        resolve();
+                    }
+                }, 100);
+            });
+        }
+
+        this.isSubpackageLoading = true;
+
+        return new Promise<void>((resolve, reject) => {
+            // 首先加载 other bundle
+            assetManager.loadBundle('other', (err, bundle) => {
+                if (err) {
+                    this.isSubpackageLoading = false;
+                    console.error('[UIManager] 加载 other bundle 失败', err);
+                    reject(err);
+                    return;
+                }
+
+                this.otherBundle = bundle;
+                console.log('[UIManager] 成功加载 other bundle');
+
+                // 加载所有关卡背景图片（background2.png 到 background5.png）
+                const backgroundFiles = ['background2', 'background3', 'background4', 'background5'];
+                const loadPromises: Promise<void>[] = [];
+
+                backgroundFiles.forEach((fileName, index) => {
+                    const level = index + 2; // 关卡号从2开始
+                    const resourcePath = `${fileName}/spriteFrame`; // bundle 内的相对路径
+                    
+                    const loadPromise = new Promise<void>((resolveItem, rejectItem) => {
+                        bundle.load(resourcePath, SpriteFrame, (err, spriteFrame) => {
+                            if (err) {
+                                console.warn(`[UIManager] 加载分包资源失败: ${resourcePath}`, err);
+                                rejectItem(err);
+                                return;
+                            }
+                            
+                            // 缓存加载的背景图片
+                            this.backgroundSprites.set(level, spriteFrame);
+                            console.log(`[UIManager] 成功加载分包资源: ${resourcePath} (关卡 ${level})`);
+                            resolveItem();
+                        });
+                    });
+                    
+                    loadPromises.push(loadPromise);
+                });
+
+                // 等待所有资源加载完成
+                Promise.all(loadPromises)
+                    .then(() => {
+                        this.isSubpackageLoaded = true;
+                        this.isSubpackageLoading = false;
+                        console.log('[UIManager] 分包资源加载完成');
+                        resolve();
+                    })
+                    .catch((err) => {
+                        this.isSubpackageLoading = false;
+                        console.error('[UIManager] 分包资源加载失败', err);
+                        reject(err);
+                    });
+            });
+        });
+    }
+
+    /**
+     * 切换背景图片
+     * @param level 关卡号（1-5）
+     */
+    private changeBackground(level: number) {
+        // 确保背景节点存在
+        if (!this.backgroundNode) {
+            this.backgroundNode = find('Canvas/Background');
+        }
+
+        if (!this.backgroundNode) {
+            console.warn('[UIManager] 未找到背景节点 Canvas/Background');
+            return;
+        }
+
+        // 获取背景节点的 Sprite 组件
+        let sprite = this.backgroundNode.getComponent(Sprite);
+        if (!sprite) {
+            sprite = this.backgroundNode.addComponent(Sprite);
+        }
+
+        // 首次记录默认背景贴图
+        if (!this.defaultBackgroundSprite) {
+            this.defaultBackgroundSprite = sprite.spriteFrame || null;
+        }
+
+        // 如果关卡号为1，使用默认背景（如果有的话，保持原样）
+        if (level === 1) {
+            if (this.defaultBackgroundSprite) {
+                sprite.spriteFrame = this.defaultBackgroundSprite;
+                sprite.enabled = true;
+                console.log('[UIManager] 已切换回第一关默认背景');
+            } else {
+                console.warn('[UIManager] 未记录到默认背景，无法切回第一关背景');
+            }
+            return;
+        }
+
+        // 从缓存中获取对应关卡的背景图片
+        const spriteFrame = this.backgroundSprites.get(level);
+        if (spriteFrame) {
+            sprite.spriteFrame = spriteFrame;
+            sprite.enabled = true;
+            console.log(`[UIManager] 已切换背景图片到关卡 ${level}`);
+        } else {
+            console.warn(`[UIManager] 关卡 ${level} 的背景图片未加载`);
+        }
+    }
+
+    /**
      * 选择上一个关卡
      */
     selectPreviousLevel() {
         if (this.currentLevel > 1) {
             this.currentLevel--;
             this.updateStartButtonText();
+            
+            // 切换背景图片（不加载分包资源）
+            this.changeBackground(this.currentLevel);
         }
     }
     
@@ -1551,8 +1690,44 @@ export class UIManager extends Component {
      */
     selectNextLevel() {
         if (this.currentLevel < 5) {
-            this.currentLevel++;
-            this.updateStartButtonText();
+            const nextLevel = this.currentLevel + 1;
+            
+            // 如果是第一次点击下一关卡，需要加载分包资源
+            if (!this.isSubpackageLoaded && !this.isSubpackageLoading) {
+                // 先更新关卡号，让用户看到反馈
+                this.currentLevel = nextLevel;
+                this.updateStartButtonText();
+                
+                // 异步加载分包资源，加载完成后切换背景
+                this.loadSubpackageResources()
+                    .then(() => {
+                        // 加载完成后切换背景
+                        this.changeBackground(this.currentLevel);
+                    })
+                    .catch((err) => {
+                        console.error('[UIManager] 加载分包资源失败', err);
+                        // 即使加载失败，也尝试切换背景（可能资源已存在）
+                        this.changeBackground(this.currentLevel);
+                    });
+            } else {
+                // 分包资源已加载或正在加载，直接切换背景
+                this.currentLevel = nextLevel;
+                this.updateStartButtonText();
+                
+                // 如果正在加载，等待加载完成后再切换背景
+                if (this.isSubpackageLoading) {
+                    this.loadSubpackageResources()
+                        .then(() => {
+                            this.changeBackground(this.currentLevel);
+                        })
+                        .catch(() => {
+                            this.changeBackground(this.currentLevel);
+                        });
+                } else {
+                    // 已加载完成，直接切换
+                    this.changeBackground(this.currentLevel);
+                }
+            }
         }
     }
     

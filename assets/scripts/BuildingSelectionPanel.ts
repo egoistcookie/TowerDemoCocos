@@ -464,7 +464,20 @@ export class BuildingSelectionPanel extends Component {
                             if (gridCenter) {
                                 // 检查目标网格是否被占用
                                 const grid = this.stoneWallGridPanel.worldToGrid(gridCenter);
-                                if (grid && !this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y)) {
+                                // 哨塔占据两个网格高度，需要检查两个网格是否都被占用
+                                let canPlace = false;
+                                if (isWatchTower) {
+                                    // 检查第二个网格是否存在
+                                    if (grid.y + 1 < this.stoneWallGridPanel.gridHeight) {
+                                        // 检查两个网格是否都被占用
+                                        canPlace = !this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y) && 
+                                                   !this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y + 1);
+                                    }
+                                } else {
+                                    // 石墙只占用一个网格
+                                    canPlace = !this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y);
+                                }
+                                if (grid && canPlace) {
                                     worldPos = gridCenter;
                                 } else {
                                     // 网格被占用，建造失败
@@ -1027,7 +1040,23 @@ export class BuildingSelectionPanel extends Component {
                             // 检查目标网格是否被占用
                             const grid = this.stoneWallGridPanel.worldToGrid(gridCenter);
                             if (grid) {
-                                const isOccupied = this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y);
+                                // 哨塔占据两个网格高度，需要检查两个网格是否都被占用
+                                let isOccupied = false;
+                                if (isWatchTower) {
+                                    // 检查第二个网格是否存在
+                                    if (grid.y + 1 >= this.stoneWallGridPanel.gridHeight) {
+                                        // 第二个网格超出范围，无法放置
+                                        isOccupied = true;
+                                    } else {
+                                        // 检查两个网格是否都被占用
+                                        isOccupied = this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y) || 
+                                                    this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y + 1);
+                                    }
+                                } else {
+                                    // 石墙只占用一个网格
+                                    isOccupied = this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y);
+                                }
+                                
                                 if (!isOccupied) {
                                     buildPos = gridCenter;
                                 } else {
@@ -1252,7 +1281,20 @@ export class BuildingSelectionPanel extends Component {
                             if (gridCenter) {
                                 // 检查目标网格是否被占用
                                 const grid = this.stoneWallGridPanel.worldToGrid(gridCenter);
-                                if (grid && !this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y)) {
+                                // 哨塔占据两个网格高度，需要检查两个网格是否都被占用
+                                let canPlace = false;
+                                if (isWatchTower) {
+                                    // 检查第二个网格是否存在
+                                    if (grid.y + 1 < this.stoneWallGridPanel.gridHeight) {
+                                        // 检查两个网格是否都被占用
+                                        canPlace = !this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y) && 
+                                                   !this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y + 1);
+                                    }
+                                } else {
+                                    // 石墙只占用一个网格
+                                    canPlace = !this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y);
+                                }
+                                if (grid && canPlace) {
                                     worldPos = gridCenter;
                                 } else {
                                     this.clearDragPreview();

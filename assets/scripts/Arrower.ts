@@ -96,7 +96,7 @@ export class Arrower extends Role {
     unitName: string = "弓箭手";
     
     @property({ override: true })
-    unitDescription: string = "远程攻击单位，能够攻击远处的敌人，射速较快。";
+    unitDescription: string = "你就是城里来的指挥官吗？看起来还不赖，暂且相信你好了。";
     
     @property({ type: SpriteFrame, override: true })
     unitIcon: SpriteFrame = null!;

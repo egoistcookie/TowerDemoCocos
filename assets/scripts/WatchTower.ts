@@ -92,6 +92,12 @@ export class WatchTower extends Build {
         // 调用父类start方法
         super.start();
         
+        // 设置哨塔高度为两个网格（100像素）
+        const uiTransform = this.node.getComponent(UITransform);
+        if (uiTransform) {
+            uiTransform.setContentSize(uiTransform.width, 100); // 高度设为100（两个网格）
+        }
+        
         // 初始化攻击相关属性
         this.attackTimer = 0;
         this.currentTarget = null!;
@@ -120,6 +126,56 @@ export class WatchTower extends Build {
             // 使用类型断言，因为StoneWallGridPanel和BuildingGridPanel有相同的方法接口
             this.gridPanel = stoneWallGridPanelNode.getComponent(StoneWallGridPanel) as any;
         }
+    }
+
+    /**
+     * 移动到指定网格位置（重写以支持占用两个网格）
+     */
+    public moveToGridPosition(gridX: number, gridY: number) {
+        if (!this.gridPanel) {
+            this.findGridPanel();
+        }
+        
+        if (!this.gridPanel) {
+            return;
+        }
+
+        // 检查第二个网格是否存在（gridY+1不能超出网格范围）
+        const gridPanel = this.gridPanel as any;
+        if (gridY + 1 >= gridPanel.gridHeight) {
+            // 第二个网格超出范围，无法放置
+            return;
+        }
+
+        // 检查两个网格是否都被占用
+        if (gridPanel.isGridOccupied(gridX, gridY) || gridPanel.isGridOccupied(gridX, gridY + 1)) {
+            // 至少有一个网格被占用，无法放置
+            return;
+        }
+
+        // 获取目标网格的世界坐标（使用第一个网格的位置）
+        const targetWorldPos = this.gridPanel.gridToWorld(gridX, gridY);
+        if (!targetWorldPos) {
+            return;
+        }
+
+        // 释放原网格（释放两个网格）
+        if (this.gridX >= 0 && this.gridY >= 0) {
+            this.gridPanel.releaseGrid(this.gridX, this.gridY);
+            if (this.gridY + 1 < gridPanel.gridHeight) {
+                this.gridPanel.releaseGrid(this.gridX, this.gridY + 1);
+            }
+        }
+
+        // 占用新网格（占用两个网格）
+        this.gridPanel.occupyGrid(gridX, gridY, this.node);
+        this.gridPanel.occupyGrid(gridX, gridY + 1, this.node);
+        this.gridX = gridX;
+        this.gridY = gridY;
+
+        // 移动建筑物到新位置（调整Y坐标，使其居中在两个网格之间）
+        const adjustedPos = new Vec3(targetWorldPos.x, targetWorldPos.y + 25, targetWorldPos.z); // 向上偏移25像素（半个网格）
+        this.node.setWorldPosition(adjustedPos);
     }
 
     /**
@@ -740,11 +796,17 @@ export class WatchTower extends Build {
         this.hideCaptureIndicator();
 
         // 释放网格占用（确保能找到网格面板）
+        // 哨塔占据两个网格高度，需要释放两个网格
         if (!this.gridPanel) {
             this.findGridPanel();
         }
         if (this.gridPanel && this.gridX >= 0 && this.gridY >= 0) {
+            // 释放第一个网格
             this.gridPanel.releaseGrid(this.gridX, this.gridY);
+            // 释放第二个网格（如果存在）
+            if (this.gridY + 1 < (this.gridPanel as any).gridHeight) {
+                this.gridPanel.releaseGrid(this.gridX, this.gridY + 1);
+            }
         }
 
         // 播放爆炸特效

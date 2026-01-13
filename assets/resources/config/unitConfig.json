@@ -10,7 +10,7 @@
     },
     "displayInfo": {
       "name": "弓箭手",
-      "description": "远程攻击单位，能够攻击远处的敌人，射速较快"
+      "description": "城里来的指挥官？看起来还不赖，暂且相信好了。"
     },
     "displayStats": {
       "生命值": 50,
@@ -31,7 +31,7 @@
     },
     "displayInfo": {
       "name": "女猎手",
-      "description": "远程攻击单位，投掷回旋镖攻击敌人，回旋镖可以反弹多次"
+      "description": "稍息！"
     },
     "displayStats": {
       "生命值": 50,
@@ -74,7 +74,7 @@
     },
     "displayInfo": {
       "name": "弓箭手小屋",
-      "description": "能够训练弓箭手的建筑物，同时拥有远程攻击能力"
+      "description": "训练弓箭手的场地"
     },
     "displayStats": {
       "生命值": 100,
@@ -137,7 +137,7 @@
     },
     "displayInfo": {
       "name": "精灵剑士",
-      "description": "近战攻击单位，使用剑进行近距离战斗"
+      "description": "以吾之剑为攻，此身即为汝之壁垒！"
     },
     "displayStats": {
       "生命值": 200,
@@ -158,7 +158,7 @@
     },
     "displayInfo": {
       "name": "牧师",
-      "description": "辅助单位，治疗附近受伤的友军"
+      "description": "圣光将治愈你的伤口"
     },
     "displayStats": {
       "生命值": 60,
@@ -179,7 +179,7 @@
     },
     "displayInfo": {
       "name": "猎手大厅",
-      "description": "能够生产女猎手的建筑物"
+      "description": "训练女猎手的场地"
     },
     "displayStats": {
       "生命值": 100,
@@ -199,7 +199,7 @@
     },
     "displayInfo": {
       "name": "剑士小屋",
-      "description": "能够生产精灵剑士的建筑物，提供强大的近战攻击单位"
+      "description": "训练精灵剑士的场地"
     },
     "displayStats": {
       "生命值": 100,
@@ -219,7 +219,7 @@
     },
     "displayInfo": {
       "name": "教堂",
-      "description": "训练牧师的建筑，可以持续生产为友军治疗的辅助单位"
+      "description": "训练牧师的场地"
     },
     "displayStats": {
       "生命值": 120,
@@ -238,12 +238,135 @@
     },
     "displayInfo": {
       "name": "石墙",
-      "description": "坚固的石墙，可以阻挡敌人的进攻路线"
+      "description": "可以阻挡敌人的进攻路线"
     },
     "displayStats": {
       "生命值": 50,
       "建造成本": "5金币",
       "回收奖励": "1金币"
+    }
+  },
+  "WatchTower": {
+    "baseStats": {
+      "maxHealth": 100,
+      "buildCost": 5,
+      "attackRange": 250,
+      "attackDamage": 15,
+      "attackInterval": 1.2,
+      "goldReward": 2,
+      "level": 1,
+      "collisionRadius": 25
+    },
+    "displayInfo": {
+      "name": "哨塔",
+      "description": "可以攻击敌人的防御建筑，可以被敌我双方占领"
+    },
+    "displayStats": {
+      "生命值": 100,
+      "攻击力": 15,
+      "攻击范围": "250像素",
+      "攻击间隔": "1.2秒",
+      "建造成本": "5金币",
+      "回收奖励": "2金币"
+    }
+  },
+  "Orc": {
+    "baseStats": {
+      "maxHealth": 30,
+      "attackRange": 70,
+      "attackDamage": 5,
+      "attackInterval": 2.0,
+      "moveSpeed": 50,
+      "goldReward": 2,
+      "expReward": 1
+    },
+    "displayInfo": {
+      "name": "兽人",
+      "description": "普通的兽人，攻击力和生命值较低，但数量众多。"
+    },
+    "displayStats": {
+      "生命值": 30,
+      "攻击力": 5,
+      "攻击范围": "70像素",
+      "攻击间隔": "2.0秒",
+      "移动速度": "50像素/秒",
+      "金币奖励": "2金币",
+      "经验奖励": "1点"
+    }
+  },
+  "OrcWarrior": {
+    "baseStats": {
+      "maxHealth": 50,
+      "attackRange": 60,
+      "attackDamage": 8,
+      "attackInterval": 1.5,
+      "moveSpeed": 40,
+      "collisionRadius": 20,
+      "goldReward": 3,
+      "expReward": 5
+    },
+    "displayInfo": {
+      "name": "兽人战士",
+      "description": "强大的兽人战士，拥有较高的攻击力和生命值。"
+    },
+    "displayStats": {
+      "生命值": 50,
+      "攻击力": 8,
+      "攻击范围": "60像素",
+      "攻击间隔": "1.5秒",
+      "移动速度": "40像素/秒",
+      "金币奖励": "3金币",
+      "经验奖励": "5点"
+    }
+  },
+  "OrcWarlord": {
+    "baseStats": {
+      "maxHealth": 100,
+      "attackRange": 70,
+      "attackDamage": 15,
+      "attackInterval": 2.0,
+      "moveSpeed": 30,
+      "collisionRadius": 10,
+      "goldReward": 5,
+      "expReward": 10
+    },
+    "displayInfo": {
+      "name": "兽人督军",
+      "description": "兽人军队的首领，拥有强大的攻击力和生命值，还能释放战争咆哮增强周围敌人。"
+    },
+    "displayStats": {
+      "生命值": 100,
+      "攻击力": 15,
+      "攻击范围": "70像素",
+      "攻击间隔": "2.0秒",
+      "移动速度": "30像素/秒",
+      "金币奖励": "5金币",
+      "经验奖励": "10点"
+    }
+  },
+  "TrollSpearman": {
+    "baseStats": {
+      "maxHealth": 40,
+      "attackRange": 200,
+      "attackDamage": 6,
+      "attackInterval": 1.8,
+      "moveSpeed": 55,
+      "collisionRadius": 20,
+      "goldReward": 3,
+      "expReward": 3
+    },
+    "displayInfo": {
+      "name": "巨魔投矛手",
+      "description": "远程攻击的巨魔投矛手，拥有较远的攻击距离，但血量较低。"
+    },
+    "displayStats": {
+      "生命值": 40,
+      "攻击力": 6,
+      "攻击范围": "200像素",
+      "攻击间隔": "1.8秒",
+      "移动速度": "55像素/秒",
+      "金币奖励": "3金币",
+      "经验奖励": "3点"
     }
   }
 }

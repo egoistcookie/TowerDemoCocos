@@ -1291,7 +1291,8 @@ export class Role extends Component {
         const minX = this.collisionRadius;
         const maxX = designResolution.width - this.collisionRadius;
         const minY = this.collisionRadius;
-        const maxY = designResolution.height - this.collisionRadius;
+        // 限制顶部：距离画面顶部100像素
+        const maxY = designResolution.height - this.collisionRadius - 100;
         
         // 限制位置在屏幕范围内
         const clampedPos = new Vec3(position);

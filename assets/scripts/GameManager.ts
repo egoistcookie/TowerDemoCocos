@@ -1431,9 +1431,19 @@ export class GameManager extends Component {
         }
         
         if (this.unitIntroPopup) {
+            // 从 unitConfig.json 获取单位信息
+            const configManager = UnitConfigManager.getInstance();
+            // 获取单位ID（优先使用 prefabName，其次使用 unitType）
+            const unitId = unitScript.prefabName || unitScript.unitType || '';
+            const displayInfo = configManager.getUnitDisplayInfo(unitId);
+            
+            // 使用配置文件中的信息
+            const unitName = displayInfo ? displayInfo.name : (unitScript.unitName || '未知单位');
+            const unitDescription = displayInfo ? displayInfo.description : '暂无描述';
+            
             this.unitIntroPopup.show({
-                unitName: unitScript.unitName || '未知单位',
-                unitDescription: unitScript.unitDescription || '暂无描述',
+                unitName: unitName,
+                unitDescription: unitDescription,
                 unitIcon: unitIcon,
                 unitType: unitScript.unitType || 'unknown'
             });

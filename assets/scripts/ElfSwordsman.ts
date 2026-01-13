@@ -97,7 +97,7 @@ export class ElfSwordsman extends Role {
     unitIcon: SpriteFrame = null!;
 
     
-    battleSlogans: string[] = ['为了荣耀！', '为了联盟！', '剑士剑士，剑术无双！', '吃我一剑！', '哈！'];
+    battleSlogans: string[] = ['为了荣耀！', '为了联盟！', '吃我一剑！', '哈！'];
 
     /**
      * 重写索敌范围，索敌范围为攻击范围的8倍（特殊处理）

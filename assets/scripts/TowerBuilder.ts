@@ -1558,15 +1558,33 @@ export class TowerBuilder extends Component {
             if (this.stoneWallGridPanelComponent) {
                 const grid = this.stoneWallGridPanelComponent.worldToGrid(worldPosition);
                 if (grid) {
-                    // 检查网格是否被占用
-                    if (this.stoneWallGridPanelComponent.isGridOccupied(grid.x, grid.y)) {
-                        // 网格已被占用，不应该发生这种情况（应该在放置前检查）
+                    // 哨塔占据两个网格高度，需要检查两个网格是否都被占用
+                    // 检查第二个网格是否存在（grid.y+1不能超出网格范围）
+                    if (grid.y + 1 >= this.stoneWallGridPanelComponent.gridHeight) {
+                        // 第二个网格超出范围，无法放置
+                        towerScript.gridX = -1;
+                        towerScript.gridY = -1;
+                    } else if (this.stoneWallGridPanelComponent.isGridOccupied(grid.x, grid.y) || 
+                               this.stoneWallGridPanelComponent.isGridOccupied(grid.x, grid.y + 1)) {
+                        // 至少有一个网格被占用，不应该发生这种情况（应该在放置前检查）
+                        towerScript.gridX = -1;
+                        towerScript.gridY = -1;
                     } else {
-                        // 占用网格
-                        if (this.stoneWallGridPanelComponent.occupyGrid(grid.x, grid.y, tower)) {
+                        // 占用两个网格
+                        if (this.stoneWallGridPanelComponent.occupyGrid(grid.x, grid.y, tower) &&
+                            this.stoneWallGridPanelComponent.occupyGrid(grid.x, grid.y + 1, tower)) {
                             towerScript.gridX = grid.x;
                             towerScript.gridY = grid.y;
+                            // 调整位置，使其居中在两个网格之间
+                            const gridPos = this.stoneWallGridPanelComponent.gridToWorld(grid.x, grid.y);
+                            if (gridPos) {
+                                const adjustedPos = new Vec3(gridPos.x, gridPos.y + 25, gridPos.z); // 向上偏移25像素（半个网格）
+                                tower.setWorldPosition(adjustedPos);
+                            }
                         } else {
+                            // 占用失败，释放已占用的网格
+                            this.stoneWallGridPanelComponent.releaseGrid(grid.x, grid.y);
+                            this.stoneWallGridPanelComponent.releaseGrid(grid.x, grid.y + 1);
                             towerScript.gridX = -1;
                             towerScript.gridY = -1;
                         }
@@ -1659,8 +1677,9 @@ export class TowerBuilder extends Component {
         console.info('[TowerBuilder] spawnInitialWatchTowers: 找到石墙网格面板，gridWidth=', panel.gridWidth, 'gridHeight=', panel.gridHeight);
 
         // 排除最上层（y=9），在其他行中随机选择
+        // 哨塔占据两个网格高度，所以还需要排除倒数第二层（y=8），因为y=8时y+1=9会超出范围
         const availableYs: number[] = [];
-        for (let y = 0; y < panel.gridHeight - 1; y++) { // 排除最上层（y=9）
+        for (let y = 0; y < panel.gridHeight - 2; y++) { // 排除最上层（y=9）和倒数第二层（y=8）
             availableYs.push(y);
         }
         console.info('[TowerBuilder] spawnInitialWatchTowers: 可用y坐标范围=', availableYs);

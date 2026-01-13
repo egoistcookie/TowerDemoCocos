@@ -146,6 +146,9 @@ export class OrcWarlord extends Component {
     public prefabName: string = "OrcWarlord";
 
     onEnable() {
+        // 清理所有插在身上的武器（箭矢、长矛等）
+        this.clearAttachedWeapons();
+        
         // 从对象池获取时，重新初始化状态
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
@@ -2134,21 +2137,28 @@ export class OrcWarlord extends Component {
     }
     
     /**
-     * 重置敌人状态（用于对象池回收）
+     * 清理所有插在身上的武器（箭矢、长矛、回旋镖等）
      */
-    private resetEnemyState() {
-        // 清理所有不需要的子节点（箭矢、长矛等）
+    private clearAttachedWeapons() {
         const childrenToRemove: Node[] = [];
         if (this.node) {
             const children = this.node.children || [];
             for (const child of children) {
                 if (child && child.isValid) {
                     const arrowScript = child.getComponent('Arrow') as any;
+                    const arrow2Script = child.getComponent('Arrow2') as any;
+                    const boomerangScript = child.getComponent('Boomerang') as any;
+                    const spearScript = child.getComponent('Spear') as any;
                     const childName = child.name.toLowerCase();
-                    // 保留血条节点，清理其他子节点
+                    
+                    // 保留血条节点，清理其他武器子节点
                     if (childName !== 'healthbar' && childName !== 'health bar') {
-                        if (arrowScript || childName.includes('arrow') || childName.includes('spear') || childName.includes('长矛') || childName.includes('箭矢')) {
-                            // 是箭矢或长矛，需要清理
+                        // 检查是否是武器（通过组件或名称判断）
+                        if (arrowScript || arrow2Script || boomerangScript || spearScript || 
+                            childName.includes('arrow') || childName.includes('spear') || 
+                            childName.includes('boomerang') || childName.includes('长矛') || 
+                            childName.includes('箭矢') || childName.includes('回旋镖')) {
+                            // 是武器，需要清理
                             childrenToRemove.push(child);
                         }
                     }
@@ -2156,12 +2166,20 @@ export class OrcWarlord extends Component {
             }
         }
         
-        // 销毁箭矢和长矛子节点
+        // 销毁所有武器子节点
         for (const child of childrenToRemove) {
             if (child && child.isValid) {
                 child.destroy();
             }
         }
+    }
+
+    /**
+     * 重置敌人状态（用于对象池回收）
+     */
+    private resetEnemyState() {
+        // 清理所有不需要的子节点（箭矢、长矛等）
+        this.clearAttachedWeapons();
         
         // 重置所有状态变量
         this.currentHealth = this.maxHealth;

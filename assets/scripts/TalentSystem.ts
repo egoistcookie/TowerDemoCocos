@@ -325,7 +325,7 @@ export class TalentSystem extends Component {
         const unitTypes = [
             // 建筑物单位
             { id: 'WarAncientTree', name: '弓箭手小屋', description: '能够训练弓箭手的建筑物，同时拥有远程攻击能力', icon: 'WarAncientTree', unitType: 'BUILDING' },
-            { id: 'HunterHall', name: '猎手大厅', description: '能够生产女猎手的建筑物', icon: 'HunterHall', unitType: 'BUILDING' },
+            { id: 'HunterHall', name: '猎手大厅', description: '能够训练女猎手的建筑物', icon: 'HunterHall', unitType: 'BUILDING' },
             { id: 'SwordsmanHall', name: '剑士小屋', description: '能够生产精灵剑士的建筑物，提供强大的近战攻击单位', icon: 'SwordsmanHall', unitType: 'BUILDING' },
             { id: 'Church', name: '教堂', description: '训练牧师的建筑，可以持续生产为友军治疗的辅助单位', icon: 'Church', unitType: 'BUILDING' },
             { id: 'StoneWall', name: '石墙', description: '坚固的石墙，可以阻挡敌人的进攻路线', icon: 'StoneWall', unitType: 'BUILDING' },
@@ -924,7 +924,7 @@ export class TalentSystem extends Component {
         // 重新获取unit对象（需要从单位列表中找到）
         const unitTypes = [
             { id: 'WarAncientTree', name: '弓箭手小屋', description: '能够训练弓箭手的建筑物，同时拥有远程攻击能力', icon: 'WarAncientTree', unitType: 'BUILDING' },
-            { id: 'HunterHall', name: '猎手大厅', description: '能够生产女猎手的建筑物', icon: 'HunterHall', unitType: 'BUILDING' },
+            { id: 'HunterHall', name: '猎手大厅', description: '能够训练女猎手的建筑物', icon: 'HunterHall', unitType: 'BUILDING' },
             { id: 'SwordsmanHall', name: '剑士小屋', description: '能够生产精灵剑士的建筑物，提供强大的近战攻击单位', icon: 'SwordsmanHall', unitType: 'BUILDING' },
             { id: 'Church', name: '教堂', description: '训练牧师的建筑，可以持续生产为友军治疗的辅助单位', icon: 'Church', unitType: 'BUILDING' },
             { id: 'StoneWall', name: '石墙', description: '坚固的石墙，可以阻挡敌人的进攻路线', icon: 'StoneWall', unitType: 'BUILDING' },
