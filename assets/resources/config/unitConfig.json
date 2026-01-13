@@ -10,7 +10,7 @@
     },
     "displayInfo": {
       "name": "弓箭手",
-      "description": "城里来的指挥官？看起来还不赖，暂且相信好了。"
+      "description": "城里来的指挥官？看起来还不赖，暂且相信你好了。"
     },
     "displayStats": {
       "生命值": 50,
@@ -31,7 +31,7 @@
     },
     "displayInfo": {
       "name": "女猎手",
-      "description": "稍息！"
+      "description": "我必将完成狩猎。"
     },
     "displayStats": {
       "生命值": 50,
@@ -137,7 +137,7 @@
     },
     "displayInfo": {
       "name": "精灵剑士",
-      "description": "以吾之剑为攻，此身即为汝之壁垒！"
+      "description": "此身即为汝之壁垒！"
     },
     "displayStats": {
       "生命值": 200,
@@ -158,7 +158,7 @@
     },
     "displayInfo": {
       "name": "牧师",
-      "description": "圣光将治愈你的伤口"
+      "description": "愿圣光与你同在。"
     },
     "displayStats": {
       "生命值": 60,
@@ -238,7 +238,7 @@
     },
     "displayInfo": {
       "name": "石墙",
-      "description": "可以阻挡敌人的进攻路线"
+      "description": "阻挡敌人，但也阻挡友军。"
     },
     "displayStats": {
       "生命值": 50,
@@ -259,7 +259,7 @@
     },
     "displayInfo": {
       "name": "哨塔",
-      "description": "可以攻击敌人的防御建筑，可以被敌我双方占领"
+      "description": "得哨塔者得天下！"
     },
     "displayStats": {
       "生命值": 100,
@@ -282,7 +282,7 @@
     },
     "displayInfo": {
       "name": "兽人",
-      "description": "普通的兽人，攻击力和生命值较低，但数量众多。"
+      "description": "喽啰兽人，聚众斗狠。"
     },
     "displayStats": {
       "生命值": 30,
@@ -307,7 +307,7 @@
     },
     "displayInfo": {
       "name": "兽人战士",
-      "description": "强大的兽人战士，拥有较高的攻击力和生命值。"
+      "description": "四肢发达，头脑简单。"
     },
     "displayStats": {
       "生命值": 50,
@@ -332,7 +332,7 @@
     },
     "displayInfo": {
       "name": "兽人督军",
-      "description": "兽人军队的首领，拥有强大的攻击力和生命值，还能释放战争咆哮增强周围敌人。"
+      "description": "兽人小头目，战争咆哮强化周身兽人。"
     },
     "displayStats": {
       "生命值": 100,
@@ -357,7 +357,7 @@
     },
     "displayInfo": {
       "name": "巨魔投矛手",
-      "description": "远程攻击的巨魔投矛手，拥有较远的攻击距离，但血量较低。"
+      "description": "巨矛如龙，指哪打哪。"
     },
     "displayStats": {
       "生命值": 40,
