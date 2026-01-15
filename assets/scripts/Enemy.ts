@@ -90,12 +90,12 @@ export class Enemy extends Component {
     private healthBar: HealthBar = null!;
     private healthBarNode: Node = null!;
     protected isDestroyed: boolean = false;
-    private attackTimer: number = 0;
+    protected attackTimer: number = 0;
     protected currentTarget: Node = null!;
-    private gameManager: GameManager = null!;
-    private unitManager: UnitManager = null!; // 单位管理器引用（性能优化）
-    private targetFindTimer: number = 0; // 目标查找计时器
-    private readonly TARGET_FIND_INTERVAL: number = 0.2; // 目标查找间隔（秒），不是每帧都查找
+    protected gameManager: GameManager = null!;
+    protected unitManager: UnitManager = null!; // 单位管理器引用（性能优化）
+    protected targetFindTimer: number = 0; // 目标查找计时器
+    protected readonly TARGET_FIND_INTERVAL: number = 0.2; // 目标查找间隔（秒），不是每帧都查找
     
     // 性能优化：LOD系统相关属性
     private updateSkipCounter: number = 0; // 更新跳过计数器（用于LOD）
@@ -160,7 +160,7 @@ export class Enemy extends Component {
     protected defaultScale: Vec3 = new Vec3(1, 1, 1); // 默认缩放比例，用于方向翻转
     private isHit: boolean = false; // 表示敌人是否正在被攻击
     protected attackCallback: (() => void) | null = null; // 攻击动画完成后的回调函数
-    private attackComplete: boolean = false; // 攻击动画是否已完成造成伤害
+    protected attackComplete: boolean = false; // 攻击动画是否已完成造成伤害
     
     // Animation组件相关
     protected animationComponent: Animation = null!; // Animation组件引用
@@ -1904,13 +1904,18 @@ export class Enemy extends Component {
 
     // 播放攻击动画
     playAttackAnimation() {
+        // 性能监控：开始计时
+        const playAnimStartTime = PerformanceMonitor.startTiming('Enemy.playAttackAnimation');
         
         if (this.isPlayingDeathAnimation || this.isDestroyed) {
+            PerformanceMonitor.endTiming('Enemy.playAttackAnimation', playAnimStartTime, 0);
             return;
         }
 
-        // 停止所有动画
+        // 1. 停止所有动画
+        const stopAnimStartTime = PerformanceMonitor.startTiming('Enemy.playAttackAnimation.stopAllAnimations');
         this.stopAllAnimations();
+        PerformanceMonitor.endTiming('Enemy.playAttackAnimation.stopAllAnimations', stopAnimStartTime, 0);
         
         // 设置攻击动画状态
         this.isPlayingAttackAnimation = true;
@@ -1918,21 +1923,28 @@ export class Enemy extends Component {
         this.animationTimer = 0;
         this.currentAnimationFrameIndex = -1;
 
-        // 播放攻击音效
+        // 2. 播放攻击音效
+        const soundStartTime = PerformanceMonitor.startTiming('Enemy.playAttackAnimation.playSound');
         if (this.attackSound) {
             AudioManager.Instance.playSFX(this.attackSound);
         } else {
         }
+        PerformanceMonitor.endTiming('Enemy.playAttackAnimation.playSound', soundStartTime, 0);
         
-        // 如果使用Animation组件播放攻击动画（用于需要Animation组件的情况）
+        // 3. 如果使用Animation组件播放攻击动画（用于需要Animation组件的情况）
         if (this.animationComponent) {
-            // 清除之前的动画事件
+            // 3.1 清除之前的动画事件
+            const offStartTime = PerformanceMonitor.startTiming('Enemy.playAttackAnimation.animationOff');
             this.animationComponent.off(Animation.EventType.FINISHED);
+            PerformanceMonitor.endTiming('Enemy.playAttackAnimation.animationOff', offStartTime, 0);
             
-            // 先停止当前可能正在播放的动画，确保每次都能重新开始
+            // 3.2 先停止当前可能正在播放的动画，确保每次都能重新开始
+            const stopStartTime = PerformanceMonitor.startTiming('Enemy.playAttackAnimation.animationStop');
             this.animationComponent.stop();
+            PerformanceMonitor.endTiming('Enemy.playAttackAnimation.animationStop', stopStartTime, 0);
             
-            // 获取动画状态，设置动画速度与attackAnimationDuration保持同步
+            // 3.3 获取动画状态，设置动画速度与attackAnimationDuration保持同步
+            const getStateStartTime = PerformanceMonitor.startTiming('Enemy.playAttackAnimation.getState');
             const state = this.animationComponent.getState(this.attackAnimationName);
             if (state) {
                 // 重置动画播放头到开始位置
@@ -1941,8 +1953,10 @@ export class Enemy extends Component {
                 state.speed = state.duration / this.attackAnimationDuration;
             } else {
             }
+            PerformanceMonitor.endTiming('Enemy.playAttackAnimation.getState', getStateStartTime, 0);
             
-            // 注册动画完成事件监听器，确保动画播放完成后立即重置状态
+            // 3.4 注册动画完成事件监听器，确保动画播放完成后立即重置状态
+            const onceStartTime = PerformanceMonitor.startTiming('Enemy.playAttackAnimation.animationOnce');
             this.animationComponent.once(Animation.EventType.FINISHED, () => {
                 if (this.isPlayingAttackAnimation) {
                     // 调用攻击回调函数（如果存在，用于特殊攻击逻辑如远程攻击）
@@ -1959,11 +1973,15 @@ export class Enemy extends Component {
                     this.playIdleAnimation();
                 }
             });
+            PerformanceMonitor.endTiming('Enemy.playAttackAnimation.animationOnce', onceStartTime, 0);
             
-            // 播放动画
+            // 3.5 播放动画
+            const playStartTime = PerformanceMonitor.startTiming('Enemy.playAttackAnimation.animationPlay');
             this.animationComponent.play(this.attackAnimationName);
+            PerformanceMonitor.endTiming('Enemy.playAttackAnimation.animationPlay', playStartTime, 0);
             
-            // 在动画播放到一半时造成伤害（与动画帧方式保持一致）
+            // 3.6 在动画播放到一半时造成伤害（与动画帧方式保持一致）
+            const scheduleStartTime = PerformanceMonitor.startTiming('Enemy.playAttackAnimation.scheduleOnce');
             const damageTimer = this.attackAnimationDuration * 0.5;
             this.scheduleOnce(() => {
                 if (this.isPlayingAttackAnimation && !this.attackComplete) {
@@ -1991,8 +2009,12 @@ export class Enemy extends Component {
                     this.playIdleAnimation();
                 }
             }, finishTimer);
+            PerformanceMonitor.endTiming('Enemy.playAttackAnimation.scheduleOnce', scheduleStartTime, 0);
         } else {
         }
+        
+        // 性能监控：结束计时
+        PerformanceMonitor.endTiming('Enemy.playAttackAnimation', playAnimStartTime, 0);
     }
 
     // 播放被攻击动画
@@ -2053,17 +2075,28 @@ export class Enemy extends Component {
     }
 
     protected attack() {
+        // 性能监控：开始计时
+        const attackStartTime = PerformanceMonitor.startTiming('Enemy.attack');
         
+        // 1. 目标有效性检查
+        const checkStartTime = PerformanceMonitor.startTiming('Enemy.attack.checkTarget');
         if (!this.currentTarget || this.isDestroyed) {
+            PerformanceMonitor.endTiming('Enemy.attack.checkTarget', checkStartTime, 0);
+            PerformanceMonitor.endTiming('Enemy.attack', attackStartTime, 0);
             return;
         }
 
         // 再次检查目标是否有效
         if (!this.currentTarget.isValid || !this.currentTarget.active) {
             this.currentTarget = null!;
+            PerformanceMonitor.endTiming('Enemy.attack.checkTarget', checkStartTime, 0);
+            PerformanceMonitor.endTiming('Enemy.attack', attackStartTime, 0);
             return;
         }
+        PerformanceMonitor.endTiming('Enemy.attack.checkTarget', checkStartTime, 0);
 
+        // 2. 获取位置和距离计算
+        const positionStartTime = PerformanceMonitor.startTiming('Enemy.attack.getPosition');
         const targetPos = this.currentTarget.worldPosition;
         const enemyPos = this.node.worldPosition;
         // 性能优化：使用平方距离比较
@@ -2071,9 +2104,10 @@ export class Enemy extends Component {
         const dy = targetPos.y - enemyPos.y;
         const distanceSq = dx * dx + dy * dy;
         const attackRangeSq = this.attackRange * this.attackRange;
-        const targetType = this.currentTarget.getComponent('StoneWall') ? '石墙' : 
-                          this.currentTarget.getComponent('Crystal') ? '水晶' : '其他';
+        PerformanceMonitor.endTiming('Enemy.attack.getPosition', positionStartTime, 0);
 
+        // 3. 距离检查
+        const distanceCheckStartTime = PerformanceMonitor.startTiming('Enemy.attack.distanceCheck');
         // 检查距离是否在攻击范围内（使用平方距离）
         if (distanceSq > attackRangeSq) {
             // 如果正在播放攻击动画，停止攻击动画
@@ -2081,16 +2115,27 @@ export class Enemy extends Component {
                 this.isPlayingAttackAnimation = false;
                 this.attackComplete = false;
             }
+            PerformanceMonitor.endTiming('Enemy.attack.distanceCheck', distanceCheckStartTime, 0);
+            PerformanceMonitor.endTiming('Enemy.attack', attackStartTime, 0);
             return;
         }
+        PerformanceMonitor.endTiming('Enemy.attack.distanceCheck', distanceCheckStartTime, 0);
 
+        // 4. 方向计算和翻转
+        const directionStartTime = PerformanceMonitor.startTiming('Enemy.attack.calculateDirection');
         // 攻击时朝向目标方向
         const direction = new Vec3();
         Vec3.subtract(direction, this.currentTarget.worldPosition, this.node.worldPosition);
         this.flipDirection(direction);
+        PerformanceMonitor.endTiming('Enemy.attack.calculateDirection', directionStartTime, 0);
 
-        // 播放攻击动画（使用动画帧，在updateAttackAnimation中造成伤害）
+        // 5. 播放攻击动画（使用动画帧，在updateAttackAnimation中造成伤害）
+        const animationStartTime = PerformanceMonitor.startTiming('Enemy.attack.playAnimation');
         this.playAttackAnimation();
+        PerformanceMonitor.endTiming('Enemy.attack.playAnimation', animationStartTime, 0);
+        
+        // 性能监控：结束计时
+        PerformanceMonitor.endTiming('Enemy.attack', attackStartTime, 2);
     }
     
     /**

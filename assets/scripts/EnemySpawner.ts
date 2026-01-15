@@ -6,6 +6,7 @@ import { OrcWarrior } from './OrcWarrior';
 import { OrcWarlord } from './OrcWarlord';
 import { TrollSpearman } from './TrollSpearman';
 import { EnemyPool } from './EnemyPool';
+import { UnitManager } from './UnitManager';
 const { ccclass, property } = _decorator;
 
 // 定义波次配置接口
@@ -64,6 +65,11 @@ export class EnemySpawner extends Component {
         visible: function() { return this.testMode; }
     })
     testEnemyType: string = "Orc";
+
+    @property({
+        tooltip: "同屏最大敌人数量，上限用于控制刷怪节奏"
+    })
+    maxEnemiesOnScreen: number = 50;
 
     private gameManager: GameManager = null!;
     private uiManager: any = null!;
@@ -605,7 +611,12 @@ export class EnemySpawner extends Component {
         this.currentEnemyConfig = null;
         
         // 检查是否是第5、10、15波完成，每隔5波出现一次弹窗
-        if (this.waveConfig && this.waveConfig.waves && (this.currentWaveIndex + 1) % 5 === 0 && (this.currentWaveIndex + 1) < this.waveConfig.waves.length) {
+        // 使用 currentLevelConfig 而不是 waveConfig
+        if (this.currentLevelConfig && this.currentLevelConfig.waves && 
+            (this.currentWaveIndex + 1) % 5 === 0 && 
+            (this.currentWaveIndex + 1) < this.currentLevelConfig.waves.length) {
+            
+            console.info(`[EnemySpawner] 第 ${this.currentWaveIndex + 1} 波完成，停止刷怪1分钟，显示倒计时弹窗`);
             
             // 设置倒计时激活标志
             this.isCountdownActive = true;
@@ -624,6 +635,7 @@ export class EnemySpawner extends Component {
             // 启动一个自动继续的定时器，确保即使没有弹窗也能继续游戏
             this.scheduleOnce(() => {
                 if (this.isCountdownActive) {
+                    console.info(`[EnemySpawner] 倒计时1分钟完成，自动继续下一波`);
                     this.continueToNextWaves();
                 }
             }, 60); // 60秒后自动继续
@@ -658,18 +670,25 @@ export class EnemySpawner extends Component {
     }
     
     /**
-     * 继续生成下一波
+     * 继续生成下一波（点击倒计时弹窗后触发，继续下5波）
      */
     private continueToNextWaves() {
-        // 确保波次系统继续运行
-        this.isWaveActive = false;
-        this.isCountdownActive = false; // 取消倒计时激活标志
-        this.preWaveDelayTimer = 0;
+        // 取消倒计时激活标志
+        this.isCountdownActive = false;
         
-        // 如果还有下一波，开始下一波的延迟
+        // 隐藏倒计时弹窗
+        if (this.uiManager) {
+            this.uiManager.hideCountdownPopup();
+        }
+        
+        // 如果还有下一波，开始下一波
         if (this.currentLevelConfig && this.currentLevelConfig.waves && 
             this.currentWaveIndex < this.currentLevelConfig.waves.length - 1) {
+            console.info(`[EnemySpawner] 继续下一波，currentWaveIndex: ${this.currentWaveIndex}, 总波数: ${this.currentLevelConfig.waves.length}`);
+            // 调用 startNextWave 开始下一波
+            this.startNextWave();
         } else {
+            console.info(`[EnemySpawner] 没有更多波次了，currentWaveIndex: ${this.currentWaveIndex}, 总波数: ${this.currentLevelConfig?.waves?.length}`);
         }
     }
     
@@ -778,7 +797,32 @@ export class EnemySpawner extends Component {
                 return;
             }
         }
-        
+
+        // 限制同屏敌人数量：若场上敌人数量达到上限，则本次不再刷怪
+        let currentEnemyCount = 0;
+        const unitManager = UnitManager.getInstance();
+        if (unitManager) {
+            const enemies = unitManager.getEnemies();
+            currentEnemyCount = enemies ? enemies.length : 0;
+        } else {
+            // 降级方案：直接统计 Canvas/Enemies 下的激活子节点数量
+            const enemiesNode = find('Canvas/Enemies');
+            if (enemiesNode && enemiesNode.isValid) {
+                const children = enemiesNode.children || [];
+                for (let i = 0; i < children.length; i++) {
+                    const node = children[i];
+                    if (node && node.isValid && node.active) {
+                        currentEnemyCount++;
+                    }
+                }
+            }
+        }
+
+        if (currentEnemyCount >= this.maxEnemiesOnScreen) {
+            console.info(`[EnemySpawner.spawnEnemy] 当前敌人数量 ${currentEnemyCount} 已达到上限 ${this.maxEnemiesOnScreen}，暂停本次刷怪`);
+            return;
+        }
+
         if (!this.currentEnemyConfig || !this.targetCrystal) {
             return;
         }
