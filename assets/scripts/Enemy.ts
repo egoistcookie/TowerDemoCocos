@@ -8,6 +8,7 @@ import { UnitType } from './WarAncientTree';
 import { StoneWallGridPanel } from './StoneWallGridPanel';
 import { UnitManager } from './UnitManager';
 import { EnemyPool } from './EnemyPool';
+import { PerformanceMonitor } from './PerformanceMonitor';
 const { ccclass, property } = _decorator;
 
 @ccclass('Enemy')
@@ -174,6 +175,10 @@ export class Enemy extends Component {
     private readonly DIALOG_MAX_INTERVAL: number = 10; // 最大间隔10秒
     private readonly DIALOG_DURATION: number = 2; // 对话框显示持续时间2秒
     private readonly DIALOG_SLOGANS: string[] = ['兽人万岁！', '打下这条防线！', '为了鲜血与荣耀！', '乌拉！', '为了部落！']; // 进攻口号数组
+    
+    // 性能监控相关属性
+    private static unitCountLogTimer: number = 0; // 单位数量日志输出计时器（静态，所有Enemy实例共享）
+    private static readonly UNIT_COUNT_LOG_INTERVAL: number = 1.0; // 单位数量日志输出间隔（秒）
 
     start() {
         this.currentHealth = this.maxHealth;
@@ -513,17 +518,59 @@ export class Enemy extends Component {
     }
 
     update(deltaTime: number) {
+        // 性能监控：开始计时
+        const updateStartTime = PerformanceMonitor.startTiming('Enemy.update');
+        
         // 如果被销毁，只更新动画，不执行其他逻辑
         if (this.isDestroyed) {
             this.updateAnimation(deltaTime);
+            PerformanceMonitor.endTiming('Enemy.update', updateStartTime, 5);
             return;
+        }
+
+        // 性能监控：单位数量统计和日志输出（降低频率，避免每帧都输出）
+        Enemy.unitCountLogTimer += deltaTime;
+        if (Enemy.unitCountLogTimer >= Enemy.UNIT_COUNT_LOG_INTERVAL) {
+            Enemy.unitCountLogTimer = 0;
+            
+            // 获取单位数量
+            let enemyCount = 0;
+            let roleCount = 0;
+            
+            if (this.unitManager) {
+                const enemies = this.unitManager.getEnemies();
+                enemyCount = enemies.length;
+                
+                // 统计Role单位数量（包括弓箭手、女猎手、精灵剑士、牧师）
+                const towers = this.unitManager.getTowers();
+                const hunters = this.unitManager.getHunters();
+                const elfSwordsmans = this.unitManager.getElfSwordsmans();
+                roleCount = towers.length + hunters.length + elfSwordsmans.length;
+            } else {
+                // 降级方案：直接查找节点
+                const enemiesNode = find('Canvas/Enemies');
+                if (enemiesNode) {
+                    enemyCount = enemiesNode.children.filter(node => node && node.isValid && node.active).length;
+                }
+                
+                const towersNode = find('Canvas/Towers');
+                const huntersNode = find('Canvas/Hunters');
+                const elfSwordsmansNode = find('Canvas/ElfSwordsmans');
+                if (towersNode) roleCount += towersNode.children.filter(node => node && node.isValid && node.active).length;
+                if (huntersNode) roleCount += huntersNode.children.filter(node => node && node.isValid && node.active).length;
+                if (elfSwordsmansNode) roleCount += elfSwordsmansNode.children.filter(node => node && node.isValid && node.active).length;
+            }
+            
+            console.info(`[Enemy.update] 单位数量统计 - 敌人: ${enemyCount}, 角色: ${roleCount}, 总计: ${enemyCount + roleCount}`);
         }
 
         // 性能优化：LOD系统 - 根据距离摄像机远近，降低更新频率
         // 使用累计时间而不是Date.now()，避免系统调用开销
         this.lastDistanceCheckTime += deltaTime;
         if (this.lastDistanceCheckTime >= this.DISTANCE_CHECK_INTERVAL) {
+            const lodStartTime = PerformanceMonitor.startTiming('Enemy.updateLOD');
             this.updateLOD();
+            PerformanceMonitor.endTiming('Enemy.updateLOD', lodStartTime, 1);
             this.lastDistanceCheckTime = 0;
         }
         
@@ -536,6 +583,7 @@ export class Enemy extends Component {
                 this.animationUpdateTimer = 0;
                 this.updateAnimation(deltaTime);
             }
+            PerformanceMonitor.endTiming('Enemy.update', updateStartTime, 5);
             return;
         }
         this.updateSkipCounter = 0;
@@ -566,14 +614,18 @@ export class Enemy extends Component {
         // 查找目标（优先防御塔，然后水晶）- 按间隔查找而不是每帧都查找
         if (this.targetFindTimer >= this.TARGET_FIND_INTERVAL) {
             this.targetFindTimer = 0;
+            const findTargetStartTime = PerformanceMonitor.startTiming('Enemy.findTarget');
             this.findTarget();
+            PerformanceMonitor.endTiming('Enemy.findTarget', findTargetStartTime, 3);
         }
         
         // 如果当前目标已失效，立即重新查找（不等待间隔）
         if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
             if (this.targetFindTimer >= 0.1) { // 至少间隔0.1秒
                 this.targetFindTimer = 0;
+                const findTargetStartTime = PerformanceMonitor.startTiming('Enemy.findTarget');
                 this.findTarget();
+                PerformanceMonitor.endTiming('Enemy.findTarget', findTargetStartTime, 3);
             }
         }
 
@@ -606,7 +658,9 @@ export class Enemy extends Component {
                     this.stopAllAnimations();
                 }
                 const hadTargetBefore = !!this.currentTarget;
+                const moveInGridStartTime = PerformanceMonitor.startTiming('Enemy.moveInStoneWallGrid');
                 this.moveInStoneWallGrid(deltaTime);
+                PerformanceMonitor.endTiming('Enemy.moveInStoneWallGrid', moveInGridStartTime, 3);
                 // 如果moveInStoneWallGrid检测到我方单位并设置了currentTarget，且退出了网格寻路模式，不直接return，让后续逻辑处理目标
                 if (!this.isInStoneWallGrid && this.currentTarget && !hadTargetBefore) {
                     // 不return，继续执行后续逻辑处理移动和攻击
@@ -689,7 +743,9 @@ export class Enemy extends Component {
                             
                             // 进入网格寻路模式（简化：直接进入，不使用A*算法）
                             this.isInStoneWallGrid = true;
+                            const moveInGridStartTime2 = PerformanceMonitor.startTiming('Enemy.moveInStoneWallGrid');
                             this.moveInStoneWallGrid(deltaTime);
+                            PerformanceMonitor.endTiming('Enemy.moveInStoneWallGrid', moveInGridStartTime2, 3);
                             return;
                             // 继续执行，让后续逻辑处理石墙攻击
                         } else {
@@ -745,7 +801,9 @@ export class Enemy extends Component {
                 if (this.attackTimer >= this.attackInterval && !this.isHit && !this.isPlayingAttackAnimation) {
                     // 攻击条件满足，停止移动并攻击
                     this.stopMoving();
+                    const attackStartTime = PerformanceMonitor.startTiming('Enemy.attack');
                     this.attack();
+                    PerformanceMonitor.endTiming('Enemy.attack', attackStartTime, 2);
                     this.attackTimer = 0;
                 } else {
                     // 攻击条件不满足，不调用移动方法也不调用stopMoving()，保持当前状态等待攻击
@@ -775,7 +833,12 @@ export class Enemy extends Component {
         }
         
         // 更新动画
+        const updateAnimationStartTime = PerformanceMonitor.startTiming('Enemy.updateAnimation');
         this.updateAnimation(deltaTime);
+        PerformanceMonitor.endTiming('Enemy.updateAnimation', updateAnimationStartTime, 2);
+        
+        // 性能监控：结束 update 方法计时
+        PerformanceMonitor.endTiming('Enemy.update', updateStartTime, 5);
     }
 
     private findTarget() {
@@ -1349,7 +1412,9 @@ export class Enemy extends Component {
         if (!this.isInStoneWallGrid && this.checkStoneWallGridBelowEnemy()) {
             // checkStoneWallGridBelowEnemy() 已经检查了是否到达最底层，所以这里直接进入网格寻路模式
             this.isInStoneWallGrid = true;
+            const moveInGridStartTime3 = PerformanceMonitor.startTiming('Enemy.moveInStoneWallGrid');
             this.moveInStoneWallGrid(deltaTime);
+            PerformanceMonitor.endTiming('Enemy.moveInStoneWallGrid', moveInGridStartTime3, 3);
             return;
         }
 

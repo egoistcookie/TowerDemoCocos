@@ -10,6 +10,7 @@ import { UnitInfo } from './UnitInfoPanel';
 import { UnitType } from './UnitType';
 import { UnitManager } from './UnitManager';
 import { UnitPool } from './UnitPool';
+import { PerformanceMonitor } from './PerformanceMonitor';
 const { ccclass, property } = _decorator;
 
 @ccclass('Role')
@@ -159,6 +160,10 @@ export class Role extends Component {
     private readonly DIALOG_MIN_INTERVAL: number = 5; // 最小间隔5秒
     private readonly DIALOG_MAX_INTERVAL: number = 10; // 最大间隔10秒
     private readonly DIALOG_DURATION: number = 2; // 对话框显示持续时间2秒
+    
+    // 性能监控相关属性
+    private static unitCountLogTimer: number = 0; // 单位数量日志输出计时器（静态，所有Role实例共享）
+    private static readonly UNIT_COUNT_LOG_INTERVAL: number = 1.0; // 单位数量日志输出间隔（秒）
 
     start() {
         this.currentHealth = this.maxHealth;
@@ -454,8 +459,48 @@ export class Role extends Component {
     }
 
     update(deltaTime: number) {
+        // 性能监控：开始计时
+        const updateStartTime = PerformanceMonitor.startTiming('Role.update');
+        
         if (this.isDestroyed) {
+            PerformanceMonitor.endTiming('Role.update', updateStartTime, 5);
             return;
+        }
+
+        // 性能监控：单位数量统计和日志输出（降低频率，避免每帧都输出）
+        Role.unitCountLogTimer += deltaTime;
+        if (Role.unitCountLogTimer >= Role.UNIT_COUNT_LOG_INTERVAL) {
+            Role.unitCountLogTimer = 0;
+            
+            // 获取单位数量
+            let enemyCount = 0;
+            let roleCount = 0;
+            
+            if (this.unitManager) {
+                const enemies = this.unitManager.getEnemies();
+                enemyCount = enemies.length;
+                
+                // 统计Role单位数量（包括弓箭手、女猎手、精灵剑士、牧师）
+                const towers = this.unitManager.getTowers();
+                const hunters = this.unitManager.getHunters();
+                const elfSwordsmans = this.unitManager.getElfSwordsmans();
+                roleCount = towers.length + hunters.length + elfSwordsmans.length;
+            } else {
+                // 降级方案：直接查找节点
+                const enemiesNode = find('Canvas/Enemies');
+                if (enemiesNode) {
+                    enemyCount = enemiesNode.children.filter(node => node && node.isValid && node.active).length;
+                }
+                
+                const towersNode = find('Canvas/Towers');
+                const huntersNode = find('Canvas/Hunters');
+                const elfSwordsmansNode = find('Canvas/ElfSwordsmans');
+                if (towersNode) roleCount += towersNode.children.filter(node => node && node.isValid && node.active).length;
+                if (huntersNode) roleCount += huntersNode.children.filter(node => node && node.isValid && node.active).length;
+                if (elfSwordsmansNode) roleCount += elfSwordsmansNode.children.filter(node => node && node.isValid && node.active).length;
+            }
+            
+            console.info(`[Role.update] 单位数量统计 - 敌人: ${enemyCount}, 角色: ${roleCount}, 总计: ${enemyCount + roleCount}`);
         }
 
         // 更新对话框系统（在游戏状态检查之前，确保对话框能正常显示）
@@ -472,6 +517,7 @@ export class Role extends Component {
             if (gameState !== GameState.Playing) {
                 // 游戏已结束或暂停，停止攻击和移动
                 this.currentTarget = null!;
+                PerformanceMonitor.endTiming('Role.update', updateStartTime, 5);
                 return;
             }
         }
@@ -494,7 +540,9 @@ export class Role extends Component {
             
             if (needFindTarget || shouldFindByInterval) {
                 this.targetFindTimer = 0; // 重置计时器
+                const findTargetStartTime = PerformanceMonitor.startTiming('Role.findTarget');
                 this.findTarget();
+                PerformanceMonitor.endTiming('Role.findTarget', findTargetStartTime, 3);
                 // 如果找到了目标，标记为已找到第一个目标
                 if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
                     this.hasFoundFirstTarget = true;
@@ -511,7 +559,9 @@ export class Role extends Component {
                     if (this.attackTimer >= this.attackInterval) {
                         // 再次检查游戏状态，确保游戏仍在进行
                         if (this.gameManager && this.gameManager.getGameState() === GameState.Playing) {
+                            const attackStartTime = PerformanceMonitor.startTiming('Role.attack');
                             this.attack();
+                            PerformanceMonitor.endTiming('Role.attack', attackStartTime, 2);
                             this.attackTimer = 0;
                         }
                     }
@@ -552,7 +602,9 @@ export class Role extends Component {
             
             if (needFindTarget || shouldFindByInterval) {
                 this.targetFindTimer = 0; // 重置计时器
+                const findTargetStartTime2 = PerformanceMonitor.startTiming('Role.findTarget');
                 this.findTarget();
+                PerformanceMonitor.endTiming('Role.findTarget', findTargetStartTime2, 3);
                 // 如果找到了目标，标记为已找到第一个目标
                 if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
                     this.hasFoundFirstTarget = true;
@@ -585,13 +637,17 @@ export class Role extends Component {
                 if (this.attackTimer >= this.attackInterval) {
                     // 再次检查游戏状态，确保游戏仍在进行
                     if (this.gameManager && this.gameManager.getGameState() === GameState.Playing) {
+                        const attackStartTime2 = PerformanceMonitor.startTiming('Role.attack');
                         this.attack();
+                        PerformanceMonitor.endTiming('Role.attack', attackStartTime2, 2);
                         this.attackTimer = 0;
                     }
                 }
             } else if (distance <= this.getMovementRange()) {
                 // 在移动范围内，朝敌人移动
+                const moveStartTime = PerformanceMonitor.startTiming('Role.moveTowardsTarget');
                 this.moveTowardsTarget(deltaTime);
+                PerformanceMonitor.endTiming('Role.moveTowardsTarget', moveStartTime, 3);
             } else {
                 // 超出移动范围，停止移动
                 this.stopMoving();
@@ -600,6 +656,9 @@ export class Role extends Component {
             // 没有目标，停止移动
             this.stopMoving();
         }
+        
+        // 性能监控：结束 update 方法计时
+        PerformanceMonitor.endTiming('Role.update', updateStartTime, 5);
     }
 
     /**
