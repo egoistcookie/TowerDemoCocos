@@ -247,9 +247,13 @@ export class UnitSelectionManager extends Component {
         const roleScript = unitNode.getComponent('Role') as any;
         if (roleScript) {
             console.info('[UnitSelectionManager] getUnitInfo: 找到Role组件，单位名称 =', roleScript.unitName);
+            // 计算升级费用：1到2级是10金币，此后每次升级多10金币
+            // 公式：10 + (level - 1) * 10
+            const level = roleScript.level !== undefined ? roleScript.level : 1;
+            const upgradeCost = level < 3 ? (10 + (level - 1) * 10) : undefined;
             return {
                 name: roleScript.unitName || '单位',
-                level: roleScript.level !== undefined ? roleScript.level : 1,
+                level: level,
                 currentHealth: roleScript.currentHealth !== undefined ? roleScript.currentHealth : (roleScript.maxHealth || 0),
                 maxHealth: roleScript.maxHealth || 0,
                 attackDamage: roleScript.attackDamage !== undefined ? roleScript.attackDamage : 0,
@@ -260,7 +264,8 @@ export class UnitSelectionManager extends Component {
                 attackFrequency: roleScript.attackInterval ? 1.0 / roleScript.attackInterval : 0,
                 moveSpeed: roleScript.moveSpeed,
                 isDefending: roleScript.isDefending !== undefined ? roleScript.isDefending : false,
-                onUpgradeClick: () => roleScript.onUpgradeClick && roleScript.onUpgradeClick(),
+                upgradeCost: upgradeCost, // 传递升级费用用于显示
+                onUpgradeClick: level < 3 ? () => roleScript.onUpgradeClick && roleScript.onUpgradeClick() : undefined,
                 onSellClick: () => roleScript.onSellClick && roleScript.onSellClick(),
                 onDefendClick: () => roleScript.onDefendClick && roleScript.onDefendClick()
             };
@@ -270,9 +275,11 @@ export class UnitSelectionManager extends Component {
         const arrowerScript = unitNode.getComponent('Arrower') as any;
         if (arrowerScript) {
             console.info('[UnitSelectionManager] getUnitInfo: 找到Arrower组件');
+            const level = arrowerScript.level || 1;
+            const upgradeCost = level < 3 ? (10 + (level - 1) * 10) : undefined;
             return {
                 name: arrowerScript.unitName || '弓箭手',
-                level: arrowerScript.level || 1,
+                level: level,
                 currentHealth: arrowerScript.currentHealth || arrowerScript.maxHealth || 0,
                 maxHealth: arrowerScript.maxHealth || 0,
                 attackDamage: arrowerScript.attackDamage || 0,
@@ -283,7 +290,8 @@ export class UnitSelectionManager extends Component {
                 attackFrequency: arrowerScript.attackInterval ? 1.0 / arrowerScript.attackInterval : 0,
                 moveSpeed: arrowerScript.moveSpeed,
                 isDefending: arrowerScript.isDefending,
-                onUpgradeClick: () => arrowerScript.onUpgradeClick && arrowerScript.onUpgradeClick(),
+                upgradeCost: upgradeCost, // 传递升级费用用于显示
+                onUpgradeClick: level < 3 ? () => arrowerScript.onUpgradeClick && arrowerScript.onUpgradeClick() : undefined,
                 onSellClick: () => arrowerScript.onSellClick && arrowerScript.onSellClick(),
                 onDefendClick: () => arrowerScript.onDefendClick && arrowerScript.onDefendClick()
             };
@@ -292,9 +300,11 @@ export class UnitSelectionManager extends Component {
         const hunterScript = unitNode.getComponent('Hunter') as any;
         if (hunterScript) {
             console.info('[UnitSelectionManager] getUnitInfo: 找到Hunter组件');
+            const level = hunterScript.level || 1;
+            const upgradeCost = level < 3 ? (10 + (level - 1) * 10) : undefined;
             return {
                 name: hunterScript.unitName || '女猎手',
-                level: hunterScript.level || 1,
+                level: level,
                 currentHealth: hunterScript.currentHealth || hunterScript.maxHealth || 0,
                 maxHealth: hunterScript.maxHealth || 0,
                 attackDamage: hunterScript.attackDamage || 0,
@@ -305,7 +315,8 @@ export class UnitSelectionManager extends Component {
                 attackFrequency: hunterScript.attackInterval ? 1.0 / hunterScript.attackInterval : 0,
                 moveSpeed: hunterScript.moveSpeed,
                 isDefending: hunterScript.isDefending,
-                onUpgradeClick: () => hunterScript.onUpgradeClick && hunterScript.onUpgradeClick(),
+                upgradeCost: upgradeCost, // 传递升级费用用于显示
+                onUpgradeClick: level < 3 ? () => hunterScript.onUpgradeClick && hunterScript.onUpgradeClick() : undefined,
                 onSellClick: () => hunterScript.onSellClick && hunterScript.onSellClick(),
                 onDefendClick: () => hunterScript.onDefendClick && hunterScript.onDefendClick()
             };
@@ -314,9 +325,11 @@ export class UnitSelectionManager extends Component {
         const swordsmanScript = unitNode.getComponent('ElfSwordsman') as any;
         if (swordsmanScript) {
             console.info('[UnitSelectionManager] getUnitInfo: 找到ElfSwordsman组件');
+            const level = swordsmanScript.level || 1;
+            const upgradeCost = level < 3 ? (10 + (level - 1) * 10) : undefined;
             return {
                 name: swordsmanScript.unitName || '精灵剑士',
-                level: swordsmanScript.level || 1,
+                level: level,
                 currentHealth: swordsmanScript.currentHealth || swordsmanScript.maxHealth || 0,
                 maxHealth: swordsmanScript.maxHealth || 0,
                 attackDamage: swordsmanScript.attackDamage || 0,
@@ -327,7 +340,8 @@ export class UnitSelectionManager extends Component {
                 attackFrequency: swordsmanScript.attackInterval ? 1.0 / swordsmanScript.attackInterval : 0,
                 moveSpeed: swordsmanScript.moveSpeed,
                 isDefending: swordsmanScript.isDefending,
-                onUpgradeClick: () => swordsmanScript.onUpgradeClick && swordsmanScript.onUpgradeClick(),
+                upgradeCost: upgradeCost, // 传递升级费用用于显示
+                onUpgradeClick: level < 3 ? () => swordsmanScript.onUpgradeClick && swordsmanScript.onUpgradeClick() : undefined,
                 onSellClick: () => swordsmanScript.onSellClick && swordsmanScript.onSellClick(),
                 onDefendClick: () => swordsmanScript.onDefendClick && swordsmanScript.onDefendClick()
             };
@@ -335,9 +349,11 @@ export class UnitSelectionManager extends Component {
 
         const priestScript = unitNode.getComponent('Priest') as any;
         if (priestScript) {
+            const level = priestScript.level || 1;
+            const upgradeCost = level < 3 ? (10 + (level - 1) * 10) : undefined;
             return {
                 name: priestScript.unitName || '牧师',
-                level: priestScript.level || 1,
+                level: level,
                 currentHealth: priestScript.currentHealth || priestScript.maxHealth || 0,
                 maxHealth: priestScript.maxHealth || 0,
                 attackDamage: priestScript.attackDamage || 0,
@@ -348,7 +364,8 @@ export class UnitSelectionManager extends Component {
                 attackFrequency: priestScript.attackInterval ? 1.0 / priestScript.attackInterval : 0,
                 moveSpeed: priestScript.moveSpeed,
                 isDefending: priestScript.isDefending,
-                onUpgradeClick: () => priestScript.onUpgradeClick && priestScript.onUpgradeClick(),
+                upgradeCost: upgradeCost, // 传递升级费用用于显示
+                onUpgradeClick: level < 3 ? () => priestScript.onUpgradeClick && priestScript.onUpgradeClick() : undefined,
                 onSellClick: () => priestScript.onSellClick && priestScript.onSellClick(),
                 onDefendClick: () => priestScript.onDefendClick && priestScript.onDefendClick()
             };

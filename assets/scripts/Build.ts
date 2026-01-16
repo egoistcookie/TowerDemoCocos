@@ -437,10 +437,10 @@ export class Build extends Component {
         if (this.unitSelectionManager) {
             const unitInfo = this.getUnitInfo();
             if (unitInfo) {
-                // 确保回调函数正确绑定
-                unitInfo.onUpgradeClick = () => {
-                    this.onUpgradeClick();
-                };
+                // 建筑物不显示升级按钮，去掉 onUpgradeClick
+                // unitInfo.onUpgradeClick = () => {
+                //     this.onUpgradeClick();
+                // };
                 unitInfo.onSellClick = () => {
                     this.onSellClick();
                 };

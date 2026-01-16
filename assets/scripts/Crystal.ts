@@ -310,10 +310,17 @@ export class Crystal extends Component {
         if (targetLevel <= this.level) {
             return 0; // 不能降级
         }
+        // 升级费用：2级50，3级100，4级150，5级200
         if (targetLevel === 2) {
-            return 10;
+            return 50;
+        } else if (targetLevel === 3) {
+            return 100;
+        } else if (targetLevel === 4) {
+            return 150;
+        } else if (targetLevel === 5) {
+            return 200;
         }
-        return 10 + (targetLevel - 2) * 5;
+        return 200; // 默认返回最高级费用
     }
 
     /**
@@ -375,7 +382,7 @@ export class Crystal extends Component {
         // 增加人口上限
         if (this.gameManager) {
             const currentMax = this.gameManager.getMaxPopulation();
-            this.gameManager.setMaxPopulation(currentMax + 10);
+            this.gameManager.setMaxPopulation(currentMax + 4);
         }
 
         // 更新贴图
@@ -496,11 +503,12 @@ export class Crystal extends Component {
                 populationCost: 0, // 生命之树不占用人口
                 icon: currentLevelSprite || this.cardIcon || this.defaultSpriteFrame, // 优先使用当前等级的贴图
                 collisionRadius: this.collisionRadius,
+                maxLevel: this.maxLevel, // 传递最高等级信息
                 // 只要未达到最高等级，就显示升级按钮（点击时的检查在startUpgrade中处理）
                 onUpgradeClick: this.level < this.maxLevel ? () => {
                     this.startUpgrade();
                 } : undefined,
-                upgradeCost: this.level < this.maxLevel ? upgradeCost : undefined
+                upgradeCost: this.level < this.maxLevel ? upgradeCost : undefined // 传递升级费用用于显示
             };
             this.unitSelectionManager.selectUnit(this.node, unitInfo);
         }

@@ -66,7 +66,7 @@
       "attackRange": 200,
       "attackDamage": 15,
       "attackInterval": 1.5,
-      "buildCost": 10,
+      "buildCost": 20,
       "level": 1,
       "collisionRadius": 50,
       "maxTowerCount": 4,
@@ -81,7 +81,7 @@
       "攻击力": 15,
       "攻击范围": "200像素",
       "攻击间隔": "1.5秒",
-      "建造成本": "10金币",
+      "建造成本": "20金币",
       "最大生产数量": 4
     }
   },
@@ -171,7 +171,7 @@
   "HunterHall": {
     "baseStats": {
       "maxHealth": 100,
-      "buildCost": 10,
+      "buildCost": 30,
       "level": 1,
       "collisionRadius": 50,
       "maxHunterCount": 4,
@@ -183,7 +183,7 @@
     },
     "displayStats": {
       "生命值": 100,
-      "建造成本": "10金币",
+      "建造成本": "30金币",
       "最大生产数量": 4,
       "生产间隔": "2.0秒"
     }
@@ -191,7 +191,7 @@
   "SwordsmanHall": {
     "baseStats": {
       "maxHealth": 100,
-      "buildCost": 10,
+      "buildCost": 30,
       "level": 1,
       "collisionRadius": 50,
       "maxSwordsmanCount": 4,
@@ -203,7 +203,7 @@
     },
     "displayStats": {
       "生命值": 100,
-      "建造成本": "10金币",
+      "建造成本": "30金币",
       "最大生产数量": 4,
       "生产间隔": "2.0秒"
     }
@@ -211,7 +211,7 @@
   "Church": {
     "baseStats": {
       "maxHealth": 120,
-      "buildCost": 12,
+      "buildCost": 30,
       "level": 1,
       "collisionRadius": 50,
       "maxPriestCount": 4,
@@ -223,7 +223,7 @@
     },
     "displayStats": {
       "生命值": 120,
-      "建造成本": "12金币",
+      "建造成本": "30金币",
       "最大生产数量": 4,
       "生产间隔": "2.0秒"
     }
@@ -277,7 +277,7 @@
       "attackDamage": 5,
       "attackInterval": 2.0,
       "moveSpeed": 50,
-      "goldReward": 2,
+      "goldReward": 1,
       "expReward": 1
     },
     "displayInfo": {
@@ -290,7 +290,7 @@
       "攻击范围": "70像素",
       "攻击间隔": "2.0秒",
       "移动速度": "50像素/秒",
-      "金币奖励": "2金币",
+      "金币奖励": "1金币",
       "经验奖励": "1点"
     }
   },
@@ -302,8 +302,8 @@
       "attackInterval": 1.5,
       "moveSpeed": 40,
       "collisionRadius": 20,
-      "goldReward": 3,
-      "expReward": 5
+      "goldReward": 2,
+      "expReward": 2
     },
     "displayInfo": {
       "name": "兽人战士",
@@ -315,8 +315,8 @@
       "攻击范围": "60像素",
       "攻击间隔": "1.5秒",
       "移动速度": "40像素/秒",
-      "金币奖励": "3金币",
-      "经验奖励": "5点"
+      "金币奖励": "2金币",
+      "经验奖励": "2点"
     }
   },
   "OrcWarlord": {
@@ -327,8 +327,8 @@
       "attackInterval": 2.0,
       "moveSpeed": 30,
       "collisionRadius": 10,
-      "goldReward": 5,
-      "expReward": 10
+      "goldReward": 3,
+      "expReward": 3
     },
     "displayInfo": {
       "name": "兽人督军",
@@ -340,8 +340,8 @@
       "攻击范围": "70像素",
       "攻击间隔": "2.0秒",
       "移动速度": "30像素/秒",
-      "金币奖励": "5金币",
-      "经验奖励": "10点"
+      "金币奖励": "3金币",
+      "经验奖励": "3点"
     }
   },
   "TrollSpearman": {
@@ -352,8 +352,8 @@
       "attackInterval": 1.8,
       "moveSpeed": 55,
       "collisionRadius": 20,
-      "goldReward": 3,
-      "expReward": 3
+      "goldReward": 1,
+      "expReward": 1
     },
     "displayInfo": {
       "name": "巨魔投矛手",
@@ -365,8 +365,8 @@
       "攻击范围": "200像素",
       "攻击间隔": "1.8秒",
       "移动速度": "55像素/秒",
-      "金币奖励": "3金币",
-      "经验奖励": "3点"
+      "金币奖励": "1金币",
+      "经验奖励": "1点"
     }
   },
   "Dragon": {
@@ -377,8 +377,8 @@
       "attackInterval": 2.0,
       "moveSpeed": 60,
       "collisionRadius": 25,
-      "goldReward": 10,
-      "expReward": 15
+      "goldReward": 3,
+      "expReward": 3
     },
     "displayInfo": {
       "name": "飞龙",
@@ -390,8 +390,8 @@
       "攻击范围": "200像素",
       "攻击间隔": "2.0秒",
       "移动速度": "60像素/秒",
-      "金币奖励": "10金币",
-      "经验奖励": "15点"
+      "金币奖励": "3金币",
+      "经验奖励": "3点"
     }
   }
 }

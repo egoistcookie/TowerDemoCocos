@@ -7,6 +7,7 @@ import { UnitManager } from './UnitManager';
 import { UnitPool } from './UnitPool';
 import { BuildingPool } from './BuildingPool';
 import { GameState } from './GameState';
+import { GamePopup } from './GamePopup';
 const { ccclass, property } = _decorator;
 
 // 重新导出 GameState 以保持向后兼容
@@ -49,11 +50,12 @@ export class GameManager extends Component {
     private gameState: GameState = GameState.Ready;
     private gameTime: number = 0; // 已防御时间（累积时间，从0开始）
     private crystalScript: Crystal = null!;
-    private gold: number = 10; // 初始金币
+    private gold: number = 20; // 初始金币
     private population: number = 0; // 当前人口
     private maxPopulation: number = 10; // 人口上限
     private currentGameExp: number = 0; // 本局游戏获得的经验值
     private playerDataManager: PlayerDataManager = null!;
+    private hasShownPopulationLimitWarning: boolean = false; // 是否已显示过人口上限提示
     
     // 单位首次出现相关
     private appearedUnitTypes: Set<string> = new Set();
@@ -1494,6 +1496,13 @@ export class GameManager extends Component {
         if (this.population + amount <= this.maxPopulation) {
             this.population += amount;
             this.updateUI();
+            
+            // 检测首次达到人口上限时显示提示框
+            if (this.population >= this.maxPopulation && !this.hasShownPopulationLimitWarning) {
+                this.hasShownPopulationLimitWarning = true;
+                GamePopup.showMessage('已达到人口上限，请升级生命之树');
+            }
+            
             return true;
         }
         return false;
@@ -1581,6 +1590,7 @@ export class GameManager extends Component {
         this.gold = 10;
         this.population = 0;
         this.maxPopulation = 10;
+        this.hasShownPopulationLimitWarning = false; // 重置人口上限提示标志
         
         // 重置水晶状态
         if (this.crystalScript) {

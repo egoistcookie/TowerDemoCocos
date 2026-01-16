@@ -776,6 +776,11 @@ export class EnemySpawner extends Component {
             // 设置prefabName（用于对象池回收）
             enemyScript.prefabName = this.testEnemyType;
             
+            // 从配置文件加载金币和经验奖励（在设置prefabName之后）
+            if (enemyScript.loadRewardsFromConfig && typeof enemyScript.loadRewardsFromConfig === 'function') {
+                enemyScript.loadRewardsFromConfig();
+            }
+            
             if (this.targetCrystal) {
                 enemyScript.targetCrystal = this.targetCrystal;
             }
@@ -870,12 +875,17 @@ export class EnemySpawner extends Component {
         enemy.setParent(this.enemyContainer || this.node);
         enemy.setWorldPosition(spawnPos);
 
-        // 设置敌人的目标水晶，支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
+        // 设置敌人的目标水晶，支持Enemy、OrcWarrior、OrcWarlord、TrollSpearman和Dragon
         // 尝试获取不同类型的敌人组件
-        const enemyScript = enemy.getComponent(Enemy) as any || enemy.getComponent(OrcWarrior) as any || enemy.getComponent(OrcWarlord) as any || enemy.getComponent(TrollSpearman) as any;
+        const enemyScript = enemy.getComponent(Enemy) as any || enemy.getComponent(OrcWarrior) as any || enemy.getComponent(OrcWarlord) as any || enemy.getComponent(TrollSpearman) as any || enemy.getComponent('Dragon') as any;
         if (enemyScript) {
             // 设置prefabName（用于对象池回收）
             enemyScript.prefabName = prefabName;
+            
+            // 从配置文件加载金币和经验奖励（在设置prefabName之后）
+            if (enemyScript.loadRewardsFromConfig && typeof enemyScript.loadRewardsFromConfig === 'function') {
+                enemyScript.loadRewardsFromConfig();
+            }
             
             if (this.targetCrystal) {
                 enemyScript.targetCrystal = this.targetCrystal;

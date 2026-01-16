@@ -32,6 +32,7 @@ export interface UnitInfo {
     onDefendClick?: () => void; // 防御按钮点击回调
     // 升级相关
     upgradeCost?: number; // 升级费用（用于显示）
+    maxLevel?: number; // 最高等级（用于判断是否满级）
     // 集结点相关
     rallyPoint?: Vec3 | null; // 集结点位置（用于显示）
     // 防御状态
@@ -288,6 +289,22 @@ export class UnitInfoPanel extends Component {
                 label.fontSize = 14;
                 label.color = Color.WHITE;
 
+                // 为升级按钮（索引2）创建费用标签
+                if (buttonIndex === 2) {
+                    const costLabelNode = new Node('CostLabel');
+                    costLabelNode.setParent(buttonNode);
+                    const costLabelTransform = costLabelNode.addComponent(UITransform);
+                    costLabelTransform.setContentSize(buttonSize, 20);
+                    costLabelNode.setPosition(0, -buttonSize / 2 - 5, 0); // 按钮下方
+                    const costLabel = costLabelNode.addComponent(Label);
+                    costLabel.string = '';
+                    costLabel.fontSize = 14;
+                    costLabel.color = new Color(255, 255, 0, 255); // 黄色
+                    costLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+                    costLabel.verticalAlign = Label.VerticalAlign.CENTER;
+                    costLabelNode.active = false; // 默认隐藏
+                }
+
                 this.buttonNodes.push(buttonNode);
             }
         }
@@ -393,8 +410,9 @@ export class UnitInfoPanel extends Component {
 
         // 更新等级
         if (this.levelLabel) {
-            // 如果等级达到3级，显示（满级）后缀
-            const levelText = unitInfo.level >= 3 ? `等级: ${unitInfo.level}（满级）` : `等级: ${unitInfo.level}`;
+            // 判断是否满级：如果提供了maxLevel，则使用它；否则默认使用3级
+            const maxLevel = unitInfo.maxLevel !== undefined ? unitInfo.maxLevel : 3;
+            const levelText = unitInfo.level >= maxLevel ? `等级: ${unitInfo.level}（满级）` : `等级: ${unitInfo.level}`;
             this.levelLabel.string = levelText;
             this.levelLabel.node.active = true; // 确保等级标签显示
         }
@@ -638,6 +656,11 @@ export class UnitInfoPanel extends Component {
             if (labelNode) {
                 labelNode.active = false; // 隐藏标签
             }
+            // 隐藏费用标签
+            const costLabelNode = buttonNode.getChildByName('CostLabel');
+            if (costLabelNode) {
+                costLabelNode.active = false;
+            }
         }
 
         // 设置集结点按钮（位置：左上角，索引0）
@@ -727,6 +750,18 @@ export class UnitInfoPanel extends Component {
             const upgradeButton = this.buttonNodes[2];
             upgradeButton.active = true;
             
+            // 显示升级费用标签
+            const costLabelNode = upgradeButton.getChildByName('CostLabel');
+            if (costLabelNode) {
+                const costLabel = costLabelNode.getComponent(Label);
+                if (costLabel && unitInfo.upgradeCost !== undefined) {
+                    costLabel.string = `${unitInfo.upgradeCost}`;
+                    costLabelNode.active = true;
+                } else {
+                    costLabelNode.active = false;
+                }
+            }
+            
             // 加载升级按钮贴图
             this.loadButtonSprite(2, 'up.png', 'up_down.png');
             
@@ -749,6 +784,13 @@ export class UnitInfoPanel extends Component {
                     unitInfo.onUpgradeClick();
                 }
             });
+        } else if (this.buttonNodes[2]) {
+            // 如果没有升级按钮，隐藏费用标签
+            const upgradeButton = this.buttonNodes[2];
+            const costLabelNode = upgradeButton.getChildByName('CostLabel');
+            if (costLabelNode) {
+                costLabelNode.active = false;
+            }
         }
 
         // 设置回收按钮（位置：右下，索引8）
@@ -801,6 +843,11 @@ export class UnitInfoPanel extends Component {
             const labelNode = buttonNode.getChildByName('Label');
             if (labelNode) {
                 labelNode.active = false;
+            }
+            // 隐藏费用标签
+            const costLabelNode = buttonNode.getChildByName('CostLabel');
+            if (costLabelNode) {
+                costLabelNode.active = false;
             }
         }
 
@@ -873,6 +920,18 @@ export class UnitInfoPanel extends Component {
         if (firstUnitInfo.onUpgradeClick && this.buttonNodes[2]) {
             const upgradeButton = this.buttonNodes[2];
             upgradeButton.active = true;
+            
+            // 显示升级费用标签
+            const costLabelNode = upgradeButton.getChildByName('CostLabel');
+            if (costLabelNode) {
+                const costLabel = costLabelNode.getComponent(Label);
+                if (costLabel && firstUnitInfo.upgradeCost !== undefined) {
+                    costLabel.string = `${firstUnitInfo.upgradeCost}`;
+                    costLabelNode.active = true;
+                } else {
+                    costLabelNode.active = false;
+                }
+            }
             
             // 加载升级按钮贴图
             this.loadButtonSprite(2, 'up.png', 'up_down.png');

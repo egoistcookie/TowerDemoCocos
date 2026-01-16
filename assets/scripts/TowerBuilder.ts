@@ -375,57 +375,102 @@ export class TowerBuilder extends Component {
 
         // 设置建筑物类型
         const buildingTypes: BuildingType[] = [];
+        const configManager = UnitConfigManager.getInstance();
+        
+        // 确保配置文件已加载（如果未加载，使用预制体的默认值作为后备）
         if (this.warAncientTreePrefab) {
+            let cost = this.towerCost; // 默认使用预制体的值
+            if (configManager.isConfigLoaded()) {
+                const configCost = this.getBuildCostFromConfig('WarAncientTree');
+                if (configCost > 0) {
+                    cost = this.getActualBuildCost('WarAncientTree', configCost);
+                }
+            }
             buildingTypes.push({
                 name: '弓箭手小屋',
                 prefab: this.warAncientTreePrefab,
-                cost: this.towerCost,
+                cost: cost,
                 icon: this.warAncientTreeIcon || null!,
                 description: '可以生产Tower单位'
             });
         }
         if (this.hunterHallPrefab) {
+            let cost = this.hunterHallCost; // 默认使用预制体的值
+            if (configManager.isConfigLoaded()) {
+                const configCost = this.getBuildCostFromConfig('HunterHall');
+                if (configCost > 0) {
+                    cost = this.getActualBuildCost('HunterHall', configCost);
+                }
+            }
             buildingTypes.push({
                 name: '猎手大厅',
                 prefab: this.hunterHallPrefab,
-                cost: this.hunterHallCost,
+                cost: cost,
                 icon: this.hunterHallIcon || null!,
                 description: '可以生产女猎手单位'
             });
         }
         if (this.stoneWallPrefab) {
+            let cost = this.stoneWallCost; // 默认使用预制体的值
+            if (configManager.isConfigLoaded()) {
+                const configCost = this.getBuildCostFromConfig('StoneWall');
+                if (configCost > 0) {
+                    cost = this.getActualBuildCost('StoneWall', configCost);
+                }
+            }
             buildingTypes.push({
                 name: '石墙',
                 prefab: this.stoneWallPrefab,
-                cost: this.stoneWallCost,
+                cost: cost,
                 icon: this.stoneWallIcon || null!,
                 description: '坚固的障碍物，阻挡敌人进攻路线'
             });
         }
         // 哨塔不在建造面板中显示，只能通过初始化生成
         // if (this.watchTowerPrefab) {
+        //     let cost = this.watchTowerCost; // 默认使用预制体的值
+        //     if (configManager.isConfigLoaded()) {
+        //         const configCost = this.getBuildCostFromConfig('WatchTower');
+        //         if (configCost > 0) {
+        //             cost = this.getActualBuildCost('WatchTower', configCost);
+        //         }
+        //     }
         //     buildingTypes.push({
         //         name: '哨塔',
         //         prefab: this.watchTowerPrefab,
-        //         cost: this.watchTowerCost,
+        //         cost: cost,
         //         icon: this.watchTowerIcon || null!,
         //         description: '可以攻击敌人的防御塔，使用弓箭攻击'
         //     });
         // }
         if (this.swordsmanHallPrefab) {
+            let cost = this.swordsmanHallCost; // 默认使用预制体的值
+            if (configManager.isConfigLoaded()) {
+                const configCost = this.getBuildCostFromConfig('SwordsmanHall');
+                if (configCost > 0) {
+                    cost = this.getActualBuildCost('SwordsmanHall', configCost);
+                }
+            }
             buildingTypes.push({
                 name: '剑士小屋',
                 prefab: this.swordsmanHallPrefab,
-                cost: this.swordsmanHallCost,
+                cost: cost,
                 icon: this.swordsmanHallIcon || null!,
                 description: '可以生产精灵剑士单位'
             });
         }
         if (this.churchPrefab) {
+            let cost = this.churchCost; // 默认使用预制体的值
+            if (configManager.isConfigLoaded()) {
+                const configCost = this.getBuildCostFromConfig('Church');
+                if (configCost > 0) {
+                    cost = this.getActualBuildCost('Church', configCost);
+                }
+            }
             buildingTypes.push({
                 name: '教堂',
                 prefab: this.churchPrefab,
-                cost: this.churchCost,
+                cost: cost,
                 icon: this.churchIcon || null!,
                 description: '可以生产为友军治疗的牧师单位'
             });
@@ -1130,7 +1175,26 @@ export class TowerBuilder extends Component {
             this.findGameManager();
         }
         
-        if (this.gameManager && !this.gameManager.canAfford(building.cost)) {
+        // 从配置文件中获取建造成本
+        let buildCost = building.cost;
+        const buildingNameToUnitId: Record<string, string> = {
+            '弓箭手小屋': 'WarAncientTree',
+            '猎手大厅': 'HunterHall',
+            '石墙': 'StoneWall',
+            '哨塔': 'WatchTower',
+            '剑士小屋': 'SwordsmanHall',
+            '教堂': 'Church'
+        };
+        
+        const unitId = buildingNameToUnitId[building.name];
+        if (unitId) {
+            const configCost = this.getBuildCostFromConfig(unitId);
+            if (configCost > 0) {
+                buildCost = this.getActualBuildCost(unitId, configCost);
+            }
+        }
+        
+        if (this.gameManager && !this.gameManager.canAfford(buildCost)) {
             // 显示金币不足弹窗
             GamePopup.showMessage('金币不足');
             // 不退出建造模式，让用户可以继续尝试或选择其他建筑物
@@ -1211,8 +1275,8 @@ export class TowerBuilder extends Component {
             this.findGridPanel();
         }
 
-        // 获取实际建造成本（考虑单位卡片强化减少）
-        const actualCost = this.getActualBuildCost('WarAncientTree', this.towerCost);
+        // 从配置文件中获取建造成本（考虑单位卡片强化减少）
+        const actualCost = this.getActualBuildCost('WarAncientTree');
         
         // 消耗金币
         if (this.gameManager) {
@@ -1298,7 +1362,7 @@ export class TowerBuilder extends Component {
         }
 
         // 获取实际建造成本（考虑单位卡片强化减少）
-        const actualCost = this.getActualBuildCost('HunterHall', this.hunterHallCost);
+        const actualCost = this.getActualBuildCost('HunterHall');
         
         // 消耗金币
         if (this.gameManager) {
@@ -1383,7 +1447,7 @@ export class TowerBuilder extends Component {
         }
 
         // 获取实际建造成本（考虑单位卡片强化减少）
-        const actualCost = this.getActualBuildCost('StoneWall', this.stoneWallCost);
+        const actualCost = this.getActualBuildCost('StoneWall');
         
         // 消耗金币
         if (this.gameManager && !skipCost) {
@@ -1492,7 +1556,7 @@ export class TowerBuilder extends Component {
         }
 
         // 获取实际建造成本（考虑单位卡片强化减少）
-        const actualCost = this.getActualBuildCost('WatchTower', this.watchTowerCost);
+        const actualCost = this.getActualBuildCost('WatchTower');
         
         // 消耗金币
         if (this.gameManager && !skipCost) {
@@ -1758,7 +1822,7 @@ export class TowerBuilder extends Component {
         }
 
         // 获取实际建造成本（考虑单位卡片强化减少）
-        const actualCost = this.getActualBuildCost('SwordsmanHall', this.swordsmanHallCost);
+        const actualCost = this.getActualBuildCost('SwordsmanHall');
         
         // 消耗金币
         if (this.gameManager) {
@@ -1843,7 +1907,7 @@ export class TowerBuilder extends Component {
         }
 
         // 获取实际建造成本（考虑单位卡片强化减少）
-        const actualCost = this.getActualBuildCost('Church', this.churchCost);
+        const actualCost = this.getActualBuildCost('Church');
         
         // 消耗金币
         if (this.gameManager) {
@@ -2726,23 +2790,48 @@ export class TowerBuilder extends Component {
     }
     
     /**
+     * 从配置文件中获取建造成本
+     * @param unitId 单位ID
+     * @returns 建造成本，如果配置不存在则返回0
+     */
+    private getBuildCostFromConfig(unitId: string): number {
+        const configManager = UnitConfigManager.getInstance();
+        if (!configManager.isConfigLoaded()) {
+            return 0;
+        }
+        
+        const config = configManager.getUnitConfig(unitId);
+        if (config && config.baseStats && config.baseStats.buildCost !== undefined) {
+            return config.baseStats.buildCost;
+        }
+        
+        return 0;
+    }
+
+    /**
      * 获取实际建造成本（考虑单位卡片强化减少）
      * @param unitId 单位ID
-     * @param baseCost 基础建造成本
+     * @param baseCost 基础建造成本（如果为0或未提供，则从配置文件读取）
      * @returns 实际建造成本
      */
-    private getActualBuildCost(unitId: string, baseCost: number): number {
+    private getActualBuildCost(unitId: string, baseCost?: number): number {
+        // 如果未提供baseCost或为0，从配置文件读取
+        let actualBaseCost = baseCost || 0;
+        if (actualBaseCost === 0) {
+            actualBaseCost = this.getBuildCostFromConfig(unitId);
+        }
+        
         const playerDataManager = PlayerDataManager.getInstance();
         const enhancement = playerDataManager.getUnitEnhancement(unitId);
         
         if (enhancement && enhancement.enhancements && enhancement.enhancements.buildCost !== undefined) {
             // buildCost 是负数，表示减少的成本
             const costReduction = enhancement.enhancements.buildCost;
-            const actualCost = Math.max(1, baseCost + costReduction); // 最少1金币
+            const actualCost = Math.max(1, actualBaseCost + costReduction); // 最少1金币
             return actualCost;
         }
         
-        return baseCost;
+        return actualBaseCost;
     }
 }
 

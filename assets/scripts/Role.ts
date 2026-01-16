@@ -10,7 +10,7 @@ import { UnitInfo } from './UnitInfoPanel';
 import { UnitType } from './UnitType';
 import { UnitManager } from './UnitManager';
 import { UnitPool } from './UnitPool';
-import { PerformanceMonitor } from './PerformanceMonitor';
+// import { PerformanceMonitor } from './PerformanceMonitor';
 const { ccclass, property } = _decorator;
 
 @ccclass('Role')
@@ -460,10 +460,10 @@ export class Role extends Component {
 
     update(deltaTime: number) {
         // 性能监控：开始计时
-        const updateStartTime = PerformanceMonitor.startTiming('Role.update');
+        // const updateStartTime = PerformanceMonitor.startTiming('Role.update');
         
         if (this.isDestroyed) {
-            PerformanceMonitor.endTiming('Role.update', updateStartTime, 5);
+            // PerformanceMonitor.endTiming('Role.update', updateStartTime, 5);
             return;
         }
 
@@ -500,7 +500,7 @@ export class Role extends Component {
                 if (elfSwordsmansNode) roleCount += elfSwordsmansNode.children.filter(node => node && node.isValid && node.active).length;
             }
             
-            console.info(`[Role.update] 单位数量统计 - 敌人: ${enemyCount}, 角色: ${roleCount}, 总计: ${enemyCount + roleCount}`);
+            //console.info(`[Role.update] 单位数量统计 - 敌人: ${enemyCount}, 角色: ${roleCount}, 总计: ${enemyCount + roleCount}`);
         }
 
         // 更新对话框系统（在游戏状态检查之前，确保对话框能正常显示）
@@ -517,7 +517,7 @@ export class Role extends Component {
             if (gameState !== GameState.Playing) {
                 // 游戏已结束或暂停，停止攻击和移动
                 this.currentTarget = null!;
-                PerformanceMonitor.endTiming('Role.update', updateStartTime, 5);
+                // PerformanceMonitor.endTiming('Role.update', updateStartTime, 5);
                 return;
             }
         }
@@ -540,9 +540,9 @@ export class Role extends Component {
             
             if (needFindTarget || shouldFindByInterval) {
                 this.targetFindTimer = 0; // 重置计时器
-                const findTargetStartTime = PerformanceMonitor.startTiming('Role.findTarget');
+                // const findTargetStartTime = PerformanceMonitor.startTiming('Role.findTarget');
                 this.findTarget();
-                PerformanceMonitor.endTiming('Role.findTarget', findTargetStartTime, 3);
+                // PerformanceMonitor.endTiming('Role.findTarget', findTargetStartTime, 3);
                 // 如果找到了目标，标记为已找到第一个目标
                 if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
                     this.hasFoundFirstTarget = true;
@@ -559,9 +559,9 @@ export class Role extends Component {
                     if (this.attackTimer >= this.attackInterval) {
                         // 再次检查游戏状态，确保游戏仍在进行
                         if (this.gameManager && this.gameManager.getGameState() === GameState.Playing) {
-                            const attackStartTime = PerformanceMonitor.startTiming('Role.attack');
+                            // const attackStartTime = PerformanceMonitor.startTiming('Role.attack');
                             this.attack();
-                            PerformanceMonitor.endTiming('Role.attack', attackStartTime, 2);
+                            // PerformanceMonitor.endTiming('Role.attack', attackStartTime, 2);
                             this.attackTimer = 0;
                         }
                     }
@@ -602,9 +602,9 @@ export class Role extends Component {
             
             if (needFindTarget || shouldFindByInterval) {
                 this.targetFindTimer = 0; // 重置计时器
-                const findTargetStartTime2 = PerformanceMonitor.startTiming('Role.findTarget');
+                // const findTargetStartTime2 = PerformanceMonitor.startTiming('Role.findTarget');
                 this.findTarget();
-                PerformanceMonitor.endTiming('Role.findTarget', findTargetStartTime2, 3);
+                // PerformanceMonitor.endTiming('Role.findTarget', findTargetStartTime2, 3);
                 // 如果找到了目标，标记为已找到第一个目标
                 if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
                     this.hasFoundFirstTarget = true;
@@ -637,17 +637,17 @@ export class Role extends Component {
                 if (this.attackTimer >= this.attackInterval) {
                     // 再次检查游戏状态，确保游戏仍在进行
                     if (this.gameManager && this.gameManager.getGameState() === GameState.Playing) {
-                        const attackStartTime2 = PerformanceMonitor.startTiming('Role.attack');
+                        // const attackStartTime2 = PerformanceMonitor.startTiming('Role.attack');
                         this.attack();
-                        PerformanceMonitor.endTiming('Role.attack', attackStartTime2, 2);
+                        // PerformanceMonitor.endTiming('Role.attack', attackStartTime2, 2);
                         this.attackTimer = 0;
                     }
                 }
             } else if (distance <= this.getMovementRange()) {
                 // 在移动范围内，朝敌人移动
-                const moveStartTime = PerformanceMonitor.startTiming('Role.moveTowardsTarget');
+                // const moveStartTime = PerformanceMonitor.startTiming('Role.moveTowardsTarget');
                 this.moveTowardsTarget(deltaTime);
-                PerformanceMonitor.endTiming('Role.moveTowardsTarget', moveStartTime, 3);
+                // PerformanceMonitor.endTiming('Role.moveTowardsTarget', moveStartTime, 3);
             } else {
                 // 超出移动范围，停止移动
                 this.stopMoving();
@@ -658,7 +658,7 @@ export class Role extends Component {
         }
         
         // 性能监控：结束 update 方法计时
-        PerformanceMonitor.endTiming('Role.update', updateStartTime, 5);
+        // PerformanceMonitor.endTiming('Role.update', updateStartTime, 5);
     }
 
     /**
@@ -2603,6 +2603,10 @@ export class Role extends Component {
             this.findUnitSelectionManager();
         }
         if (this.unitSelectionManager) {
+            // 计算升级费用：1到2级是10金币，此后每次升级多10金币
+            // 公式：10 + (level - 1) * 10
+            const upgradeCost = this.level < 3 ? (10 + (this.level - 1) * 10) : undefined;
+            
             const unitInfo: UnitInfo = {
                 name: this.unitName || '角色',
                 level: this.level,
@@ -2616,9 +2620,10 @@ export class Role extends Component {
                 attackFrequency: 1.0 / this.attackInterval, // 攻击频率（次/秒）
                 moveSpeed: this.moveSpeed,
                 isDefending: this.isDefending, // 传递防御状态
-                onUpgradeClick: () => {
+                upgradeCost: upgradeCost, // 传递升级费用用于显示
+                onUpgradeClick: this.level < 3 ? () => {
                     this.onUpgradeClick();
-                },
+                } : undefined,
                 onSellClick: () => {
                     this.onSellClick();
                 },
@@ -2996,9 +3001,10 @@ export class Role extends Component {
                 attackFrequency: 1.0 / this.attackInterval,
                 moveSpeed: this.moveSpeed,
                 isDefending: this.isDefending, // 传递防御状态
-                onUpgradeClick: () => {
+                upgradeCost: this.level < 3 ? (10 + (this.level - 1) * 10) : undefined, // 传递升级费用用于显示
+                onUpgradeClick: this.level < 3 ? () => {
                     this.onUpgradeClick();
-                },
+                } : undefined,
                 onSellClick: () => {
                     this.onSellClick();
                 },
