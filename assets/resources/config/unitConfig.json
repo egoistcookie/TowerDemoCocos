@@ -10,7 +10,7 @@
     },
     "displayInfo": {
       "name": "弓箭手",
-      "description": "城里来的指挥官？看起来还不赖，暂且相信你好了。"
+      "description": "银月城来的指挥官？看起来还不赖，暂且相信你好了。"
     },
     "displayStats": {
       "生命值": 50,
@@ -31,7 +31,7 @@
     },
     "displayInfo": {
       "name": "女猎手",
-      "description": "我必将完成狩猎。"
+      "description": "不要妨碍狩猎。"
     },
     "displayStats": {
       "生命值": 50,
@@ -367,6 +367,31 @@
       "移动速度": "55像素/秒",
       "金币奖励": "3金币",
       "经验奖励": "3点"
+    }
+  },
+  "Dragon": {
+    "baseStats": {
+      "maxHealth": 100,
+      "attackRange": 200,
+      "attackDamage": 15,
+      "attackInterval": 2.0,
+      "moveSpeed": 60,
+      "collisionRadius": 25,
+      "goldReward": 10,
+      "expReward": 15
+    },
+    "displayInfo": {
+      "name": "飞龙",
+      "description": "强大的飞龙，能够飞行并释放火球攻击。"
+    },
+    "displayStats": {
+      "生命值": 100,
+      "攻击力": 15,
+      "攻击范围": "200像素",
+      "攻击间隔": "2.0秒",
+      "移动速度": "60像素/秒",
+      "金币奖励": "10金币",
+      "经验奖励": "15点"
     }
   }
 }

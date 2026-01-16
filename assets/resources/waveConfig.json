@@ -12,7 +12,7 @@
       "preWaveDelay": 2,
       "enemies": [
         {
-          "prefabName": "Dragon",
+          "prefabName": "Orc",
           "count": 15,
               "interval": 1.0
         }
@@ -82,6 +82,11 @@
         },
         {
           "prefabName": "OrcWarlord",
+          "count": 1,
+          "interval": 3.0
+        },
+        {
+          "prefabName": "Dragon",
           "count": 1,
           "interval": 3.0
         },
@@ -160,6 +165,11 @@
               "interval": 2.8
         },
         {
+          "prefabName": "Dragon",
+          "count": 1,
+          "interval": 2.8
+        },
+        {
           "prefabName": "TrollSpearman",
           "count": 10,
           "interval": 0.8
@@ -234,6 +244,11 @@
               "interval": 2.5
         },
         {
+          "prefabName": "Dragon",
+          "count": 2,
+          "interval": 2.5
+        },
+        {
           "prefabName": "TrollSpearman",
           "count": 12,
               "interval": 0.65
@@ -304,6 +319,11 @@
         },
         {
           "prefabName": "OrcWarlord",
+              "count": 2,
+              "interval": 2.3
+            },
+            {
+              "prefabName": "Dragon",
               "count": 2,
               "interval": 2.3
             },
@@ -382,6 +402,11 @@
           "interval": 2.0
         },
         {
+          "prefabName": "Dragon",
+          "count": 3,
+          "interval": 2.0
+        },
+        {
           "prefabName": "TrollSpearman",
               "count": 16,
               "interval": 0.45
@@ -456,6 +481,11 @@
               "interval": 1.8
             },
             {
+              "prefabName": "Dragon",
+              "count": 3,
+              "interval": 1.8
+            },
+            {
               "prefabName": "TrollSpearman",
               "count": 18,
               "interval": 0.35
@@ -482,6 +512,11 @@
               "prefabName": "OrcWarlord",
               "count": 4,
               "interval": 1.5
+        },
+        {
+          "prefabName": "Dragon",
+          "count": 4,
+          "interval": 1.5
         },
         {
           "prefabName": "TrollSpearman",

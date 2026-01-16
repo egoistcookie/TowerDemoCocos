@@ -1,4 +1,6 @@
 import { _decorator, Component, Node, Label, Button, EventTouch, find, instantiate, Prefab, Vec3, Color, UIOpacity, Sprite, SpriteFrame, UITransform, Graphics, tween } from 'cc';
+import { GameManager } from './GameManager';
+import { DamageNumber } from './DamageNumber';
 const { ccclass, property } = _decorator;
 
 /**
@@ -30,6 +32,8 @@ export class CountdownPopup extends Component {
     private isShowingNextWaveText: boolean = false; // 是否正在显示"下一波敌人"文本
     private nextWaveTextTimer: number = 0; // 显示"下一波敌人"的计时器
     private arcBorderGraphics: any = null; // 圆弧边框的Graphics组件
+    private gameManager: GameManager = null!; // GameManager引用
+    private initialCountdownTime: number = 60; // 初始倒计时时间（秒）
 
     onLoad() {
         // 确保弹窗初始状态为隐藏
@@ -44,6 +48,19 @@ export class CountdownPopup extends Component {
         if (this.closeButton) {
             this.closeButton.node.on(Button.EventType.CLICK, this.onCloseButtonClick, this);
         } else {
+        }
+        
+        // 查找GameManager
+        this.findGameManager();
+    }
+    
+    /**
+     * 查找GameManager
+     */
+    private findGameManager() {
+        const gameManagerNode = find('Canvas/GameManager');
+        if (gameManagerNode) {
+            this.gameManager = gameManagerNode.getComponent(GameManager);
         }
     }
     
@@ -146,12 +163,96 @@ export class CountdownPopup extends Component {
      * 弹窗点击事件处理
      */
     private onPopupClick() {
+        // 如果正在显示"下一波敌人"文本，不处理点击（等待5秒后开始倒计时）
+        if (this.isShowingNextWaveText) {
+            return;
+        }
+        
+        // 如果正在倒计时，计算剩余时间并奖励金币
+        if (this.isCounting && this.countdownTime > 0) {
+            // 计算剩余倒计时时间（向上取整，确保至少奖励1金币）
+            const remainingSeconds = Math.ceil(this.countdownTime);
+            const goldReward = remainingSeconds;
+            
+            // 添加金币奖励
+            if (this.gameManager) {
+                this.gameManager.addGold(goldReward);
+            }
+            
+            // 在弹窗位置显示金币提示效果
+            this.showGoldRewardEffect(goldReward);
+        }
+        
         this.isCounting = false;
         if (this.onManualClose) {
             this.onManualClose();
         } else {
         }
         this.hide();
+    }
+    
+    /**
+     * 显示金币奖励提示效果
+     * @param goldAmount 金币数量
+     */
+    private showGoldRewardEffect(goldAmount: number) {
+        // 创建金币提示节点
+        const goldNode = new Node('GoldRewardEffect');
+        
+        // 添加到Canvas或场景
+        const canvas = find('Canvas');
+        if (canvas) {
+            goldNode.setParent(canvas);
+        } else {
+            goldNode.setParent(this.node.scene);
+        }
+        
+        // 设置位置（在弹窗位置）
+        const popupWorldPos = this.node.worldPosition.clone();
+        goldNode.setWorldPosition(popupWorldPos);
+        
+        // 添加UITransform组件
+        const uiTransform = goldNode.addComponent(UITransform);
+        uiTransform.setContentSize(100, 40);
+        
+        // 添加Label组件
+        const label = goldNode.addComponent(Label);
+        label.string = `+${goldAmount}`;
+        label.fontSize = 24;
+        label.color = new Color(255, 215, 0, 255); // 金色
+        label.isBold = true;
+        
+        // 创建向上移动并淡出的动画效果
+        const startPos = goldNode.position.clone();
+        const endPos = startPos.clone();
+        endPos.y += 60; // 向上移动60像素
+        
+        // 添加UIOpacity组件用于透明度动画
+        const uiOpacity = goldNode.addComponent(UIOpacity);
+        uiOpacity.opacity = 255;
+        
+        // 使用tween创建动画
+        tween(goldNode)
+            .to(1.0, { 
+                position: endPos
+            }, {
+                easing: 'sineOut'
+            })
+            .parallel(
+                tween().to(1.0, {}, {
+                    onUpdate: (target, ratio) => {
+                        if (uiOpacity) {
+                            uiOpacity.opacity = 255 * (1 - ratio);
+                        }
+                    }
+                })
+            )
+            .call(() => {
+                if (goldNode && goldNode.isValid) {
+                    goldNode.destroy();
+                }
+            })
+            .start();
     }
     
     /**
@@ -214,6 +315,12 @@ export class CountdownPopup extends Component {
         this.onCountdownComplete = onComplete;
         this.onManualClose = onManualClose;
         this.countdownTime = 60;
+        this.initialCountdownTime = 60; // 保存初始倒计时时间
+        
+        // 确保GameManager已获取
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
         
         // 初始状态：显示"下一波敌人"文本，不开始倒计时
         this.isCounting = false;
@@ -288,6 +395,26 @@ export class CountdownPopup extends Component {
      * 关闭按钮点击事件
      */
     private onCloseButtonClick() {
+        // 如果正在显示"下一波敌人"文本，不处理点击
+        if (this.isShowingNextWaveText) {
+            return;
+        }
+        
+        // 如果正在倒计时，计算剩余时间并奖励金币
+        if (this.isCounting && this.countdownTime > 0) {
+            // 计算剩余倒计时时间（向上取整，确保至少奖励1金币）
+            const remainingSeconds = Math.ceil(this.countdownTime);
+            const goldReward = remainingSeconds;
+            
+            // 添加金币奖励
+            if (this.gameManager) {
+                this.gameManager.addGold(goldReward);
+            }
+            
+            // 在弹窗位置显示金币提示效果
+            this.showGoldRewardEffect(goldReward);
+        }
+        
         this.isCounting = false;
         if (this.onManualClose) {
             this.onManualClose();
