@@ -1,6 +1,6 @@
 import { _decorator, SpriteFrame, Prefab, Texture2D, AudioClip, Node, Vec3 } from 'cc';
 import { Role } from './Role';
-import { AudioManager } from './AudioManager';
+import { AudioManager } from '../AudioManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('ElfSwordsman')
@@ -81,7 +81,7 @@ export class ElfSwordsman extends Role {
     moveAnimationDuration: number = 0.3; // 移动动画时长（秒）
 
     @property({ override: true })
-    collisionRadius: number = 30; // 碰撞半径（像素）
+    collisionRadius: number = 10; // 碰撞半径（像素）
 
     @property({ type: SpriteFrame, override: true })
     cardIcon: SpriteFrame = null!; // 单位名片图片

@@ -1,14 +1,14 @@
 import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip, Animation, AnimationState, view } from 'cc';
-import { GameManager } from './GameManager';
-import { GameState } from './GameState';
-import { HealthBar } from './HealthBar';
-import { DamageNumber } from './DamageNumber';
-import { AudioManager } from './AudioManager';
-import { UnitType } from './WarAncientTree';
-import { StoneWallGridPanel } from './StoneWallGridPanel';
-import { UnitManager } from './UnitManager';
-import { EnemyPool } from './EnemyPool';
-import { UnitConfigManager } from './UnitConfigManager';
+import { GameManager } from '../GameManager';
+import { GameState } from '../GameState';
+import { HealthBar } from '../HealthBar';
+import { DamageNumber } from '../DamageNumber';
+import { AudioManager } from '../AudioManager';
+import { UnitType } from '../role/WarAncientTree';
+import { StoneWallGridPanel } from '../StoneWallGridPanel';
+import { UnitManager } from '../UnitManager';
+import { EnemyPool } from '../EnemyPool';
+import { UnitConfigManager } from '../UnitConfigManager';
 // import { PerformanceMonitor } from './PerformanceMonitor';
 const { ccclass, property } = _decorator;
 
@@ -88,8 +88,8 @@ export class Enemy extends Component {
     deathAnimationDuration: number = 1.0; // 死亡动画总时长
 
     protected currentHealth: number = 0;
-    private healthBar: HealthBar = null!;
-    private healthBarNode: Node = null!;
+    protected healthBar: HealthBar = null!;
+    protected healthBarNode: Node = null!;
     protected isDestroyed: boolean = false;
     protected attackTimer: number = 0;
     protected currentTarget: Node = null!;

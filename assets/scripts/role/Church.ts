@@ -1,13 +1,13 @@
 import { _decorator, Node, Vec3, Prefab, instantiate, find, Sprite, SpriteFrame, Color, Graphics, UITransform, Label, EventTouch } from 'cc';
 import { Build } from './Build';
-import { GameManager, GameState } from './GameManager';
-import { UnitSelectionManager } from './UnitSelectionManager';
-import { UnitInfo } from './UnitInfoPanel';
-import { UnitConfigManager } from './UnitConfigManager';
+import { GameManager, GameState } from '../GameManager';
+import { UnitSelectionManager } from '../UnitSelectionManager';
+import { UnitInfo } from '../UnitInfoPanel';
+import { UnitConfigManager } from '../UnitConfigManager';
 import { UnitType } from './WarAncientTree';
 import { Priest } from './Priest';
-import { TalentEffectManager } from './TalentEffectManager';
-import { UnitPool } from './UnitPool';
+import { TalentEffectManager } from '../TalentEffectManager';
+import { UnitPool } from '../UnitPool';
 const { ccclass, property } = _decorator;
 
 @ccclass('Church')

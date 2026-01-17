@@ -1,10 +1,10 @@
 import { _decorator, Component, Node, Prefab, instantiate, Vec3, view, find, resources, JsonAsset } from 'cc';
 import { GameManager, GameState } from './GameManager';
 // 移除UIManager导入，避免循环导入
-import { Enemy } from './Enemy';
-import { OrcWarrior } from './OrcWarrior';
-import { OrcWarlord } from './OrcWarlord';
-import { TrollSpearman } from './TrollSpearman';
+import { Enemy } from './enemy/Enemy';
+import { OrcWarrior } from './enemy/OrcWarrior';
+import { OrcWarlord } from './enemy/OrcWarlord';
+import { TrollSpearman } from './enemy/TrollSpearman';
 import { EnemyPool } from './EnemyPool';
 import { UnitManager } from './UnitManager';
 const { ccclass, property } = _decorator;

@@ -1,8 +1,8 @@
 import { _decorator, Component, Node, EventTarget, instantiate, EventTouch, Sprite, SpriteFrame, find, Graphics, UITransform, Color } from 'cc';
-import { UnitSelectionManager } from './UnitSelectionManager';
-import { UnitInfo } from './UnitInfoPanel';
-import { GameState } from './GameState';
-import { GamePopup } from './GamePopup';
+import { UnitSelectionManager } from '../UnitSelectionManager';
+import { UnitInfo } from '../UnitInfoPanel';
+import { GameState } from '../GameState';
+import { GamePopup } from '../GamePopup';
 const { ccclass, property } = _decorator;
 
 const eventTarget = new EventTarget();
@@ -310,17 +310,17 @@ export class Crystal extends Component {
         if (targetLevel <= this.level) {
             return 0; // 不能降级
         }
-        // 升级费用：2级50，3级100，4级150，5级200
+        // 升级费用：2级100，3级150，4级200，5级250
         if (targetLevel === 2) {
-            return 50;
-        } else if (targetLevel === 3) {
             return 100;
-        } else if (targetLevel === 4) {
+        } else if (targetLevel === 3) {
             return 150;
-        } else if (targetLevel === 5) {
+        } else if (targetLevel === 4) {
             return 200;
+        } else if (targetLevel === 5) {
+            return 250;
         }
-        return 200; // 默认返回最高级费用
+        return 250; // 默认返回最高级费用
     }
 
     /**

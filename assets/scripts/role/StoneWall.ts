@@ -1,10 +1,10 @@
 import { _decorator, Node, Vec3, find, UITransform, Label, Color, SpriteFrame, Graphics, EventTouch, Camera, instantiate } from 'cc';
 import { Build } from './Build';
-import { UnitInfo } from './UnitInfoPanel';
-import { BuildingGridPanel } from './BuildingGridPanel';
-import { StoneWallGridPanel } from './StoneWallGridPanel';
+import { UnitInfo } from '../UnitInfoPanel';
+import { BuildingGridPanel } from '../BuildingGridPanel';
+import { StoneWallGridPanel } from '../StoneWallGridPanel';
 import { UnitType } from './WarAncientTree';
-import { BuildingPool } from './BuildingPool';
+import { BuildingPool } from '../BuildingPool';
 const { ccclass, property } = _decorator;
 
 @ccclass('StoneWall')

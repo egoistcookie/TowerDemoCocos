@@ -1,12 +1,12 @@
 import { _decorator, Node, Vec3, Prefab, instantiate, find, Sprite, SpriteFrame, Color, Graphics, UITransform, Label, EventTouch } from 'cc';
-import { GameState } from './GameState';
-import { Arrow } from './Arrow';
-import { UnitInfo } from './UnitInfoPanel';
-import { UnitConfigManager } from './UnitConfigManager';
+import { GameState } from '../GameState';
+import { Arrow } from '../Arrow';
+import { UnitInfo } from '../UnitInfoPanel';
+import { UnitConfigManager } from '../UnitConfigManager';
 import { Build } from './Build';
-import { TalentEffectManager } from './TalentEffectManager';
-import { UnitPool } from './UnitPool';
-import { UnitType } from './UnitType';
+import { TalentEffectManager } from '../TalentEffectManager';
+import { UnitPool } from '../UnitPool';
+import { UnitType } from '../UnitType';
 const { ccclass, property } = _decorator;
 
 // 重新导出 UnitType 以保持向后兼容
@@ -59,6 +59,7 @@ export class WarAncientTree extends Build {
     private productionProgressBar: Node = null!; // 生产进度条节点
     private productionProgressGraphics: Graphics = null!; // 生产进度条Graphics组件
     private producedTowers: Node[] = []; // 已生产的Arrower列表
+    private totalProducedCount: number = 0; // 累计生产的单位数量（用于计算金币消耗）
     private productionTimer: number = 0; // 生产计时器
     private productionProgress: number = 0; // 生产进度（0-1）
     private isProducing: boolean = false; // 是否正在生产
@@ -72,6 +73,7 @@ export class WarAncientTree extends Build {
         this.currentTarget = null!;
         this.isPlayingAttackAnimation = false;
         this.producedTowers = [];
+        this.totalProducedCount = 0; // 重置累计生产数量
         this.productionTimer = 0;
         this.productionProgress = 0;
         this.isProducing = false;
@@ -498,6 +500,29 @@ export class WarAncientTree extends Build {
             }
         }
 
+        // 检查是否需要消耗金币：前4个单位免费，之后每补充1个单位消耗3金币
+        // 使用累计生产数量，而不是当前存活数量
+        const freeUnitCount = 4; // 前4个单位免费
+        const unitCost = 3; // 之后每单位消耗3金币
+        
+        if (this.totalProducedCount >= freeUnitCount) {
+            // 需要消耗金币
+            if (!this.gameManager) {
+                this.findGameManager();
+            }
+            if (this.gameManager && !this.gameManager.canAfford(unitCost)) {
+                // 金币不足，回退人口
+                if (this.gameManager) {
+                    this.gameManager.removePopulation(1);
+                }
+                return;
+            }
+            // 消耗金币
+            if (this.gameManager) {
+                this.gameManager.spendGold(unitCost);
+            }
+        }
+
         // 性能优化：从对象池获取Tower，而不是直接实例化
         let tower: Node | null = null;
         const unitPool = UnitPool.getInstance();
@@ -551,13 +576,15 @@ export class WarAncientTree extends Build {
 
         // 添加到生产的Tower列表
         this.producedTowers.push(tower);
+        // 增加累计生产数量
+        this.totalProducedCount++;
 
         // 计算Tower的目标位置
-        // 如果有集结点，先移动到集结点；否则向左右两侧跑开
+        // 如果有集结点，优化集结点的位置（避免挤在一起）；否则向左右两侧跑开
         let targetPos: Vec3;
         if (this.rallyPoint) {
-            // 有集结点，移动到集结点
-            targetPos = this.rallyPoint.clone();
+            // 有集结点，查找最佳位置（考虑附近的友方单位）
+            targetPos = this.findOptimalRallyPointPosition(this.rallyPoint, spawnPos);
         } else {
             // 没有集结点，根据已生产的Tower数量，分散到不同位置
             const towerIndex = this.producedTowers.length - 1;

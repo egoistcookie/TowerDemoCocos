@@ -1,6 +1,6 @@
 import { _decorator, Prefab, Node, Vec3, find, instantiate, SpriteFrame } from 'cc';
 import { Enemy } from './Enemy';
-import { AudioManager } from './AudioManager';
+import { AudioManager } from '../AudioManager';
 
 const { ccclass, property } = _decorator;
 

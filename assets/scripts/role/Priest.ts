@@ -1,6 +1,6 @@
 import { _decorator, SpriteFrame, Prefab, Texture2D, AudioClip, Node, Vec3, find, CCString } from 'cc';
 import { Role } from './Role';
-import { GameManager, GameState } from './GameManager';
+import { GameManager, GameState } from '../GameManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('Priest')
@@ -80,7 +80,7 @@ export class Priest extends Role {
     moveAnimationDuration: number = 0.3;
 
     @property({ override: true })
-    collisionRadius: number = 30;
+    collisionRadius: number = 10;
 
     @property({ type: SpriteFrame, override: true })
     cardIcon: SpriteFrame = null!;

@@ -1,13 +1,13 @@
 import { _decorator, Node, Vec3, find, Prefab, instantiate, SpriteFrame, AudioClip, Graphics, UITransform, Color } from 'cc';
 import { Build } from './Build';
-import { UnitInfo } from './UnitInfoPanel';
-import { StoneWallGridPanel } from './StoneWallGridPanel';
+import { UnitInfo } from '../UnitInfoPanel';
+import { StoneWallGridPanel } from '../StoneWallGridPanel';
 import { UnitType } from './WarAncientTree';
-import { BuildingPool } from './BuildingPool';
-import { GameManager, GameState } from './GameManager';
-import { Arrow } from './Arrow';
-import { AudioManager } from './AudioManager';
-import { UnitManager } from './UnitManager';
+import { BuildingPool } from '../BuildingPool';
+import { GameManager, GameState } from '../GameManager';
+import { Arrow } from '../Arrow';
+import { AudioManager } from '../AudioManager';
+import { UnitManager } from '../UnitManager';
 const { ccclass, property } = _decorator;
 
 // 占领状态枚举

@@ -1,8 +1,8 @@
 import { _decorator, Component, Node, Vec3, Graphics, UITransform, EventTouch, find, Camera, input, Input, Sprite, Label } from 'cc';
-import { Arrower } from './Arrower';
-import { Hunter } from './Hunter';
-import { ElfSwordsman } from './ElfSwordsman';
-import { Priest } from './Priest';
+import { Arrower } from './role/Arrower';
+import { Hunter } from './role/Hunter';
+import { ElfSwordsman } from './role/ElfSwordsman';
+import { Priest } from './role/Priest';
 const { ccclass, property } = _decorator;
 
 @ccclass('SelectionManager')

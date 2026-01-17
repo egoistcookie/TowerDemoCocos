@@ -1,15 +1,15 @@
 import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, tween, EventTouch, input, Input, resources, Sprite, SpriteFrame, Texture2D, Camera, AudioClip, view, CCString } from 'cc';
-import { AudioManager } from './AudioManager';
-import { GameManager } from './GameManager';
-import { GameState } from './GameState';
-import { HealthBar } from './HealthBar';
-import { DamageNumber } from './DamageNumber';
-import { Arrow } from './Arrow';
-import { UnitSelectionManager } from './UnitSelectionManager';
-import { UnitInfo } from './UnitInfoPanel';
-import { UnitType } from './UnitType';
-import { UnitManager } from './UnitManager';
-import { UnitPool } from './UnitPool';
+import { AudioManager } from '../AudioManager';
+import { GameManager } from '../GameManager';
+import { GameState } from '../GameState';
+import { HealthBar } from '../HealthBar';
+import { DamageNumber } from '../DamageNumber';
+import { Arrow } from '../Arrow';
+import { UnitSelectionManager } from '../UnitSelectionManager';
+import { UnitInfo } from '../UnitInfoPanel';
+import { UnitType } from '../UnitType';
+import { UnitManager } from '../UnitManager';
+import { UnitPool } from '../UnitPool';
 // import { PerformanceMonitor } from './PerformanceMonitor';
 const { ccclass, property } = _decorator;
 

@@ -1,9 +1,9 @@
 import { _decorator, Component, Node, Vec3, SpriteFrame, Prefab, instantiate, find } from 'cc';
 import { Enemy } from './Enemy';
-import { UnitManager } from './UnitManager';
-import { GameState } from './GameState';
-import { Fireball } from './Fireball';
-import { AudioManager } from './AudioManager';
+import { UnitManager } from '../UnitManager';
+import { GameState } from '../GameState';
+import { Fireball } from '../Fireball';
+import { AudioManager } from '../AudioManager';
 
 const { ccclass, property } = _decorator;
 
@@ -32,6 +32,16 @@ export class Dragon extends Enemy {
     unitDescription: string = "强大的飞龙，能够飞行并释放火球攻击。";
     goldReward: number = 10;
     expReward: number = 15;
+
+    @property({
+        tooltip: "韧性（0-1）：1秒内遭受此百分比血量损失才会触发僵直。0表示没有抗性（受到攻击就会播放受击动画），1表示最大抗性（需要100%血量损失才触发僵直）"
+    })
+    tenacity: number = 0.25; // 韧性，默认0.25表示需要25%血量损失才触发僵直
+
+    // 伤害计算相关属性
+    private recentDamage: number = 0; // 最近1秒内受到的总伤害
+    private damageTime: number = 0; // 最近一次伤害的时间戳
+    private lastStaggerTime: number = -1; // 上次产生僵直的时间戳（-1表示从未产生过僵直）
 
     /**
      * 重写 update 方法，实现飞行移动逻辑
@@ -623,5 +633,88 @@ export class Dragon extends Enemy {
 
         // 初始化火球
         fireballScript.init(startPos, targetNode, this.attackDamage);
+    }
+
+    /**
+     * 重写受击方法，应用韧性机制
+     */
+    takeDamage(damage: number) {
+        if (this.isDestroyed) {
+            return;
+        }
+
+        // 显示伤害数字
+        this.showDamageNumber(damage);
+
+        // 处理韧性为0的情况：没有抗性，每次受到伤害都触发僵直（仍需检查僵直冷却）
+        if (this.tenacity <= 0) {
+            const timeSinceLastStagger = this.lastStaggerTime < 0 ? Infinity : (this.attackTimer - this.lastStaggerTime);
+            if (timeSinceLastStagger > 2.0) {
+                // 记录僵直时间
+                this.lastStaggerTime = this.attackTimer;
+                // 被攻击时停止移动
+                this.stopMoving();
+                // 播放受击动画
+                this.playHitAnimation();
+            }
+        } else {
+            // 计算韧性阈值：需要受到最大生命值的 tenacity 百分比才会触发僵直
+            // 例如：tenacity = 0.25 表示需要受到25%血量损失才触发僵直
+            const threshold = this.maxHealth * Math.min(1, Math.max(0, this.tenacity));
+
+            // 如果距离上次伤害超过1秒，重置累计伤害
+            if (this.damageTime > 0 && this.attackTimer - this.damageTime > 1.0) {
+                this.recentDamage = 0;
+            }
+
+            // 更新最近伤害和时间
+            this.recentDamage += damage;
+            this.damageTime = this.attackTimer;
+
+            // 检查是否应该产生僵直：
+            // 1. 最近1秒内受到的伤害大于等于韧性阈值
+            // 2. 距离上次产生僵直超过2秒（或从未产生过僵直）
+            const timeSinceLastStagger = this.lastStaggerTime < 0 ? Infinity : (this.attackTimer - this.lastStaggerTime);
+            const canStagger = this.recentDamage >= threshold && timeSinceLastStagger > 2.0;
+
+            if (canStagger) {
+                // 记录僵直时间
+                this.lastStaggerTime = this.attackTimer;
+                // 重置累计伤害（因为已经产生僵直了，重新开始计算）
+                this.recentDamage = 0;
+                this.damageTime = this.attackTimer; // 重置伤害时间戳，确保下次计算从当前时间开始
+
+                // 被攻击时停止移动
+                this.stopMoving();
+
+                // 播放受击动画
+                this.playHitAnimation();
+            }
+        }
+
+        this.currentHealth -= damage;
+
+        // 更新血条
+        if (this.healthBar) {
+            this.healthBar.setHealth(this.currentHealth);
+        }
+
+        if (this.currentHealth <= 0) {
+            this.currentHealth = 0;
+            this.die();
+        }
+    }
+
+    /**
+     * 重写 onEnable 方法，重置韧性相关状态
+     */
+    onEnable() {
+        // 调用父类的 onEnable
+        super.onEnable();
+
+        // 重置韧性相关状态
+        this.recentDamage = 0;
+        this.damageTime = 0;
+        this.lastStaggerTime = -1; // 重置僵直时间
     }
 }

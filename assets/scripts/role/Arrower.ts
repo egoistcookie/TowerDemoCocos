@@ -1,8 +1,8 @@
 import { _decorator, SpriteFrame, Prefab, Texture2D, AudioClip, Vec3, Node, instantiate, find } from 'cc';
 import { Role } from './Role';
-import { AudioManager } from './AudioManager';
-import { Arrow } from './Arrow';
-import { Arrow2 } from './Arrow2';
+import { AudioManager } from '../AudioManager';
+import { Arrow } from '../Arrow';
+import { Arrow2 } from '../Arrow2';
 const { ccclass, property } = _decorator;
 
 @ccclass('Arrower')
@@ -86,7 +86,7 @@ export class Arrower extends Role {
     moveAnimationDuration: number = 0.3; // 移动动画时长（秒）
 
     @property({ override: true })
-    collisionRadius: number = 30; // 碰撞半径（像素）
+    collisionRadius: number = 10; // 碰撞半径（像素）
 
     @property({ type: SpriteFrame, override: true })
     cardIcon: SpriteFrame = null!; // 单位名片图片
@@ -204,5 +204,33 @@ export class Arrower extends Role {
                 }
             }
         );
+    }
+
+    /**
+     * 重写 destroyTower 方法，在第一个弓箭手死亡时显示提示框
+     */
+    destroyTower() {
+        // 检查是否是第一个弓箭手死亡
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+
+        // 如果是第一个弓箭手死亡，显示提示框
+        if (this.gameManager && !(this.gameManager as any).hasShownFirstArrowerDeathPopup) {
+            (this.gameManager as any).hasShownFirstArrowerDeathPopup = true;
+            
+            // 显示单位提示框
+            if ((this.gameManager as any).unitIntroPopup) {
+                const unitInfo = {
+                    unitIcon: this.cardIcon || this.unitIcon || this.defaultSpriteFrame,
+                    unitName: this.unitName || '弓箭手',
+                    unitDescription: '请珍惜我的同伴，训练一个士兵需要耗费5枚金币'
+                };
+                (this.gameManager as any).unitIntroPopup.show(unitInfo);
+            }
+        }
+
+        // 调用父类的 destroyTower 方法
+        super.destroyTower();
     }
 }

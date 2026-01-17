@@ -1,7 +1,7 @@
 import { _decorator, SpriteFrame, Prefab, Texture2D, AudioClip, Node, Vec3, instantiate, find } from 'cc';
 import { Role } from './Role';
-import { Boomerang } from './Boomerang';
-import { AudioManager } from './AudioManager';
+import { Boomerang } from '../Boomerang';
+import { AudioManager } from '../AudioManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('Hunter')
@@ -89,7 +89,7 @@ export class Hunter extends Role {
     moveAnimationDuration: number = 0.3; // 移动动画时长（秒）
 
     @property({ override: true })
-    collisionRadius: number = 30; // 碰撞半径（像素）
+    collisionRadius: number = 10; // 碰撞半径（像素）
 
     @property({ type: SpriteFrame, override: true })
     cardIcon: SpriteFrame = null!; // 单位名片图片

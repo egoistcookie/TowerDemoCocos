@@ -1,11 +1,11 @@
 import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip, Animation, AnimationState, view } from 'cc';
-import { GameManager, GameState } from './GameManager';
-import { HealthBar } from './HealthBar';
-import { DamageNumber } from './DamageNumber';
-import { AudioManager } from './AudioManager';
-import { UnitType } from './WarAncientTree';
-import { EnemyPool } from './EnemyPool';
-import { UnitManager } from './UnitManager';
+import { GameManager, GameState } from '../GameManager';
+import { HealthBar } from '../HealthBar';
+import { DamageNumber } from '../DamageNumber';
+import { AudioManager } from '../AudioManager';
+import { UnitType } from '../role/WarAncientTree';
+import { EnemyPool } from '../EnemyPool';
+import { UnitManager } from '../UnitManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('OrcWarlord')
@@ -27,6 +27,11 @@ export class OrcWarlord extends Component {
 
     @property
     collisionRadius: number = 10; // 碰撞半径（像素）
+
+    @property({
+        tooltip: "韧性（0-1）：1秒内遭受此百分比血量损失才会触发僵直。0表示没有抗性（受到攻击就会播放受击动画），1表示最大抗性（需要100%血量损失才触发僵直）"
+    })
+    tenacity: number = 0.3; // 韧性，默认0.3表示需要30%血量损失才触发僵直
 
     @property(Node)
     targetCrystal: Node = null!;
@@ -118,6 +123,7 @@ export class OrcWarlord extends Component {
     // 伤害计算相关属性
     private recentDamage: number = 0; // 最近1秒内受到的总伤害
     private damageTime: number = 0; // 最近一次伤害的时间戳
+    private lastStaggerTime: number = -1; // 上次产生僵直的时间戳（-1表示从未产生过僵直）
 
     // 战争咆哮技能属性
     @property
@@ -155,6 +161,9 @@ export class OrcWarlord extends Component {
         this.attackTimer = 0;
         this.attackComplete = false;
         this.warcryTimer = 0;
+        this.recentDamage = 0;
+        this.damageTime = 0;
+        this.lastStaggerTime = -1; // 重置僵直时间
         this.isPlayingWarcryAnimation = false;
         this.warcryBuffedEnemies.clear();
         this.warcryBuffEndTime.clear();
@@ -1803,20 +1812,50 @@ export class OrcWarlord extends Component {
         // 显示伤害数字
         this.showDamageNumber(damage);
         
-        // 计算生命值的五分之一
-        const threshold = this.maxHealth * 0.2;
-        
-        // 更新最近伤害和时间
-        this.recentDamage += damage;
-        this.damageTime = this.attackTimer;
-        
-        // 只有当最近1秒内受到的伤害大于生命值五分之一时，才产生僵直和播放受击动画
-        if (this.recentDamage >= threshold) {
-            // 被攻击时停止移动
-            this.stopMoving();
+        // 处理韧性为0的情况：没有抗性，每次受到伤害都触发僵直（仍需检查僵直冷却）
+        if (this.tenacity <= 0) {
+            const timeSinceLastStagger = this.lastStaggerTime < 0 ? Infinity : (this.attackTimer - this.lastStaggerTime);
+            if (timeSinceLastStagger > 2.0) {
+                // 记录僵直时间
+                this.lastStaggerTime = this.attackTimer;
+                // 被攻击时停止移动
+                this.stopMoving();
+                // 播放受击动画
+                this.playHitAnimation();
+            }
+        } else {
+            // 计算韧性阈值：需要受到最大生命值的 tenacity 百分比才会触发僵直
+            // 例如：tenacity = 0.3 表示需要受到30%血量损失才触发僵直
+            const threshold = this.maxHealth * Math.min(1, Math.max(0, this.tenacity));
             
-            // 播放受击动画
-            this.playHitAnimation();
+            // 如果距离上次伤害超过1秒，重置累计伤害
+            if (this.damageTime > 0 && this.attackTimer - this.damageTime > 1.0) {
+                this.recentDamage = 0;
+            }
+            
+            // 更新最近伤害和时间
+            this.recentDamage += damage;
+            this.damageTime = this.attackTimer;
+            
+            // 检查是否应该产生僵直：
+            // 1. 最近1秒内受到的伤害大于等于韧性阈值
+            // 2. 距离上次产生僵直超过2秒（或从未产生过僵直）
+            const timeSinceLastStagger = this.lastStaggerTime < 0 ? Infinity : (this.attackTimer - this.lastStaggerTime);
+            const canStagger = this.recentDamage >= threshold && timeSinceLastStagger > 2.0;
+            
+            if (canStagger) {
+                // 记录僵直时间
+                this.lastStaggerTime = this.attackTimer;
+                // 重置累计伤害（因为已经产生僵直了，重新开始计算）
+                this.recentDamage = 0;
+                this.damageTime = this.attackTimer; // 重置伤害时间戳，确保下次计算从当前时间开始
+                
+                // 被攻击时停止移动
+                this.stopMoving();
+                
+                // 播放受击动画
+                this.playHitAnimation();
+            }
         }
 
         this.currentHealth -= damage;

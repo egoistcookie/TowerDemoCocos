@@ -1,14 +1,14 @@
 import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Sprite, SpriteFrame, Color, Graphics, UITransform, Label, EventTouch, Camera } from 'cc';
-import { GameManager } from './GameManager';
-import { GameState } from './GameState';
-import { HealthBar } from './HealthBar';
-import { DamageNumber } from './DamageNumber';
-import { UnitSelectionManager } from './UnitSelectionManager';
-import { UnitInfo } from './UnitInfoPanel';
-import { SelectionManager } from './SelectionManager';
-import { BuildingGridPanel } from './BuildingGridPanel';
-import { UnitType } from './UnitType';
-import { BuildingPool } from './BuildingPool';
+import { GameManager } from '../GameManager';
+import { GameState } from '../GameState';
+import { HealthBar } from '../HealthBar';
+import { DamageNumber } from '../DamageNumber';
+import { UnitSelectionManager } from '../UnitSelectionManager';
+import { UnitInfo } from '../UnitInfoPanel';
+import { SelectionManager } from '../SelectionManager';
+import { BuildingGridPanel } from '../BuildingGridPanel';
+import { UnitType } from '../UnitType';
+import { BuildingPool } from '../BuildingPool';
 const { ccclass, property } = _decorator;
 
 @ccclass('Build')
@@ -77,6 +77,9 @@ export class Build extends Component {
     protected rallyPointPreview: Node = null!; // 集结点预览节点（红色圆点虚影）
     protected rallyPointHideTimer: number = 0; // 集结点隐藏定时器
     protected readonly RALLY_POINT_DISPLAY_DURATION: number = 2; // 集结点显示持续时间（秒）
+    
+    @property(SpriteFrame)
+    protected rallyPointMarkerSprite: SpriteFrame = null!; // 集结点标记贴图（如果设置了贴图，则使用贴图；否则使用默认的红点）
     
     // 对象池相关：预制体名称（用于对象池回收）
     public prefabName: string = '';
@@ -858,15 +861,25 @@ export class Build extends Component {
         const uiTransform = this.rallyPointMarker.addComponent(UITransform);
         uiTransform.setContentSize(20, 20);
         
-        // 添加Graphics组件绘制红色圆点
-        const graphics = this.rallyPointMarker.addComponent(Graphics);
-        graphics.fillColor = new Color(255, 0, 0, 255); // 红色
-        graphics.circle(0, 0, 10); // 半径10的圆
-        graphics.fill();
-        graphics.strokeColor = new Color(255, 0, 0, 255);
-        graphics.lineWidth = 2;
-        graphics.circle(0, 0, 10);
-        graphics.stroke();
+        // 如果设置了集结点的贴图，使用贴图；否则使用默认的红点
+        if (this.rallyPointMarkerSprite) {
+            // 使用贴图
+            // 添加Sprite组件显示贴图
+            const sprite = this.rallyPointMarker.addComponent(Sprite);
+            sprite.spriteFrame = this.rallyPointMarkerSprite;
+            sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        } else {
+            // 使用默认红点（Graphics绘制）
+            // 添加Graphics组件绘制红色圆点
+            const graphics = this.rallyPointMarker.addComponent(Graphics);
+            graphics.fillColor = new Color(255, 0, 0, 255); // 红色
+            graphics.circle(0, 0, 10); // 半径10的圆
+            graphics.fill();
+            graphics.strokeColor = new Color(255, 0, 0, 255);
+            graphics.lineWidth = 2;
+            graphics.circle(0, 0, 10);
+            graphics.stroke();
+        }
         
         // 初始隐藏
         this.rallyPointMarker.active = false;
@@ -937,6 +950,116 @@ export class Build extends Component {
             this.rallyPointMarker.active = false;
         }
         this.rallyPointHideTimer = 0;
+    }
+
+    /**
+     * 查找集结点的最佳位置（考虑附近的友方单位，避免挤在一起）
+     * 子类可以重写此方法以使用自己的 hasUnitAtPosition 和 findAvailableSpawnPosition 方法
+     * @param rallyPoint 集结点位置
+     * @param unitSpawnPos 单位生成位置
+     * @returns 最佳目标位置
+     */
+    protected findOptimalRallyPointPosition(rallyPoint: Vec3, unitSpawnPos: Vec3): Vec3 {
+        const checkRadius = 80; // 检查半径（像素）
+        const minDistance = 60; // 最小间距（像素），避免太挤
+        const unitRadius = 20; // 单位碰撞半径
+        
+        // 查找集结点附近的友方单位（弓箭手、女猎手、剑士、牧师）
+        const nearbyFriends: { node: Node; pos: Vec3; distance: number }[] = [];
+        
+        // 检查所有友方单位容器
+        const friendlyContainers = [
+            { name: 'Towers', componentNames: ['Arrower', 'Priest'] },
+            { name: 'Hunters', componentNames: ['Hunter'] },
+            { name: 'ElfSwordsmans', componentNames: ['ElfSwordsman'] }
+        ];
+        
+        for (const container of friendlyContainers) {
+            const containerNode = find(`Canvas/${container.name}`);
+            if (!containerNode) continue;
+            
+            const units = containerNode.children || [];
+            for (const unit of units) {
+                if (!unit || !unit.isValid || !unit.active) continue;
+                
+                // 检查是否是友方单位
+                let isFriendly = false;
+                for (const compName of container.componentNames) {
+                    const script = unit.getComponent(compName) as any;
+                    if (script && script.isAlive && script.isAlive()) {
+                        isFriendly = true;
+                        break;
+                    }
+                }
+                
+                if (isFriendly) {
+                    const unitPos = unit.worldPosition;
+                    const distance = Vec3.distance(rallyPoint, unitPos);
+                    
+                    // 只考虑在检查半径内的单位
+                    if (distance <= checkRadius) {
+                        nearbyFriends.push({
+                            node: unit,
+                            pos: unitPos,
+                            distance: distance
+                        });
+                    }
+                }
+            }
+        }
+        
+        // 如果没有附近的友方单位，直接返回集结点位置
+        if (nearbyFriends.length === 0) {
+            return rallyPoint.clone();
+        }
+        
+        // 找到最近的友方单位
+        nearbyFriends.sort((a, b) => a.distance - b.distance);
+        const nearestFriend = nearbyFriends[0];
+        
+        // 计算从最近友方单位到集结点的方向
+        const direction = new Vec3();
+        Vec3.subtract(direction, rallyPoint, nearestFriend.pos);
+        const dirLength = direction.length();
+        
+        // 如果距离已经很远，直接使用集结点位置
+        if (dirLength > checkRadius) {
+            return rallyPoint.clone();
+        }
+        
+        // 在友方单位附近找一个合适的位置，朝向集结点
+        // 位置在友方单位和集结点之间，保持最小间距
+        const targetDistance = Math.max(minDistance, unitRadius * 2);
+        let targetPos: Vec3;
+        
+        if (dirLength > 0.1) {
+            // 归一化方向
+            direction.normalize();
+            
+            // 计算目标位置：在友方单位周围，朝向集结点方向
+            Vec3.scaleAndAdd(targetPos = new Vec3(), nearestFriend.pos, direction, targetDistance);
+        } else {
+            // 如果友方单位就在集结点上，在集结点周围找一个位置
+            // 使用一个固定方向（例如右侧）
+            targetPos = new Vec3(rallyPoint.x + targetDistance, rallyPoint.y, rallyPoint.z);
+        }
+        
+        // 子类可能重写了 hasUnitAtPosition 和 findAvailableSpawnPosition，尝试调用它们
+        // 如果没有重写，使用默认逻辑（直接返回目标位置）
+        if ((this as any).hasUnitAtPosition && typeof (this as any).hasUnitAtPosition === 'function') {
+            const checkRadiusForPos = unitRadius;
+            if (!(this as any).hasUnitAtPosition(targetPos, checkRadiusForPos)) {
+                return targetPos;
+            }
+            
+            // 如果目标位置被占用，尝试在周围找一个可用的位置
+            if ((this as any).findAvailableSpawnPosition && typeof (this as any).findAvailableSpawnPosition === 'function') {
+                return (this as any).findAvailableSpawnPosition(targetPos);
+            }
+        }
+        
+        // 如果没有重写方法，直接返回目标位置（让单位自己处理碰撞）
+        return targetPos;
     }
     
     protected findGridPanel() {

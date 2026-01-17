@@ -1,5 +1,5 @@
 import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager } from 'cc';
-import { Crystal } from './Crystal';
+import { Crystal } from './role/Crystal';
 import { UnitIntroPopup } from './UnitIntroPopup';
 import { UnitConfigManager } from './UnitConfigManager';
 import { PlayerDataManager } from './PlayerDataManager';
@@ -56,6 +56,7 @@ export class GameManager extends Component {
     private currentGameExp: number = 0; // 本局游戏获得的经验值
     private playerDataManager: PlayerDataManager = null!;
     private hasShownPopulationLimitWarning: boolean = false; // 是否已显示过人口上限提示
+    private hasShownFirstArrowerDeathPopup: boolean = false; // 是否已显示过第一个弓箭手死亡提示
     
     // 单位首次出现相关
     private appearedUnitTypes: Set<string> = new Set();
