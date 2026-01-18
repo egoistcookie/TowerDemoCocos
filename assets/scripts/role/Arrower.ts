@@ -224,7 +224,7 @@ export class Arrower extends Role {
                 const unitInfo = {
                     unitIcon: this.cardIcon || this.unitIcon || this.defaultSpriteFrame,
                     unitName: this.unitName || '弓箭手',
-                    unitDescription: '请珍惜我的同伴，训练一个士兵需要耗费5枚金币'
+                    unitDescription: '请珍惜我的同伴，训练一个士兵需要耗费3枚金币'
                 };
                 (this.gameManager as any).unitIntroPopup.show(unitInfo);
             }

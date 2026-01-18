@@ -50,7 +50,7 @@ export class GameManager extends Component {
     private gameState: GameState = GameState.Ready;
     private gameTime: number = 0; // 已防御时间（累积时间，从0开始）
     private crystalScript: Crystal = null!;
-    private gold: number = 20; // 初始金币
+    private gold: number = 200; // 初始金币
     private population: number = 0; // 当前人口
     private maxPopulation: number = 10; // 人口上限
     private currentGameExp: number = 0; // 本局游戏获得的经验值

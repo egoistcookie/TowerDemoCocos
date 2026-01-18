@@ -2598,6 +2598,7 @@ export class Role extends Component {
      * 显示单位信息面板（不显示头顶的选择面板）
      */
     showUnitInfoPanel() {
+        console.info('[Role.showUnitInfoPanel] 显示单位信息面板，单位名称:', this.node?.name);
         // 显示单位信息面板和范围
         if (!this.unitSelectionManager) {
             this.findUnitSelectionManager();
@@ -2638,8 +2639,40 @@ export class Role extends Component {
         const canvas = find('Canvas');
         this.scheduleOnce(() => {
             if (canvas) {
+                console.info('[Role.showUnitInfoPanel] 注册globalTouchHandler到Canvas，单位名称:', this.node?.name);
                 // 创建全局触摸事件处理器
                 this.globalTouchHandler = (event: EventTouch) => {
+                    console.info('[Role.globalTouchHandler] 全局触摸事件触发，单位名称:', this.node?.name);
+                    
+                    // 检查当前单位是否仍被选中
+                    // 注意：globalTouchHandler只有在单位被选中时才会注册
+                    // 但如果选中状态在onGlobalTouchEnd中被清除，这里检查可能返回false
+                    // 所以我们需要检查：如果getCurrentSelectedUnit()不为null且不是当前单位，说明选中了其他单位，应该移除监听器
+                    if (this.unitSelectionManager) {
+                        const currentSelectedUnit = this.unitSelectionManager.getCurrentSelectedUnit();
+                        const isSelected = this.unitSelectionManager.isUnitSelected(this.node);
+                        
+                        console.info('[Role.globalTouchHandler] 检查选中状态，单位名称:', this.node?.name, '是否选中:', isSelected, '当前选中单位:', currentSelectedUnit?.name);
+                        
+                        // 如果选中了其他单位（不是当前单位），移除监听器
+                        // 或者如果没有任何选中（currentSelectedUnit为null），也移除监听器
+                        if (currentSelectedUnit !== null && currentSelectedUnit !== this.node) {
+                            console.info('[Role.globalTouchHandler] 选中了其他单位，移除当前单位的监听器，单位名称:', this.node?.name);
+                            const canvas = find('Canvas');
+                            if (canvas && this.globalTouchHandler) {
+                                canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
+                                console.info('[Role.globalTouchHandler] 已移除监听器，单位名称:', this.node?.name);
+                            }
+                            this.globalTouchHandler = null!;
+                            return;
+                        }
+                        
+                        // 如果没有任何选中，也不执行移动操作
+                        // 注意：这个检查可能在onGlobalTouchEnd清除选择后返回true
+                        // 但我们仍然允许执行移动操作，因为点击空地移动是正常行为
+                        // 只在选中了其他单位时才阻止
+                    }
+                    
                     // 检查点击是否在信息面板上（通过节点名称和路径检查）
                     const targetNode = event.target as Node;
                     if (targetNode) {
@@ -2649,12 +2682,14 @@ export class Role extends Component {
                             // 检查节点名称是否包含 UnitInfoPanel（信息面板的节点名称）
                             if (currentNode.name === 'UnitInfoPanel' || currentNode.name.includes('UnitInfoPanel')) {
                                 // 点击在信息面板上，不设置移动目标
+                                console.info('[Role.globalTouchHandler] 点击在信息面板上，不设置移动目标，节点名称:', currentNode.name);
                                 return;
                             }
                             // 检查节点的路径是否包含 UnitInfoPanel
                             const nodePath = currentNode.getPathInHierarchy();
                             if (nodePath && nodePath.includes('UnitInfoPanel')) {
                                 // 点击在信息面板上，不设置移动目标
+                                console.info('[Role.globalTouchHandler] 点击在信息面板路径上，不设置移动目标，节点路径:', nodePath);
                                 return;
                             }
                             currentNode = currentNode.parent;
@@ -2666,6 +2701,7 @@ export class Role extends Component {
                     }
                     
                     // 点击不在信息面板上，设置移动目标
+                    console.info('[Role.globalTouchHandler] 点击不在信息面板上，设置移动目标');
                     this.setManualMoveTarget(event);
                 };
                 
@@ -2679,6 +2715,7 @@ export class Role extends Component {
      * @param worldPos 世界坐标位置
      */
     setManualMoveTargetPosition(worldPos: Vec3) {
+        console.info('[Role.setManualMoveTargetPosition] 设置手动移动目标位置，单位名称:', this.node?.name, '目标位置:', worldPos);
         // 智能调整目标位置，避免与单位重叠
         const adjustedPos = this.findAvailableMovePosition(worldPos);
         
@@ -2688,6 +2725,7 @@ export class Role extends Component {
         
         // 清除当前自动寻敌目标，优先执行手动移动
         this.currentTarget = null!;
+        console.info('[Role.setManualMoveTargetPosition] 手动移动目标已设置，调整后位置:', adjustedPos);
     }
 
     /**
@@ -2695,6 +2733,7 @@ export class Role extends Component {
      * @param event 触摸事件
      */
     setManualMoveTarget(event: EventTouch) {
+        console.info('[Role.setManualMoveTarget] 设置手动移动目标，单位名称:', this.node?.name);
         // 阻止事件冒泡，避免触发其他点击事件
         event.propagationStopped = true;
         
@@ -2704,11 +2743,13 @@ export class Role extends Component {
         // 查找Camera节点
         const cameraNode = find('Canvas/Camera') || this.node.scene?.getChildByName('Camera');
         if (!cameraNode) {
+            console.info('[Role.setManualMoveTarget] 找不到Camera节点');
             return;
         }
         
         const camera = cameraNode.getComponent(Camera);
         if (!camera) {
+            console.info('[Role.setManualMoveTarget] 找不到Camera组件');
             return;
         }
         
@@ -2717,12 +2758,28 @@ export class Role extends Component {
         const worldPos = new Vec3();
         camera.screenToWorld(screenPos, worldPos);
         worldPos.z = 0;
+        console.info('[Role.setManualMoveTarget] 屏幕坐标转换为世界坐标，屏幕:', touchLocation, '世界:', worldPos);
         
         // 使用setManualMoveTargetPosition方法设置移动目标
         this.setManualMoveTargetPosition(worldPos);
         
         // 隐藏选择面板（这会移除全局触摸监听，确保只有一次控制机会）
+        console.info('[Role.setManualMoveTarget] 调用hideSelectionPanel清除globalTouchHandler');
         this.hideSelectionPanel();
+        
+        // 清除选中状态（无论当前是否选中这个单位，点击空地移动后都应该清除选择）
+        if (this.unitSelectionManager) {
+            const isSelected = this.unitSelectionManager.isUnitSelected(this.node);
+            console.info('[Role.setManualMoveTarget] 检查单位是否被选中，单位名称:', this.node?.name, '是否选中:', isSelected);
+            if (isSelected) {
+                console.info('[Role.setManualMoveTarget] 单位当前被选中，调用clearSelection清除选择，单位名称:', this.node?.name);
+                this.unitSelectionManager.clearSelection();
+            } else {
+                console.info('[Role.setManualMoveTarget] 单位当前未被选中，但仍尝试清除选择，单位名称:', this.node?.name);
+                // 即使当前未选中，也清除选择（防止其他单位的选中状态残留）
+                this.unitSelectionManager.clearSelection();
+            }
+        }
     }
 
     findAvailableMovePosition(initialPos: Vec3): Vec3 {
@@ -2869,20 +2926,28 @@ export class Role extends Component {
     }
 
     hideSelectionPanel() {
+        console.info('[Role.hideSelectionPanel] 隐藏选择面板，单位名称:', this.node?.name);
         // 移除全局触摸事件监听
         if (this.globalTouchHandler) {
+            console.info('[Role.hideSelectionPanel] 清除globalTouchHandler');
             const canvas = find('Canvas');
             if (canvas) {
                 canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
+                console.info('[Role.hideSelectionPanel] 已从Canvas移除TOUCH_END监听器');
             }
             this.globalTouchHandler = null!;
+        } else {
+            console.info('[Role.hideSelectionPanel] globalTouchHandler为null，无需清除');
         }
 
         // 清除单位信息面板和范围显示
         if (this.unitSelectionManager) {
             // 检查是否当前选中的是这个单位
             if (this.unitSelectionManager.isUnitSelected(this.node)) {
+                console.info('[Role.hideSelectionPanel] 当前选中的是这个单位，调用clearSelection');
                 this.unitSelectionManager.clearSelection();
+            } else {
+                console.info('[Role.hideSelectionPanel] 当前选中的不是这个单位，不调用clearSelection');
             }
         }
         

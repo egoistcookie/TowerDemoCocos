@@ -36,8 +36,10 @@ export class UnitSelectionManager extends Component {
      * 全局触摸结束事件处理
      */
     onGlobalTouchEnd(event: EventTouch) {
+        console.info('[UnitSelectionManager.onGlobalTouchEnd] 全局触摸结束事件触发');
         // 如果没有选中任何单位（单选或多选），直接返回
         if (!this.currentSelectedUnit && this.currentSelectedUnits.length === 0) {
+            console.info('[UnitSelectionManager.onGlobalTouchEnd] 没有选中任何单位，直接返回');
             return;
         }
         
@@ -78,6 +80,7 @@ export class UnitSelectionManager extends Component {
                         touchLocation.y >= panelBottom && 
                         touchLocation.y <= panelTop) {
                         // 点击在信息面板上，不取消选择
+                        console.info('[UnitSelectionManager.onGlobalTouchEnd] 点击在信息面板上，不取消选择');
                         return;
                     }
                 }
@@ -98,6 +101,7 @@ export class UnitSelectionManager extends Component {
             const collisionRadius = 50;
             if (distanceToUnit <= collisionRadius) {
                 // 点击在单位上，不取消选择
+                console.info('[UnitSelectionManager.onGlobalTouchEnd] 点击在单选单位上，不取消选择，单位名称:', this.currentSelectedUnit?.name);
                 return;
             }
         } else if (this.currentSelectedUnits.length > 0) {
@@ -117,12 +121,14 @@ export class UnitSelectionManager extends Component {
                 const collisionRadius = 50;
                 if (distanceToUnit <= collisionRadius) {
                     // 点击在单位上，不取消选择
+                    console.info('[UnitSelectionManager.onGlobalTouchEnd] 点击在多选单位上，不取消选择，单位名称:', unitNode?.name);
                     return;
                 }
             }
         }
         
         // 点击不在单位和信息面板上，取消选择
+        console.info('[UnitSelectionManager.onGlobalTouchEnd] 点击在空地上，清除选择');
         this.clearSelection();
     }
 
@@ -159,12 +165,27 @@ export class UnitSelectionManager extends Component {
      * @param unitInfo 单位信息
      */
     selectUnit(unitNode: Node, unitInfo: UnitInfo) {
-        // 清除之前的选择
+        // 保存之前选中的单位，用于清除其globalTouchHandler
+        const previousUnit = this.currentSelectedUnit;
+        const previousUnits = [...this.currentSelectedUnits];
+        
+        // 清除之前的选择（不清除globalTouchHandler）
         this.clearSelection();
 
         // 设置当前选中的单位
         this.currentSelectedUnit = unitNode;
         this.currentSelectedUnits = []; // 清除多选
+
+        // 清除之前选中单位的globalTouchHandler（防止旧单位继续响应点击）
+        // 注意：这不会影响当前选中单位，因为它会重新注册globalTouchHandler
+        if (previousUnit && previousUnit.isValid && previousUnit !== unitNode) {
+            this.clearUnitTouchHandler(previousUnit);
+        }
+        for (const prevUnit of previousUnits) {
+            if (prevUnit && prevUnit.isValid && prevUnit !== unitNode) {
+                this.clearUnitTouchHandler(prevUnit);
+            }
+        }
 
         // 显示单位信息面板
         if (this.unitInfoPanel) {
@@ -378,6 +399,7 @@ export class UnitSelectionManager extends Component {
      * 清除选择
      */
     clearSelection() {
+        console.info('[UnitSelectionManager.clearSelection] 开始清除选择');
         // 隐藏信息面板
         if (this.unitInfoPanel) {
             this.unitInfoPanel.hide();
@@ -388,42 +410,149 @@ export class UnitSelectionManager extends Component {
 
         // 先保存当前选中的单位，然后清除选中状态
         const selectedUnit = this.currentSelectedUnit;
-        const selectedUnits = this.currentSelectedUnits;
+        const selectedUnits = [...this.currentSelectedUnits]; // 复制数组，避免引用问题
+        console.info('[UnitSelectionManager.clearSelection] 当前选中单位:', selectedUnit?.name, '多选单位数量:', selectedUnits.length);
         // 清除当前选中单位
         this.currentSelectedUnit = null!;
         this.currentSelectedUnits = [];
         
-        // 如果有选中的单位，调用setHighlight(false)清除高亮
+        // 清除单选单位的高亮
+        // 注意：不清除globalTouchHandler，让单位可以响应第一次点击移动
+        // globalTouchHandler会在setManualMoveTarget()中的hideSelectionPanel()中被清除
         if (selectedUnit && selectedUnit.isValid) {
-            // 调用单位的setHighlight方法清除高亮
-            const unitScript = selectedUnit.getComponent('Arrower') as any;
-            if (unitScript && unitScript.setHighlight) {
-                unitScript.setHighlight(false);
-            }
-            
-            // 也检查是否是其他单位类型
-            const arrowerScript = selectedUnit.getComponent('Arrower') as any;
-            if (arrowerScript && arrowerScript.setHighlight) {
-                arrowerScript.setHighlight(false);
-            }
-            
-            // 检查是否是女猎手
-            const hunterScript = selectedUnit.getComponent('Hunter') as any;
-            if (hunterScript && hunterScript.setHighlight) {
-                hunterScript.setHighlight(false);
-            }
-            
-            // 检查是否是建筑物类型
-            const warAncientTreeScript = selectedUnit.getComponent('WarAncientTree') as any;
-            if (warAncientTreeScript && warAncientTreeScript.setHighlight) {
-                warAncientTreeScript.setHighlight(false);
-            }
-            
-            const hunterHallScript = selectedUnit.getComponent('HunterHall') as any;
-            if (hunterHallScript && hunterHallScript.setHighlight) {
-                hunterHallScript.setHighlight(false);
+            console.info('[UnitSelectionManager.clearSelection] 清除单选单位高亮，单位名称:', selectedUnit.name);
+            this.clearUnitHighlight(selectedUnit);
+        }
+        
+        // 清除多选单位的高亮
+        for (const unitNode of selectedUnits) {
+            if (unitNode && unitNode.isValid) {
+                console.info('[UnitSelectionManager.clearSelection] 清除多选单位高亮，单位名称:', unitNode.name);
+                this.clearUnitHighlight(unitNode);
             }
         }
+        
+        console.info('[UnitSelectionManager.clearSelection] 清除选择完成');
+    }
+    
+    /**
+     * 清除单位的高亮（辅助方法）
+     * @param unitNode 单位节点
+     */
+    private clearUnitHighlight(unitNode: Node) {
+        if (!unitNode || !unitNode.isValid) {
+            return;
+        }
+        
+        // 尝试获取Role组件（所有单位都继承自Role）
+        const roleScript = unitNode.getComponent('Role') as any;
+        if (roleScript && roleScript.setHighlight) {
+            roleScript.setHighlight(false);
+        }
+        
+        // 尝试获取Arrower组件（弓箭手）
+        const arrowerScript = unitNode.getComponent('Arrower') as any;
+        if (arrowerScript && arrowerScript.setHighlight) {
+            arrowerScript.setHighlight(false);
+        }
+        
+        // 尝试获取Hunter组件（女猎手）
+        const hunterScript = unitNode.getComponent('Hunter') as any;
+        if (hunterScript && hunterScript.setHighlight) {
+            hunterScript.setHighlight(false);
+        }
+        
+        // 尝试获取ElfSwordsman组件（精灵剑士）
+        const swordsmanScript = unitNode.getComponent('ElfSwordsman') as any;
+        if (swordsmanScript && swordsmanScript.setHighlight) {
+            swordsmanScript.setHighlight(false);
+        }
+        
+        // 尝试获取Priest组件（牧师）
+        const priestScript = unitNode.getComponent('Priest') as any;
+        if (priestScript && priestScript.setHighlight) {
+            priestScript.setHighlight(false);
+        }
+        
+        // 尝试获取建筑物组件
+        const warAncientTreeScript = unitNode.getComponent('WarAncientTree') as any;
+        if (warAncientTreeScript && warAncientTreeScript.setHighlight) {
+            warAncientTreeScript.setHighlight(false);
+        }
+        
+        const hunterHallScript = unitNode.getComponent('HunterHall') as any;
+        if (hunterHallScript && hunterHallScript.setHighlight) {
+            hunterHallScript.setHighlight(false);
+        }
+        
+        const swordsmanHallScript = unitNode.getComponent('SwordsmanHall') as any;
+        if (swordsmanHallScript && swordsmanHallScript.setHighlight) {
+            swordsmanHallScript.setHighlight(false);
+        }
+        
+        const churchScript = unitNode.getComponent('Church') as any;
+        if (churchScript && churchScript.setHighlight) {
+            churchScript.setHighlight(false);
+        }
+        
+        const buildScript = unitNode.getComponent('Build') as any;
+        if (buildScript && buildScript.setHighlight) {
+            buildScript.setHighlight(false);
+        }
+    }
+    
+    /**
+     * 清除单位的全局触摸监听器（辅助方法）
+     * 用于清除单位的globalTouchHandler，防止单位继续响应点击移动
+     * @param unitNode 单位节点
+     */
+    private clearUnitTouchHandler(unitNode: Node) {
+        if (!unitNode || !unitNode.isValid) {
+            console.info('[UnitSelectionManager.clearUnitTouchHandler] 单位节点无效，无法清除globalTouchHandler');
+            return;
+        }
+        
+        console.info('[UnitSelectionManager.clearUnitTouchHandler] 开始清除单位的globalTouchHandler，单位名称:', unitNode?.name);
+        
+        // 尝试获取Role组件（所有单位都继承自Role）
+        const roleScript = unitNode.getComponent('Role') as any;
+        if (roleScript && roleScript.hideSelectionPanel) {
+            // 不调用hideSelectionPanel，因为它会再次调用clearSelection导致循环
+            // 直接清除globalTouchHandler
+            if (roleScript.globalTouchHandler) {
+                console.info('[UnitSelectionManager.clearUnitTouchHandler] 找到Role组件的globalTouchHandler，准备清除，单位名称:', unitNode?.name);
+                const canvas = find('Canvas');
+                if (canvas) {
+                    canvas.off(Node.EventType.TOUCH_END, roleScript.globalTouchHandler, roleScript);
+                    console.info('[UnitSelectionManager.clearUnitTouchHandler] 已从Canvas移除Role组件的TOUCH_END监听器，单位名称:', unitNode?.name);
+                } else {
+                    console.info('[UnitSelectionManager.clearUnitTouchHandler] 找不到Canvas节点，无法清除监听器，单位名称:', unitNode?.name);
+                }
+                roleScript.globalTouchHandler = null!;
+                console.info('[UnitSelectionManager.clearUnitTouchHandler] Role组件的globalTouchHandler已设置为null，单位名称:', unitNode?.name);
+            } else {
+                console.info('[UnitSelectionManager.clearUnitTouchHandler] Role组件没有globalTouchHandler，无需清除，单位名称:', unitNode?.name);
+            }
+        } else {
+            console.info('[UnitSelectionManager.clearUnitTouchHandler] 找不到Role组件或hideSelectionPanel方法，单位名称:', unitNode?.name);
+        }
+        
+        // 尝试获取Build组件（建筑物）
+        const buildScript = unitNode.getComponent('Build') as any;
+        if (buildScript && buildScript.globalTouchHandler) {
+            console.info('[UnitSelectionManager.clearUnitTouchHandler] 找到Build组件的globalTouchHandler，准备清除，单位名称:', unitNode?.name);
+            const canvas = find('Canvas');
+            if (canvas) {
+                canvas.off(Node.EventType.TOUCH_END, buildScript.globalTouchHandler, buildScript);
+                console.info('[UnitSelectionManager.clearUnitTouchHandler] 已从Canvas移除Build组件的TOUCH_END监听器，单位名称:', unitNode?.name);
+            } else {
+                console.info('[UnitSelectionManager.clearUnitTouchHandler] 找不到Canvas节点，无法清除监听器，单位名称:', unitNode?.name);
+            }
+            buildScript.globalTouchHandler = null;
+            console.info('[UnitSelectionManager.clearUnitTouchHandler] Build组件的globalTouchHandler已设置为null，单位名称:', unitNode?.name);
+        }
+        
+        console.info('[UnitSelectionManager.clearUnitTouchHandler] 清除单位的globalTouchHandler完成，单位名称:', unitNode?.name);
     }
 
     /**
