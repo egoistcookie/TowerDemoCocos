@@ -645,6 +645,15 @@ export class GameManager extends Component {
         if (this.gameOverLabel) {
             if (state === GameState.Victory) {
                 this.gameOverLabel.string = '胜利！';
+                
+                // 记录当前关卡为已通过
+                if (this.uiManager && this.uiManager.getCurrentLevel) {
+                    const currentLevel = this.uiManager.getCurrentLevel();
+                    if (this.playerDataManager && currentLevel) {
+                        this.playerDataManager.passLevel(currentLevel);
+                        console.info(`[GameManager.endGame] 关卡 ${currentLevel} 已标记为通过`);
+                    }
+                }
             } else {
                 this.gameOverLabel.string = '失败！';
             }

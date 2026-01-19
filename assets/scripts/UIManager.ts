@@ -3,6 +3,7 @@ import { GameManager as GameManagerClass } from './GameManager';
 import { CountdownPopup } from './CountdownPopup';
 // 导入TalentSystem，用于管理天赋系统和单位卡片
 import { TalentSystem } from './TalentSystem';
+import { PlayerDataManager } from './PlayerDataManager';
 
 const { ccclass, property } = _decorator;
 
@@ -24,6 +25,7 @@ export class UIManager extends Component {
     talentPanelPrefab: Prefab = null!; // TalentPanel 预制体（可在编辑器中配置，包含 TalentSystem 组件和边框贴图）
 
     private gameManager: GameManagerClass = null!;
+    private playerDataManager: PlayerDataManager = null!;
     private warningNode: Node = null!;
     private announcementNode: Node = null!;
     private onCountdownComplete: (() => void) | null = null; // 倒计时完成回调
@@ -68,6 +70,13 @@ export class UIManager extends Component {
     start() {
         // 查找游戏管理器
         this.findGameManager();
+        
+        // 初始化玩家数据管理器
+        this.playerDataManager = PlayerDataManager.getInstance();
+        this.playerDataManager.loadData().then(() => {
+            // 数据加载完成后，更新下一关按钮状态
+            this.updateNextLevelButtonState();
+        });
 
         // 检查并自动创建countdownPopup
         this.autoCreateCountdownPopup();
@@ -756,6 +765,12 @@ export class UIManager extends Component {
      * 切换首页当前激活页面
      */
     private setActivePage(page: 'game' | 'talent' | 'settings') {
+        // 切换到game页面时，更新下一关按钮状态
+        if (page === 'game') {
+            this.scheduleOnce(() => {
+                this.updateNextLevelButtonState();
+            }, 0.1);
+        }
         this.activePage = page;
 
         // 如果底部三页签还未创建，尝试查找
@@ -1485,6 +1500,8 @@ export class UIManager extends Component {
      * 无需确认，直接退出游戏
      */
     onExitGameClick() {
+        // 返回首页时，更新下一关按钮状态
+        this.updateNextLevelButtonState();
         // 1. 使用已有的gameManager属性，如果不存在则查找
         if (!this.gameManager) {
             this.findGameManager();
@@ -1679,6 +1696,7 @@ export class UIManager extends Component {
         if (this.currentLevel > 1) {
             this.currentLevel--;
             this.updateStartButtonText();
+            this.updateNextLevelButtonState(); // 更新按钮状态
             
             // 切换背景图片（不加载分包资源）
             this.changeBackground(this.currentLevel);
@@ -1692,11 +1710,22 @@ export class UIManager extends Component {
         if (this.currentLevel < 5) {
             const nextLevel = this.currentLevel + 1;
             
+            // 规则：只有“通过当前关卡”，才能选择“下一关”
+            // 例如：通过关卡1 -> 可以选择关卡2
+            if (this.playerDataManager) {
+                const isCurrentLevelPassed = this.playerDataManager.isLevelPassed(this.currentLevel);
+                if (!isCurrentLevelPassed) {
+                    console.info(`[UIManager.selectNextLevel] 当前关卡 ${this.currentLevel} 未通过，无法切换到关卡 ${nextLevel}`);
+                    return;
+                }
+            }
+            
             // 如果是第一次点击下一关卡，需要加载分包资源
             if (!this.isSubpackageLoaded && !this.isSubpackageLoading) {
                 // 先更新关卡号，让用户看到反馈
                 this.currentLevel = nextLevel;
                 this.updateStartButtonText();
+                this.updateNextLevelButtonState(); // 更新按钮状态
                 
                 // 异步加载分包资源，加载完成后切换背景
                 this.loadSubpackageResources()
@@ -1713,6 +1742,7 @@ export class UIManager extends Component {
                 // 分包资源已加载或正在加载，直接切换背景
                 this.currentLevel = nextLevel;
                 this.updateStartButtonText();
+                this.updateNextLevelButtonState(); // 更新按钮状态
                 
                 // 如果正在加载，等待加载完成后再切换背景
                 if (this.isSubpackageLoading) {
@@ -1732,12 +1762,83 @@ export class UIManager extends Component {
     }
     
     /**
+     * 更新下一关按钮的状态（启用/禁用和置灰）
+     */
+    updateNextLevelButtonState() {
+        if (!this.levelSelectRightButton) {
+            return;
+        }
+        
+        const nextLevel = this.currentLevel + 1;
+        
+        // 如果已经是最后一关，禁用按钮
+        if (nextLevel > 5) {
+            const button = this.levelSelectRightButton.getComponent(Button);
+            if (button) {
+                button.interactable = false;
+            }
+            const sprite = this.levelSelectRightButton.getComponent(Sprite);
+            if (sprite) {
+                sprite.color = new Color(128, 128, 128, 200); // 灰色半透明
+            }
+            let opacity = this.levelSelectRightButton.getComponent(UIOpacity);
+            if (!opacity) {
+                opacity = this.levelSelectRightButton.addComponent(UIOpacity);
+            }
+            if (opacity) {
+                opacity.opacity = 150;
+            }
+            return;
+        }
+        
+        // 检查当前关卡是否已通过（只有通过当前关卡才能进入下一关）
+        // 第一关默认解锁，所以如果当前关卡是1，可以进入第2关
+        // 如果当前关卡大于1，需要检查当前关卡是否已通过
+        let canGoToNextLevel = false;
+        if (this.currentLevel === 1) {
+            // 第一关默认解锁，可以进入第二关
+            canGoToNextLevel = true;
+        } else {
+            // 检查当前关卡是否已通过
+            const isCurrentLevelPassed = this.playerDataManager && this.playerDataManager.isLevelPassed(this.currentLevel);
+            canGoToNextLevel = isCurrentLevelPassed || false;
+        }
+        
+        const button = this.levelSelectRightButton.getComponent(Button);
+        if (button) {
+            button.interactable = canGoToNextLevel;
+            console.info(`[UIManager.updateNextLevelButtonState] 下一关按钮状态更新，当前关卡: ${this.currentLevel}, 下一关: ${nextLevel}, 当前关卡已通过: ${canGoToNextLevel}, 可切换: ${canGoToNextLevel}`);
+        }
+        
+        // 设置按钮透明度（置灰效果）
+        const sprite = this.levelSelectRightButton.getComponent(Sprite);
+        if (sprite) {
+            if (canGoToNextLevel) {
+                sprite.color = new Color(255, 255, 255, 255); // 正常颜色
+            } else {
+                sprite.color = new Color(128, 128, 128, 200); // 灰色半透明
+            }
+        }
+        
+        // 如果按钮有UIOpacity组件，也可以通过它来设置透明度
+        let opacity = this.levelSelectRightButton.getComponent(UIOpacity);
+        if (!opacity) {
+            opacity = this.levelSelectRightButton.addComponent(UIOpacity);
+        }
+        if (opacity) {
+            opacity.opacity = canGoToNextLevel ? 255 : 150; // 未通过时降低透明度
+        }
+    }
+    
+    /**
      * 更新关卡选择区域的文本，显示当前选择的关卡
      */
     updateStartButtonText() {
         if (this.currentLevelLabel) {
             this.currentLevelLabel.string = `关卡 ${this.currentLevel}`;
         }
+        // 更新下一关按钮状态
+        this.updateNextLevelButtonState();
     }
     
     /**
@@ -1751,6 +1852,8 @@ export class UIManager extends Component {
      * 返回按钮事件方法，从游戏主体页面返回到三页签首页
      */
     onBackToHome() {
+        // 返回首页时，更新下一关按钮状态
+        this.updateNextLevelButtonState();
         // 重新查找GameManager
         if (!this.gameManager) {
             this.findGameManager();

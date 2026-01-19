@@ -24,6 +24,7 @@ interface PlayerData {
     talentPoints: number;
     talentLevels?: Record<string, number>;  // 天赋ID -> 等级
     unitEnhancements?: Record<string, UnitEnhancement>;  // 单位ID -> 强化数据
+    passedLevels?: number[];  // 已通过的关卡列表（关卡号）
 }
 
 @ccclass('PlayerDataManager')
@@ -33,7 +34,8 @@ export class PlayerDataManager {
         experience: 0,
         talentPoints: 0,
         talentLevels: {},
-        unitEnhancements: {}
+        unitEnhancements: {},
+        passedLevels: [1]  // 默认第一关已通过（解锁）
     };
     private isLoaded: boolean = false;
     private loadPromise: Promise<void> | null = null;
@@ -74,6 +76,7 @@ export class PlayerDataManager {
                         talentPoints: 5,
                         talentLevels: {},
                         unitEnhancements: {},
+                        passedLevels: [1],  // 默认第一关已通过
                         ...parsedData
                     };
                     if (!this.playerData.talentLevels) {
@@ -81,6 +84,9 @@ export class PlayerDataManager {
                     }
                     if (!this.playerData.unitEnhancements) {
                         this.playerData.unitEnhancements = {};
+                    }
+                    if (!this.playerData.passedLevels || this.playerData.passedLevels.length === 0) {
+                        this.playerData.passedLevels = [1];  // 默认第一关已通过
                     }
                     this.isLoaded = true;
                     resolve();
@@ -98,7 +104,8 @@ export class PlayerDataManager {
                         experience: 0,
                         talentPoints: 0,
                         talentLevels: {},
-                        unitEnhancements: {}
+                        unitEnhancements: {},
+                        passedLevels: [1]  // 默认第一关已通过
                     };
                     this.isLoaded = true;
                     this.saveData(); // 保存默认值到localStorage
@@ -287,6 +294,43 @@ export class PlayerDataManager {
     }
 
     /**
+     * 标记关卡为已通过
+     * @param level 关卡号（1-5）
+     */
+    public passLevel(level: number): void {
+        if (!this.playerData.passedLevels) {
+            this.playerData.passedLevels = [1];  // 默认第一关已通过
+        }
+        if (this.playerData.passedLevels.indexOf(level) === -1) {
+            this.playerData.passedLevels.push(level);
+            this.saveData();
+        }
+    }
+
+    /**
+     * 检查关卡是否已通过
+     * @param level 关卡号（1-5）
+     * @returns 是否已通过
+     */
+    public isLevelPassed(level: number): boolean {
+        if (!this.playerData.passedLevels) {
+            this.playerData.passedLevels = [1];  // 默认第一关已通过
+        }
+        return this.playerData.passedLevels.indexOf(level) !== -1;
+    }
+
+    /**
+     * 获取已通过的关卡列表
+     * @returns 已通过的关卡号数组
+     */
+    public getPassedLevels(): number[] {
+        if (!this.playerData.passedLevels) {
+            this.playerData.passedLevels = [1];  // 默认第一关已通过
+        }
+        return [...this.playerData.passedLevels];
+    }
+
+    /**
      * 重置玩家数据（用于测试或重置功能）
      */
     public resetData(): void {
@@ -294,7 +338,8 @@ export class PlayerDataManager {
             experience: 0,
             talentPoints: 0,
             talentLevels: {},
-            unitEnhancements: {}
+            unitEnhancements: {},
+            passedLevels: [1]  // 默认第一关已通过
         };
         this.saveData();
     }
