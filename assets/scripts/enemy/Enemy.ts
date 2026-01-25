@@ -404,7 +404,7 @@ export class Enemy extends Component {
 
         this.dialogLabel = labelNode.addComponent(Label);
         this.dialogLabel.string = this.getRandomSlogan();
-        this.dialogLabel.fontSize = 14;
+        this.dialogLabel.fontSize = 16;
         this.dialogLabel.color = new Color(255, 0, 0, 255); // 红色文字
         this.dialogLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         this.dialogLabel.verticalAlign = Label.VerticalAlign.CENTER;

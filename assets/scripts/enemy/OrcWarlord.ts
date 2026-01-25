@@ -419,8 +419,9 @@ export class OrcWarlord extends Component {
                 const crystalScript = this.currentTarget.getComponent('Crystal') as any;
                 const hunterScript = this.currentTarget.getComponent('Hunter') as any;
                 const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
+                const priestScript = this.currentTarget.getComponent('Priest') as any;
                 const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-                const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript;
+                const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript;
                 
                 if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
                     // 当前目标已被摧毁，清除目标
@@ -530,15 +531,17 @@ export class OrcWarlord extends Component {
 
         // 3. 查找范围内的角色（优先级第三）
         // 4. 查找范围内的角色（优先级第四）
-        // 查找所有角色单位：弓箭手、女猎手
-        // 1) 弓箭手
+        // 查找所有角色单位：弓箭手、女猎手、牧师
+        // 1) 弓箭手和牧师（都在Towers容器中）
         for (const tower of towers) {
             if (tower && tower.active && tower.isValid) {
                 const towerScript = tower.getComponent('Arrower') as any;
-                // 检查弓箭手是否存活
-                if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
+                const priestScript = tower.getComponent('Priest') as any;
+                const characterScript = towerScript || priestScript;
+                // 检查弓箭手或牧师是否存活
+                if (characterScript && characterScript.isAlive && characterScript.isAlive()) {
                     const distance = Vec3.distance(this.node.worldPosition, tower.worldPosition);
-                    // 如果弓箭手在范围内，且优先级更高或距离更近
+                    // 如果角色在范围内，且优先级更高或距离更近
                     if (distance <= detectionRange) {
                         if (PRIORITY.CHARACTER < targetPriority || 
                             (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
@@ -651,8 +654,9 @@ export class OrcWarlord extends Component {
             const crystalScript = this.currentTarget.getComponent('Crystal') as any;
             const hunterScript = this.currentTarget.getComponent('Hunter') as any;
             const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
+            const priestScript = this.currentTarget.getComponent('Priest') as any;
             const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-            const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript;
+            const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript;
             
             // 如果当前目标仍然存活，保持当前目标不变
             if (targetScript && targetScript.isAlive && targetScript.isAlive()) {
@@ -1429,8 +1433,9 @@ export class OrcWarlord extends Component {
         const crystalScript = this.currentTarget.getComponent('Crystal') as any;
         const hunterScript = this.currentTarget.getComponent('Hunter') as any;
         const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
+        const priestScript = this.currentTarget.getComponent('Priest') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript;
+        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript;
         
         if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
             // 目标已被摧毁，停止攻击动画
@@ -1743,8 +1748,9 @@ export class OrcWarlord extends Component {
         const crystalScript = this.currentTarget.getComponent('Crystal') as any;
         const hunterScript = this.currentTarget.getComponent('Hunter') as any;
         const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
+        const priestScript = this.currentTarget.getComponent('Priest') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript;
+        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript;
         
         if (targetScript && targetScript.takeDamage) {
             const targetType = targetScript.constructor.name;

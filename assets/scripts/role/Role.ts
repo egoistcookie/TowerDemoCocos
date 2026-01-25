@@ -325,7 +325,7 @@ export class Role extends Component {
 
         this.dialogLabel = labelNode.addComponent(Label);
         this.dialogLabel.string = this.getRandomSlogan();
-        this.dialogLabel.fontSize = 14;
+        this.dialogLabel.fontSize = 16;
         this.dialogLabel.color = new Color(0, 255, 0, 255); // 绿色文字（我方单位）
         this.dialogLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         this.dialogLabel.verticalAlign = Label.VerticalAlign.CENTER;
@@ -353,6 +353,7 @@ export class Role extends Component {
 
     /**
      * 更新对话框系统（检查间隔时间，创建对话框）
+     * 修改：只有在移动或攻击时才播放口号
      */
     updateDialogSystem(deltaTime: number) {
         // 如果没有配置战斗口号，不显示对话框
@@ -363,6 +364,15 @@ export class Role extends Component {
         // 如果对话框正在显示，更新对话框
         if (this.dialogNode && this.dialogNode.isValid) {
             this.updateDialog(deltaTime);
+            return;
+        }
+
+        // 只有在移动或攻击时才允许播放口号
+        const isMovingOrAttacking = this.isMoving || this.isPlayingAttackAnimation;
+        
+        if (!isMovingOrAttacking) {
+            // 不在移动或攻击状态，重置间隔计时器
+            this.dialogIntervalTimer = 0;
             return;
         }
 
@@ -377,6 +387,30 @@ export class Role extends Component {
                 this.dialogIntervalTimer = 0; // 重置间隔计时器
                 this.dialogTimer = 0; // 重置显示计时器
             }
+        }
+    }
+
+    /**
+     * 尝试在移动或攻击时触发口号
+     * 如果还没有对话框且间隔计时器已经累计了一定时间，就立即创建对话框
+     */
+    tryTriggerSloganOnAction() {
+        // 如果没有配置战斗口号，不显示对话框
+        if (!this.battleSlogans || this.battleSlogans.length === 0) {
+            return;
+        }
+
+        // 如果对话框正在显示，不重复创建
+        if (this.dialogNode && this.dialogNode.isValid) {
+            return;
+        }
+
+        // 如果间隔计时器已经累计了至少2秒，立即创建对话框
+        // 这样可以更快地响应移动或攻击动作
+        if (this.dialogIntervalTimer >= 2.0) {
+            this.createDialog();
+            this.dialogIntervalTimer = 0; // 重置间隔计时器
+            this.dialogTimer = 0; // 重置显示计时器
         }
     }
 
@@ -744,6 +778,8 @@ export class Role extends Component {
         if (!this.isMoving) {
             this.isMoving = true;
             this.playMoveAnimation();
+            // 开始移动时，如果满足条件，立即触发一次口号
+            this.tryTriggerSloganOnAction();
         }
     }
 
@@ -1040,6 +1076,8 @@ export class Role extends Component {
         if (!this.isMoving) {
             this.isMoving = true;
             this.playMoveAnimation();
+            // 开始移动时，如果满足条件，立即触发一次口号
+            this.tryTriggerSloganOnAction();
         }
     }
 
@@ -1711,6 +1749,9 @@ export class Role extends Component {
         // 攻击时停止移动
         this.stopMoving();
 
+        // 开始攻击时，如果满足条件，立即触发一次口号
+        this.tryTriggerSloganOnAction();
+
         // 检查目标是否是存活的敌人
         if (this.isAliveEnemy(this.currentTarget)) {
             // 播放攻击动画，动画完成后才射出弓箭
@@ -1803,7 +1844,13 @@ export class Role extends Component {
         }
 
         // 标记正在播放动画
+        const wasPlayingAnimation = this.isPlayingAttackAnimation;
         this.isPlayingAttackAnimation = true;
+        
+        // 如果刚刚开始播放攻击动画，尝试触发口号
+        if (!wasPlayingAnimation) {
+            this.tryTriggerSloganOnAction();
+        }
 
         const frames = validFrames;
         const frameCount = frames.length;

@@ -28,7 +28,7 @@ export class Crystal extends Component {
     maxLevel: number = 5; // 最高等级
 
     @property
-    upgradeDuration: number = 60; // 升级时间（秒）
+    upgradeDuration: number = 20; // 升级时间（秒）
 
     @property([SpriteFrame])
     levelSprites: SpriteFrame[] = []; // 每个等级的贴图数组（索引0对应1级，索引1对应2级...）
