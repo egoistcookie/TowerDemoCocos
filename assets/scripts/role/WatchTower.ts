@@ -1,4 +1,4 @@
-import { _decorator, Node, Vec3, find, Prefab, instantiate, SpriteFrame, AudioClip, Graphics, UITransform, Color } from 'cc';
+import { _decorator, Node, Vec3, find, Prefab, instantiate, SpriteFrame, AudioClip, Graphics, UITransform, Color, EventTouch } from 'cc';
 import { Build } from './Build';
 import { UnitInfo } from '../UnitInfoPanel';
 import { StoneWallGridPanel } from '../StoneWallGridPanel';
@@ -67,6 +67,9 @@ export class WatchTower extends Build {
         // 调用父类onEnable方法
         super.onEnable();
         
+        // 哨塔特有的初始化：监听点击事件
+        this.node.on(Node.EventType.TOUCH_END, this.onWatchTowerClick, this);
+        
         // 初始化攻击相关属性
         this.attackTimer = 0;
         this.currentTarget = null!;
@@ -92,6 +95,9 @@ export class WatchTower extends Build {
         // 调用父类start方法
         super.start();
         
+        // 哨塔特有的初始化：监听点击事件
+        this.node.on(Node.EventType.TOUCH_END, this.onWatchTowerClick, this);
+        
         // 设置哨塔高度为两个网格（100像素）
         const uiTransform = this.node.getComponent(UITransform);
         if (uiTransform) {
@@ -114,6 +120,14 @@ export class WatchTower extends Build {
         
         // 获取UnitManager
         this.unitManager = UnitManager.getInstance();
+    }
+    
+    onDestroy() {
+        // 移除点击事件监听
+        this.node.off(Node.EventType.TOUCH_END, this.onWatchTowerClick, this);
+        
+        // 调用父类onDestroy
+        super.onDestroy();
     }
 
     /**
@@ -196,6 +210,113 @@ export class WatchTower extends Build {
             }
         };
     }
+    
+    /**
+     * 点击事件（哨塔特有，参考石墙的逻辑）
+     */
+    onWatchTowerClick(event: EventTouch) {
+        // 检查是否正在拖拽建筑物（通过TowerBuilder）
+        let towerBuilderNode = find('TowerBuilder');
+        if (!towerBuilderNode && this.node.scene) {
+            const findNodeRecursive = (node: Node, name: string): Node | null => {
+                if (node.name === name) {
+                    return node;
+                }
+                for (const child of node.children) {
+                    const found = findNodeRecursive(child, name);
+                    if (found) return found;
+                }
+                return null;
+            };
+            towerBuilderNode = findNodeRecursive(this.node.scene, 'TowerBuilder');
+        }
+        
+        // 如果还是找不到，尝试通过组件类型查找
+        let towerBuilder: any = null;
+        if (towerBuilderNode) {
+            towerBuilder = towerBuilderNode.getComponent('TowerBuilder') as any;
+        } else if (this.node.scene) {
+            // 从场景中查找TowerBuilder组件
+            const findComponentInScene = (node: Node, componentType: string): any => {
+                const comp = node.getComponent(componentType);
+                if (comp) return comp;
+                for (const child of node.children) {
+                    const found = findComponentInScene(child, componentType);
+                    if (found) return found;
+                }
+                return null;
+            };
+            towerBuilder = findComponentInScene(this.node.scene, 'TowerBuilder');
+        }
+        
+        // 检查是否正在长按检测（由TowerBuilder处理）
+        if (towerBuilder && (towerBuilder as any).isLongPressActive) {
+            return;
+        }
+        
+        // 检查是否正在显示信息面板（由TowerBuilder打开）
+        if ((this.node as any)._showingInfoPanel) {
+            return;
+        }
+        
+        if (towerBuilder && towerBuilder.isDraggingBuilding) {
+            // 直接调用TowerBuilder的方法来处理拖拽结束
+            if (towerBuilder.endDraggingBuilding && typeof towerBuilder.endDraggingBuilding === 'function') {
+                towerBuilder.endDraggingBuilding(event);
+            }
+            return;
+        }
+
+        // 阻止事件传播
+        event.propagationStopped = true;
+
+        // 点击时显示九宫格信息面板（包含回收按钮）
+        if (!this.unitSelectionManager) {
+            this.findUnitSelectionManager();
+        }
+        if (this.unitSelectionManager) {
+            this.unitSelectionManager.selectUnit(this.node, this.buildUnitInfo());
+        }
+
+        // 如果正在移动，不重复处理
+        if (this.isMoving) {
+            return;
+        }
+
+        // 如果已经显示自带选择面板，先隐藏
+        if (this.selectionPanel && this.selectionPanel.isValid) {
+            this.hideSelectionPanel();
+            return;
+        }
+
+        // 开始移动模式
+        this.startMoving(event);
+    }
+    
+    /**
+     * 回收按钮点击事件（哨塔特有，参考石墙的逻辑）
+     */
+    onSellClick(event?: EventTouch) {
+        if (event) {
+            event.propagationStopped = true;
+        }
+        
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+
+        if (this.gameManager) {
+            // 回收80%金币
+            const refund = Math.floor(this.buildCost * 0.8);
+            this.gameManager.addGold(refund);
+        }
+
+        // 隐藏面板
+        this.hideSelectionPanel();
+        
+        // 销毁哨塔（使用die方法，会返回到对象池）
+        this.die();
+    }
 
     /**
      * 更新逻辑（处理攻击和占领）
@@ -221,7 +342,8 @@ export class WatchTower extends Build {
         }
 
         // 处理占领逻辑
-        this.updateCapture(deltaTime);
+        // 注释掉占领逻辑，哨塔只能归属我方
+        // this.updateCapture(deltaTime);
 
         // 处理攻击逻辑（占领时仍然可以攻击）
         this.attackTimer += deltaTime;
@@ -669,20 +791,21 @@ export class WatchTower extends Build {
         }
 
         // 根据占领状态获取不同的脚本
+        // 注释掉占领逻辑，哨塔只能归属我方，始终攻击敌人
         let targetScript: any = null;
-        if (this.captureState === CaptureState.Enemy) {
-            // 敌方占领，攻击我方单位
-            targetScript = this.currentTarget.getComponent('Arrower') as any ||
-                          this.currentTarget.getComponent('Hunter') as any ||
-                          this.currentTarget.getComponent('ElfSwordsman') as any ||
-                          this.currentTarget.getComponent('Priest') as any;
-        } else {
-            // 我方占领或中立，攻击敌人
+        // if (this.captureState === CaptureState.Enemy) {
+        //     // 敌方占领，攻击我方单位
+        //     targetScript = this.currentTarget.getComponent('Arrower') as any ||
+        //                   this.currentTarget.getComponent('Hunter') as any ||
+        //                   this.currentTarget.getComponent('ElfSwordsman') as any ||
+        //                   this.currentTarget.getComponent('Priest') as any;
+        // } else {
+            // 我方占领或中立，攻击敌人（哨塔只能归属我方）
             targetScript = this.currentTarget.getComponent('Enemy') as any || 
                            this.currentTarget.getComponent('OrcWarlord') as any ||
                            this.currentTarget.getComponent('OrcWarrior') as any ||
                            this.currentTarget.getComponent('TrollSpearman') as any;
-        }
+        // }
         
         if (!targetScript || !targetScript.isAlive || !targetScript.isAlive()) {
             this.currentTarget = null!;

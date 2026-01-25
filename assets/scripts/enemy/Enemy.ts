@@ -872,12 +872,14 @@ export class Enemy extends Component {
             }
         }
 
-        // 如果当前目标是石墙且敌人不在网格寻路模式（说明可能是A*寻路失败后设置的，或者是网格最上层没有缺口时设置的），保持这个目标作为最高优先级
+        // 如果当前目标是石墙或哨塔且敌人不在网格寻路模式（说明可能是A*寻路失败后设置的，或者是网格最上层没有缺口时设置的），保持这个目标作为最高优先级
         if (this.currentTarget && this.currentTarget.isValid && !this.isInStoneWallGrid && this.currentTarget.worldPosition &&
             this.node && this.node.isValid && this.node.worldPosition) {
             const currentWallScript = this.currentTarget.getComponent('StoneWall') as any;
-            if (currentWallScript && currentWallScript.isAlive && currentWallScript.isAlive()) {
-                // 性能优化：不需要计算实际距离，只需要检查石墙是否有效且存活
+            const currentWatchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
+            if ((currentWallScript && currentWallScript.isAlive && currentWallScript.isAlive()) ||
+                (currentWatchTowerScript && currentWatchTowerScript.isAlive && currentWatchTowerScript.isAlive())) {
+                // 性能优化：不需要计算实际距离，只需要检查石墙或哨塔是否有效且存活
                 // 保持这个目标，不执行后续的目标查找逻辑，确保敌人会移动到攻击范围内
                 return;
             }
@@ -893,9 +895,10 @@ export class Enemy extends Component {
                                 this.currentTarget.getComponent('Arrower') as any || 
                                 this.currentTarget.getComponent('WarAncientTree') as any ||
                                 this.currentTarget.getComponent('Crystal') as any ||
-                                this.currentTarget.getComponent('Church') as any;
+                                this.currentTarget.getComponent('Church') as any ||
+                                this.currentTarget.getComponent('WatchTower') as any;
             
-            // 如果目标是石墙，检查是否仍然存活
+            // 如果目标是石墙或哨塔，检查是否仍然存活
             if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
                 this.currentTarget = null!;
             } else if (this.currentTarget && this.currentTarget.worldPosition &&
@@ -1187,6 +1190,47 @@ export class Enemy extends Component {
             }
         }
 
+        // 查找哨塔 - 从UnitManager获取
+        let watchTowers: Node[] = [];
+        if (this.unitManager) {
+            // 优先使用getWatchTowers方法（如果存在）
+            if (this.unitManager.getWatchTowers) {
+                watchTowers = this.unitManager.getWatchTowers();
+            } else {
+                // 降级方案：从getBuildings中过滤
+                watchTowers = this.unitManager.getBuildings().filter(building => {
+                    const watchTowerScript = building.getComponent('WatchTower') as any;
+                    return watchTowerScript && watchTowerScript.isAlive && watchTowerScript.isAlive();
+                });
+            }
+        } else {
+            // 降级方案：直接从容器节点获取
+            const watchTowersNode = find('Canvas/WatchTowers');
+            if (watchTowersNode) {
+                watchTowers = watchTowersNode.children || [];
+            }
+        }
+        // 哨塔
+        for (const watchTower of watchTowers) {
+            if (!watchTower || !watchTower.active || !watchTower.isValid) continue;
+            
+            const watchTowerScript = watchTower.getComponent('WatchTower') as any;
+            if (!watchTowerScript || !watchTowerScript.isAlive || !watchTowerScript.isAlive()) continue;
+            
+            const dx = watchTower.worldPosition.x - myPos.x;
+            const dy = watchTower.worldPosition.y - myPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            
+            if (distanceSq <= detectionRangeSq) {
+                if (PRIORITY.BUILDING < targetPriority || 
+                    (PRIORITY.BUILDING === targetPriority && distanceSq < minDistanceSq)) {
+                    minDistanceSq = distanceSq;
+                    nearestTarget = watchTower;
+                    targetPriority = PRIORITY.BUILDING;
+                }
+            }
+        }
+
         // 如果找到目标，设置为当前目标
         // 但是，如果当前目标是石墙（网格最上层没有缺口时设置的），且新找到的目标不是石墙，不要替换
         if (nearestTarget && nearestTarget.isValid) {
@@ -1202,9 +1246,11 @@ export class Enemy extends Component {
             }
             const isCurrentTargetGridTopLayerWall = currentWallScript && this.checkEnemyAboveGrid() && !this.topLayerGapTarget;
             const newTargetIsWall = nearestTarget.isValid ? nearestTarget.getComponent('StoneWall') !== null : false;
+            const newTargetIsWatchTower = nearestTarget.isValid ? nearestTarget.getComponent('WatchTower') !== null : false;
             
-            if (isCurrentTargetGridTopLayerWall && !newTargetIsWall) {
-                // 当前目标是网格最上层没有缺口时设置的石墙，且新目标不是石墙，保持当前目标
+            // 如果当前目标是网格最上层没有缺口时设置的石墙，且新目标不是石墙也不是哨塔，保持当前目标
+            if (isCurrentTargetGridTopLayerWall && !newTargetIsWall && !newTargetIsWatchTower) {
+                // 当前目标是网格最上层没有缺口时设置的石墙，且新目标不是石墙也不是哨塔，保持当前目标
                 return;
             }
             
@@ -1246,12 +1292,14 @@ export class Enemy extends Component {
         const distanceSq = direction.lengthSqr();
         const attackRangeSq = this.attackRange * this.attackRange;
         
-        // 检查目标是否是石墙
+        // 检查目标是否是石墙或哨塔
         const targetScript = this.currentTarget.getComponent('StoneWall') as any;
+        const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
         const isTargetStoneWall = !!targetScript;
+        const isTargetWatchTower = !!watchTowerScript;
 
-        // 如果目标是石墙，使用简化的移动逻辑：直接移动到攻击范围内
-        if (isTargetStoneWall) {
+        // 如果目标是石墙或哨塔，使用简化的移动逻辑：直接移动到攻击范围内
+        if (isTargetStoneWall || isTargetWatchTower) {
             // 检查是否已经在攻击范围内（使用平方距离）
             if (distanceSq <= attackRangeSq) {
                 // 已经在攻击范围内，停止移动，让update()方法处理攻击
@@ -1265,7 +1313,7 @@ export class Enemy extends Component {
             const newPos = new Vec3();
             Vec3.scaleAndAdd(newPos, currentPos, direction, moveStep);
             
-            // 性能优化：检查新位置到石墙的距离（使用平方距离）
+            // 性能优化：检查新位置到石墙或哨塔的距离（使用平方距离）
             const newDx = newPos.x - this.currentTarget.worldPosition.x;
             const newDy = newPos.y - this.currentTarget.worldPosition.y;
             const newDistanceSq = newDx * newDx + newDy * newDy;
@@ -1288,7 +1336,7 @@ export class Enemy extends Component {
                 // 移动后距离仍然大于攻击范围，计算攻击范围边缘位置并移动到那里
                 const targetPos = this.currentTarget.worldPosition;
                 const attackRangePos = new Vec3();
-                // 从石墙位置向敌人方向后退 attackRange 距离
+                // 从石墙或哨塔位置向敌人方向后退 attackRange 距离
                 Vec3.scaleAndAdd(attackRangePos, targetPos, direction, -this.attackRange);
                 
                 // 计算从当前位置到攻击范围边缘的移动方向
@@ -2179,7 +2227,8 @@ export class Enemy extends Component {
         const hunterScript = this.currentTarget.getComponent('Hunter') as any;
         const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || churchScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript;
+        const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any; // 添加哨塔支持
+        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || churchScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript;
         
         if (targetScript && targetScript.takeDamage) {
             targetScript.takeDamage(this.attackDamage);

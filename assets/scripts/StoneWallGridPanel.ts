@@ -1,4 +1,6 @@
-import { _decorator, Component, Node, Vec3, Graphics, UITransform, Color, view, SpriteFrame, find } from 'cc';
+import { _decorator, Component, Node, Vec3, Graphics, UITransform, Color, view, SpriteFrame, find, EventTouch, Camera } from 'cc';
+import { GridBuildingSelectionPanel } from './GridBuildingSelectionPanel';
+import { UnitSelectionManager } from './UnitSelectionManager';
 const { ccclass, property } = _decorator;
 
 /**
@@ -33,6 +35,7 @@ export class StoneWallGridPanel extends Component {
     private highlightedCell: { x: number; y: number } | null = null; // 当前高亮的网格
     private excludeBuildingForHighlight: Node | null = null; // 高亮时排除的建筑物（用于拖拽）
     private showGridBorder: boolean = false; // 是否显示网格边框（默认不显示）
+    private selectionPanel: GridBuildingSelectionPanel = null!; // 选择面板组件
 
     onLoad() {
         // 确保网格在任何生命周期调用前初始化
@@ -63,6 +66,138 @@ export class StoneWallGridPanel extends Component {
         if (this.highlightGraphics && this.highlightGraphics.node) {
             this.highlightGraphics.node.active = true;
             this.highlightGraphics.enabled = true;
+        }
+        
+        // 初始化选择面板
+        this.initSelectionPanel();
+        
+        // 添加点击事件监听
+        this.setupClickHandler();
+    }
+    
+    /**
+     * 初始化选择面板
+     */
+    private initSelectionPanel() {
+        // 查找或创建选择面板节点
+        let panelNode = find('Canvas/GridBuildingSelectionPanel');
+        if (!panelNode) {
+            panelNode = new Node('GridBuildingSelectionPanel');
+            const canvas = find('Canvas');
+            if (canvas) {
+                panelNode.setParent(canvas);
+            }
+            this.selectionPanel = panelNode.addComponent(GridBuildingSelectionPanel);
+        } else {
+            this.selectionPanel = panelNode.getComponent(GridBuildingSelectionPanel);
+            if (!this.selectionPanel) {
+                this.selectionPanel = panelNode.addComponent(GridBuildingSelectionPanel);
+            }
+        }
+    }
+    
+    /**
+     * 设置点击事件处理器
+     */
+    private setupClickHandler() {
+        // 在Canvas上添加点击事件监听
+        const canvas = find('Canvas');
+        if (canvas) {
+            canvas.on(Node.EventType.TOUCH_END, this.onGridClick, this);
+        }
+    }
+    
+    /**
+     * 网格点击事件
+     */
+    private onGridClick(event: EventTouch) {
+        // 检查是否有选中单位，如果有则不显示选择框
+        const unitSelectionManagerNode = find('Canvas/UnitSelectionManager');
+        if (unitSelectionManagerNode) {
+            const unitSelectionManager = unitSelectionManagerNode.getComponent(UnitSelectionManager);
+            if (unitSelectionManager) {
+                const selectedUnit = unitSelectionManager.getCurrentSelectedUnit();
+                // 检查是否有选中单位（单选或多选）
+                if (selectedUnit) {
+                    // 有选中单位，不显示选择框
+                    if (this.selectionPanel) {
+                        this.selectionPanel.hide();
+                    }
+                    return;
+                }
+                // 检查多选单位（通过检查currentSelectedUnits属性）
+                const selectedUnits = (unitSelectionManager as any).currentSelectedUnits;
+                if (selectedUnits && selectedUnits.length > 0) {
+                    // 有选中单位，不显示选择框
+                    if (this.selectionPanel) {
+                        this.selectionPanel.hide();
+                    }
+                    return;
+                }
+            }
+        }
+        
+        // 获取触摸位置
+        const touchLocation = event.getLocation();
+        
+        // 查找Camera节点
+        const cameraNode = find('Canvas/Camera');
+        if (!cameraNode) {
+            return;
+        }
+        
+        const camera = cameraNode.getComponent(Camera);
+        if (!camera) {
+            return;
+        }
+        
+        // 将屏幕坐标转换为世界坐标
+        const screenPos = new Vec3(touchLocation.x, touchLocation.y, 0);
+        const worldPos = new Vec3();
+        camera.screenToWorld(screenPos, worldPos);
+        worldPos.z = 0;
+        
+        // 检查点击位置是否在网格内
+        if (!this.isPositionInGrid(worldPos)) {
+            // 点击不在网格内，关闭选择面板
+            if (this.selectionPanel) {
+                this.selectionPanel.hide();
+            }
+            return;
+        }
+        
+        // 转换为网格坐标
+        const grid = this.worldToGrid(worldPos);
+        if (!grid) {
+            return;
+        }
+        
+        // 检查网格是否被占用（石墙只占用一个网格，哨塔占用两个网格）
+        // 对于点击的网格，如果被占用则不显示选择面板
+        if (this.isGridOccupied(grid.x, grid.y)) {
+            // 网格已被占用，不显示选择面板
+            if (this.selectionPanel) {
+                this.selectionPanel.hide();
+            }
+            return;
+        }
+        
+        // 检查第二个网格是否被占用（哨塔需要两个网格）
+        // 如果第二个网格被占用，仍然可以显示选择面板，但只能选择石墙
+        // 这个检查在选择面板中处理，这里只检查第一个网格
+        
+        // 获取网格中心位置
+        const gridCenter = this.gridToWorld(grid.x, grid.y);
+        if (!gridCenter) {
+            return;
+        }
+        
+        // 显示选择面板
+        if (this.selectionPanel) {
+            console.info('[StoneWallGridPanel] 显示选择面板，网格坐标:', grid.x, grid.y, '世界坐标:', gridCenter);
+            this.selectionPanel.show(grid.x, grid.y, gridCenter);
+        } else {
+            console.warn('[StoneWallGridPanel] 选择面板未初始化');
         }
     }
 

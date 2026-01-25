@@ -128,8 +128,16 @@ export class UnitSelectionManager extends Component {
         }
         
         // 点击不在单位和信息面板上，取消选择
-        console.info('[UnitSelectionManager.onGlobalTouchEnd] 点击在空地上，清除选择');
-        this.clearSelection();
+        // 注意：延迟清除选择，让单位的globalTouchHandler先处理移动操作
+        // 这样单位可以在清除选择前响应移动命令
+        console.info('[UnitSelectionManager.onGlobalTouchEnd] 点击在空地上，延迟清除选择');
+        // 延迟一帧清除选择，确保单位的globalTouchHandler先执行
+        // 使用scheduleOnce延迟到下一帧，让Role.globalTouchHandler先处理移动
+        this.scheduleOnce(() => {
+            // 延迟清除选择，确保单位的globalTouchHandler先执行
+            // 此时如果单位已经处理了移动，globalTouchHandler会被清除，不会重复处理
+            this.clearSelection();
+        }, 0.01);
     }
 
     /**
@@ -412,13 +420,27 @@ export class UnitSelectionManager extends Component {
         const selectedUnit = this.currentSelectedUnit;
         const selectedUnits = [...this.currentSelectedUnits]; // 复制数组，避免引用问题
         console.info('[UnitSelectionManager.clearSelection] 当前选中单位:', selectedUnit?.name, '多选单位数量:', selectedUnits.length);
-        // 清除当前选中单位
+        
+        // 重要：先清除所有单位的globalTouchHandler，防止在清除选中状态后仍响应触摸事件
+        // 这样Role.globalTouchHandler就不会在清除选择后执行了
+        if (selectedUnit && selectedUnit.isValid) {
+            console.info('[UnitSelectionManager.clearSelection] 清除单选单位的globalTouchHandler，单位名称:', selectedUnit.name);
+            this.clearUnitTouchHandler(selectedUnit);
+        }
+        
+        // 清除多选单位的globalTouchHandler
+        for (const unitNode of selectedUnits) {
+            if (unitNode && unitNode.isValid) {
+                console.info('[UnitSelectionManager.clearSelection] 清除多选单位的globalTouchHandler，单位名称:', unitNode.name);
+                this.clearUnitTouchHandler(unitNode);
+            }
+        }
+        
+        // 清除当前选中单位（在清除globalTouchHandler之后）
         this.currentSelectedUnit = null!;
         this.currentSelectedUnits = [];
         
         // 清除单选单位的高亮
-        // 注意：不清除globalTouchHandler，让单位可以响应第一次点击移动
-        // globalTouchHandler会在setManualMoveTarget()中的hideSelectionPanel()中被清除
         if (selectedUnit && selectedUnit.isValid) {
             console.info('[UnitSelectionManager.clearSelection] 清除单选单位高亮，单位名称:', selectedUnit.name);
             this.clearUnitHighlight(selectedUnit);

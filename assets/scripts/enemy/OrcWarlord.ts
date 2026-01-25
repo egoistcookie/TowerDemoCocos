@@ -643,6 +643,38 @@ export class OrcWarlord extends Component {
             }
         }
 
+        // 查找哨塔 - 从UnitManager获取
+        let watchTowers: Node[] = [];
+        if (this.unitManager) {
+            watchTowers = this.unitManager.getBuildings().filter(building => {
+                const watchTowerScript = building.getComponent('WatchTower') as any;
+                return watchTowerScript && watchTowerScript.isAlive && watchTowerScript.isAlive();
+            });
+        } else {
+            // 降级方案：直接从容器节点获取
+            const watchTowersNode = find('Canvas/WatchTowers');
+            if (watchTowersNode) {
+                watchTowers = watchTowersNode.children || [];
+            }
+        }
+        // 哨塔
+        for (const watchTower of watchTowers) {
+            if (!watchTower || !watchTower.active || !watchTower.isValid) continue;
+            
+            const watchTowerScript = watchTower.getComponent('WatchTower') as any;
+            if (!watchTowerScript || !watchTowerScript.isAlive || !watchTowerScript.isAlive()) continue;
+            
+            const distance = Vec3.distance(this.node.worldPosition, watchTower.worldPosition);
+            if (distance <= detectionRange) {
+                if (PRIORITY.BUILDING < targetPriority || 
+                    (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
+                    minDistance = distance;
+                    nearestTarget = watchTower;
+                    targetPriority = PRIORITY.BUILDING;
+                }
+            }
+        }
+
         // 如果找到目标，设置为当前目标
         // 但是，如果正在播放攻击动画，且当前目标仍然有效，不改变目标
         if (this.isPlayingAttackAnimation && this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
@@ -656,7 +688,8 @@ export class OrcWarlord extends Component {
             const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
             const priestScript = this.currentTarget.getComponent('Priest') as any;
             const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-            const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript;
+            const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
+            const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript;
             
             // 如果当前目标仍然存活，保持当前目标不变
             if (targetScript && targetScript.isAlive && targetScript.isAlive()) {
@@ -1435,7 +1468,8 @@ export class OrcWarlord extends Component {
         const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
         const priestScript = this.currentTarget.getComponent('Priest') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript;
+        const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
+        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript;
         
         if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
             // 目标已被摧毁，停止攻击动画
@@ -1750,7 +1784,8 @@ export class OrcWarlord extends Component {
         const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
         const priestScript = this.currentTarget.getComponent('Priest') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript;
+        const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
+        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript;
         
         if (targetScript && targetScript.takeDamage) {
             const targetType = targetScript.constructor.name;

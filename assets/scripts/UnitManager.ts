@@ -19,6 +19,7 @@ export class UnitManager extends Component {
     private swordsmanHalls: Node[] = [];
     private churches: Node[] = [];
     private stoneWalls: Node[] = [];
+    private watchTowers: Node[] = []; // 哨塔列表
     private hunters: Node[] = []; // 女猎手列表
     private elfSwordsmans: Node[] = []; // 精灵剑士列表
     private crystal: Node = null!;
@@ -31,6 +32,7 @@ export class UnitManager extends Component {
     private swordsmanHallsNode: Node = null!;
     private churchesNode: Node = null!;
     private stoneWallsNode: Node = null!;
+    private watchTowersNode: Node = null!; // 哨塔容器节点
     private huntersNode: Node = null!; // 女猎手容器节点
     private elfSwordsmansNode: Node = null!; // 精灵剑士容器节点
     
@@ -59,6 +61,7 @@ export class UnitManager extends Component {
         this.swordsmanHallsNode = find('Canvas/SwordsmanHalls');
         this.churchesNode = find('Canvas/Churches');
         this.stoneWallsNode = find('Canvas/StoneWalls');
+        this.watchTowersNode = find('Canvas/WatchTowers');
         this.huntersNode = find('Canvas/Hunters');
         this.elfSwordsmansNode = find('Canvas/ElfSwordsmans');
         this.crystal = find('Canvas/Crystal');
@@ -156,6 +159,15 @@ export class UnitManager extends Component {
             this.stoneWalls = [];
         }
         
+        // 更新哨塔列表
+        if (this.watchTowersNode && this.watchTowersNode.isValid) {
+            this.watchTowers = this.watchTowersNode.children.filter(node => 
+                node && node.isValid && node.active
+            );
+        } else {
+            this.watchTowers = [];
+        }
+        
         // 更新女猎手列表（从对象池容器直接获取）
         if (this.huntersNode && this.huntersNode.isValid) {
             this.hunters = this.huntersNode.children.filter(node => 
@@ -198,6 +210,9 @@ export class UnitManager extends Component {
         if (!this.stoneWallsNode || !this.stoneWallsNode.isValid) {
             this.stoneWallsNode = find('Canvas/StoneWalls');
         }
+        if (!this.watchTowersNode || !this.watchTowersNode.isValid) {
+            this.watchTowersNode = find('Canvas/WatchTowers');
+        }
         if (!this.huntersNode || !this.huntersNode.isValid) {
             this.huntersNode = find('Canvas/Hunters');
         }
@@ -228,15 +243,23 @@ export class UnitManager extends Component {
     }
     
     /**
-     * 获取所有建筑物（包括战争古树、大厅等）
+     * 获取所有建筑物（包括战争古树、大厅、哨塔等）
      */
     getBuildings(): Node[] {
         return [
             ...this.warAncientTrees,
             ...this.hunterHalls,
             ...this.swordsmanHalls,
-            ...this.churches
+            ...this.churches,
+            ...this.watchTowers
         ].filter(node => node && node.isValid && node.active);
+    }
+    
+    /**
+     * 获取所有哨塔（已缓存）
+     */
+    getWatchTowers(): Node[] {
+        return this.watchTowers.filter(node => node && node.isValid && node.active);
     }
     
     /**

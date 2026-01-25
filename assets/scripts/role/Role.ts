@@ -2702,7 +2702,6 @@ export class Role extends Component {
                         console.info('[Role.globalTouchHandler] 检查选中状态，单位名称:', this.node?.name, '是否选中:', isSelected, '当前选中单位:', currentSelectedUnit?.name);
                         
                         // 如果选中了其他单位（不是当前单位），移除监听器
-                        // 或者如果没有任何选中（currentSelectedUnit为null），也移除监听器
                         if (currentSelectedUnit !== null && currentSelectedUnit !== this.node) {
                             console.info('[Role.globalTouchHandler] 选中了其他单位，移除当前单位的监听器，单位名称:', this.node?.name);
                             const canvas = find('Canvas');
@@ -2714,10 +2713,19 @@ export class Role extends Component {
                             return;
                         }
                         
-                        // 如果没有任何选中，也不执行移动操作
-                        // 注意：这个检查可能在onGlobalTouchEnd清除选择后返回true
-                        // 但我们仍然允许执行移动操作，因为点击空地移动是正常行为
-                        // 只在选中了其他单位时才阻止
+                        // 如果当前单位未被选中，也不执行移动操作
+                        // 或者如果没有任何选中（currentSelectedUnit为null），也不执行移动操作
+                        if (!isSelected || currentSelectedUnit === null) {
+                            console.info('[Role.globalTouchHandler] 单位未被选中或没有任何选中，不执行移动操作，单位名称:', this.node?.name);
+                            // 移除监听器，因为单位已不再被选中
+                            const canvas = find('Canvas');
+                            if (canvas && this.globalTouchHandler) {
+                                canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
+                                console.info('[Role.globalTouchHandler] 已移除监听器（单位未选中），单位名称:', this.node?.name);
+                            }
+                            this.globalTouchHandler = null!;
+                            return;
+                        }
                     }
                     
                     // 检查点击是否在信息面板上（通过节点名称和路径检查）
@@ -2814,7 +2822,7 @@ export class Role extends Component {
         console.info('[Role.setManualMoveTarget] 调用hideSelectionPanel清除globalTouchHandler');
         this.hideSelectionPanel();
         
-        // 清除选中状态（无论当前是否选中这个单位，点击空地移动后都应该清除选择）
+        // 清除选中状态（只有当前单位被选中时才清除选择）
         if (this.unitSelectionManager) {
             const isSelected = this.unitSelectionManager.isUnitSelected(this.node);
             console.info('[Role.setManualMoveTarget] 检查单位是否被选中，单位名称:', this.node?.name, '是否选中:', isSelected);
@@ -2822,10 +2830,14 @@ export class Role extends Component {
                 console.info('[Role.setManualMoveTarget] 单位当前被选中，调用clearSelection清除选择，单位名称:', this.node?.name);
                 this.unitSelectionManager.clearSelection();
             } else {
-                console.info('[Role.setManualMoveTarget] 单位当前未被选中，但仍尝试清除选择，单位名称:', this.node?.name);
-                // 即使当前未选中，也清除选择（防止其他单位的选中状态残留）
-                this.unitSelectionManager.clearSelection();
+                console.info('[Role.setManualMoveTarget] 单位当前未被选中，不执行移动操作，单位名称:', this.node?.name);
+                // 单位未被选中，不应该执行移动操作，直接返回
+                return;
             }
+        } else {
+            // 如果没有unitSelectionManager，也不应该执行移动操作
+            console.info('[Role.setManualMoveTarget] 没有unitSelectionManager，不执行移动操作，单位名称:', this.node?.name);
+            return;
         }
     }
 

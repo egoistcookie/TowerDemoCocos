@@ -7,6 +7,8 @@ import { WarAncientTree } from './role/WarAncientTree';
 import { HunterHall } from './role/HunterHall';
 import { StoneWall } from './role/StoneWall';
 import { WatchTower } from './role/WatchTower';
+import { IceTower } from './role/IceTower';
+import { ThunderTower } from './role/ThunderTower';
 import { SwordsmanHall } from './role/SwordsmanHall';
 import { TalentEffectManager } from './TalentEffectManager';
 import { Church } from './role/Church';
@@ -44,6 +46,18 @@ export class TowerBuilder extends Component {
 
     @property(SpriteFrame)
     watchTowerIcon: SpriteFrame = null!; // 哨塔图标
+
+    @property(Prefab)
+    iceTowerPrefab: Prefab = null!; // 冰元素塔预制体
+
+    @property(SpriteFrame)
+    iceTowerIcon: SpriteFrame = null!; // 冰元素塔图标
+
+    @property(Prefab)
+    thunderTowerPrefab: Prefab = null!; // 雷元素塔预制体
+
+    @property(SpriteFrame)
+    thunderTowerIcon: SpriteFrame = null!; // 雷元素塔图标
 
     @property(Prefab)
     swordsmanHallPrefab: Prefab = null!; // 剑士小屋预制体
@@ -85,6 +99,12 @@ export class TowerBuilder extends Component {
 
     @property(Node)
     watchTowerContainer: Node = null!; // 哨塔容器
+
+    @property(Node)
+    iceTowerContainer: Node = null!; // 冰元素塔容器
+
+    @property(Node)
+    thunderTowerContainer: Node = null!; // 雷元素塔容器
 
     @property(Node)
     swordsmanHallContainer: Node = null!; // 剑士小屋容器
@@ -1814,6 +1834,204 @@ export class TowerBuilder extends Component {
     }
 
     /**
+     * 建造冰元素塔
+     */
+    buildIceTower(worldPosition: Vec3, skipCost: boolean = false) {
+        if (!this.iceTowerPrefab) {
+            return;
+        }
+
+        // 获取实际建造成本（考虑单位卡片强化减少）
+        const actualCost = this.getActualBuildCost('IceTower', 20); // 默认20金币
+        
+        // 消耗金币
+        if (this.gameManager && !skipCost) {
+            this.gameManager.spendGold(actualCost);
+        }
+
+        // 性能优化：从对象池获取建筑物
+        const buildingPool = BuildingPool.getInstance();
+        let tower: Node | null = null;
+        if (buildingPool) {
+            const stats = buildingPool.getStats();
+            if (!stats['IceTower']) {
+                buildingPool.registerPrefab('IceTower', this.iceTowerPrefab);
+            }
+            tower = buildingPool.get('IceTower');
+        }
+        
+        if (!tower) {
+            tower = instantiate(this.iceTowerPrefab);
+        }
+        
+        // 设置父节点
+        const parent = this.iceTowerContainer || this.node;
+        if (parent && !parent.active) {
+            parent.active = true;
+        }
+        
+        tower.setParent(parent);
+        tower.active = true;
+        tower.setPosition(0, 0, 0);
+        tower.setRotationFromEuler(0, 0, 0);
+        tower.setScale(1, 1, 1);
+        tower.setWorldPosition(worldPosition);
+
+        // 设置建造成本并检查首次出现
+        const towerScript = tower.getComponent(IceTower);
+        if (towerScript) {
+            towerScript.prefabName = 'IceTower';
+            const configManager = UnitConfigManager.getInstance();
+            if (configManager.isConfigLoaded()) {
+                configManager.applyConfigToUnit('IceTower', towerScript, ['buildCost', 'collisionRadius']);
+            }
+            
+            const talentEffectManager = TalentEffectManager.getInstance();
+            talentEffectManager.applyUnitEnhancements('IceTower', towerScript);
+            talentEffectManager.applyTalentEffects(towerScript);
+            
+            towerScript.buildCost = actualCost;
+            
+            // 冰塔只能放置在石墙网格内，占用一个网格
+            if (!this.stoneWallGridPanelComponent) {
+                this.findStoneWallGridPanel();
+            }
+            
+            if (this.stoneWallGridPanelComponent) {
+                const grid = this.stoneWallGridPanelComponent.worldToGrid(worldPosition);
+                if (grid) {
+                    if (this.stoneWallGridPanelComponent.isGridOccupied(grid.x, grid.y)) {
+                        towerScript.gridX = -1;
+                        towerScript.gridY = -1;
+                    } else {
+                        if (this.stoneWallGridPanelComponent.occupyGrid(grid.x, grid.y, tower)) {
+                            towerScript.gridX = grid.x;
+                            towerScript.gridY = grid.y;
+                            const gridPos = this.stoneWallGridPanelComponent.gridToWorld(grid.x, grid.y);
+                            if (gridPos) {
+                                tower.setWorldPosition(gridPos);
+                            }
+                        } else {
+                            towerScript.gridX = -1;
+                            towerScript.gridY = -1;
+                        }
+                    }
+                } else {
+                    towerScript.gridX = -1;
+                    towerScript.gridY = -1;
+                }
+            } else {
+                towerScript.gridX = -1;
+                towerScript.gridY = -1;
+            }
+            
+            if (this.gameManager) {
+                const unitType = towerScript.unitType || 'IceTower';
+                this.gameManager.checkUnitFirstAppearance(unitType, towerScript);
+            }
+        }
+    }
+
+    /**
+     * 建造雷元素塔
+     */
+    buildThunderTower(worldPosition: Vec3, skipCost: boolean = false) {
+        if (!this.thunderTowerPrefab) {
+            return;
+        }
+
+        // 获取实际建造成本（考虑单位卡片强化减少）
+        const actualCost = this.getActualBuildCost('ThunderTower', 30); // 默认30金币
+        
+        // 消耗金币
+        if (this.gameManager && !skipCost) {
+            this.gameManager.spendGold(actualCost);
+        }
+
+        // 性能优化：从对象池获取建筑物
+        const buildingPool = BuildingPool.getInstance();
+        let tower: Node | null = null;
+        if (buildingPool) {
+            const stats = buildingPool.getStats();
+            if (!stats['ThunderTower']) {
+                buildingPool.registerPrefab('ThunderTower', this.thunderTowerPrefab);
+            }
+            tower = buildingPool.get('ThunderTower');
+        }
+        
+        if (!tower) {
+            tower = instantiate(this.thunderTowerPrefab);
+        }
+        
+        // 设置父节点
+        const parent = this.thunderTowerContainer || this.node;
+        if (parent && !parent.active) {
+            parent.active = true;
+        }
+        
+        tower.setParent(parent);
+        tower.active = true;
+        tower.setPosition(0, 0, 0);
+        tower.setRotationFromEuler(0, 0, 0);
+        tower.setScale(1, 1, 1);
+        tower.setWorldPosition(worldPosition);
+
+        // 设置建造成本并检查首次出现
+        const towerScript = tower.getComponent(ThunderTower);
+        if (towerScript) {
+            towerScript.prefabName = 'ThunderTower';
+            const configManager = UnitConfigManager.getInstance();
+            if (configManager.isConfigLoaded()) {
+                configManager.applyConfigToUnit('ThunderTower', towerScript, ['buildCost', 'collisionRadius']);
+            }
+            
+            const talentEffectManager = TalentEffectManager.getInstance();
+            talentEffectManager.applyUnitEnhancements('ThunderTower', towerScript);
+            talentEffectManager.applyTalentEffects(towerScript);
+            
+            towerScript.buildCost = actualCost;
+            
+            // 雷塔只能放置在石墙网格内，占用一个网格
+            if (!this.stoneWallGridPanelComponent) {
+                this.findStoneWallGridPanel();
+            }
+            
+            if (this.stoneWallGridPanelComponent) {
+                const grid = this.stoneWallGridPanelComponent.worldToGrid(worldPosition);
+                if (grid) {
+                    if (this.stoneWallGridPanelComponent.isGridOccupied(grid.x, grid.y)) {
+                        towerScript.gridX = -1;
+                        towerScript.gridY = -1;
+                    } else {
+                        if (this.stoneWallGridPanelComponent.occupyGrid(grid.x, grid.y, tower)) {
+                            towerScript.gridX = grid.x;
+                            towerScript.gridY = grid.y;
+                            const gridPos = this.stoneWallGridPanelComponent.gridToWorld(grid.x, grid.y);
+                            if (gridPos) {
+                                tower.setWorldPosition(gridPos);
+                            }
+                        } else {
+                            towerScript.gridX = -1;
+                            towerScript.gridY = -1;
+                        }
+                    }
+                } else {
+                    towerScript.gridX = -1;
+                    towerScript.gridY = -1;
+                }
+            } else {
+                towerScript.gridX = -1;
+                towerScript.gridY = -1;
+            }
+            
+            if (this.gameManager) {
+                const unitType = towerScript.unitType || 'ThunderTower';
+                this.gameManager.checkUnitFirstAppearance(unitType, towerScript);
+            }
+        }
+    }
+
+    /**
      * 建造剑士小屋
      */
     buildSwordsmanHall(worldPosition: Vec3) {
@@ -2814,7 +3032,7 @@ export class TowerBuilder extends Component {
      * @param baseCost 基础建造成本（如果为0或未提供，则从配置文件读取）
      * @returns 实际建造成本
      */
-    private getActualBuildCost(unitId: string, baseCost?: number): number {
+    public getActualBuildCost(unitId: string, baseCost?: number): number {
         // 如果未提供baseCost或为0，从配置文件读取
         let actualBaseCost = baseCost || 0;
         if (actualBaseCost === 0) {
