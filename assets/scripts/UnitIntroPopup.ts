@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Sprite, Label, Button, EventTouch, find, UITransform, Vec3 } from 'cc';
+import { _decorator, Component, Node, Sprite, Label, Button, EventTouch, find, UITransform, Vec3, tween, Color, UIOpacity, Graphics, view } from 'cc';
 const { ccclass, property } = _decorator;
 
 @ccclass('UnitIntroPopup')
@@ -20,6 +20,7 @@ export class UnitIntroPopup extends Component {
     
     private gameManager: any = null!; // GameManager引用（使用any避免循环依赖）
     private buildButton: Button = null!; // 建造按钮引用
+    private maskLayer: Node = null!; // 遮罩层节点
     
     start() {
         // 尝试多种方式查找GameManager（使用字符串避免循环依赖）
@@ -31,6 +32,9 @@ export class UnitIntroPopup extends Component {
         
         // 查找建造按钮
         this.findBuildButton();
+        
+        // 创建遮罩层
+        this.createMaskLayer();
         
         // 初始隐藏
         if (this.container) {
@@ -46,6 +50,65 @@ export class UnitIntroPopup extends Component {
         if (this.container) {
             this.container.on('touch-end', this.onClose, this);
         }
+    }
+    
+    /**
+     * 创建遮罩层（用于阻止点击穿透和置灰效果）
+     */
+    private createMaskLayer() {
+        // 如果遮罩层已存在，先销毁
+        if (this.maskLayer && this.maskLayer.isValid) {
+            this.maskLayer.destroy();
+        }
+        
+        // 查找 Canvas 节点
+        const canvasNode = find('Canvas');
+        if (!canvasNode) {
+            console.error('[UnitIntroPopup] Canvas node not found');
+            return;
+        }
+        
+        // 创建遮罩层节点
+        this.maskLayer = new Node('UnitIntroMask');
+        this.maskLayer.setParent(canvasNode);
+        
+        // 设置遮罩层在最上层（但低于介绍框容器）
+        this.maskLayer.setSiblingIndex(Number.MAX_SAFE_INTEGER - 1);
+        
+        // 添加 UITransform 组件
+        const uiTransform = this.maskLayer.addComponent(UITransform);
+        const visibleSize = view.getVisibleSize();
+        // 使用足够大的尺寸确保覆盖整个屏幕
+        uiTransform.setContentSize(visibleSize.width * 2, visibleSize.height * 2);
+        this.maskLayer.setPosition(0, 0, 0);
+        
+        // 添加 Graphics 组件用于绘制半透明黑色背景
+        const graphics = this.maskLayer.addComponent(Graphics);
+        graphics.fillColor = new Color(0, 0, 0, 180); // 半透明黑色（alpha=180，约70%不透明度）
+        // 绘制一个足够大的矩形覆盖整个屏幕
+        graphics.rect(-visibleSize.width, -visibleSize.height, visibleSize.width * 2, visibleSize.height * 2);
+        graphics.fill();
+        
+        // 添加 UIOpacity 组件用于淡入淡出动画
+        const uiOpacity = this.maskLayer.addComponent(UIOpacity);
+        uiOpacity.opacity = 0;
+        
+        // 初始隐藏遮罩层
+        this.maskLayer.active = false;
+        
+        // 阻止遮罩层的所有触摸事件穿透（使用 capture 模式确保优先处理）
+        this.maskLayer.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+            event.propagationStopped = true;
+        }, this, true);
+        this.maskLayer.on(Node.EventType.TOUCH_MOVE, (event: EventTouch) => {
+            event.propagationStopped = true;
+        }, this, true);
+        this.maskLayer.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
+            event.propagationStopped = true;
+        }, this, true);
+        this.maskLayer.on(Node.EventType.TOUCH_CANCEL, (event: EventTouch) => {
+            event.propagationStopped = true;
+        }, this, true);
     }
     
     /**
@@ -196,16 +259,182 @@ export class UnitIntroPopup extends Component {
                 : '暂无描述';
         }
         
-        // 设置容器为最上层
+        // 显示遮罩层（置灰效果）
+        this.showMaskLayer();
+        
+        // 设置容器为最上层（在遮罩层之上）
         this.container.setSiblingIndex(Number.MAX_SAFE_INTEGER);
         
         // 显示弹窗
         this.container.active = true;
         
+        // 添加高亮显示效果
+        this.playHighlightAnimation();
+        
         // 监听触摸事件，阻止事件冒泡到下层
         this.container.on(Node.EventType.TOUCH_START, this.onTouchStart, this);
         this.container.on(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
         this.container.on(Node.EventType.TOUCH_END, this.onClose, this);
+    }
+    
+    /**
+     * 显示遮罩层（置灰效果）
+     */
+    private showMaskLayer() {
+        if (!this.maskLayer || !this.maskLayer.isValid) {
+            this.createMaskLayer();
+        }
+        if (!this.maskLayer || !this.maskLayer.isValid) return;
+        
+        // 获取屏幕尺寸
+        const visibleSize = view.getVisibleSize();
+        
+        // 更新遮罩层大小（以防屏幕尺寸变化）
+        const uiTransform = this.maskLayer.getComponent(UITransform);
+        if (uiTransform) {
+            uiTransform.setContentSize(visibleSize.width * 2, visibleSize.height * 2);
+        }
+        
+        // 更新 Graphics 绘制（如果需要）
+        const graphics = this.maskLayer.getComponent(Graphics);
+        if (graphics) {
+            graphics.clear();
+            graphics.fillColor = new Color(0, 0, 0, 180);
+            graphics.rect(-visibleSize.width, -visibleSize.height, visibleSize.width * 2, visibleSize.height * 2);
+            graphics.fill();
+        }
+        
+        // 显示遮罩层
+        this.maskLayer.active = true;
+        this.maskLayer.setSiblingIndex(Number.MAX_SAFE_INTEGER - 1);
+        
+        // 淡入动画
+        const uiOpacity = this.maskLayer.getComponent(UIOpacity);
+        if (uiOpacity) {
+            uiOpacity.opacity = 0;
+            tween({ opacity: 0 })
+                .to(0.3, { opacity: 180 }, {
+                    onUpdate: (target: any) => {
+                        if (uiOpacity && uiOpacity.isValid) {
+                            uiOpacity.opacity = Math.floor(target.opacity);
+                        }
+                    }
+                })
+                .start();
+        }
+    }
+    
+    /**
+     * 隐藏遮罩层
+     */
+    private hideMaskLayer() {
+        if (!this.maskLayer) return;
+        
+        // 淡出动画
+        const uiOpacity = this.maskLayer.getComponent(UIOpacity);
+        if (uiOpacity) {
+            tween({ opacity: uiOpacity.opacity })
+                .to(0.2, { opacity: 0 }, {
+                    onUpdate: (target: any) => {
+                        if (uiOpacity) {
+                            uiOpacity.opacity = Math.floor(target.opacity);
+                        }
+                    },
+                    onComplete: () => {
+                        // 动画完成后隐藏遮罩层
+                        this.maskLayer.active = false;
+                    }
+                })
+                .start();
+        } else {
+            // 如果没有 UIOpacity 组件，直接隐藏
+            this.maskLayer.active = false;
+        }
+    }
+    
+    /**
+     * 播放高亮显示动画
+     */
+    private playHighlightAnimation() {
+        if (!this.container) return;
+        
+        // 停止之前的动画
+        tween(this.container).stop();
+        
+        // 初始状态：缩放为0.8，透明度为0
+        this.container.setScale(0.8, 0.8, 1);
+        
+        // 获取或添加 UIOpacity 组件用于透明度控制
+        let uiOpacity = this.container.getComponent(UIOpacity);
+        if (!uiOpacity) {
+            uiOpacity = this.container.addComponent(UIOpacity);
+        }
+        uiOpacity.opacity = 0;
+        
+        // 弹跳出现动画：同时进行缩放和透明度动画
+        // 缩放动画：从0.8到1.1再到1.0（弹跳效果）
+        tween(this.container)
+            .to(0.3, { scale: new Vec3(1.1, 1.1, 1) }, { easing: 'backOut' })
+            .to(0.1, { scale: new Vec3(1.0, 1.0, 1) })
+            .start();
+        
+        // 透明度动画：从0到255
+        tween({ opacity: 0 })
+            .to(0.2, { opacity: 255 }, {
+                onUpdate: (target: any) => {
+                    if (uiOpacity) {
+                        uiOpacity.opacity = Math.floor(target.opacity);
+                    }
+                }
+            })
+            .call(() => {
+                // 动画完成后，确保透明度为255
+                if (uiOpacity) {
+                    uiOpacity.opacity = 255;
+                }
+                
+                // 添加持续的高亮闪烁效果（轻微的颜色变化）
+                this.playContinuousHighlight();
+            })
+            .start();
+    }
+    
+    /**
+     * 播放持续的高亮闪烁效果
+     */
+    private playContinuousHighlight() {
+        if (!this.container) return;
+        
+        // 获取容器的背景 Sprite（如果有的话）
+        const backgroundSprite = this.container.getComponent(Sprite);
+        
+        if (backgroundSprite) {
+            // 保存原始颜色
+            const originalColor = backgroundSprite.color.clone();
+            
+            // 创建闪烁动画：轻微的颜色变化
+            tween(backgroundSprite)
+                .to(1.0, { 
+                    color: new Color(
+                        Math.min(255, originalColor.r + 20),
+                        Math.min(255, originalColor.g + 20),
+                        Math.min(255, originalColor.b + 20),
+                        originalColor.a
+                    )
+                })
+                .to(1.0, { color: originalColor })
+                .union()
+                .repeatForever()
+                .start();
+        } else {
+            // 如果没有背景 Sprite，使用缩放脉冲效果
+            tween(this.container)
+                .to(0.8, { scale: new Vec3(1.02, 1.02, 1) })
+                .to(0.8, { scale: new Vec3(1.0, 1.0, 1) })
+                .union()
+                .repeatForever()
+                .start();
+        }
     }
     
     /**
@@ -269,10 +498,29 @@ export class UnitIntroPopup extends Component {
     hide() {
         if (!this.container) return;
         
+        // 停止所有动画
+        tween(this.container).stop();
+        
+        // 恢复原始状态
+        this.container.setScale(1.0, 1.0, 1);
+        const uiOpacity = this.container.getComponent(UIOpacity);
+        if (uiOpacity) {
+            uiOpacity.opacity = 255;
+        }
+        
+        // 恢复背景颜色（如果有）
+        const backgroundSprite = this.container.getComponent(Sprite);
+        if (backgroundSprite) {
+            tween(backgroundSprite).stop();
+        }
+        
         // 移除所有触摸事件监听器
         this.container.off(Node.EventType.TOUCH_START, this.onTouchStart, this);
         this.container.off(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
         this.container.off(Node.EventType.TOUCH_END, this.onClose, this);
+        
+        // 隐藏遮罩层
+        this.hideMaskLayer();
         
         // 启用建造按钮
         this.enableBuildButton();
