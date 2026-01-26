@@ -92,15 +92,18 @@ export class UnitInfoPanel extends Component {
         const screenWidth = canvasTransform?.width || 750;
 
         // 设置面板位置和大小（屏幕下方，占屏幕1/6高度）
+        // 两侧与边框保持50像素的距离，所以面板宽度 = 屏幕宽度 - 50
+        const panelWidth = screenWidth - 50;
+        const panelHeight = screenHeight / 6; 
         const panelTransform = this.panelNode.getComponent(UITransform) || this.panelNode.addComponent(UITransform);
-        panelTransform.setContentSize(screenWidth, screenHeight / 6);
-        this.panelNode.setPosition(0, -screenHeight / 2 + screenHeight / 12, 0);
+        panelTransform.setContentSize(panelWidth, panelHeight);
+        this.panelNode.setPosition(0, -screenHeight / 2 + panelHeight / 2, 0);
 
         // 创建背景
-        this.createBackground(screenWidth, screenHeight / 6);
+        this.createBackground(panelWidth, panelHeight);
 
         // 创建内容（左侧信息 + 右侧按钮）
-        this.createContent(screenWidth, screenHeight / 6);
+        this.createContent(panelWidth, panelHeight);
 
         // 初始隐藏
         this.hide();
@@ -122,9 +125,20 @@ export class UnitInfoPanel extends Component {
         bgTransform.setContentSize(width, height);
 
         const bgGraphics = this.backgroundNode.addComponent(Graphics);
-        bgGraphics.fillColor = new Color(0, 0, 0, 200); // 半透明黑色
-        bgGraphics.rect(-width / 2, -height / 2, width, height);
+        
+        // 圆角半径
+        const cornerRadius = 15;
+        
+        // 绘制半透明黑色背景（圆角矩形）
+        bgGraphics.fillColor = new Color(0, 0, 0, 200);
+        bgGraphics.roundRect(-width / 2, -height / 2, width, height, cornerRadius);
         bgGraphics.fill();
+        
+        // 绘制高亮边框（圆角矩形）
+        bgGraphics.strokeColor = new Color(100, 200, 255, 255); // 亮蓝色边框
+        bgGraphics.lineWidth = 3;
+        bgGraphics.roundRect(-width / 2, -height / 2, width, height, cornerRadius);
+        bgGraphics.stroke();
     }
 
     /**
@@ -247,8 +261,8 @@ export class UnitInfoPanel extends Component {
         this.buttonGridNode.setParent(parentNode);
         const gridTransform = this.buttonGridNode.addComponent(UITransform);
         gridTransform.setContentSize(buttonAreaWidth, panelHeight);
-        // 按钮区域位置：右侧区域中心（相对于父节点）
-        this.buttonGridNode.setPosition(panelWidth / 2 - buttonAreaWidth / 2, 0, 0);
+        // 按钮区域位置：右侧区域中心（相对于父节点），整体往上移10像素
+        this.buttonGridNode.setPosition(panelWidth / 2 - buttonAreaWidth / 2, 10, 0);
 
         // 按钮大小和间距
         const buttonSize = Math.min(buttonAreaWidth / 3.5, panelHeight / 3.5); // 按钮大小

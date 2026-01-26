@@ -43,6 +43,9 @@ export class Dragon extends Enemy {
     private damageTime: number = 0; // 最近一次伤害的时间戳
     private lastStaggerTime: number = -1; // 上次产生僵直的时间戳（-1表示从未产生过僵直）
 
+    // 用于跟踪是否已经设置过渲染顺序
+    private renderOrderSet: boolean = false;
+
     /**
      * 重写 update 方法，实现飞行移动逻辑
      */
@@ -51,6 +54,15 @@ export class Dragon extends Enemy {
         if (this.isDestroyed) {
             this.updateAnimation(deltaTime);
             return;
+        }
+
+        // 确保渲染顺序正确（在初始几秒中持续检查，因为初始石墙可能在之后才创建）
+        if (!this.renderOrderSet) {
+            this.setRenderOrderAboveStoneWalls();
+            // 延迟几秒后标记为已设置，避免每帧都检查
+            this.scheduleOnce(() => {
+                this.renderOrderSet = true;
+            }, 2.0); // 2秒后停止持续检查，确保初始石墙已经创建
         }
 
         // 检查游戏状态
@@ -216,6 +228,18 @@ export class Dragon extends Enemy {
             if (churchesNode) {
                 friendlyUnits.push(...churchesNode.children);
             }
+
+            // 冰塔
+            const iceTowersNode = find('Canvas/IceTowers');
+            if (iceTowersNode) {
+                friendlyUnits.push(...iceTowersNode.children);
+            }
+
+            // 雷塔
+            const thunderTowersNode = find('Canvas/ThunderTowers');
+            if (thunderTowersNode) {
+                friendlyUnits.push(...thunderTowersNode.children);
+            }
         }
 
         // 查找最近的我方单位
@@ -230,6 +254,8 @@ export class Dragon extends Enemy {
                               unit.getComponent('ElfSwordsman') as any ||
                               unit.getComponent('Priest') as any ||
                               unit.getComponent('WatchTower') as any ||
+                              unit.getComponent('IceTower') as any ||
+                              unit.getComponent('ThunderTower') as any ||
                               unit.getComponent('WarAncientTree') as any ||
                               unit.getComponent('HunterHall') as any ||
                               unit.getComponent('SwordsmanHall') as any ||
@@ -711,10 +737,114 @@ export class Dragon extends Enemy {
     onEnable() {
         // 调用父类的 onEnable
         super.onEnable();
+        
+        // 设置飞龙的渲染顺序，使其显示在石墙之上（不被遮挡）
+        this.setRenderOrderAboveStoneWalls();
 
         // 重置韧性相关状态
         this.recentDamage = 0;
         this.damageTime = 0;
         this.lastStaggerTime = -1; // 重置僵直时间
+    }
+
+    /**
+     * 设置飞龙的渲染顺序，使其显示在所有游戏对象之上（除了UI）
+     * 强制确保Enemies容器在StoneWalls容器之后
+     */
+    private setRenderOrderAboveStoneWalls() {
+        if (!this.node || !this.node.isValid) {
+            return;
+        }
+
+        // 获取 Canvas 节点
+        const canvas = find('Canvas');
+        if (!canvas) {
+            return;
+        }
+
+        // 获取飞龙所在的容器（应该是 Enemies）
+        const enemiesNode = this.node.parent;
+        if (!enemiesNode || enemiesNode.parent !== canvas) {
+            return;
+        }
+
+        // 首先强制确保Enemies在StoneWalls之后（这是最重要的）
+        const stoneWallsNode = find('Canvas/StoneWalls');
+        if (stoneWallsNode && stoneWallsNode.parent === canvas) {
+            const stoneWallsIndex = stoneWallsNode.getSiblingIndex();
+            const enemiesIndex = enemiesNode.getSiblingIndex();
+            
+            // 如果Enemies的索引小于或等于StoneWalls，强制将其移到StoneWalls之后
+            if (enemiesIndex <= stoneWallsIndex) {
+                enemiesNode.setSiblingIndex(stoneWallsIndex + 1);
+            }
+        }
+
+        // 然后查找所有需要放在飞龙下方的容器节点（游戏对象容器）
+        const gameObjectContainers = [
+            'StoneWalls',
+            'Towers',
+            'Hunters',
+            'ElfSwordsmans',
+            'WarAncientTrees',
+            'HunterHalls',
+            'SwordsmanHalls',
+            'Churches',
+            'WatchTowers',
+            'IceTowers',
+            'ThunderTowers',
+            'Crystal'
+        ];
+
+        // 查找UI容器（通常命名为UI或UIManager等）
+        const uiContainers = ['UI', 'UIManager', 'GameOverPanel', 'GridBuildingSelectionPanel'];
+        
+        // 找到所有游戏对象容器中最大的siblingIndex
+        let maxGameObjectIndex = -1;
+        for (const containerName of gameObjectContainers) {
+            const containerNode = find(`Canvas/${containerName}`);
+            if (containerNode && containerNode.parent === canvas) {
+                const index = containerNode.getSiblingIndex();
+                if (index > maxGameObjectIndex) {
+                    maxGameObjectIndex = index;
+                }
+            }
+        }
+
+        // 找到UI容器的最小siblingIndex（UI应该在游戏对象之后）
+        let minUIIndex = canvas.children.length;
+        for (const containerName of uiContainers) {
+            const containerNode = find(`Canvas/${containerName}`);
+            if (containerNode && containerNode.parent === canvas) {
+                const index = containerNode.getSiblingIndex();
+                if (index < minUIIndex) {
+                    minUIIndex = index;
+                }
+            }
+        }
+
+        // 确定Enemies应该放置的位置
+        // 应该在所有游戏对象之后，但在UI之前
+        let targetIndex: number;
+        if (minUIIndex < canvas.children.length) {
+            // 如果有UI容器，放在UI之前
+            targetIndex = minUIIndex - 1;
+        } else {
+            // 如果没有找到UI容器，放在所有游戏对象之后
+            targetIndex = maxGameObjectIndex >= 0 ? maxGameObjectIndex + 1 : canvas.children.length - 1;
+        }
+
+        // 确保targetIndex在有效范围内，并且至少比StoneWalls大
+        if (stoneWallsNode && stoneWallsNode.parent === canvas) {
+            const stoneWallsIndex = stoneWallsNode.getSiblingIndex();
+            targetIndex = Math.max(targetIndex, stoneWallsIndex + 1);
+        }
+        targetIndex = Math.max(0, Math.min(targetIndex, canvas.children.length - 1));
+
+        // 将敌人容器移到目标位置
+        const enemiesIndex = enemiesNode.getSiblingIndex();
+        if (enemiesIndex !== targetIndex) {
+            enemiesNode.setSiblingIndex(targetIndex);
+        }
     }
 }

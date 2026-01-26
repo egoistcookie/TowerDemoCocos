@@ -70,15 +70,22 @@ export class ThunderChain extends Component {
         this.hitEnemies.add(target);
         this.bounceCount++;
 
-        // 显示闪电特效
-        this.createLightningEffect(fromPos, target.worldPosition);
+        // 计算当前伤害：第一跳使用原始伤害，之后每一跳伤害缩减一半
+        // bounceCount从1开始，所以第一跳时bounceCount=1，伤害=damage
+        // 第二跳时bounceCount=2，伤害=damage/2
+        // 第三跳时bounceCount=3，伤害=damage/4
+        const currentDamage = this.damage / Math.pow(2, this.bounceCount - 1);
+
+        // 显示闪电特效（起点往上移20像素）
+        const adjustedFromPos = new Vec3(fromPos.x, fromPos.y + 20, fromPos.z);
+        this.createLightningEffect(adjustedFromPos, target.worldPosition);
 
         // 显示电火花特效
         this.createSparkEffect(target.worldPosition);
 
-        // 应用伤害
+        // 应用伤害（使用计算后的当前伤害）
         if (this.onHitCallback) {
-            this.onHitCallback(this.damage, target);
+            this.onHitCallback(currentDamage, target);
         }
 
         // 检查是否可以继续弹射
@@ -272,7 +279,7 @@ export class ThunderChain extends Component {
     }
 
     /**
-     * 使用Graphics绘制闪电特效
+     * 使用Graphics绘制闪电特效（多条白金色曲折折线）
      */
     private createLightningEffectWithGraphics(fromPos: Vec3, toPos: Vec3) {
         const lightningNode = new Node('Lightning');
@@ -295,41 +302,61 @@ export class ThunderChain extends Component {
         Vec3.lerp(centerPos, fromPos, toPos, 0.5);
         lightningNode.setWorldPosition(centerPos);
 
-        // 绘制闪电（锯齿状线条）
+        // 计算方向和距离
         const direction = new Vec3();
         Vec3.subtract(direction, toPos, fromPos);
         const distance = direction.length();
         direction.normalize();
 
-        graphics.strokeColor = new Color(255, 255, 0, 255); // 黄色
-        graphics.lineWidth = 3;
+        // 白金色：金色偏白 (255, 248, 220) 或更亮的金色 (255, 255, 200)
+        const goldColor = new Color(255, 248, 220, 255); // 白金色
+        const brightGoldColor = new Color(255, 255, 200, 255); // 更亮的白金色
 
-        // 绘制锯齿状闪电
-        const segments = 8;
-        const segmentLength = distance / segments;
-        const offsetRange = 10; // 锯齿偏移范围
+        // 绘制多条曲折折线（3-5条）
+        const lineCount = 3 + Math.floor(Math.random() * 3); // 3-5条线
+        const segments = 10; // 每条线的分段数
+        const offsetRange = 15; // 曲折偏移范围
 
-        let currentPos = new Vec3();
-        Vec3.subtract(currentPos, fromPos, centerPos);
+        // 计算起点和终点的相对位置
+        const startPos = new Vec3();
+        Vec3.subtract(startPos, fromPos, centerPos);
+        const endPos = new Vec3();
+        Vec3.subtract(endPos, toPos, centerPos);
 
-        graphics.moveTo(currentPos.x, currentPos.y);
+        for (let lineIndex = 0; lineIndex < lineCount; lineIndex++) {
+            // 每条线的颜色略有不同（从白金色到亮白金色）
+            const colorLerp = lineIndex / (lineCount - 1);
+            const currentColor = new Color();
+            Color.lerp(currentColor, goldColor, brightGoldColor, colorLerp);
+            graphics.strokeColor = currentColor;
+            
+            // 线条宽度略有变化（2-4像素）
+            graphics.lineWidth = 2 + (lineIndex % 3);
 
-        for (let i = 1; i <= segments; i++) {
-            const t = i / segments;
-            const nextPos = new Vec3();
-            Vec3.lerp(nextPos, fromPos, toPos, t);
-            Vec3.subtract(nextPos, nextPos, centerPos);
+            // 绘制一条曲折折线
+            graphics.moveTo(startPos.x, startPos.y);
 
-            // 添加随机偏移（锯齿效果）
-            const offsetX = (Math.random() - 0.5) * offsetRange;
-            const offsetY = (Math.random() - 0.5) * offsetRange;
-            nextPos.x += offsetX;
-            nextPos.y += offsetY;
+            for (let i = 1; i <= segments; i++) {
+                const t = i / segments;
+                const nextPos = new Vec3();
+                Vec3.lerp(nextPos, startPos, endPos, t);
 
-            graphics.lineTo(nextPos.x, nextPos.y);
+                // 添加随机偏移（曲折效果）
+                // 使用不同的随机种子，让每条线的曲折程度不同
+                const randomSeed = lineIndex * 1000 + i;
+                const random1 = (Math.sin(randomSeed) + 1) / 2; // 使用sin函数生成伪随机数
+                const random2 = (Math.cos(randomSeed * 1.3) + 1) / 2;
+                
+                const offsetX = (random1 - 0.5) * offsetRange;
+                const offsetY = (random2 - 0.5) * offsetRange;
+                nextPos.x += offsetX;
+                nextPos.y += offsetY;
+
+                graphics.lineTo(nextPos.x, nextPos.y);
+            }
+
+            graphics.stroke();
         }
-
-        graphics.stroke();
 
         this.chainNodes.push(lightningNode);
 

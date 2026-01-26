@@ -1,4 +1,4 @@
-import { _decorator, Node, Vec3, find, Prefab, instantiate, SpriteFrame, AudioClip, Graphics, UITransform, Color, EventTouch } from 'cc';
+import { _decorator, Node, Vec3, find, Prefab, instantiate, SpriteFrame, AudioClip, Graphics, UITransform, Color, EventTouch, Sprite } from 'cc';
 import { Build } from './Build';
 import { UnitInfo } from '../UnitInfoPanel';
 import { StoneWallGridPanel } from '../StoneWallGridPanel';
@@ -9,6 +9,21 @@ import { IceArrow } from '../IceArrow';
 import { AudioManager } from '../AudioManager';
 import { UnitManager } from '../UnitManager';
 const { ccclass, property } = _decorator;
+
+// 建造阶段枚举
+enum ConstructionStage {
+    FOUNDATION = 0,    // 地基
+    HALF_BUILT = 1,    // 半成品
+    COMPLETE = 2       // 完全体
+}
+
+// 风化阶段枚举
+enum WeatheringStage {
+    NONE = -1,         // 无风化
+    STAGE_1 = 0,       // 风化阶段1
+    STAGE_2 = 1,       // 风化阶段2
+    STAGE_3 = 2        // 风化阶段3
+}
 
 @ccclass('IceTower')
 export class IceTower extends Build { 
@@ -21,7 +36,7 @@ export class IceTower extends Build {
     attackRange: number = 300; // 攻击范围
 
     @property
-    attackDamage: number = 20; // 攻击伤害
+    attackDamage: number = 10; // 攻击伤害
 
     @property
     attackInterval: number = 1.5; // 攻击间隔（秒）
@@ -35,6 +50,55 @@ export class IceTower extends Build {
     @property(AudioClip)
     hitSound: AudioClip = null!; // 冰箭击中敌人时的音效
 
+    // 建造阶段贴图
+    @property(SpriteFrame)
+    foundationSprite: SpriteFrame = null!; // 地基贴图
+
+    @property(SpriteFrame)
+    halfBuiltSprite: SpriteFrame = null!; // 半成品贴图
+
+    @property(SpriteFrame)
+    completeSprite: SpriteFrame = null!; // 完全体贴图
+
+    // 被破坏阶段贴图（3张）
+    @property(SpriteFrame)
+    destructionSprite1: SpriteFrame = null!; // 被破坏贴图1
+
+    @property(SpriteFrame)
+    destructionSprite2: SpriteFrame = null!; // 被破坏贴图2
+
+    @property(SpriteFrame)
+    destructionSprite3: SpriteFrame = null!; // 被破坏贴图3
+
+    // 风化阶段贴图（3张）
+    @property(SpriteFrame)
+    weatheringSprite1: SpriteFrame = null!; // 风化贴图1
+
+    @property(SpriteFrame)
+    weatheringSprite2: SpriteFrame = null!; // 风化贴图2
+
+    @property(SpriteFrame)
+    weatheringSprite3: SpriteFrame = null!; // 风化贴图3
+
+    // 建造阶段相关
+    private constructionStage: ConstructionStage = ConstructionStage.FOUNDATION; // 当前建造阶段
+    private constructionProgress: number = 0; // 建造进度（0-1）
+    private constructionTimer: number = 0; // 建造计时器
+    private readonly CONSTRUCTION_TIME: number = 5; // 每个阶段建造时间（秒）
+    private constructionProgressBar: Node = null!; // 建造进度条节点
+    private constructionProgressGraphics: Graphics = null!; // 建造进度条图形组件
+
+    // 被破坏阶段相关
+    private isDestroying: boolean = false; // 是否正在播放被破坏动画
+    private destructionTimer: number = 0; // 被破坏动画计时器
+    private readonly DESTRUCTION_TIME: number = 1; // 被破坏动画时间（秒）
+    private destructionFrameIndex: number = 0; // 当前被破坏帧索引（0-2）
+
+    // 风化阶段相关
+    private weatheringStage: WeatheringStage = WeatheringStage.NONE; // 当前风化阶段
+    private weatheringTimer: number = 0; // 风化计时器
+    private readonly WEATHERING_TIME: number = 5; // 每个风化阶段时间（秒）
+
     // 攻击相关私有属性
     protected attackTimer: number = 0; // 攻击计时器
     protected currentTarget: Node = null!; // 当前攻击目标
@@ -42,6 +106,58 @@ export class IceTower extends Build {
     protected readonly TARGET_FIND_INTERVAL: number = 0.2; // 目标查找间隔（秒）
     protected hasFoundFirstTarget: boolean = false; // 是否已经找到过第一个目标
     private unitManager: UnitManager = null!; // 单位管理器引用
+    private baseY: number = 0; // 完全体时的基准Y坐标（用于保持底部位置不变）
+
+    /**
+     * 设置节点高度并保持底部位置不变
+     * @param heightScale 高度缩放比例（0.5 = 50%, 0.66 = 66%, 1.0 = 100%）
+     */
+    private setHeightWithFixedBottom(heightScale: number) {
+        // 获取节点的UITransform以获取实际高度
+        const uiTransform = this.node.getComponent(UITransform);
+        if (!uiTransform) {
+            // 如果没有UITransform，直接设置缩放
+            this.node.setScale(this.defaultScale.x, this.defaultScale.y * heightScale, this.defaultScale.z);
+            return;
+        }
+
+        // 获取完全体时的实际高度（使用defaultScale）
+        const fullHeight = uiTransform.height * this.defaultScale.y;
+        
+        // baseY 存储的是网格底部的Y坐标（第一个网格的底部）
+        // 如果baseY为0，说明还没有设置，需要从网格位置计算
+        if (this.baseY === 0) {
+            // 需要从网格位置计算网格底部
+            if (this.gridPanel && this.gridX >= 0 && this.gridY >= 0) {
+                const gridPanel = this.gridPanel as any;
+                const gridCenter = this.gridPanel.gridToWorld(this.gridX, this.gridY);
+                if (gridCenter) {
+                    // 网格底部 = 网格中心 - cellSize/2
+                    this.baseY = gridCenter.y - gridPanel.cellSize / 2;
+                } else {
+                    // 如果无法获取网格位置，使用当前节点位置推算
+                    const currentHeight = fullHeight * heightScale;
+                    this.baseY = this.node.worldPosition.y - currentHeight / 2;
+                }
+            } else {
+                // 如果还没有网格位置，使用当前节点位置推算
+                const currentHeight = fullHeight * heightScale;
+                this.baseY = this.node.worldPosition.y - currentHeight / 2;
+            }
+        }
+
+        // 计算当前高度
+        const currentHeight = fullHeight * heightScale;
+        
+        // 节点中心Y = 网格底部Y + 当前高度/2
+        const newY = this.baseY + currentHeight / 2;
+        
+        // 设置缩放和位置
+        this.node.setScale(this.defaultScale.x, this.defaultScale.y * heightScale, this.defaultScale.z);
+        const currentPos = this.node.worldPosition.clone();
+        currentPos.y = newY;
+        this.node.setWorldPosition(currentPos);
+    }
 
     /**
      * 当冰塔从对象池激活时调用
@@ -58,8 +174,32 @@ export class IceTower extends Build {
         this.targetFindTimer = 0;
         this.hasFoundFirstTarget = false;
         
+        // 初始化建造阶段
+        this.constructionStage = ConstructionStage.FOUNDATION;
+        this.constructionProgress = 0;
+        this.constructionTimer = 0;
+        
+        // 初始化被破坏和风化阶段
+        this.isDestroying = false;
+        this.destructionTimer = 0;
+        this.destructionFrameIndex = 0;
+        this.weatheringStage = WeatheringStage.NONE;
+        this.weatheringTimer = 0;
+        
+        // 重置基准Y坐标（将在第一次设置高度时记录）
+        this.baseY = 0;
+        
+        // 获取Sprite组件
+        this.sprite = this.node.getComponent(Sprite);
+        
         // 获取UnitManager
         this.unitManager = UnitManager.getInstance();
+        
+        // 创建建造进度条
+        this.createConstructionProgressBar();
+        
+        // 设置初始贴图
+        this.updateSprite();
     }
 
     protected start() {
@@ -78,8 +218,31 @@ export class IceTower extends Build {
         this.targetFindTimer = 0;
         this.hasFoundFirstTarget = false;
         
+        // 初始化建造阶段
+        this.constructionStage = ConstructionStage.FOUNDATION;
+        this.constructionProgress = 0;
+        this.constructionTimer = 0;
+        
+        // 初始化被破坏和风化阶段
+        this.isDestroying = false;
+        this.destructionTimer = 0;
+        this.destructionFrameIndex = 0;
+        this.weatheringStage = WeatheringStage.NONE;
+        this.weatheringTimer = 0;
+        
+        // 获取Sprite组件
+        if (!this.sprite) {
+            this.sprite = this.node.getComponent(Sprite);
+        }
+        
         // 获取UnitManager
         this.unitManager = UnitManager.getInstance();
+        
+        // 创建建造进度条
+        this.createConstructionProgressBar();
+        
+        // 设置初始贴图
+        this.updateSprite();
     }
     
     onDestroy() {
@@ -94,9 +257,76 @@ export class IceTower extends Build {
      * 查找网格面板（重写以支持石墙网格）
      */
     protected findGridPanel() {
-        const stoneWallGridPanelNode = find('StoneWallGridPanel');
+        const stoneWallGridPanelNode = find('Canvas/StoneWallGridPanel');
         if (stoneWallGridPanelNode) {
             this.gridPanel = stoneWallGridPanelNode.getComponent(StoneWallGridPanel) as any;
+        }
+    }
+
+    /**
+     * 移动到指定网格位置（重写以支持占用两个网格）
+     */
+    public moveToGridPosition(gridX: number, gridY: number) {
+        if (!this.gridPanel) {
+            this.findGridPanel();
+        }
+        
+        if (!this.gridPanel) {
+            return;
+        }
+
+        // 检查第二个网格是否存在（gridY+1不能超出网格范围）
+        const gridPanel = this.gridPanel as any;
+        if (gridY + 1 >= gridPanel.gridHeight) {
+            // 第二个网格超出范围，无法放置
+            return;
+        }
+
+        // 检查两个网格是否都被占用（如果已经被当前节点占用，则允许继续）
+        if (gridPanel.isGridOccupiedByOther && this.gridX === gridX && this.gridY === gridY) {
+            // 如果目标网格就是当前节点已经占用的网格，允许继续（用于更新位置）
+            // 这种情况发生在 buildIceTower 中已经占用网格后调用 moveToGridPosition
+        } else if (gridPanel.isGridOccupied(gridX, gridY) || gridPanel.isGridOccupied(gridX, gridY + 1)) {
+            // 至少有一个网格被占用，无法放置
+            return;
+        }
+
+        // 获取目标网格的世界坐标（使用第一个网格的位置）
+        const targetWorldPos = this.gridPanel.gridToWorld(gridX, gridY);
+        if (!targetWorldPos) {
+            return;
+        }
+
+        // 释放原网格（释放两个网格）
+        if (this.gridX >= 0 && this.gridY >= 0) {
+            this.gridPanel.releaseGrid(this.gridX, this.gridY);
+            if (this.gridY + 1 < gridPanel.gridHeight) {
+                this.gridPanel.releaseGrid(this.gridX, this.gridY + 1);
+            }
+        }
+
+        // 占用新网格（占用两个网格）
+        this.gridPanel.occupyGrid(gridX, gridY, this.node);
+        this.gridPanel.occupyGrid(gridX, gridY + 1, this.node);
+        this.gridX = gridX;
+        this.gridY = gridY;
+
+        // 计算网格底部Y坐标（第一个网格的底部）
+        const gridBottomY = targetWorldPos.y - gridPanel.cellSize / 2;
+        
+        // 设置baseY为网格底部Y坐标
+        this.baseY = gridBottomY;
+        
+        // 根据当前建造阶段更新高度和位置，确保底部对齐网格
+        if (this.constructionStage === ConstructionStage.FOUNDATION) {
+            this.setHeightWithFixedBottom(0.5);
+        } else if (this.constructionStage === ConstructionStage.HALF_BUILT) {
+            this.setHeightWithFixedBottom(0.66);
+        } else if (this.constructionStage === ConstructionStage.COMPLETE) {
+            this.setHeightWithFixedBottom(1.0);
+        } else {
+            // 默认完全体高度
+            this.setHeightWithFixedBottom(1.0);
         }
     }
 
@@ -180,16 +410,10 @@ export class IceTower extends Build {
             this.unitSelectionManager.selectUnit(this.node, this.buildUnitInfo());
         }
 
-        if (this.isMoving) {
-            return;
-        }
-
         if (this.selectionPanel && this.selectionPanel.isValid) {
             this.hideSelectionPanel();
             return;
         }
-
-        this.startMoving(event);
     }
     
     /**
@@ -214,10 +438,126 @@ export class IceTower extends Build {
     }
 
     /**
-     * 更新逻辑（处理攻击）
+     * 更新逻辑（处理建造、攻击、被破坏、风化）
      */
     update(deltaTime: number) {
+        // 处理风化阶段（优先级最高，因为此时已经死亡）
+        if (this.weatheringStage !== WeatheringStage.NONE) {
+            // 检查是否有风化贴图，如果没有则直接完成风化
+            const hasWeatheringSprites = this.weatheringSprite1 || this.weatheringSprite2 || this.weatheringSprite3;
+            
+            if (!hasWeatheringSprites) {
+                // 没有风化贴图，直接完成风化
+                this.finalDestroy();
+                return;
+            }
+            
+            this.weatheringTimer += deltaTime;
+            if (this.weatheringTimer >= this.WEATHERING_TIME) {
+                this.weatheringTimer = 0;
+                this.weatheringStage++;
+                
+                if (this.weatheringStage > WeatheringStage.STAGE_3) {
+                    // 风化完成，彻底消失并释放网格
+                    this.finalDestroy();
+                    return;
+                } else {
+                    // 更新风化贴图
+                    this.updateSprite();
+                }
+            }
+            return;
+        }
+
+        // 处理被破坏阶段
+        if (this.isDestroying) {
+            // 检查是否有被破坏贴图，如果没有则直接进入风化阶段
+            const hasDestructionSprites = this.destructionSprite1 || this.destructionSprite2 || this.destructionSprite3;
+            
+            if (!hasDestructionSprites) {
+                // 没有被破坏贴图，直接进入风化阶段
+                this.isDestroying = false;
+                this.weatheringStage = WeatheringStage.STAGE_1;
+                this.weatheringTimer = 0;
+                this.updateSprite();
+                return;
+            }
+            
+            this.destructionTimer += deltaTime;
+            const frameTime = this.DESTRUCTION_TIME / 3; // 每帧时间
+            const newFrameIndex = Math.floor(this.destructionTimer / frameTime);
+            
+            if (newFrameIndex !== this.destructionFrameIndex && newFrameIndex < 3) {
+                this.destructionFrameIndex = newFrameIndex;
+                this.updateSprite();
+            }
+            
+            if (this.destructionTimer >= this.DESTRUCTION_TIME) {
+                // 被破坏动画完成，开始风化阶段
+                this.isDestroying = false;
+                this.weatheringStage = WeatheringStage.STAGE_1;
+                this.weatheringTimer = 0;
+                this.updateSprite();
+            }
+            return;
+        }
+
         if (this.isDestroyed) {
+            return;
+        }
+
+        // 处理建造阶段
+        if (this.constructionStage < ConstructionStage.COMPLETE) {
+            // 检查当前阶段是否有贴图，如果没有则跳过
+            let shouldSkipStage = false;
+            if (this.constructionStage === ConstructionStage.FOUNDATION && !this.foundationSprite) {
+                shouldSkipStage = true;
+            } else if (this.constructionStage === ConstructionStage.HALF_BUILT && !this.halfBuiltSprite) {
+                shouldSkipStage = true;
+            }
+            
+            if (shouldSkipStage) {
+                // 跳过当前阶段
+                this.constructionStage++;
+                this.constructionTimer = 0;
+                this.constructionProgress = 0;
+                this.updateSprite();
+                
+                if (this.constructionStage >= ConstructionStage.COMPLETE) {
+                    if (this.constructionProgressBar) {
+                        this.constructionProgressBar.active = false;
+                    }
+                }
+            } else {
+                // 正常建造流程
+                this.constructionTimer += deltaTime;
+                const targetTime = this.CONSTRUCTION_TIME;
+                
+                if (this.constructionTimer >= targetTime) {
+                    // 当前阶段完成，进入下一阶段
+                    this.constructionStage++;
+                    this.constructionTimer = 0;
+                    this.constructionProgress = 0;
+                    
+                    // 更新贴图
+                    this.updateSprite();
+                    
+                    // 如果到达完全体，隐藏进度条
+                    if (this.constructionStage >= ConstructionStage.COMPLETE) {
+                        if (this.constructionProgressBar) {
+                            this.constructionProgressBar.active = false;
+                        }
+                    }
+                } else {
+                    // 更新建造进度
+                    this.constructionProgress = this.constructionTimer / targetTime;
+                    this.updateConstructionProgressBar();
+                }
+            }
+        }
+
+        // 只有完全体才能攻击
+        if (this.constructionStage < ConstructionStage.COMPLETE) {
             return;
         }
 
@@ -406,5 +746,252 @@ export class IceTower extends Build {
         if (enemyScript && enemyScript.takeDamage) {
             enemyScript.takeDamage(damage);
         }
+    }
+
+    /**
+     * 检查是否存活（与哨塔保持一致）
+     */
+    public isAlive(): boolean {
+        return !this.isDestroyed && !this.isDestroying && this.weatheringStage === WeatheringStage.NONE && this.currentHealth > 0;
+    }
+
+    /**
+     * 创建建造进度条
+     */
+    private createConstructionProgressBar() {
+        if (this.constructionProgressBar && this.constructionProgressBar.isValid) {
+            return;
+        }
+
+        this.constructionProgressBar = new Node('ConstructionProgressBar');
+        this.constructionProgressBar.setParent(this.node);
+        this.constructionProgressBar.setPosition(0, 60, 0);
+
+        const uiTransform = this.constructionProgressBar.addComponent(UITransform);
+        uiTransform.setContentSize(40, 4);
+
+        this.constructionProgressGraphics = this.constructionProgressBar.addComponent(Graphics);
+        this.constructionProgressBar.active = true;
+    }
+
+    /**
+     * 更新建造进度条
+     */
+    private updateConstructionProgressBar() {
+        if (!this.constructionProgressBar || !this.constructionProgressGraphics) return;
+
+        if (this.constructionStage >= ConstructionStage.COMPLETE) {
+            this.constructionProgressBar.active = false;
+            return;
+        }
+
+        this.constructionProgressBar.active = true;
+        this.constructionProgressGraphics.clear();
+
+        const barWidth = 40;
+        const barHeight = 4;
+        const barX = -barWidth / 2;
+        const barY = 0;
+
+        // 绘制背景（灰色）
+        this.constructionProgressGraphics.fillColor = new Color(100, 100, 100, 255);
+        this.constructionProgressGraphics.rect(barX, barY, barWidth, barHeight);
+        this.constructionProgressGraphics.fill();
+
+        // 绘制进度（蓝色）
+        if (this.constructionProgress > 0) {
+            this.constructionProgressGraphics.fillColor = new Color(0, 150, 255, 255);
+            this.constructionProgressGraphics.rect(barX, barY, barWidth * this.constructionProgress, barHeight);
+            this.constructionProgressGraphics.fill();
+        }
+    }
+
+    /**
+     * 更新贴图
+     */
+    private updateSprite() {
+        if (!this.sprite) {
+            this.sprite = this.node.getComponent(Sprite);
+        }
+        if (!this.sprite) {
+            return;
+        }
+
+        // 优先处理风化阶段
+        if (this.weatheringStage === WeatheringStage.STAGE_1 && this.weatheringSprite1) {
+            this.sprite.spriteFrame = this.weatheringSprite1;
+            // 风化状态高度为50%，保持底部位置不变
+            this.setHeightWithFixedBottom(0.5);
+            return;
+        }
+        if (this.weatheringStage === WeatheringStage.STAGE_2 && this.weatheringSprite2) {
+            this.sprite.spriteFrame = this.weatheringSprite2;
+            // 风化状态高度为50%，保持底部位置不变
+            this.setHeightWithFixedBottom(0.5);
+            return;
+        }
+        if (this.weatheringStage === WeatheringStage.STAGE_3 && this.weatheringSprite3) {
+            this.sprite.spriteFrame = this.weatheringSprite3;
+            // 风化状态高度为50%，保持底部位置不变
+            this.setHeightWithFixedBottom(0.5);
+            return;
+        }
+
+        // 处理被破坏阶段
+        if (this.isDestroying) {
+            if (this.destructionFrameIndex === 0 && this.destructionSprite1) {
+                this.sprite.spriteFrame = this.destructionSprite1;
+                // 被破坏阶段保持当前高度（通常是完全体高度）
+                return;
+            }
+            if (this.destructionFrameIndex === 1 && this.destructionSprite2) {
+                this.sprite.spriteFrame = this.destructionSprite2;
+                return;
+            }
+            if (this.destructionFrameIndex === 2 && this.destructionSprite3) {
+                this.sprite.spriteFrame = this.destructionSprite3;
+                return;
+            }
+        }
+
+        // 处理建造阶段
+        if (this.constructionStage === ConstructionStage.FOUNDATION && this.foundationSprite) {
+            this.sprite.spriteFrame = this.foundationSprite;
+            // 地基形态高度为50%，保持底部位置不变
+            this.setHeightWithFixedBottom(0.5);
+            return;
+        }
+        if (this.constructionStage === ConstructionStage.HALF_BUILT && this.halfBuiltSprite) {
+            this.sprite.spriteFrame = this.halfBuiltSprite;
+            // 半成品高度为66%，保持底部位置不变
+            this.setHeightWithFixedBottom(0.66);
+            return;
+        }
+        if (this.constructionStage === ConstructionStage.COMPLETE && this.completeSprite) {
+            this.sprite.spriteFrame = this.completeSprite;
+            // 完全体高度为100%，保持底部位置不变
+            this.setHeightWithFixedBottom(1.0);
+            return;
+        }
+
+        // 如果没有配置贴图，使用默认贴图（不改变）
+        // 如果没有配置贴图，默认使用完全体高度
+        if (this.constructionStage === ConstructionStage.COMPLETE) {
+            this.setHeightWithFixedBottom(1.0);
+        } else if (this.constructionStage === ConstructionStage.HALF_BUILT) {
+            this.setHeightWithFixedBottom(0.66);
+        } else if (this.constructionStage === ConstructionStage.FOUNDATION) {
+            this.setHeightWithFixedBottom(0.5);
+        }
+    }
+
+    /**
+     * 重写die方法，不立即释放网格，而是进入被破坏阶段
+     */
+    protected die() {
+        if (this.isDestroyed || this.isDestroying) {
+            return;
+        }
+
+        this.isDestroyed = true;
+        this.isDestroying = true;
+        this.destructionTimer = 0;
+        this.destructionFrameIndex = 0;
+
+        // 停止攻击
+        this.currentTarget = null!;
+
+        // 隐藏进度条
+        if (this.constructionProgressBar) {
+            this.constructionProgressBar.active = false;
+        }
+
+        // 隐藏血条
+        if (this.healthBarNode) {
+            this.healthBarNode.active = false;
+        }
+
+        // 更新贴图
+        this.updateSprite();
+
+        // 播放爆炸特效（如果有）
+        if (this.explosionEffect) {
+            const explosion = instantiate(this.explosionEffect);
+            const canvas = find('Canvas');
+            if (canvas) {
+                explosion.setParent(canvas);
+            } else if (this.node.scene) {
+                explosion.setParent(this.node.scene);
+            }
+            explosion.setWorldPosition(this.node.worldPosition);
+            explosion.active = true;
+        }
+    }
+
+    /**
+     * 最终销毁（风化完成后调用）
+     */
+    private finalDestroy() {
+        // 释放网格占用（确保能找到网格面板）
+        if (!this.gridPanel) {
+            this.findGridPanel();
+        }
+        if (this.gridPanel && this.gridX >= 0 && this.gridY >= 0) {
+            // 释放两个网格（因为占用两个格子）
+            this.gridPanel.releaseGrid(this.gridX, this.gridY);
+            const gridPanel = this.gridPanel as any;
+            if (this.gridY + 1 < gridPanel.gridHeight) {
+                this.gridPanel.releaseGrid(this.gridX, this.gridY + 1);
+            }
+        }
+
+        // 性能优化：使用对象池回收建筑物，而不是直接销毁
+        const returnToPool = () => {
+            const buildingPool = BuildingPool.getInstance();
+            if (buildingPool && this.node && this.node.isValid) {
+                // 重置建筑物状态（在返回对象池前）
+                this.resetBuildingState();
+                // 返回到对象池
+                buildingPool.release(this.node, this.prefabName);
+            } else {
+                // 如果对象池不存在，直接销毁
+                if (this.node && this.node.isValid) {
+                    this.node.destroy();
+                }
+            }
+        };
+        
+        // 延迟返回对象池
+        this.scheduleOnce(() => {
+            returnToPool();
+        }, 0.1);
+    }
+
+    /**
+     * 重置建筑物状态（用于对象池回收）
+     */
+    protected resetBuildingState() {
+        super.resetBuildingState();
+        
+        // 重置建造阶段
+        this.constructionStage = ConstructionStage.FOUNDATION;
+        this.constructionProgress = 0;
+        this.constructionTimer = 0;
+        
+        // 重置被破坏和风化阶段
+        this.isDestroying = false;
+        this.destructionTimer = 0;
+        this.destructionFrameIndex = 0;
+        this.weatheringStage = WeatheringStage.NONE;
+        this.weatheringTimer = 0;
+        
+        // 重置攻击相关
+        this.attackTimer = 0;
+        this.currentTarget = null!;
+        this.targetFindTimer = 0;
+        this.hasFoundFirstTarget = false;
+        
+        // 更新贴图
+        this.updateSprite();
     }
 }

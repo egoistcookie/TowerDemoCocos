@@ -268,8 +268,7 @@ export class UnitIntroPopup extends Component {
         // 显示弹窗
         this.container.active = true;
         
-        // 添加高亮显示效果
-        this.playHighlightAnimation();
+        // 不播放闪烁动画，直接显示（保持高亮边框）
         
         // 监听触摸事件，阻止事件冒泡到下层
         this.container.on(Node.EventType.TOUCH_START, this.onTouchStart, this);

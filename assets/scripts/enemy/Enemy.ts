@@ -872,14 +872,18 @@ export class Enemy extends Component {
             }
         }
 
-        // 如果当前目标是石墙或哨塔且敌人不在网格寻路模式（说明可能是A*寻路失败后设置的，或者是网格最上层没有缺口时设置的），保持这个目标作为最高优先级
+        // 如果当前目标是石墙、哨塔、冰塔或雷塔且敌人不在网格寻路模式（说明可能是A*寻路失败后设置的，或者是网格最上层没有缺口时设置的），保持这个目标作为最高优先级
         if (this.currentTarget && this.currentTarget.isValid && !this.isInStoneWallGrid && this.currentTarget.worldPosition &&
             this.node && this.node.isValid && this.node.worldPosition) {
             const currentWallScript = this.currentTarget.getComponent('StoneWall') as any;
             const currentWatchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
+            const currentIceTowerScript = this.currentTarget.getComponent('IceTower') as any;
+            const currentThunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
             if ((currentWallScript && currentWallScript.isAlive && currentWallScript.isAlive()) ||
-                (currentWatchTowerScript && currentWatchTowerScript.isAlive && currentWatchTowerScript.isAlive())) {
-                // 性能优化：不需要计算实际距离，只需要检查石墙或哨塔是否有效且存活
+                (currentWatchTowerScript && currentWatchTowerScript.isAlive && currentWatchTowerScript.isAlive()) ||
+                (currentIceTowerScript && currentIceTowerScript.isAlive && currentIceTowerScript.isAlive()) ||
+                (currentThunderTowerScript && currentThunderTowerScript.isAlive && currentThunderTowerScript.isAlive())) {
+                // 性能优化：不需要计算实际距离，只需要检查目标是否有效且存活
                 // 保持这个目标，不执行后续的目标查找逻辑，确保敌人会移动到攻击范围内
                 return;
             }
@@ -896,7 +900,9 @@ export class Enemy extends Component {
                                 this.currentTarget.getComponent('WarAncientTree') as any ||
                                 this.currentTarget.getComponent('Crystal') as any ||
                                 this.currentTarget.getComponent('Church') as any ||
-                                this.currentTarget.getComponent('WatchTower') as any;
+                                this.currentTarget.getComponent('WatchTower') as any ||
+                                this.currentTarget.getComponent('IceTower') as any ||
+                                this.currentTarget.getComponent('ThunderTower') as any;
             
             // 如果目标是石墙或哨塔，检查是否仍然存活
             if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
@@ -1231,6 +1237,70 @@ export class Enemy extends Component {
             }
         }
 
+        // 查找冰塔 - 从UnitManager获取
+        let iceTowers: Node[] = [];
+        if (this.unitManager && this.unitManager.getIceTowers) {
+            iceTowers = this.unitManager.getIceTowers();
+        } else {
+            // 降级方案：直接从容器节点获取
+            const iceTowersNode = find('Canvas/IceTowers');
+            if (iceTowersNode) {
+                iceTowers = iceTowersNode.children || [];
+            }
+        }
+        // 冰塔
+        for (const iceTower of iceTowers) {
+            if (!iceTower || !iceTower.active || !iceTower.isValid) continue;
+            
+            const iceTowerScript = iceTower.getComponent('IceTower') as any;
+            if (!iceTowerScript || !iceTowerScript.isAlive || !iceTowerScript.isAlive()) continue;
+            
+            const dx = iceTower.worldPosition.x - myPos.x;
+            const dy = iceTower.worldPosition.y - myPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            
+            if (distanceSq <= detectionRangeSq) {
+                if (PRIORITY.BUILDING < targetPriority || 
+                    (PRIORITY.BUILDING === targetPriority && distanceSq < minDistanceSq)) {
+                    minDistanceSq = distanceSq;
+                    nearestTarget = iceTower;
+                    targetPriority = PRIORITY.BUILDING;
+                }
+            }
+        }
+
+        // 查找雷塔 - 从UnitManager获取
+        let thunderTowers: Node[] = [];
+        if (this.unitManager && this.unitManager.getThunderTowers) {
+            thunderTowers = this.unitManager.getThunderTowers();
+        } else {
+            // 降级方案：直接从容器节点获取
+            const thunderTowersNode = find('Canvas/ThunderTowers');
+            if (thunderTowersNode) {
+                thunderTowers = thunderTowersNode.children || [];
+            }
+        }
+        // 雷塔
+        for (const thunderTower of thunderTowers) {
+            if (!thunderTower || !thunderTower.active || !thunderTower.isValid) continue;
+            
+            const thunderTowerScript = thunderTower.getComponent('ThunderTower') as any;
+            if (!thunderTowerScript || !thunderTowerScript.isAlive || !thunderTowerScript.isAlive()) continue;
+            
+            const dx = thunderTower.worldPosition.x - myPos.x;
+            const dy = thunderTower.worldPosition.y - myPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            
+            if (distanceSq <= detectionRangeSq) {
+                if (PRIORITY.BUILDING < targetPriority || 
+                    (PRIORITY.BUILDING === targetPriority && distanceSq < minDistanceSq)) {
+                    minDistanceSq = distanceSq;
+                    nearestTarget = thunderTower;
+                    targetPriority = PRIORITY.BUILDING;
+                }
+            }
+        }
+
         // 如果找到目标，设置为当前目标
         // 但是，如果当前目标是石墙（网格最上层没有缺口时设置的），且新找到的目标不是石墙，不要替换
         if (nearestTarget && nearestTarget.isValid) {
@@ -1247,10 +1317,12 @@ export class Enemy extends Component {
             const isCurrentTargetGridTopLayerWall = currentWallScript && this.checkEnemyAboveGrid() && !this.topLayerGapTarget;
             const newTargetIsWall = nearestTarget.isValid ? nearestTarget.getComponent('StoneWall') !== null : false;
             const newTargetIsWatchTower = nearestTarget.isValid ? nearestTarget.getComponent('WatchTower') !== null : false;
+            const newTargetIsIceTower = nearestTarget.isValid ? nearestTarget.getComponent('IceTower') !== null : false;
+            const newTargetIsThunderTower = nearestTarget.isValid ? nearestTarget.getComponent('ThunderTower') !== null : false;
             
-            // 如果当前目标是网格最上层没有缺口时设置的石墙，且新目标不是石墙也不是哨塔，保持当前目标
-            if (isCurrentTargetGridTopLayerWall && !newTargetIsWall && !newTargetIsWatchTower) {
-                // 当前目标是网格最上层没有缺口时设置的石墙，且新目标不是石墙也不是哨塔，保持当前目标
+            // 如果当前目标是网格最上层没有缺口时设置的石墙，且新目标不是石墙、哨塔、冰塔或雷塔，保持当前目标
+            if (isCurrentTargetGridTopLayerWall && !newTargetIsWall && !newTargetIsWatchTower && !newTargetIsIceTower && !newTargetIsThunderTower) {
+                // 当前目标是网格最上层没有缺口时设置的石墙，且新目标不是石墙、哨塔、冰塔或雷塔，保持当前目标
                 return;
             }
             
@@ -1292,21 +1364,81 @@ export class Enemy extends Component {
         const distanceSq = direction.lengthSqr();
         const attackRangeSq = this.attackRange * this.attackRange;
         
-        // 检查目标是否是石墙或哨塔
+        // 检查目标是否是石墙、哨塔、冰塔或雷塔
         const targetScript = this.currentTarget.getComponent('StoneWall') as any;
         const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
+        const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
+        const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
         const isTargetStoneWall = !!targetScript;
         const isTargetWatchTower = !!watchTowerScript;
+        const isTargetIceTower = !!iceTowerScript;
+        const isTargetThunderTower = !!thunderTowerScript;
 
-        // 如果目标是石墙或哨塔，使用简化的移动逻辑：直接移动到攻击范围内
-        if (isTargetStoneWall || isTargetWatchTower) {
+        // 如果目标是石墙、哨塔、冰塔或雷塔，使用简化的移动逻辑：直接移动到攻击范围内
+        if (isTargetStoneWall || isTargetWatchTower || isTargetIceTower || isTargetThunderTower) {
             // 检查是否已经在攻击范围内（使用平方距离）
             if (distanceSq <= attackRangeSq) {
                 // 已经在攻击范围内，停止移动，让update()方法处理攻击
                 return;
             }
             
-            // 直接向石墙移动，即使检测到碰撞也要继续移动，直到进入攻击范围
+            // 对于防御塔目标，需要检查路径上的石墙阻挡
+            if (isTargetWatchTower || isTargetIceTower || isTargetThunderTower) {
+                direction.normalize();
+                const moveStep = this.moveSpeed * deltaTime;
+                const currentPos = this.node.worldPosition.clone();
+                const newPos = new Vec3();
+                Vec3.scaleAndAdd(newPos, currentPos, direction, moveStep);
+                
+                // 检查移动路径上是否有石墙阻挡
+                const hasCollision = this.checkCollisionWithStoneWall(newPos);
+                
+                if (hasCollision) {
+                    // 路径被石墙阻挡，先攻击阻挡的石墙
+                    const blockingWall = this.getBlockingStoneWall(newPos);
+                    if (blockingWall) {
+                        this.currentTarget = blockingWall;
+                        return;
+                    }
+                    // 如果找不到阻挡的石墙，尝试绕路
+                    const detourPos = this.calculateDetourPosition(direction, deltaTime);
+                    if (detourPos) {
+                        const detourDirection = new Vec3();
+                        Vec3.subtract(detourDirection, detourPos, currentPos);
+                        const detourDistance = detourDirection.length();
+                        
+                        if (detourDistance > 0.1) {
+                            detourDirection.normalize();
+                            const moveDist = Math.min(this.moveSpeed * deltaTime, detourDistance);
+                            const smoothDetourPos = new Vec3();
+                            Vec3.scaleAndAdd(smoothDetourPos, currentPos, detourDirection, moveDist);
+                            const clampedPos = this.clampPositionToScreen(smoothDetourPos);
+                            this.node.setWorldPosition(clampedPos);
+                            this.flipDirection(detourDirection);
+                            this.playWalkAnimation();
+                        }
+                        return;
+                    } else {
+                        // 无法绕路，攻击最近的石墙
+                        const nearestWall = this.findNearestStoneWall();
+                        if (nearestWall) {
+                            this.currentTarget = nearestWall;
+                            return;
+                        }
+                        // 找不到石墙，停止移动
+                        return;
+                    }
+                }
+                
+                // 没有碰撞，正常移动
+                const clampedPos = this.clampPositionToScreen(newPos);
+                this.node.setWorldPosition(clampedPos);
+                this.flipDirection(direction);
+                this.playWalkAnimation();
+                return;
+            }
+            
+            // 对于石墙目标，保持原有逻辑（直接移动到攻击范围）
             direction.normalize();
             const moveStep = this.moveSpeed * deltaTime;
             const currentPos = this.node.worldPosition.clone();
@@ -1593,38 +1725,6 @@ export class Enemy extends Component {
         return nearestWall;
     }
 
-    /**
-     * 检查指定位置是否有石墙节点
-     * @param position 要检查的世界坐标位置
-     * @returns 如果该位置有石墙节点返回true，否则返回false
-     */
-    private checkStoneWallAtPosition(position: Vec3): boolean {
-        // 从Canvas/StoneWalls容器节点获取所有石墙
-        let stoneWalls: Node[] = [];
-        const stoneWallsNode = find('Canvas/StoneWalls');
-        if (stoneWallsNode) {
-            stoneWalls = stoneWallsNode.children || [];
-        }
-
-        for (const wall of stoneWalls) {
-            if (!wall || !wall.active || !wall.isValid) continue;
-            
-            const wallScript = wall.getComponent('StoneWall') as any;
-            // 检查石墙是否被摧毁（如果有isDestroyed属性）
-            if (wallScript && wallScript.isDestroyed === true) continue;
-
-            const wallPos = wall.worldPosition;
-            const wallRadius = wallScript.collisionRadius ?? 25; // 使用预制体设置的值，如果没有设置则默认为25
-            const distance = Vec3.distance(position, wallPos);
-
-            // 如果距离小于碰撞半径，说明该位置有石墙
-            if (distance < wallRadius) {
-                return true;
-            }
-        }
-
-        return false;
-    }
 
     /**
      * 获取阻挡位置的石墙节点
@@ -2227,8 +2327,10 @@ export class Enemy extends Component {
         const hunterScript = this.currentTarget.getComponent('Hunter') as any;
         const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-        const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any; // 添加哨塔支持
-        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || churchScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript;
+        const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
+        const iceTowerScript = this.currentTarget.getComponent('IceTower') as any; // 添加冰塔支持
+        const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any; // 添加雷塔支持
+        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || churchScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
         
         if (targetScript && targetScript.takeDamage) {
             targetScript.takeDamage(this.attackDamage);
@@ -2680,9 +2782,10 @@ export class Enemy extends Component {
             if (!this.stoneWallGridPanelComponent.isGridOccupied(x, topLayerY)) {
                 const worldPos = this.stoneWallGridPanelComponent.gridToWorld(x, topLayerY);
                 if (worldPos) {
-                    // 检查该位置附近是否有石墙节点（通过搜索场景中的石墙节点）
-                    // const hasStoneWallAtPosition = this.checkStoneWallAtPosition(worldPos);
-                    // if (!hasStoneWallAtPosition) {
+                    // 不能只依赖占用网格：初始石墙有时未正确标记占用。
+                    // 这里直接把石墙当作“有碰撞体积的单位”，通过场景中的石墙节点判断该格是否真的可通过。
+                    const blockingWall = this.getBlockingStoneWall(worldPos);
+                    if (!blockingWall) {
                         // 计算到敌人的距离（仅考虑x方向，因为敌人是在上方）
                         const distanceX = Math.abs(worldPos.x - enemyPos.x);
                         
@@ -2698,7 +2801,7 @@ export class Enemy extends Component {
                             minDistance = distanceX;
                             bestGap = worldPos;
                         }
-                    // }
+                    }
                 }
             }
         }
@@ -2902,6 +3005,16 @@ export class Enemy extends Component {
             Vec3.lerp(finalDirection, finalDirection, avoidanceDir, avoidanceWeight);
             finalDirection.normalize();
             Vec3.scaleAndAdd(newPos, enemyPos, finalDirection, moveDistance);
+        }
+
+        // 网格移动分支也需要石墙碰撞：否则会“穿墙”
+        const blockingWall = this.getBlockingStoneWall(newPos);
+        if (blockingWall) {
+            this.isInStoneWallGrid = false;
+            this.gridMoveState = null;
+            this.gridMoveTargetX = null;
+            this.currentTarget = blockingWall;
+            return;
         }
         
         const clampedPos = this.clampPositionToScreen(newPos);

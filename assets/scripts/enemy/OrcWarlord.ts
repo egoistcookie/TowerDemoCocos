@@ -675,6 +675,64 @@ export class OrcWarlord extends Component {
             }
         }
 
+        // 查找冰塔 - 从UnitManager获取
+        let iceTowers: Node[] = [];
+        if (this.unitManager && this.unitManager.getIceTowers) {
+            iceTowers = this.unitManager.getIceTowers();
+        } else {
+            // 降级方案：直接从容器节点获取
+            const iceTowersNode = find('Canvas/IceTowers');
+            if (iceTowersNode) {
+                iceTowers = iceTowersNode.children || [];
+            }
+        }
+        // 冰塔
+        for (const iceTower of iceTowers) {
+            if (!iceTower || !iceTower.active || !iceTower.isValid) continue;
+            
+            const iceTowerScript = iceTower.getComponent('IceTower') as any;
+            if (!iceTowerScript || !iceTowerScript.isAlive || !iceTowerScript.isAlive()) continue;
+            
+            const distance = Vec3.distance(this.node.worldPosition, iceTower.worldPosition);
+            if (distance <= detectionRange) {
+                if (PRIORITY.BUILDING < targetPriority || 
+                    (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
+                    minDistance = distance;
+                    nearestTarget = iceTower;
+                    targetPriority = PRIORITY.BUILDING;
+                }
+            }
+        }
+
+        // 查找雷塔 - 从UnitManager获取
+        let thunderTowers: Node[] = [];
+        if (this.unitManager && this.unitManager.getThunderTowers) {
+            thunderTowers = this.unitManager.getThunderTowers();
+        } else {
+            // 降级方案：直接从容器节点获取
+            const thunderTowersNode = find('Canvas/ThunderTowers');
+            if (thunderTowersNode) {
+                thunderTowers = thunderTowersNode.children || [];
+            }
+        }
+        // 雷塔
+        for (const thunderTower of thunderTowers) {
+            if (!thunderTower || !thunderTower.active || !thunderTower.isValid) continue;
+            
+            const thunderTowerScript = thunderTower.getComponent('ThunderTower') as any;
+            if (!thunderTowerScript || !thunderTowerScript.isAlive || !thunderTowerScript.isAlive()) continue;
+            
+            const distance = Vec3.distance(this.node.worldPosition, thunderTower.worldPosition);
+            if (distance <= detectionRange) {
+                if (PRIORITY.BUILDING < targetPriority || 
+                    (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
+                    minDistance = distance;
+                    nearestTarget = thunderTower;
+                    targetPriority = PRIORITY.BUILDING;
+                }
+            }
+        }
+
         // 如果找到目标，设置为当前目标
         // 但是，如果正在播放攻击动画，且当前目标仍然有效，不改变目标
         if (this.isPlayingAttackAnimation && this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
@@ -689,7 +747,9 @@ export class OrcWarlord extends Component {
             const priestScript = this.currentTarget.getComponent('Priest') as any;
             const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
             const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
-            const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript;
+            const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
+            const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
+            const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
             
             // 如果当前目标仍然存活，保持当前目标不变
             if (targetScript && targetScript.isAlive && targetScript.isAlive()) {
@@ -1785,7 +1845,9 @@ export class OrcWarlord extends Component {
         const priestScript = this.currentTarget.getComponent('Priest') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
         const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
-        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript;
+        const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
+        const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
+        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
         
         if (targetScript && targetScript.takeDamage) {
             const targetType = targetScript.constructor.name;

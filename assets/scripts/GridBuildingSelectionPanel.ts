@@ -21,6 +21,7 @@ export class GridBuildingSelectionPanel extends Component {
     private towerBuilder: TowerBuilder = null!; // TowerBuilder引用
     private currentGridPos: { x: number; y: number; worldPos: Vec3 } | null = null; // 当前选择的网格位置
     private onCloseCallback: (() => void) | null = null; // 关闭回调
+    private stoneWallGridPanel: StoneWallGridPanel = null!; // 石墙网格面板引用（用于高亮）
 
     onLoad() {
         this.createPanel();
@@ -29,6 +30,8 @@ export class GridBuildingSelectionPanel extends Component {
     start() {
         // 查找TowerBuilder
         this.findTowerBuilder();
+        // 查找StoneWallGridPanel
+        this.findStoneWallGridPanel();
     }
 
     /**
@@ -42,6 +45,16 @@ export class GridBuildingSelectionPanel extends Component {
     }
 
     /**
+     * 查找StoneWallGridPanel
+     */
+    private findStoneWallGridPanel() {
+        const gridPanelNode = find('Canvas/StoneWallGridPanel');
+        if (gridPanelNode) {
+            this.stoneWallGridPanel = gridPanelNode.getComponent(StoneWallGridPanel);
+        }
+    }
+
+    /**
      * 创建面板
      */
     private createPanel() {
@@ -51,26 +64,32 @@ export class GridBuildingSelectionPanel extends Component {
         this.panelNode.setPosition(0, 0, 0);
         
         const panelTransform = this.panelNode.addComponent(UITransform);
-        panelTransform.setContentSize(200, 200); // 增大面板以容纳2x2布局
+        // 计算面板大小：4个格子，每个格子80x100，格子之间间隔10像素
+        // 2x2布局：宽度 = 80*2 + 10 = 170，高度 = 100*2 + 10 = 210
+        const cellWidth = 80;
+        const cellHeight = 100;
+        const cellSpacing = 10;
+        const panelWidth = cellWidth * 2 + cellSpacing;
+        const panelHeight = cellHeight * 2 + cellSpacing;
+        panelTransform.setContentSize(panelWidth, panelHeight);
+        panelTransform.setAnchorPoint(0.5, 0.5); // 设置锚点为中心，确保点击位置在四宫格正中间
         
-        // 创建背景
-        const bgGraphics = this.panelNode.addComponent(Graphics);
-        bgGraphics.fillColor = new Color(50, 50, 50, 240);
-        bgGraphics.roundRect(-100, -100, 200, 200, 10);
-        bgGraphics.fill();
-        bgGraphics.strokeColor = new Color(255, 255, 255, 255);
-        bgGraphics.lineWidth = 2;
-        bgGraphics.roundRect(-100, -100, 200, 200, 10);
-        bgGraphics.stroke();
+        // 不再创建半透明背景，只保留四个格子的边框
         
         // 创建选项（2x2布局）
         // 第一行：石墙（左上）、哨塔（右上）
-        this.stoneWallOption = this.createOption('StoneWall', -50, 50);
-        this.watchTowerOption = this.createOption('WatchTower', 50, 50);
+        // 位置计算：左上(-cellWidth/2 - cellSpacing/2, cellHeight/2 + cellSpacing/2)
+        // 右上(cellWidth/2 + cellSpacing/2, cellHeight/2 + cellSpacing/2)
+        // 左下(-cellWidth/2 - cellSpacing/2, -cellHeight/2 - cellSpacing/2)
+        // 右下(cellWidth/2 + cellSpacing/2, -cellHeight/2 - cellSpacing/2)
+        const offsetX = cellWidth / 2 + cellSpacing / 2;
+        const offsetY = cellHeight / 2 + cellSpacing / 2;
+        this.stoneWallOption = this.createOption('StoneWall', -offsetX, offsetY);
+        this.watchTowerOption = this.createOption('WatchTower', offsetX, offsetY);
         
         // 第二行：冰塔（左下）、雷塔（右下）
-        this.iceTowerOption = this.createOption('IceTower', -50, -50);
-        this.thunderTowerOption = this.createOption('ThunderTower', 50, -50);
+        this.iceTowerOption = this.createOption('IceTower', -offsetX, -offsetY);
+        this.thunderTowerOption = this.createOption('ThunderTower', offsetX, -offsetY);
         
         // 初始隐藏
         this.hide();
@@ -86,14 +105,15 @@ export class GridBuildingSelectionPanel extends Component {
         
         const optionTransform = optionNode.addComponent(UITransform);
         optionTransform.setContentSize(80, 100);
+        optionTransform.setAnchorPoint(0.5, 0.5); // 设置锚点为中心，确保位置计算正确
         
-        // 创建背景
+        // 创建背景（每个格子有自己的背景）
         const bgGraphics = optionNode.addComponent(Graphics);
-        bgGraphics.fillColor = new Color(80, 80, 80, 255);
+        bgGraphics.fillColor = new Color(60, 60, 60, 200); // 半透明背景
         bgGraphics.roundRect(-40, -50, 80, 100, 5);
         bgGraphics.fill();
-        bgGraphics.strokeColor = new Color(200, 200, 200, 255);
-        bgGraphics.lineWidth = 2;
+        bgGraphics.strokeColor = new Color(220, 220, 220, 200);
+        bgGraphics.lineWidth = 1.5;
         bgGraphics.roundRect(-40, -50, 80, 100, 5);
         bgGraphics.stroke();
         
@@ -123,8 +143,19 @@ export class GridBuildingSelectionPanel extends Component {
         nameLabelTransform.setContentSize(80, 20);
         
         const nameLabel = nameLabelNode.addComponent(Label);
-        nameLabel.string = buildingType === 'StoneWall' ? '石墙' : '哨塔';
-        nameLabel.fontSize = 16;
+        // 根据建筑类型设置名称
+        let buildingName = '';
+        if (buildingType === 'StoneWall') {
+            buildingName = '石墙';
+        } else if (buildingType === 'WatchTower') {
+            buildingName = '哨塔';
+        } else if (buildingType === 'IceTower') {
+            buildingName = '冰塔';
+        } else if (buildingType === 'ThunderTower') {
+            buildingName = '雷塔';
+        }
+        nameLabel.string = buildingName;
+        nameLabel.fontSize = 14;
         nameLabel.color = Color.WHITE;
         nameLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         nameLabel.verticalAlign = Label.VerticalAlign.CENTER;
@@ -348,8 +379,8 @@ export class GridBuildingSelectionPanel extends Component {
             return;
         }
         
-        // 对于哨塔，需要检查两个网格是否都被占用
-        if (buildingType === 'WatchTower') {
+        // 对于哨塔、冰塔、雷塔，需要检查两个网格是否都被占用
+        if (buildingType === 'WatchTower' || buildingType === 'IceTower' || buildingType === 'ThunderTower') {
             // 查找StoneWallGridPanel检查网格占用
             const gridPanelNode = find('Canvas/StoneWallGridPanel');
             if (gridPanelNode) {
@@ -357,15 +388,15 @@ export class GridBuildingSelectionPanel extends Component {
                 if (gridPanel) {
                     // 检查第二个网格是否存在且未被占用
                     if (this.currentGridPos.y + 1 >= gridPanel.gridHeight) {
-                        // 第二个网格超出范围，无法放置哨塔
+                        // 第二个网格超出范围，无法放置
                         console.warn('[GridBuildingSelectionPanel] 第二个网格超出范围');
-                        GamePopup.showMessage('无法在此位置建造哨塔');
+                        GamePopup.showMessage('无法在此位置建造' + (buildingType === 'WatchTower' ? '哨塔' : buildingType === 'IceTower' ? '冰塔' : '雷塔'));
                         return;
                     }
                     if (gridPanel.isGridOccupied(this.currentGridPos.x, this.currentGridPos.y + 1)) {
-                        // 第二个网格被占用，无法放置哨塔
+                        // 第二个网格被占用，无法放置
                         console.warn('[GridBuildingSelectionPanel] 第二个网格被占用');
-                        GamePopup.showMessage('无法在此位置建造哨塔');
+                        GamePopup.showMessage('无法在此位置建造' + (buildingType === 'WatchTower' ? '哨塔' : buildingType === 'IceTower' ? '冰塔' : '雷塔'));
                         return;
                     }
                 }
@@ -411,8 +442,17 @@ export class GridBuildingSelectionPanel extends Component {
         // 更新金币显示和图标
         this.updateCostLabels();
         
-        // 设置面板位置（在网格位置上方）
-        this.panelNode.setWorldPosition(worldPos.x, worldPos.y + 60, 0);
+        // 设置面板位置（点击位置在四宫格中央）
+        // 四宫格大小为200x200，所以中心偏移为0
+        this.panelNode.setWorldPosition(worldPos.x, worldPos.y, 0);
+        
+        // 高亮被选择的网格
+        if (!this.stoneWallGridPanel) {
+            this.findStoneWallGridPanel();
+        }
+        if (this.stoneWallGridPanel) {
+            this.stoneWallGridPanel.highlightGrid(worldPos);
+        }
         
         // 确保选择框显示在最上层（设置较高的z-index）
         // 通过设置siblingIndex来确保选择框在Canvas的所有子节点中排在最前面
@@ -474,6 +514,11 @@ export class GridBuildingSelectionPanel extends Component {
     hide() {
         this.panelNode.active = false;
         this.currentGridPos = null;
+        
+        // 清除网格高亮
+        if (this.stoneWallGridPanel) {
+            this.stoneWallGridPanel.clearHighlight();
+        }
         
         // 移除Canvas点击监听
         const canvas = find('Canvas');

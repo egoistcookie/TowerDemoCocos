@@ -95,9 +95,12 @@ export class GameManager extends Component {
         // 设置容器尺寸为屏幕下方三分之一
         const popupHeight = screenHeight / 3;
         
+        // 左右与边框保持50像素间隔，所以容器宽度 = 屏幕宽度 - 100
+        const popupWidth = screenWidth - 100;
+        
         // 添加UITransform组件以设置尺寸
         const uiTransform = containerNode.addComponent(UITransform);
-        uiTransform.setContentSize(screenWidth, popupHeight);
+        uiTransform.setContentSize(popupWidth, popupHeight);
         
         // 设置容器的锚点为底部中心
         uiTransform.setAnchorPoint(0.5, 0);
@@ -108,17 +111,22 @@ export class GameManager extends Component {
         // 设置容器颜色和透明度
         const containerGraphics = containerNode.addComponent(Graphics);
         containerGraphics.fillColor = new Color(0, 0, 0, 200);
-        containerGraphics.rect(-screenWidth / 2, -popupHeight / 2, screenWidth, popupHeight);
+        
+        // 圆角半径
+        const cornerRadius = 15;
+        
+        // 绘制半透明黑色背景（圆角矩形）
+        containerGraphics.roundRect(-popupWidth / 2, -popupHeight / 2, popupWidth, popupHeight, cornerRadius);
         containerGraphics.fill();
         
-        // 添加边框
-        containerGraphics.strokeColor = new Color(255, 255, 255, 255);
-        containerGraphics.lineWidth = 2;
-        containerGraphics.rect(-screenWidth / 2, -popupHeight / 2, screenWidth, popupHeight);
+        // 添加高亮边框（圆角矩形）
+        containerGraphics.strokeColor = new Color(100, 200, 255, 255); // 亮蓝色边框
+        containerGraphics.lineWidth = 3;
+        containerGraphics.roundRect(-popupWidth / 2, -popupHeight / 2, popupWidth, popupHeight, cornerRadius);
         containerGraphics.stroke();
         
-        // 计算左右区域的宽度和位置
-        const halfWidth = screenWidth / 2;
+        // 计算左右区域的宽度和位置（使用调整后的popupWidth）
+        const halfWidth = popupWidth / 2;
         
         // 创建左侧单位图片区域
         const iconNode = new Node('unitIcon');
@@ -167,8 +175,8 @@ export class GameManager extends Component {
         // 创建关闭按钮节点（右上角）
         const closeNode = new Node('closeButton');
         closeNode.setParent(containerNode);
-        // 右上角位置：相对于容器中心，向右偏移screenWidth/2 - 30，向上偏移popupHeight/2 - 30
-        closeNode.setPosition(screenWidth / 2 - 30, popupHeight / 2 - 30, 0);
+        // 右上角位置：相对于容器中心，向右偏移popupWidth/2 - 30，向上偏移popupHeight/2 - 30
+        closeNode.setPosition(popupWidth / 2 - 30, popupHeight / 2 - 30, 0);
         const closeButton = closeNode.addComponent(Button);
         const closeTransform = closeNode.addComponent(UITransform);
         closeTransform.setContentSize(50, 50);

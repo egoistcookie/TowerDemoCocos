@@ -278,19 +278,11 @@ export class WatchTower extends Build {
             this.unitSelectionManager.selectUnit(this.node, this.buildUnitInfo());
         }
 
-        // 如果正在移动，不重复处理
-        if (this.isMoving) {
-            return;
-        }
-
         // 如果已经显示自带选择面板，先隐藏
         if (this.selectionPanel && this.selectionPanel.isValid) {
             this.hideSelectionPanel();
             return;
         }
-
-        // 开始移动模式
-        this.startMoving(event);
     }
     
     /**

@@ -1371,6 +1371,44 @@ export class Role extends Component {
             }
         }
 
+        // 检查与防御塔的碰撞（包括哨塔、冰塔、雷塔）
+        const findAllTowers = (node: Node): Node[] => {
+            const towers: Node[] = [];
+            const watchTowerScript = node.getComponent('WatchTower') as any;
+            const iceTowerScript = node.getComponent('IceTower') as any;
+            const thunderTowerScript = node.getComponent('ThunderTower') as any;
+            if ((watchTowerScript || iceTowerScript || thunderTowerScript) && node.active && node.isValid) {
+                towers.push(node);
+            }
+            for (const child of node.children) {
+                towers.push(...findAllTowers(child));
+            }
+            return towers;
+        };
+
+        if (scene) {
+            const allTowers = findAllTowers(scene);
+            for (const tower of allTowers) {
+                if (!tower || !tower.active || !tower.isValid) continue;
+                const watchTowerScript = tower.getComponent('WatchTower') as any;
+                const iceTowerScript = tower.getComponent('IceTower') as any;
+                const thunderTowerScript = tower.getComponent('ThunderTower') as any;
+                const towerScript = watchTowerScript || iceTowerScript || thunderTowerScript;
+                if (!towerScript || !towerScript.isAlive || !towerScript.isAlive()) continue;
+                
+                const towerPos = tower.worldPosition;
+                // 防御塔只有下半部分有碰撞效果，所以碰撞半径缩小到原来的60%
+                const baseRadius = towerScript.collisionRadius ?? 50;
+                const towerRadius = baseRadius * 0.6; // 缩小到60%，模拟只有下半部分有碰撞
+                const distanceToTower = Vec3.distance(position, towerPos);
+                const minDistance = this.collisionRadius + towerRadius;
+                
+                if (distanceToTower < minDistance) {
+                    return true;
+                }
+            }
+        }
+
         return false;
     }
 
