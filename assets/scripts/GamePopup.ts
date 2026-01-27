@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, tween, UIOpacity, UITransform, Sprite, SpriteFrame, Label, Color, Graphics, Prefab, instantiate, find } from 'cc';
+import { _decorator, Component, Node, Vec3, tween, UIOpacity, UITransform, Sprite, SpriteFrame, Label, Color, Graphics, Prefab, instantiate, find, view, EventTouch } from 'cc';
 const { ccclass, property } = _decorator;
 
 @ccclass('GamePopup')
@@ -15,6 +15,9 @@ export class GamePopup extends Component {
     private isShowing: boolean = false;
     private autoHideTimer: number = 0;
     private autoHideDelay: number = 2.0; // 默认2秒后自动隐藏
+
+    // 遮罩层节点，使弹窗始终处于最上层并遮挡其他元素
+    private maskLayer: Node | null = null;
     
     start() {
         this.node.active = false; // 初始隐藏
@@ -29,6 +32,9 @@ export class GamePopup extends Component {
         if (this.content) {
             this.content.active = false;
         }
+
+        // 确保初始时弹窗在最上层
+        this.ensureOnTopWithMask(false);
     }
     
     /**
@@ -156,20 +162,23 @@ export class GamePopup extends Component {
             }
         }
         
+        // 在显示前，确保弹窗和遮罩层位于最上层
+        this.ensureOnTopWithMask(true);
+
         // 设置消息
         if (this.messageLabel) {
             this.messageLabel.string = message;
-            
+
             // 强制更新文本布局，确保文本大小被正确计算
             const textNode = this.messageLabel.node;
             // 先显示节点，确保文本渲染
             textNode.active = true;
             this.content.active = true;
             this.node.active = true;
-            
+
             // 等待一帧，让文本渲染完成
             setTimeout(() => {
-                this.adjustBackgroundSizeToText();
+            this.adjustBackgroundSizeToText();
             }, 0);
         } else {
             // 尝试重新获取messageLabel
@@ -178,16 +187,16 @@ export class GamePopup extends Component {
                 this.messageLabel = labelNode.getComponent(Label);
                 if (this.messageLabel) {
                     this.messageLabel.string = message;
-                    
+
                     // 强制更新文本布局，确保文本大小被正确计算
                     // 先显示节点，确保文本渲染
                     labelNode.active = true;
                     this.content.active = true;
                     this.node.active = true;
-                    
+
                     // 等待一帧，让文本渲染完成
                     setTimeout(() => {
-                        this.adjustBackgroundSizeToText();
+                    this.adjustBackgroundSizeToText();
                     }, 0);
                 }
             }
@@ -224,9 +233,11 @@ export class GamePopup extends Component {
             .to(0.2, { opacity: 255 }, { easing: 'backOut' })
             .start();
         
-        // 如果需要自动隐藏，启动计时器
+        // 如果需要自动隐藏，启动计时器；否则禁用自动隐藏
         if (autoHide) {
             this.autoHideTimer = 0;
+        } else {
+            this.autoHideTimer = -1;
         }
     }
     
@@ -245,30 +256,23 @@ export class GamePopup extends Component {
             return;
         }
         
-        // 动画隐藏
+        // 无动画隐藏：立即关闭弹窗和遮罩
         const opacity = this.content.getComponent(UIOpacity);
-        if (!opacity) {
-            // 如果没有UIOpacity组件，直接隐藏
-            this.node.active = false;
-            this.content.active = false;
-            this.isShowing = false;
-            return;
+        if (opacity) {
+            opacity.opacity = 255;
         }
-        
-        tween(this.content)
-            .to(0.2, { scale: new Vec3(0.8, 0.8, 1) }, { easing: 'backIn' })
-            .start();
-        
-        tween(opacity)
-            .to(0.2, { opacity: 0 }, { easing: 'backIn' })
-            .call(() => {
-                if (this.node && this.content) {
-                    this.node.active = false;
-                    this.content.active = false;
-                    this.isShowing = false;
-                }
-            })
-            .start();
+
+        // 隐藏遮罩层
+        if (this.maskLayer && this.maskLayer.isValid) {
+            this.maskLayer.active = false;
+        }
+
+        this.node.active = false;
+        this.content.active = false;
+        this.isShowing = false;
+
+        // 关闭后停止自动隐藏计时
+        this.autoHideTimer = -1;
     }
     
     /**
@@ -415,6 +419,59 @@ export class GamePopup extends Component {
             }
         }
     }
+
+    /**
+     * 确保弹窗和遮罩层始终位于最上层，并根据需要创建遮罩
+     * @param activateMask 是否激活遮罩层
+     */
+    private ensureOnTopWithMask(activateMask: boolean) {
+        const canvas = find('Canvas');
+        if (!canvas) {
+            return;
+        }
+
+        // 创建或更新遮罩层（参考 UnitIntroPopup 的做法）
+        if (!this.maskLayer || !this.maskLayer.isValid) {
+            this.maskLayer = new Node('GamePopupMask');
+            this.maskLayer.setParent(canvas);
+
+            // 添加 UITransform 覆盖整个屏幕
+            const uiTransform = this.maskLayer.addComponent(UITransform);
+            const visibleSize = view.getVisibleSize();
+            uiTransform.setContentSize(visibleSize.width * 2, visibleSize.height * 2);
+            this.maskLayer.setPosition(0, 0, 0);
+
+            // 半透明黑色遮罩
+            const graphics = this.maskLayer.addComponent(Graphics);
+            graphics.fillColor = new Color(0, 0, 0, 180);
+            graphics.rect(-visibleSize.width, -visibleSize.height, visibleSize.width * 2, visibleSize.height * 2);
+            graphics.fill();
+
+            // 阻止触摸事件穿透（capture 模式）
+            this.maskLayer.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+                event.propagationStopped = true;
+            }, this, true);
+            this.maskLayer.on(Node.EventType.TOUCH_MOVE, (event: EventTouch) => {
+                event.propagationStopped = true;
+            }, this, true);
+            this.maskLayer.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
+                // 点击任意位置立即关闭提示框
+                event.propagationStopped = true;
+                this.hide();
+            }, this, true);
+            this.maskLayer.on(Node.EventType.TOUCH_CANCEL, (event: EventTouch) => {
+                event.propagationStopped = true;
+            }, this, true);
+        }
+
+        // 遮罩层位于 Canvas 最上层（但低于弹窗自身）
+        this.maskLayer.setSiblingIndex(Number.MAX_SAFE_INTEGER - 1);
+        this.maskLayer.active = activateMask;
+
+        // 弹窗节点位于所有 UI 之上
+        this.node.setParent(canvas);
+        this.node.setSiblingIndex(Number.MAX_SAFE_INTEGER);
+    }
     
     /**
      * 创建并初始化GamePopup
@@ -471,6 +528,11 @@ export class GamePopup extends Component {
         
         if (popupNode) {
             popup = popupNode.getComponent(GamePopup);
+            // 确保已完成初始化（避免依赖 start，第一次弹出时就能正确缩放）
+            if (popup) {
+                popup.initComponents();
+                popup.setDefaultStyle();
+            }
         } else {
             // 创建新实例
             popup = GamePopup.createInstance();

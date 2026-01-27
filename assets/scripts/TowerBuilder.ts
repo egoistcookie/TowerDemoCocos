@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Prefab, instantiate, Vec3, EventTouch, input, Input, Camera, find, view, UITransform, SpriteFrame, Graphics, Color, director, tween } from 'cc';
+import { _decorator, Component, Node, Prefab, instantiate, Vec3, EventTouch, input, Input, Camera, find, view, UITransform, SpriteFrame, Graphics, Color, director, tween, Sprite } from 'cc';
 import { GameManager } from './GameManager';
 import { BuildingSelectionPanel, BuildingType } from './BuildingSelectionPanel';
 import { GamePopup } from './GamePopup';
@@ -35,26 +35,26 @@ export class TowerBuilder extends Component {
     @property(SpriteFrame)
     hunterHallIcon: SpriteFrame = null!; // 猎手大厅图标
 
-    @property(Prefab)
-    stoneWallPrefab: Prefab = null!; // 石墙预制体
+    // 石墙预制体：已经移动到分包 prefabs_sub，由 GameManager 在运行时注入
+    private stoneWallPrefab: Prefab = null!; // 石墙预制体（运行时赋值）
 
     @property(SpriteFrame)
     stoneWallIcon: SpriteFrame = null!; // 石墙图标
 
-    @property(Prefab)
-    watchTowerPrefab: Prefab = null!; // 哨塔预制体
+    // 哨塔预制体：不再通过 Cocos 属性面板指定，而是从分包 prefabs_sub 中加载后由 GameManager 注入
+    private watchTowerPrefab: Prefab = null!; // 哨塔预制体（运行时赋值）
 
     @property(SpriteFrame)
     watchTowerIcon: SpriteFrame = null!; // 哨塔图标
 
-    @property(Prefab)
-    iceTowerPrefab: Prefab = null!; // 冰元素塔预制体
+    // 冰元素塔预制体：已经移动到分包 prefabs_sub，由 GameManager 在运行时注入
+    private iceTowerPrefab: Prefab = null!; // 冰元素塔预制体（运行时赋值）
 
     @property(SpriteFrame)
     iceTowerIcon: SpriteFrame = null!; // 冰元素塔图标
 
-    @property(Prefab)
-    thunderTowerPrefab: Prefab = null!; // 雷元素塔预制体
+    // 雷元素塔预制体：已经移动到分包 prefabs_sub，由 GameManager 在运行时注入
+    private thunderTowerPrefab: Prefab = null!; // 雷元素塔预制体（运行时赋值）
 
     @property(SpriteFrame)
     thunderTowerIcon: SpriteFrame = null!; // 雷元素塔图标
@@ -162,12 +162,71 @@ export class TowerBuilder extends Component {
     private longPressIndicator: Node | null = null; // 长按指示器节点（旋转圆弧）
     private isLongPressActive: boolean = false; // 是否正在长按检测中
 
+    /**
+     * 由 GameManager 在分包加载完毕后调用，注入分包中的预制体
+     */
+    public setWatchTowerPrefab(prefab: Prefab) {
+        this.watchTowerPrefab = prefab;
+        // 预制体更新后，尝试从中提取图标
+        this.ensureIconsFromPrefabs();
+    }
+
+    public setStoneWallPrefab(prefab: Prefab) {
+        this.stoneWallPrefab = prefab;
+        // 预制体更新后，尝试从中提取图标
+        this.ensureIconsFromPrefabs();
+    }
+
+    public setIceTowerPrefab(prefab: Prefab) {
+        this.iceTowerPrefab = prefab;
+        // 预制体更新后，尝试从中提取图标
+        this.ensureIconsFromPrefabs();
+    }
+
+    public setThunderTowerPrefab(prefab: Prefab) {
+        this.thunderTowerPrefab = prefab;
+        // 预制体更新后，尝试从中提取图标
+        this.ensureIconsFromPrefabs();
+    }
+
+    /**
+     * 从预制体的 Sprite 组件中自动提取图标（如果未在编辑器中手动指定）
+     */
+    private ensureIconsFromPrefabs() {
+        const extractIconFromPrefab = (prefab: Prefab | null | undefined, currentIcon: SpriteFrame | null | undefined): SpriteFrame | null | undefined => {
+            if (currentIcon) {
+                return currentIcon;
+            }
+            if (!prefab || !prefab.data) {
+                return currentIcon;
+            }
+            const root = prefab.data as Node;
+            if (!root) {
+                return currentIcon;
+            }
+            const sprite = root.getComponent(Sprite) || root.getComponentInChildren(Sprite);
+            if (sprite && sprite.spriteFrame) {
+                return sprite.spriteFrame;
+            }
+            return currentIcon;
+        };
+
+        // 石墙 / 哨塔 / 冰塔 / 雷塔图标，如果未手动设置，则自动从对应预制体根节点（或子节点）的 Sprite 中提取
+        this.stoneWallIcon = extractIconFromPrefab(this.stoneWallPrefab, this.stoneWallIcon) as SpriteFrame;
+        this.watchTowerIcon = extractIconFromPrefab(this.watchTowerPrefab, this.watchTowerIcon) as SpriteFrame;
+        this.iceTowerIcon = extractIconFromPrefab(this.iceTowerPrefab, this.iceTowerIcon) as SpriteFrame;
+        this.thunderTowerIcon = extractIconFromPrefab(this.thunderTowerPrefab, this.thunderTowerIcon) as SpriteFrame;
+    }
+
     start() {
         // 查找游戏管理器
         this.findGameManager();
         
+        // 从分包注入的预制体中自动提取图标（如果未在编辑器中配置）
+        this.ensureIconsFromPrefabs();
+
         // 查找水晶
-        if (!this.targetCrystal) {
+        if (!this.targetCrystal) { 
             this.targetCrystal = find('Crystal');
         }
 
@@ -1954,9 +2013,10 @@ export class TowerBuilder extends Component {
                             console.info('[TowerBuilder] buildIceTower 成功占用两个网格，gridX:', towerScript.gridX, 'gridY:', towerScript.gridY, '(占用网格:', grid.x, grid.y, '和', grid.x, grid.y + 1, ')');
                             // 调整位置，使其居中在两个网格之间（参考哨塔的做法）
                             const gridPos = this.stoneWallGridPanelComponent.gridToWorld(grid.x, grid.y);
+                            console.info('[TowerBuilder] buildIceTower 网格位置:', gridPos);
                             if (gridPos) {
                                 // 向上偏移50像素（一个网格），使其居中在两个网格之间
-                                const adjustedPos = new Vec3(gridPos.x, gridPos.y + 50, gridPos.z);
+                                const adjustedPos = new Vec3(gridPos.x, gridPos.y + 100, gridPos.z);
                                 tower.setWorldPosition(adjustedPos);
                                 
                                 // 设置 baseY 为下方网格的底部（用于后续的 setHeightWithFixedBottom 调用）

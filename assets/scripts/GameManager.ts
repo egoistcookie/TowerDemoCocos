@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager } from 'cc';
+import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab } from 'cc';
 import { Crystal } from './role/Crystal';
 import { UnitIntroPopup } from './UnitIntroPopup';
 import { UnitConfigManager } from './UnitConfigManager';
@@ -65,6 +65,10 @@ export class GameManager extends Component {
     // 单位信息属性，用于调试
     @property
     public debugUnitTypes: string[] = [];
+
+    // 分包预制体（prefabs_sub）加载状态
+    private prefabsSubLoaded: boolean = false;
+    private isLoadingPrefabsSub: boolean = false;
     
     // 自动创建UnitIntroPopup
     private autoCreateUnitIntroPopup() {
@@ -1276,29 +1280,121 @@ export class GameManager extends Component {
     }
     
     /**
-     * 开始游戏
+     * 开始游戏（对外入口）：先确保加载分包目录 prefabs_sub 下的所有预制体，再执行真正的开始逻辑
      */
     startGame() {
-        console.log('startGame'+this.gameState.toString());
-        
+        console.log('startGame' + this.gameState.toString());
+
+        // 如果分包还未加载，先加载分包和其中的所有预制体，然后再继续开始游戏逻辑
+        if (!this.prefabsSubLoaded) {
+            if (this.isLoadingPrefabsSub) {
+                // 已经在加载中，避免重复触发
+                return;
+            }
+
+            this.isLoadingPrefabsSub = true;
+            console.info('[GameManager] 开始加载分包 prefabs_sub');
+
+            assetManager.loadBundle('prefabs_sub', (err, bundle) => {
+                if (err) {
+                    console.error('[GameManager] 加载分包 prefabs_sub 失败:', err);
+                    this.isLoadingPrefabsSub = false;
+                    return;
+                }
+
+                if (!bundle) {
+                    console.error('[GameManager] 分包 prefabs_sub 加载结果为空');
+                    this.isLoadingPrefabsSub = false;
+                    return;
+                }
+
+                // 直接按名字加载分包中的几个建筑预制体（石墙、冰塔、雷塔、哨塔）
+                console.info('[GameManager] 开始从分包 prefabs_sub 加载建筑预制体 StoneWall / IceTower / ThunderTower / WatchTower');
+
+                const loadPrefab = (name: string, onLoaded: (prefab: Prefab | null) => void) => {
+                    bundle.load(name, Prefab, (err2, prefab) => {
+                        if (err2 || !prefab) {
+                            console.error('[GameManager] 从分包 prefabs_sub 加载预制体失败:', name, err2);
+                            onLoaded(null);
+                        } else {
+                            console.info('[GameManager] 从分包 prefabs_sub 成功加载预制体:', name);
+                            onLoaded(prefab as Prefab);
+                        }
+                    });
+                };
+
+                // 顺序加载四个预制体，全部尝试完后再注入 TowerBuilder
+                loadPrefab('StoneWall', (stoneWallPrefab) => {
+                    loadPrefab('IceTower', (iceTowerPrefab) => {
+                        loadPrefab('ThunderTower', (thunderTowerPrefab) => {
+                            loadPrefab('WatchTower', (watchTowerPrefab) => {
+                                try {
+                                    const towerBuilder = this.findComponentInScene('TowerBuilder') as any;
+                                    if (towerBuilder) {
+                                        if (stoneWallPrefab && typeof towerBuilder.setStoneWallPrefab === 'function') {
+                                            console.info('[GameManager] 将分包中的 StoneWall 预制体注入 TowerBuilder');
+                                            towerBuilder.setStoneWallPrefab(stoneWallPrefab);
+                                        }
+                                        if (iceTowerPrefab && typeof towerBuilder.setIceTowerPrefab === 'function') {
+                                            console.info('[GameManager] 将分包中的 IceTower 预制体注入 TowerBuilder');
+                                            towerBuilder.setIceTowerPrefab(iceTowerPrefab);
+                                        }
+                                        if (thunderTowerPrefab && typeof towerBuilder.setThunderTowerPrefab === 'function') {
+                                            console.info('[GameManager] 将分包中的 ThunderTower 预制体注入 TowerBuilder');
+                                            towerBuilder.setThunderTowerPrefab(thunderTowerPrefab);
+                                        }
+                                        if (watchTowerPrefab && typeof towerBuilder.setWatchTowerPrefab === 'function') {
+                                            console.info('[GameManager] 将分包中的 WatchTower 预制体注入 TowerBuilder');
+                                            towerBuilder.setWatchTowerPrefab(watchTowerPrefab);
+                                        }
+                                    } else {
+                                        console.warn('[GameManager] TowerBuilder 组件不存在，无法注入分包预制体');
+                                    }
+                                } catch (e) {
+                                    console.error('[GameManager] 注入分包建筑预制体到 TowerBuilder 时出错:', e);
+                                }
+
+                                this.prefabsSubLoaded = true;
+                                this.isLoadingPrefabsSub = false;
+
+                                // 分包加载完毕后，再次调用开始逻辑（这次会直接走内部实现）
+                                this._startGameInternal();
+                            });
+                        });
+                    });
+                });
+            });
+
+            return;
+        }
+
+        // 分包已加载，直接执行内部开始逻辑
+        this._startGameInternal();
+    }
+
+    /**
+     * 真正的开始游戏逻辑（在分包加载完成后调用）
+     */
+    private _startGameInternal() {
         // 确保时间缩放正常（防止退出时暂停导致的问题）
         const currentTimeScale = director.getScheduler().getTimeScale();
         if (currentTimeScale === 0) {
             director.getScheduler().setTimeScale(1);
             this.originalTimeScale = 1;
         }
-        
+
         if (this.gameState === GameState.Paused) {
             // 如果游戏已暂停，恢复游戏
             this.resumeGame();
         } else if (this.gameState === GameState.Ready) {
             // 如果游戏准备就绪，开始游戏
             this.gameState = GameState.Playing;
-            
+
             // 显示所有游戏元素
             this.showGameElements();
 
             // 开局在石墙网格顶行生成初始石墙
+            // 注意：这里传入的是组件名 'TowerBuilder'，而不是节点路径
             const towerBuilder = this.findComponentInScene('TowerBuilder') as any;
             if (towerBuilder && towerBuilder.spawnInitialStoneWalls) {
                 // 0 帧延迟，等于等待一帧，确保网格面板初始化完成
@@ -1315,14 +1411,11 @@ export class GameManager extends Component {
                         console.info('[GameManager] TowerBuilder没有spawnInitialWatchTowers方法');
                     }
                 }, 0);
-            } else {
             }
-            
         } else if (this.gameState !== GameState.Playing) {
             // 如果游戏已结束，重新开始游戏
             this.restartGame();
         }
-        
     }
     
     /**

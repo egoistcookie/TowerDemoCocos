@@ -126,8 +126,16 @@ export class ThunderTower extends Build {
         }
 
         // 获取完全体时的实际高度（使用defaultScale）
-        const fullHeight = uiTransform.height * this.defaultScale.y;
-        
+        // console.info('[IceTower] setHeightWithFixedBottom 实际高度:', uiTransform.height * this.defaultScale.y);
+        let fullHeight: number;
+        const gridPanelAny = this.gridPanel as any;
+        if (gridPanelAny && gridPanelAny.cellSize) {
+            fullHeight = gridPanelAny.cellSize * 2;   // 固定为 2 个格子高 = 100
+        } else {
+            fullHeight = uiTransform.height * this.defaultScale.y;
+        }
+        // const fullHeight = uiTransform.height * this.defaultScale.y;
+        // console.info('[IceTower] setHeightWithFixedBottom 完全体高度:', fullHeight);
         // baseY 存储的是网格底部的Y坐标（第一个网格的底部）
         // 如果baseY为0，说明还没有设置，需要从网格位置计算
         if (this.baseY === 0) {
@@ -152,12 +160,14 @@ export class ThunderTower extends Build {
 
         // 计算当前高度
         const currentHeight = fullHeight * heightScale;
-        
-        // 节点中心Y = 网格底部Y + 当前高度/2
+
+        // console.info('[IceTower] setHeightWithFixedBottom 当前高度:', currentHeight);
+        // 节点中心Y = 网格底部Y + 25 + 当前高度/2
         const newY = this.baseY + currentHeight / 2;
         
         // 设置缩放和位置
-        this.node.setScale(this.defaultScale.x, this.defaultScale.y * heightScale, this.defaultScale.z);
+        this.node.setScale(this.defaultScale.x, heightScale, this.defaultScale.z);
+        // console.info('[IceTower] setHeightWithFixedBottom 缩放:', this.defaultScale.x, this.defaultScale.y * heightScale, this.defaultScale.z);
         const currentPos = this.node.worldPosition.clone();
         currentPos.y = newY;
         this.node.setWorldPosition(currentPos);
