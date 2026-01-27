@@ -380,22 +380,23 @@ export class GridBuildingSelectionPanel extends Component {
         }
         
         // 对于哨塔、冰塔、雷塔，需要检查两个网格是否都被占用
+        // Y坐标越大越在上方，所以上方网格是 grid.y + 1
         if (buildingType === 'WatchTower' || buildingType === 'IceTower' || buildingType === 'ThunderTower') {
             // 查找StoneWallGridPanel检查网格占用
             const gridPanelNode = find('Canvas/StoneWallGridPanel');
             if (gridPanelNode) {
                 const gridPanel = gridPanelNode.getComponent(StoneWallGridPanel);
                 if (gridPanel) {
-                    // 检查第二个网格是否存在且未被占用
+                    // 检查上方网格是否存在且未被占用（grid.y + 1，Y坐标越大越在上方）
                     if (this.currentGridPos.y + 1 >= gridPanel.gridHeight) {
-                        // 第二个网格超出范围，无法放置
-                        console.warn('[GridBuildingSelectionPanel] 第二个网格超出范围');
+                        // 上方网格超出范围，无法放置
+                        console.warn('[GridBuildingSelectionPanel] 上方网格超出范围');
                         GamePopup.showMessage('无法在此位置建造' + (buildingType === 'WatchTower' ? '哨塔' : buildingType === 'IceTower' ? '冰塔' : '雷塔'));
                         return;
                     }
                     if (gridPanel.isGridOccupied(this.currentGridPos.x, this.currentGridPos.y + 1)) {
-                        // 第二个网格被占用，无法放置
-                        console.warn('[GridBuildingSelectionPanel] 第二个网格被占用');
+                        // 上方网格被占用，无法放置
+                        console.warn('[GridBuildingSelectionPanel] 上方网格被占用');
                         GamePopup.showMessage('无法在此位置建造' + (buildingType === 'WatchTower' ? '哨塔' : buildingType === 'IceTower' ? '冰塔' : '雷塔'));
                         return;
                     }

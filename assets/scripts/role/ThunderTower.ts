@@ -218,6 +218,12 @@ export class ThunderTower extends Build {
         // 调用父类start方法
         super.start();
         
+        // 设置雷塔高度为两个网格（100像素）
+        const uiTransform = this.node.getComponent(UITransform);
+        if (uiTransform) {
+            uiTransform.setContentSize(uiTransform.width, 100); // 高度设为100（两个网格）
+        }
+        
         // 雷塔特有的初始化：监听点击事件
         this.node.on(Node.EventType.TOUCH_END, this.onThunderTowerClick, this);
         
@@ -289,59 +295,77 @@ export class ThunderTower extends Build {
             return;
         }
 
-        // 检查第二个网格是否存在（gridY+1不能超出网格范围）
+        // 雷塔占用两个网格：gridY（下方网格，选中的）和 gridY + 1（上方网格，Y坐标越大越在上方）
+        // 检查上方网格是否存在（gridY+1不能超出网格范围）
         const gridPanel = this.gridPanel as any;
         if (gridY + 1 >= gridPanel.gridHeight) {
-            // 第二个网格超出范围，无法放置
+            // 上方网格超出范围，无法放置
             return;
         }
 
-        // 检查两个网格是否都被占用（如果已经被当前节点占用，则允许继续）
-        if (gridPanel.isGridOccupiedByOther && this.gridX === gridX && this.gridY === gridY) {
-            // 如果目标网格就是当前节点已经占用的网格，允许继续（用于更新位置）
-            // 这种情况发生在 buildThunderTower 中已经占用网格后调用 moveToGridPosition
-        } else if (gridPanel.isGridOccupied(gridX, gridY) || gridPanel.isGridOccupied(gridX, gridY + 1)) {
-            // 至少有一个网格被占用，无法放置
-            return;
+        // 检查是否是更新当前位置（网格已经被当前节点占用）
+        const isUpdatingCurrentPosition = this.gridX === gridX && this.gridY === gridY;
+        
+        // 如果不是更新当前位置，检查两个网格是否都被占用
+        if (!isUpdatingCurrentPosition) {
+            if (gridPanel.isGridOccupiedByOther && gridPanel.isGridOccupiedByOther(gridX, gridY, this.node)) {
+                // 下方网格被其他节点占用，无法放置
+                return;
+            }
+            if (gridPanel.isGridOccupiedByOther && gridPanel.isGridOccupiedByOther(gridX, gridY + 1, this.node)) {
+                // 上方网格被其他节点占用，无法放置
+                return;
+            }
+            // 如果使用 isGridOccupied 方法（没有 isGridOccupiedByOther）
+            if (!gridPanel.isGridOccupiedByOther && 
+                (gridPanel.isGridOccupied(gridX, gridY) || gridPanel.isGridOccupied(gridX, gridY + 1))) {
+                // 至少有一个网格被占用，无法放置
+                return;
+            }
         }
 
-        // 获取目标网格的世界坐标（使用第一个网格的位置）
+        // 获取目标网格的世界坐标（使用下方网格的位置，参考哨塔的做法）
         const targetWorldPos = this.gridPanel.gridToWorld(gridX, gridY);
         if (!targetWorldPos) {
             return;
         }
 
-        // 释放原网格（释放两个网格）
-        if (this.gridX >= 0 && this.gridY >= 0) {
-            this.gridPanel.releaseGrid(this.gridX, this.gridY);
-            if (this.gridY + 1 < gridPanel.gridHeight) {
-                this.gridPanel.releaseGrid(this.gridX, this.gridY + 1);
+        // 如果不是更新当前位置，需要释放原网格并占用新网格
+        if (!isUpdatingCurrentPosition) {
+            // 释放原网格（释放两个网格）
+            if (this.gridX >= 0 && this.gridY >= 0) {
+                this.gridPanel.releaseGrid(this.gridX, this.gridY);
+                if (this.gridY + 1 < gridPanel.gridHeight) {
+                    this.gridPanel.releaseGrid(this.gridX, this.gridY + 1);
+                }
             }
-        }
 
-        // 占用新网格（占用两个网格）
-        this.gridPanel.occupyGrid(gridX, gridY, this.node);
-        this.gridPanel.occupyGrid(gridX, gridY + 1, this.node);
+            // 占用新网格（占用两个网格：下方和上方）
+            this.gridPanel.occupyGrid(gridX, gridY, this.node); // 下方网格（选中的）
+            this.gridPanel.occupyGrid(gridX, gridY + 1, this.node); // 上方网格
+        }
+        
+        // 更新网格坐标（使用下方网格的坐标，与哨塔一致）
         this.gridX = gridX;
         this.gridY = gridY;
 
-        // 计算网格底部Y坐标（第一个网格的底部）
+        // 计算网格底部Y坐标（下方网格的底部）
         const gridBottomY = targetWorldPos.y - gridPanel.cellSize / 2;
         
         // 设置baseY为网格底部Y坐标
         this.baseY = gridBottomY;
         
-        // 根据当前建造阶段更新高度和位置，确保底部对齐网格
-        if (this.constructionStage === ConstructionStage.FOUNDATION) {
-            this.setHeightWithFixedBottom(0.5);
-        } else if (this.constructionStage === ConstructionStage.HALF_BUILT) {
-            this.setHeightWithFixedBottom(0.66);
-        } else if (this.constructionStage === ConstructionStage.COMPLETE) {
-            this.setHeightWithFixedBottom(1.0);
-        } else {
-            // 默认完全体高度
-            this.setHeightWithFixedBottom(1.0);
-        }
+        // 移动建筑物到新位置（调整Y坐标，使其居中在两个网格之间，参考哨塔的做法）
+        const adjustedPos = new Vec3(targetWorldPos.x, targetWorldPos.y + 25, targetWorldPos.z); // 向上偏移25像素（半个网格）
+        this.node.setWorldPosition(adjustedPos);
+        
+        // 根据当前建造阶段更新高度（但不改变位置，因为位置已经设置好了）
+        const heightScale = this.constructionStage === ConstructionStage.FOUNDATION ? 0.5 : 
+                           this.constructionStage === ConstructionStage.HALF_BUILT ? 0.66 : 1.0;
+        
+        // 设置缩放（保持X和Z不变，只调整Y）
+        const defaultScale = this.defaultScale || new Vec3(1, 1, 1);
+        this.node.setScale(defaultScale.x, defaultScale.y * heightScale, defaultScale.z);
     }
 
     /**

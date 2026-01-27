@@ -165,8 +165,8 @@ export class ThunderChain extends Component {
      */
     private createLightningEffectWithTexture(fromPos: Vec3, toPos: Vec3) {
         // 输出起始和结束位置的坐标
-        console.info(`[ThunderChain] 起始位置 fromPos: (${fromPos.x.toFixed(2)}, ${fromPos.y.toFixed(2)}, ${fromPos.z.toFixed(2)})`);
-        console.info(`[ThunderChain] 结束位置 toPos: (${toPos.x.toFixed(2)}, ${toPos.y.toFixed(2)}, ${toPos.z.toFixed(2)})`);
+        //console.info(`[ThunderChain] 起始位置 fromPos: (${fromPos.x.toFixed(2)}, ${fromPos.y.toFixed(2)}, ${fromPos.z.toFixed(2)})`);
+        //console.info(`[ThunderChain] 结束位置 toPos: (${toPos.x.toFixed(2)}, ${toPos.y.toFixed(2)}, ${toPos.z.toFixed(2)})`);
         
         // 计算方向和距离
         const direction = new Vec3();
@@ -176,7 +176,7 @@ export class ThunderChain extends Component {
         // 如果距离太近（小于20像素），不显示贴图，避免出现原贴图尺寸
         const minDistance = 20;
         if (distance < minDistance) {
-            console.info(`[ThunderChain] 距离太近 (${distance.toFixed(2)} < ${minDistance})，跳过贴图显示`);
+            //console.info(`[ThunderChain] 距离太近 (${distance.toFixed(2)} < ${minDistance})，跳过贴图显示`);
             return;
         }
         
@@ -195,7 +195,7 @@ export class ThunderChain extends Component {
         // 先尝试不调整，如果方向不对再调整
         // 如果贴图是沿x轴平放的，标准计算应该是正确的
         
-        console.info(`[ThunderChain] 距离: ${distance.toFixed(2)}, 计算角度: ${angle.toFixed(2)}°, 方向向量: (${direction.x.toFixed(2)}, ${direction.y.toFixed(2)})`);
+        //console.info(`[ThunderChain] 距离: ${distance.toFixed(2)}, 计算角度: ${angle.toFixed(2)}°, 方向向量: (${direction.x.toFixed(2)}, ${direction.y.toFixed(2)})`);
 
         // 固定宽度为10像素，长度为两点之间的实际距离
         const textureWidth = 10;
@@ -238,8 +238,8 @@ export class ThunderChain extends Component {
         lightningNode.setRotationFromEuler(0, 0, angle - 90);
         
         // 输出详细日志，帮助调试
-        console.info(`[ThunderChain] 贴图节点创建 - 尺寸: (${textureWidth}, ${textureLength.toFixed(2)}), sizeMode: ${sprite.sizeMode}, type: ${sprite.type}, trim: ${sprite.trim}`);
-        console.info(`[ThunderChain] UITransform尺寸: (${transform.width.toFixed(2)}, ${transform.height.toFixed(2)}), 锚点: (${transform.anchorX}, ${transform.anchorY})`);
+        //console.info(`[ThunderChain] 贴图节点创建 - 尺寸: (${textureWidth}, ${textureLength.toFixed(2)}), sizeMode: ${sprite.sizeMode}, type: ${sprite.type}, trim: ${sprite.trim}`);
+        //console.info(`[ThunderChain] UITransform尺寸: (${transform.width.toFixed(2)}, ${transform.height.toFixed(2)}), 锚点: (${transform.anchorX}, ${transform.anchorY})`);
         
         // 使用 scheduleOnce 延迟一帧，确保所有属性都已应用
         this.scheduleOnce(() => {
@@ -256,12 +256,12 @@ export class ThunderChain extends Component {
                 sprite.enabled = true;
                 
                 // 输出验证日志
-                console.info(`[ThunderChain] 延迟后验证 - UITransform尺寸: (${transform.width.toFixed(2)}, ${transform.height.toFixed(2)}), sizeMode: ${sprite.sizeMode}`);
+                //console.info(`[ThunderChain] 延迟后验证 - UITransform尺寸: (${transform.width.toFixed(2)}, ${transform.height.toFixed(2)}), sizeMode: ${sprite.sizeMode}`);
                 
                 // 检查是否使用了原图尺寸（如果spriteFrame存在，检查其原始尺寸）
                 if (sprite.spriteFrame) {
                     const originalSize = sprite.spriteFrame.originalSize;
-                    console.info(`[ThunderChain] 原图尺寸: (${originalSize.width}, ${originalSize.height})`);
+                    //console.info(`[ThunderChain] 原图尺寸: (${originalSize.width}, ${originalSize.height})`);
                     // 如果UITransform的尺寸和原图尺寸相同，说明可能使用了原图尺寸
                     if (Math.abs(transform.width - originalSize.width) < 1 && Math.abs(transform.height - originalSize.height) < 1) {
                         console.warn(`[ThunderChain] 警告：检测到可能使用了原图尺寸！UITransform: (${transform.width}, ${transform.height}), 原图: (${originalSize.width}, ${originalSize.height})`);

@@ -1924,7 +1924,7 @@ export class TowerBuilder extends Component {
             
             towerScript.buildCost = actualCost;
             
-            // 冰塔只能放置在石墙网格内，占用两个网格
+            // 冰塔只能放置在石墙网格内，占用网格
             if (!this.stoneWallGridPanelComponent) {
                 this.findStoneWallGridPanel();
             }
@@ -1932,39 +1932,80 @@ export class TowerBuilder extends Component {
             if (this.stoneWallGridPanelComponent) {
                 const grid = this.stoneWallGridPanelComponent.worldToGrid(worldPosition);
                 if (grid) {
-                    // 检查第二个网格是否存在
+                    // 冰塔占据两个网格高度，需要检查两个网格是否都被占用
+                    // 检查上方网格是否存在（grid.y+1不能超出网格范围，Y坐标越大越在上方）
                     if (grid.y + 1 >= this.stoneWallGridPanelComponent.gridHeight) {
-                        // 第二个网格超出范围，无法放置
+                        // 上方网格超出范围，无法放置
                         towerScript.gridX = -1;
                         towerScript.gridY = -1;
-                        } else {
-                            // 检查两个网格是否都被占用
-                            if (this.stoneWallGridPanelComponent.isGridOccupied(grid.x, grid.y) || 
-                                this.stoneWallGridPanelComponent.isGridOccupied(grid.x, grid.y + 1)) {
-                                towerScript.gridX = -1;
-                                towerScript.gridY = -1;
-                            } else {
-                                // 占用两个网格
-                                if (this.stoneWallGridPanelComponent.occupyGrid(grid.x, grid.y, tower) &&
-                                    this.stoneWallGridPanelComponent.occupyGrid(grid.x, grid.y + 1, tower)) {
-                                // 使用 moveToGridPosition 来确保 baseY 和高度正确设置
-                                towerScript.moveToGridPosition(grid.x, grid.y);
-                            } else {
-                                // 占用失败，释放已占用的网格
-                                this.stoneWallGridPanelComponent.releaseGrid(grid.x, grid.y);
-                                this.stoneWallGridPanelComponent.releaseGrid(grid.x, grid.y + 1);
-                                towerScript.gridX = -1;
-                                towerScript.gridY = -1;
+                    } else if (this.stoneWallGridPanelComponent.isGridOccupied(grid.x, grid.y) || 
+                               this.stoneWallGridPanelComponent.isGridOccupied(grid.x, grid.y + 1)) {
+                        // 至少有一个网格被占用，不应该发生这种情况（应该在放置前检查）
+                        towerScript.gridX = -1;
+                        towerScript.gridY = -1;
+                    } else {
+                        // 占用两个网格：grid.y（选中的网格，下方）和 grid.y + 1（上方网格）
+                        const occupy1 = this.stoneWallGridPanelComponent.occupyGrid(grid.x, grid.y, tower);
+                        const occupy2 = this.stoneWallGridPanelComponent.occupyGrid(grid.x, grid.y + 1, tower);
+                        console.info('[TowerBuilder] buildIceTower 占用网格:', grid.x, grid.y, '结果:', occupy1, '上方网格:', grid.x, grid.y + 1, '结果:', occupy2);
+                        if (occupy1 && occupy2) {
+                            towerScript.gridX = grid.x;
+                            towerScript.gridY = grid.y; // 使用下方网格的坐标（与哨塔一致）
+                            console.info('[TowerBuilder] buildIceTower 成功占用两个网格，gridX:', towerScript.gridX, 'gridY:', towerScript.gridY, '(占用网格:', grid.x, grid.y, '和', grid.x, grid.y + 1, ')');
+                            // 调整位置，使其居中在两个网格之间（参考哨塔的做法）
+                            const gridPos = this.stoneWallGridPanelComponent.gridToWorld(grid.x, grid.y);
+                            if (gridPos) {
+                                // 向上偏移50像素（一个网格），使其居中在两个网格之间
+                                const adjustedPos = new Vec3(gridPos.x, gridPos.y + 50, gridPos.z);
+                                tower.setWorldPosition(adjustedPos);
+                                
+                                // 设置 baseY 为下方网格的底部（用于后续的 setHeightWithFixedBottom 调用）
+                                const gridPanel = this.stoneWallGridPanelComponent as any;
+                                const gridBottomY = gridPos.y - gridPanel.cellSize / 2;
+                                (towerScript as any).baseY = gridBottomY;
+                                
+                                // 根据当前建造阶段更新高度（但不改变位置，因为位置已经设置好了）
+                                const constructionStage = (towerScript as any).constructionStage;
+                                const defaultScale = (towerScript as any).defaultScale || new Vec3(1, 1, 1);
+                                const heightScale = constructionStage === 0 ? 0.5 : constructionStage === 1 ? 0.66 : 1.0;
+                                
+                                // 设置缩放（保持X和Z不变，只调整Y）
+                                tower.setScale(defaultScale.x, defaultScale.y * heightScale, defaultScale.z);
+                                
+                                // 注意：不调用 setHeightWithFixedBottom，因为它会重新计算位置
+                                // 位置已经设置为两个网格的中心，不需要再调整
                             }
+                        } else {
+                            // 占用失败，释放已占用的网格
+                            console.warn('[TowerBuilder] buildIceTower 占用网格失败，释放已占用的网格');
+                            if (occupy1) {
+                                this.stoneWallGridPanelComponent.releaseGrid(grid.x, grid.y);
+                            }
+                            if (occupy2) {
+                                this.stoneWallGridPanelComponent.releaseGrid(grid.x, grid.y + 1);
+                            }
+                            towerScript.gridX = -1;
+                            towerScript.gridY = -1;
                         }
                     }
                 } else {
+                    // 冰塔不在石墙网格内，不应该发生这种情况（应该在放置前检查）
+                    console.warn('[TowerBuilder] buildIceTower 无法转换为网格坐标');
                     towerScript.gridX = -1;
                     towerScript.gridY = -1;
                 }
             } else {
+                console.warn('[TowerBuilder] buildIceTower 找不到石墙网格面板');
                 towerScript.gridX = -1;
                 towerScript.gridY = -1;
+            }
+            
+            // 验证网格占用情况
+            if (towerScript.gridX >= 0 && towerScript.gridY >= 0 && this.stoneWallGridPanelComponent) {
+                // gridY 是下方网格的坐标（选中的），上方网格是 gridY + 1
+                const isOccupied1 = this.stoneWallGridPanelComponent.isGridOccupied(towerScript.gridX, towerScript.gridY);
+                const isOccupied2 = this.stoneWallGridPanelComponent.isGridOccupied(towerScript.gridX, towerScript.gridY + 1);
+                console.info('[TowerBuilder] buildIceTower 验证网格占用 - 下方网格:', towerScript.gridX, towerScript.gridY, '占用:', isOccupied1, '上方网格:', towerScript.gridX, towerScript.gridY + 1, '占用:', isOccupied2);
             }
             
             if (this.gameManager) {
@@ -2033,7 +2074,7 @@ export class TowerBuilder extends Component {
             
             towerScript.buildCost = actualCost;
             
-            // 雷塔只能放置在石墙网格内，占用两个网格
+            // 雷塔只能放置在石墙网格内，占用网格
             if (!this.stoneWallGridPanelComponent) {
                 this.findStoneWallGridPanel();
             }
@@ -2041,33 +2082,64 @@ export class TowerBuilder extends Component {
             if (this.stoneWallGridPanelComponent) {
                 const grid = this.stoneWallGridPanelComponent.worldToGrid(worldPosition);
                 if (grid) {
-                    // 检查第二个网格是否存在
+                    // 雷塔占据两个网格高度，需要检查两个网格是否都被占用
+                    // 检查上方网格是否存在（grid.y+1不能超出网格范围，Y坐标越大越在上方）
                     if (grid.y + 1 >= this.stoneWallGridPanelComponent.gridHeight) {
-                        // 第二个网格超出范围，无法放置
+                        // 上方网格超出范围，无法放置
                         towerScript.gridX = -1;
                         towerScript.gridY = -1;
-                        } else {
-                            // 检查两个网格是否都被占用
-                            if (this.stoneWallGridPanelComponent.isGridOccupied(grid.x, grid.y) || 
-                                this.stoneWallGridPanelComponent.isGridOccupied(grid.x, grid.y + 1)) {
-                                towerScript.gridX = -1;
-                                towerScript.gridY = -1;
-                            } else {
-                                // 占用两个网格
-                                if (this.stoneWallGridPanelComponent.occupyGrid(grid.x, grid.y, tower) &&
-                                    this.stoneWallGridPanelComponent.occupyGrid(grid.x, grid.y + 1, tower)) {
-                                // 使用 moveToGridPosition 来确保 baseY 和高度正确设置
-                                towerScript.moveToGridPosition(grid.x, grid.y);
-                            } else {
-                                // 占用失败，释放已占用的网格
-                                this.stoneWallGridPanelComponent.releaseGrid(grid.x, grid.y);
-                                this.stoneWallGridPanelComponent.releaseGrid(grid.x, grid.y + 1);
-                                towerScript.gridX = -1;
-                                towerScript.gridY = -1;
+                    } else if (this.stoneWallGridPanelComponent.isGridOccupied(grid.x, grid.y) || 
+                               this.stoneWallGridPanelComponent.isGridOccupied(grid.x, grid.y + 1)) {
+                        // 至少有一个网格被占用，不应该发生这种情况（应该在放置前检查）
+                        towerScript.gridX = -1;
+                        towerScript.gridY = -1;
+                    } else {
+                        // 占用两个网格：grid.y（选中的网格，下方）和 grid.y + 1（上方网格）
+                        const occupy1 = this.stoneWallGridPanelComponent.occupyGrid(grid.x, grid.y, tower);
+                        const occupy2 = this.stoneWallGridPanelComponent.occupyGrid(grid.x, grid.y + 1, tower);
+                        console.info('[TowerBuilder] buildThunderTower 占用网格:', grid.x, grid.y, '结果:', occupy1, '上方网格:', grid.x, grid.y + 1, '结果:', occupy2);
+                        if (occupy1 && occupy2) {
+                            towerScript.gridX = grid.x;
+                            towerScript.gridY = grid.y; // 使用下方网格的坐标（与哨塔一致）
+                            console.info('[TowerBuilder] buildThunderTower 成功占用两个网格，gridX:', towerScript.gridX, 'gridY:', towerScript.gridY, '(占用网格:', grid.x, grid.y, '和', grid.x, grid.y + 1, ')');
+                            // 调整位置，使其居中在两个网格之间（参考哨塔的做法）
+                            const gridPos = this.stoneWallGridPanelComponent.gridToWorld(grid.x, grid.y);
+                            if (gridPos) {
+                                // 向上偏移25像素（半个网格），使其居中在两个网格之间
+                                const adjustedPos = new Vec3(gridPos.x, gridPos.y + 25, gridPos.z);
+                                tower.setWorldPosition(adjustedPos);
+                                
+                                // 设置 baseY 为下方网格的底部（用于后续的 setHeightWithFixedBottom 调用）
+                                const gridPanel = this.stoneWallGridPanelComponent as any;
+                                const gridBottomY = gridPos.y - gridPanel.cellSize / 2;
+                                (towerScript as any).baseY = gridBottomY;
+                                
+                                // 根据当前建造阶段更新高度（但不改变位置，因为位置已经设置好了）
+                                const constructionStage = (towerScript as any).constructionStage;
+                                const defaultScale = (towerScript as any).defaultScale || new Vec3(1, 1, 1);
+                                const heightScale = constructionStage === 0 ? 0.5 : constructionStage === 1 ? 0.66 : 1.0;
+                                
+                                // 设置缩放（保持X和Z不变，只调整Y）
+                                tower.setScale(defaultScale.x, defaultScale.y * heightScale, defaultScale.z);
+                                
+                                // 注意：不调用 setHeightWithFixedBottom，因为它会重新计算位置
+                                // 位置已经设置为两个网格的中心，不需要再调整
                             }
+                        } else {
+                            // 占用失败，释放已占用的网格
+                            console.warn('[TowerBuilder] buildThunderTower 占用网格失败，释放已占用的网格');
+                            if (occupy1) {
+                                this.stoneWallGridPanelComponent.releaseGrid(grid.x, grid.y);
+                            }
+                            if (occupy2) {
+                                this.stoneWallGridPanelComponent.releaseGrid(grid.x, grid.y + 1);
+                            }
+                            towerScript.gridX = -1;
+                            towerScript.gridY = -1;
                         }
                     }
                 } else {
+                    // 雷塔不在石墙网格内，不应该发生这种情况（应该在放置前检查）
                     towerScript.gridX = -1;
                     towerScript.gridY = -1;
                 }
