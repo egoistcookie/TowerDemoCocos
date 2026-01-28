@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, tween, UIOpacity, UITransform, Sprite, SpriteFrame, Label, Color, Graphics, Prefab, instantiate, find, view, EventTouch } from 'cc';
+import { _decorator, Component, Node, Vec3, tween, UIOpacity, UITransform, Sprite, SpriteFrame, Label, Color, Graphics, Prefab, instantiate, find, view, EventTouch, BlockInputEvents } from 'cc';
 const { ccclass, property } = _decorator;
 
 @ccclass('GamePopup')
@@ -447,21 +447,13 @@ export class GamePopup extends Component {
             graphics.rect(-visibleSize.width, -visibleSize.height, visibleSize.width * 2, visibleSize.height * 2);
             graphics.fill();
 
-            // 阻止触摸事件穿透（capture 模式）
-            this.maskLayer.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
-                event.propagationStopped = true;
-            }, this, true);
-            this.maskLayer.on(Node.EventType.TOUCH_MOVE, (event: EventTouch) => {
-                event.propagationStopped = true;
-            }, this, true);
+            // 使用 BlockInputEvents 阻止所有输入事件穿透
+            this.maskLayer.addComponent(BlockInputEvents);
+
+            // 点击遮罩任意位置立即关闭提示框
             this.maskLayer.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
-                // 点击任意位置立即关闭提示框
-                event.propagationStopped = true;
                 this.hide();
-            }, this, true);
-            this.maskLayer.on(Node.EventType.TOUCH_CANCEL, (event: EventTouch) => {
-                event.propagationStopped = true;
-            }, this, true);
+            }, this);
         }
 
         // 遮罩层位于 Canvas 最上层（但低于弹窗自身）

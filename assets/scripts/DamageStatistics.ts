@@ -7,11 +7,13 @@ const { ccclass } = _decorator;
 export interface UnitDamageData {
     unitType: string;        // 单位类型（如 'WatchTower', 'IceTower', 'Arrower' 等）
     unitName: string;        // 单位显示名称（如 '哨塔', '冰塔', '弓箭手' 等）
-    totalDamage: number;     // 总伤害
+    totalDamage: number;     // 总伤害（进攻贡献）
     hitCount: number;        // 命中次数
     dps: number;             // 每秒伤害（DPS）
     startTime: number;       // 开始时间
     endTime: number;         // 结束时间（或当前时间）
+    damageTaken?: number;    // 承受伤害总量（坦克型单位使用，如剑士）
+    healAmount?: number;     // 治疗总量（辅助型单位使用，如牧师）
 }
 
 /**
@@ -70,7 +72,7 @@ export class DamageStatistics {
     }
     
     /**
-     * 记录单位造成的伤害
+     * 记录单位造成的伤害（进攻型贡献）
      * @param unitType 单位类型（如 'WatchTower', 'IceTower', 'Arrower' 等）
      * @param unitName 单位显示名称（如 '哨塔', '冰塔', '弓箭手' 等）
      * @param damage 伤害值
@@ -90,7 +92,9 @@ export class DamageStatistics {
                 hitCount: 0,
                 dps: 0,
                 startTime: Date.now(),
-                endTime: Date.now()
+                endTime: Date.now(),
+                damageTaken: 0,
+                healAmount: 0
             };
             this.damageMap.set(unitType, data);
         }
@@ -107,6 +111,80 @@ export class DamageStatistics {
         } else {
             data.dps = data.totalDamage; // 如果时间太短，直接使用总伤害
         }
+
+        console.info('[DamageStatistics] recordDamage',
+            'unitType =', unitType,
+            'unitName =', unitName,
+            'damage =', damage,
+            'totalDamage =', data.totalDamage,
+            'hitCount =', data.hitCount,
+            'dps =', data.dps.toFixed(2));
+    }
+
+    /**
+     * 记录单位承受的伤害（如剑士的坦度贡献）
+     */
+    public recordDamageTaken(unitType: string, unitName: string, damage: number) {
+        if (!this.isRecording || damage <= 0) {
+            return;
+        }
+
+        let data = this.damageMap.get(unitType);
+        if (!data) {
+            data = {
+                unitType,
+                unitName,
+                totalDamage: 0,
+                hitCount: 0,
+                dps: 0,
+                startTime: Date.now(),
+                endTime: Date.now(),
+                damageTaken: 0,
+                healAmount: 0
+            };
+            this.damageMap.set(unitType, data);
+        }
+
+        data.damageTaken = (data.damageTaken || 0) + damage;
+        data.endTime = Date.now();
+
+        console.info('[DamageStatistics] recordDamageTaken',
+            'unitType =', unitType,
+            'unitName =', unitName,
+            'damageTaken =', data.damageTaken);
+    }
+
+    /**
+     * 记录单位的治疗量（如牧师的治疗贡献）
+     */
+    public recordHeal(unitType: string, unitName: string, heal: number) {
+        if (!this.isRecording || heal <= 0) {
+            return;
+        }
+
+        let data = this.damageMap.get(unitType);
+        if (!data) {
+            data = {
+                unitType,
+                unitName,
+                totalDamage: 0,
+                hitCount: 0,
+                dps: 0,
+                startTime: Date.now(),
+                endTime: Date.now(),
+                damageTaken: 0,
+                healAmount: 0
+            };
+            this.damageMap.set(unitType, data);
+        }
+
+        data.healAmount = (data.healAmount || 0) + heal;
+        data.endTime = Date.now();
+
+        console.info('[DamageStatistics] recordHeal',
+            'unitType =', unitType,
+            'unitName =', unitName,
+            'healAmount =', data.healAmount);
     }
     
     /**
@@ -119,6 +197,9 @@ export class DamageStatistics {
     /**
      * 获取DPS排名前N位的单位
      * @param topN 前N位，默认为3
+     *
+     * 说明：目前结算面板采用的是“总伤害”排序，
+     * 如果后续需要真正按DPS排序，可以调用本方法。
      */
     public getTopDPSUnits(topN: number = 3): UnitDamageData[] {
         const allData = this.getAllDamageData();
@@ -126,8 +207,16 @@ export class DamageStatistics {
         // 按DPS降序排序
         allData.sort((a, b) => b.dps - a.dps);
         
-        // 返回前N位
-        return allData.slice(0, topN);
+        const topList = allData.slice(0, topN);
+        console.info('[DamageStatistics] getTopDPSUnits topN =', topN,
+            'allCount =', allData.length,
+            'topList =', topList.map(d => ({
+                unitType: d.unitType,
+                unitName: d.unitName,
+                totalDamage: d.totalDamage,
+                dps: Number(d.dps.toFixed(2))
+            })));
+        return topList;
     }
     
     /**
@@ -140,8 +229,16 @@ export class DamageStatistics {
         // 按总伤害降序排序
         allData.sort((a, b) => b.totalDamage - a.totalDamage);
         
-        // 返回前N位
-        return allData.slice(0, topN);
+        const topList = allData.slice(0, topN);
+        console.info('[DamageStatistics] getTopDamageUnits topN =', topN,
+            'allCount =', allData.length,
+            'topList =', topList.map(d => ({
+                unitType: d.unitType,
+                unitName: d.unitName,
+                totalDamage: d.totalDamage,
+                dps: Number(d.dps.toFixed(2))
+            })));
+        return topList;
     }
     
     /**
@@ -150,13 +247,14 @@ export class DamageStatistics {
     public static getUnitTypeNameMap(): Map<string, string> {
         const map = new Map<string, string>();
         map.set('WatchTower', '哨塔');
-        map.set('IceTower', '冰塔');
-        map.set('ThunderTower', '雷塔');
+        map.set('IceTower', '冰元素塔');
+        map.set('ThunderTower', '雷元素塔');
         map.set('Arrower', '弓箭手');
         map.set('Hunter', '女猎手'); // 修正：实际类名是 Hunter，不是 Huntress
         map.set('ElfSwordsman', '剑士'); // 修正：实际类名是 ElfSwordsman，不是 Swordsman
-        map.set('HunterHall', '弓箭手小屋');
-        map.set('WarAncientTree', '战争古树');
+        map.set('HunterHall', '猎手大厅');
+        map.set('WarAncientTree', '弓箭手小屋');
+        map.set('Priest', '牧师');
         return map;
     }
 }

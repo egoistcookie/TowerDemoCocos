@@ -110,68 +110,7 @@ export class ThunderTower extends Build {
     protected readonly TARGET_FIND_INTERVAL: number = 0.2; // 目标查找间隔（秒）
     protected hasFoundFirstTarget: boolean = false; // 是否已经找到过第一个目标
     private unitManager: UnitManager = null!; // 单位管理器引用
-    private baseY: number = 0; // 完全体时的基准Y坐标（用于保持底部位置不变）
-
-    /**
-     * 设置节点高度并保持底部位置不变
-     * @param heightScale 高度缩放比例（0.5 = 50%, 0.66 = 66%, 1.0 = 100%）
-     */
-    private setHeightWithFixedBottom(heightScale: number) {
-        // 获取节点的UITransform以获取实际高度
-        const uiTransform = this.node.getComponent(UITransform);
-        if (!uiTransform) {
-            // 如果没有UITransform，直接设置缩放
-            this.node.setScale(this.defaultScale.x, this.defaultScale.y * heightScale, this.defaultScale.z);
-            return;
-        }
-
-        // 获取完全体时的实际高度（使用defaultScale）
-        // console.info('[IceTower] setHeightWithFixedBottom 实际高度:', uiTransform.height * this.defaultScale.y);
-        let fullHeight: number;
-        const gridPanelAny = this.gridPanel as any;
-        if (gridPanelAny && gridPanelAny.cellSize) {
-            fullHeight = gridPanelAny.cellSize * 2;   // 固定为 2 个格子高 = 100
-        } else {
-            fullHeight = uiTransform.height * this.defaultScale.y;
-        }
-        // const fullHeight = uiTransform.height * this.defaultScale.y;
-        // console.info('[IceTower] setHeightWithFixedBottom 完全体高度:', fullHeight);
-        // baseY 存储的是网格底部的Y坐标（第一个网格的底部）
-        // 如果baseY为0，说明还没有设置，需要从网格位置计算
-        if (this.baseY === 0) {
-            // 需要从网格位置计算网格底部
-            if (this.gridPanel && this.gridX >= 0 && this.gridY >= 0) {
-                const gridPanel = this.gridPanel as any;
-                const gridCenter = this.gridPanel.gridToWorld(this.gridX, this.gridY);
-                if (gridCenter) {
-                    // 网格底部 = 网格中心 - cellSize/2
-                    this.baseY = gridCenter.y - gridPanel.cellSize / 2;
-                } else {
-                    // 如果无法获取网格位置，使用当前节点位置推算
-                    const currentHeight = fullHeight * heightScale;
-                    this.baseY = this.node.worldPosition.y - currentHeight / 2;
-                }
-            } else {
-                // 如果还没有网格位置，使用当前节点位置推算
-                const currentHeight = fullHeight * heightScale;
-                this.baseY = this.node.worldPosition.y - currentHeight / 2;
-            }
-        }
-
-        // 计算当前高度
-        const currentHeight = fullHeight * heightScale;
-
-        // console.info('[IceTower] setHeightWithFixedBottom 当前高度:', currentHeight);
-        // 节点中心Y = 网格底部Y + 25 + 当前高度/2
-        const newY = this.baseY + currentHeight / 2;
-        
-        // 设置缩放和位置
-        this.node.setScale(this.defaultScale.x, heightScale, this.defaultScale.z);
-        // console.info('[IceTower] setHeightWithFixedBottom 缩放:', this.defaultScale.x, this.defaultScale.y * heightScale, this.defaultScale.z);
-        const currentPos = this.node.worldPosition.clone();
-        currentPos.y = newY;
-        this.node.setWorldPosition(currentPos);
-    }
+    // baseY 字段已移动到父类 Build 中复用
 
     /**
      * 当雷塔从对象池激活时调用
@@ -876,19 +815,19 @@ export class ThunderTower extends Build {
         if (this.weatheringStage === WeatheringStage.STAGE_1 && this.weatheringSprite1) {
             this.sprite.spriteFrame = this.weatheringSprite1;
             // 风化状态高度为50%，保持底部位置不变
-            this.setHeightWithFixedBottom(0.5);
+            this.setHeightWithFixedBottomGeneric(0.5);
             return;
         }
         if (this.weatheringStage === WeatheringStage.STAGE_2 && this.weatheringSprite2) {
             this.sprite.spriteFrame = this.weatheringSprite2;
             // 风化状态高度为50%，保持底部位置不变
-            this.setHeightWithFixedBottom(0.5);
+            this.setHeightWithFixedBottomGeneric(0.5);
             return;
         }
         if (this.weatheringStage === WeatheringStage.STAGE_3 && this.weatheringSprite3) {
             this.sprite.spriteFrame = this.weatheringSprite3;
             // 风化状态高度为50%，保持底部位置不变
-            this.setHeightWithFixedBottom(0.5);
+            this.setHeightWithFixedBottomGeneric(0.5);
             return;
         }
 
@@ -913,30 +852,30 @@ export class ThunderTower extends Build {
         if (this.constructionStage === ConstructionStage.FOUNDATION && this.foundationSprite) {
             this.sprite.spriteFrame = this.foundationSprite;
             // 地基形态高度为50%，保持底部位置不变
-            this.setHeightWithFixedBottom(0.5);
+            this.setHeightWithFixedBottomGeneric(0.5);
             return;
         }
         if (this.constructionStage === ConstructionStage.HALF_BUILT && this.halfBuiltSprite) {
             this.sprite.spriteFrame = this.halfBuiltSprite;
             // 半成品高度为66%，保持底部位置不变
-            this.setHeightWithFixedBottom(0.66);
+            this.setHeightWithFixedBottomGeneric(0.66);
             return;
         }
         if (this.constructionStage === ConstructionStage.COMPLETE && this.completeSprite) {
             this.sprite.spriteFrame = this.completeSprite;
             // 完全体高度为100%，保持底部位置不变
-            this.setHeightWithFixedBottom(1.0);
+            this.setHeightWithFixedBottomGeneric(1.0);
             return;
         }
 
         // 如果没有配置贴图，使用默认贴图（不改变）
         // 如果没有配置贴图，默认使用完全体高度
         if (this.constructionStage === ConstructionStage.COMPLETE) {
-            this.setHeightWithFixedBottom(1.0);
+            this.setHeightWithFixedBottomGeneric(1.0);
         } else if (this.constructionStage === ConstructionStage.HALF_BUILT) {
-            this.setHeightWithFixedBottom(0.66);
+            this.setHeightWithFixedBottomGeneric(0.66);
         } else if (this.constructionStage === ConstructionStage.FOUNDATION) {
-            this.setHeightWithFixedBottom(0.5);
+            this.setHeightWithFixedBottomGeneric(0.5);
         }
     }
 

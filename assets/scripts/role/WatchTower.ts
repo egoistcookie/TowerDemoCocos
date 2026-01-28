@@ -124,7 +124,7 @@ export class WatchTower extends Build {
     private weatheringTimer: number = 0; // 风化计时器
     private readonly WEATHERING_TIME: number = 5; // 每个风化阶段时间（秒）
 
-    private baseY: number = 0; // 完全体时的基准Y坐标（用于保持底部位置不变）
+    // 基准Y已在父类 Build 中声明，这里只复用
 
     /**
      * 当哨塔从对象池激活时调用（用于对象池复用）
@@ -289,8 +289,8 @@ export class WatchTower extends Build {
         this.gridX = gridX;
         this.gridY = gridY;
 
-        // 移动建筑物到新位置（调整Y坐标，使其居中在两个网格之间）
-        const adjustedPos = new Vec3(targetWorldPos.x, targetWorldPos.y + 25, targetWorldPos.z); // 向上偏移25像素（半个网格）
+        // 移动建筑物到新位置（在原来基础上整体向下偏移 25 像素）
+        const adjustedPos = new Vec3(targetWorldPos.x, targetWorldPos.y - 25, targetWorldPos.z);
         this.node.setWorldPosition(adjustedPos);
     }
 
@@ -1097,6 +1097,8 @@ export class WatchTower extends Build {
                     
                     if (targetScript && targetScript.takeDamage) {
                         targetScript.takeDamage(damage);
+                        // 记录伤害统计（哨塔属于建筑，使用Build里的方法）
+                        this.recordDamageToStatistics(damage);
                     }
                 }
             }
@@ -1256,17 +1258,17 @@ export class WatchTower extends Build {
         // 优先处理风化阶段
         if (this.weatheringStage === WeatheringStage.STAGE_1 && this.weatheringSprite1) {
             this.sprite.spriteFrame = this.weatheringSprite1;
-            this.setHeightWithFixedBottom(0.5);
+            this.setHeightWithFixedBottomGeneric(0.5);
             return;
         }
         if (this.weatheringStage === WeatheringStage.STAGE_2 && this.weatheringSprite2) {
             this.sprite.spriteFrame = this.weatheringSprite2;
-            this.setHeightWithFixedBottom(0.5);
+            this.setHeightWithFixedBottomGeneric(0.5);
             return;
         }
         if (this.weatheringStage === WeatheringStage.STAGE_3 && this.weatheringSprite3) {
             this.sprite.spriteFrame = this.weatheringSprite3;
-            this.setHeightWithFixedBottom(0.5);
+            this.setHeightWithFixedBottomGeneric(0.5);
             return;
         }
 
@@ -1289,72 +1291,31 @@ export class WatchTower extends Build {
         // 处理建造阶段
         if (this.constructionStage === ConstructionStage.FOUNDATION && this.foundationSprite) {
             this.sprite.spriteFrame = this.foundationSprite;
-            this.setHeightWithFixedBottom(0.5);
+            this.setHeightWithFixedBottomGeneric(0.5);
             return;
         }
         if (this.constructionStage === ConstructionStage.HALF_BUILT && this.halfBuiltSprite) {
             this.sprite.spriteFrame = this.halfBuiltSprite;
-            this.setHeightWithFixedBottom(0.66);
+            this.setHeightWithFixedBottomGeneric(0.66);
             return;
         }
         if (this.constructionStage === ConstructionStage.COMPLETE && this.completeSprite) {
             this.sprite.spriteFrame = this.completeSprite;
-            this.setHeightWithFixedBottom(1.0);
+            this.setHeightWithFixedBottomGeneric(1.0);
             return;
         }
 
         // 如果没有配置贴图，默认按高度阶段缩放
         if (this.constructionStage === ConstructionStage.COMPLETE) {
-            this.setHeightWithFixedBottom(1.0);
+            this.setHeightWithFixedBottomGeneric(1.0);
         } else if (this.constructionStage === ConstructionStage.HALF_BUILT) {
-            this.setHeightWithFixedBottom(0.66);
+            this.setHeightWithFixedBottomGeneric(0.66);
         } else if (this.constructionStage === ConstructionStage.FOUNDATION) {
-            this.setHeightWithFixedBottom(0.5);
+            this.setHeightWithFixedBottomGeneric(0.5);
         }
     }
 
-    /**
-     * 设置节点高度并保持底部位置不变（与冰塔、雷塔一致）
-     */
-    private setHeightWithFixedBottom(heightScale: number) {
-        const uiTransform = this.node.getComponent(UITransform);
-        if (!uiTransform) {
-            this.node.setScale(this.node.scale.x, this.node.scale.y * heightScale, this.node.scale.z);
-            return;
-        }
-
-        let fullHeight: number;
-        const gridPanelAny = this.gridPanel as any;
-        if (gridPanelAny && gridPanelAny.cellSize) {
-            fullHeight = gridPanelAny.cellSize * 2;
-        } else {
-            fullHeight = uiTransform.height * this.node.scale.y;
-        }
-
-        if (this.baseY === 0) {
-            if (this.gridPanel && this.gridX >= 0 && this.gridY >= 0) {
-                const gridPanel = this.gridPanel as any;
-                const gridCenter = this.gridPanel.gridToWorld(this.gridX, this.gridY);
-                if (gridCenter) {
-                    this.baseY = gridCenter.y - gridPanel.cellSize / 2;
-                } else {
-                    const currentHeight = fullHeight * heightScale;
-                    this.baseY = this.node.worldPosition.y - currentHeight / 2;
-                }
-            } else {
-                const currentHeight = fullHeight * heightScale;
-                this.baseY = this.node.worldPosition.y - currentHeight / 2;
-            }
-        }
-
-        const currentHeight = fullHeight * heightScale;
-        const newY = this.baseY + currentHeight / 2;
-
-        this.node.setScale(this.node.scale.x, heightScale, this.node.scale.z);
-        const pos = this.node.worldPosition.clone();
-        pos.y = newY;
-        this.node.setWorldPosition(pos);
-    }
+    // 具体实现复用父类 Build 的 setHeightWithFixedBottomGeneric
 
     /**
      * 检查是否存活

@@ -1084,6 +1084,13 @@ export class UIManager extends Component {
             if (gm.gameOverDialog) {
                 gm.gameOverDialog.active = false;
             }
+            // 隐藏游戏结束的全屏遮罩，恢复点击
+            if (gm.gameOverMask) {
+                const maskNode = gm.gameOverMask as Node;
+                if (maskNode && maskNode.isValid) {
+                    maskNode.active = false;
+                }
+            }
             
             // 回到主界面（隐藏游戏相关UI，显示底部三页签）
             let bottomSelectionNode = find('Canvas/BottomSelection');
@@ -1112,6 +1119,12 @@ export class UIManager extends Component {
                 }
             }
             
+            // 重新开始时，重置 TowerBuilder 的初始生成标记，允许再次生成14石墙和3哨塔
+            const towerBuilderComp = this.findComponentInScene('TowerBuilder') as any;
+            if (towerBuilderComp && towerBuilderComp.resetForRestart) {
+                towerBuilderComp.resetForRestart();
+            }
+
             // 隐藏所有游戏元素
             const gameNodes = [
                 'Canvas/Crystal',

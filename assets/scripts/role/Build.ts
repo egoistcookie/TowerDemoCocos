@@ -58,6 +58,8 @@ export class Build extends Component {
     protected sprite: Sprite = null!;
     protected defaultSpriteFrame: SpriteFrame = null!;
     protected defaultScale: Vec3 = new Vec3(1, 1, 1);
+    // 建筑在完全体时的基准底部Y坐标（用于在建造/风化/损坏过程中保持“贴地”）
+    protected baseY: number = 0;
 
     // 选择面板相关
     protected selectionPanel: Node = null!; // 选择面板节点
@@ -128,6 +130,7 @@ export class Build extends Component {
             this.defaultSpriteFrame = this.sprite.spriteFrame;
         }
         this.defaultScale = this.node.scale.clone();
+        this.baseY = 0;
 
         // 查找游戏管理器
         this.findGameManager();
@@ -1099,6 +1102,57 @@ export class Build extends Component {
     }
 
     /**
+     * 公共工具方法：根据高度缩放比例调整建筑高度，但保持底部贴合网格
+     * 适用于占据两个格子高的建筑（如哨塔、冰塔、雷元素塔）
+     * @param heightScale 高度缩放比例（0.5 = 50%, 0.66 = 66%, 1.0 = 100%）
+     */
+    protected setHeightWithFixedBottomGeneric(heightScale: number, fullGridHeightInCells: number = 2) {
+        const uiTransform = this.node.getComponent(UITransform);
+        if (!uiTransform) {
+            // 没有 UITransform 时，尽量仍然按比例缩放 Y
+            this.node.setScale(this.defaultScale.x, heightScale, this.defaultScale.z);
+            return;
+        }
+
+        // 计算完全体高度：优先使用网格 cellSize，其次用自身高度 * 默认缩放
+        let fullHeight: number;
+        const gridPanelAny = this.gridPanel as any;
+        if (gridPanelAny && gridPanelAny.cellSize) {
+            fullHeight = gridPanelAny.cellSize * fullGridHeightInCells;
+        } else {
+            fullHeight = uiTransform.height * this.defaultScale.y;
+        }
+
+        // 如果还未记录基准底部Y，则根据当前所在网格/位置计算一次
+        if (this.baseY === 0) {
+            if (this.gridPanel && this.gridX >= 0 && this.gridY >= 0) {
+                const gridPanel = this.gridPanel as any;
+                const gridCenter = this.gridPanel.gridToWorld(this.gridX, this.gridY);
+                if (gridCenter) {
+                    // 网格底部 = 中心Y - cellSize/2
+                    this.baseY = gridCenter.y - gridPanel.cellSize / 2;
+                } else {
+                    const currentHeight = fullHeight * heightScale;
+                    this.baseY = this.node.worldPosition.y - currentHeight / 2;
+                }
+            } else {
+                const currentHeight = fullHeight * heightScale;
+                this.baseY = this.node.worldPosition.y - currentHeight / 2;
+            }
+        }
+
+        const currentHeight = fullHeight * heightScale;
+        const newY = this.baseY + currentHeight / 2;
+
+        // 按比例缩放 Y，X/Z 使用默认缩放（保持宽度不变）
+        this.node.setScale(this.defaultScale.x, heightScale, this.defaultScale.z);
+
+        const pos = this.node.worldPosition.clone();
+        pos.y = newY;
+        this.node.setWorldPosition(pos);
+    }
+
+    /**
      * 建筑物点击事件处理（通用实现）
      */
     protected onBuildingClick(event: EventTouch) {
@@ -1192,6 +1246,10 @@ export class Build extends Component {
             const unitTypeNameMap = DamageStatistics.getUnitTypeNameMap();
             const unitType = this.constructor.name; // 获取类名（如 'WatchTower', 'IceTower' 等）
             const unitName = unitTypeNameMap.get(unitType) || unitType;
+            console.info('[Build] 记录伤害统计',
+                'unitType =', unitType,
+                'unitName =', unitName,
+                'damage =', damage);
             damageStats.recordDamage(unitType, unitName, damage);
         } catch (error) {
             // 忽略错误，避免影响游戏流程

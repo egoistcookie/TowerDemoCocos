@@ -1,4 +1,5 @@
 import { _decorator, Component, Node, Vec3, Graphics, UITransform, Color, view, SpriteFrame, find, EventTouch, Camera } from 'cc';
+import { GameState } from './GameState';
 import { GridBuildingSelectionPanel } from './GridBuildingSelectionPanel';
 import { UnitSelectionManager } from './UnitSelectionManager';
 const { ccclass, property } = _decorator;
@@ -111,6 +112,50 @@ export class StoneWallGridPanel extends Component {
      * 网格点击事件
      */
     private onGridClick(event: EventTouch) {
+        // 1. 如果当前不在游戏进行中（例如主页、结算页、暂停/弹窗期间），不允许弹出选择框
+        const gmNode = find('Canvas/GameManager') || find('GameManager');
+        const gameManager = gmNode ? (gmNode.getComponent('GameManager') as any) : null;
+        if (gameManager && gameManager.getGameState) {
+            const state = gameManager.getGameState();
+            if (state !== GameState.Playing) {
+                if (this.selectionPanel) {
+                    this.selectionPanel.hide();
+                }
+                return;
+            }
+        }
+
+        // 2. 如果有全屏弹窗/遮罩（结算页、提示框、单位介绍等），不允许弹出选择框
+        const canvas = find('Canvas');
+        if (canvas) {
+            // GamePopup 遮罩
+            const popupMask = canvas.getChildByName('GamePopupMask');
+            if (popupMask && popupMask.active) {
+                if (this.selectionPanel) {
+                    this.selectionPanel.hide();
+                }
+                return;
+            }
+
+            // 单位介绍遮罩
+            const unitIntroMask = canvas.getChildByName('UnitIntroMask');
+            if (unitIntroMask && unitIntroMask.active) {
+                if (this.selectionPanel) {
+                    this.selectionPanel.hide();
+                }
+                return;
+            }
+
+            // 结算弹窗（GameOverDialog）
+            const gameOverDialog = canvas.getChildByName('GameOverDialog');
+            if (gameOverDialog && gameOverDialog.active) {
+                if (this.selectionPanel) {
+                    this.selectionPanel.hide();
+                }
+                return;
+            }
+        }
+
         // 检查是否有选中单位，如果有则不显示选择框
         const unitSelectionManagerNode = find('Canvas/UnitSelectionManager');
         if (unitSelectionManagerNode) {

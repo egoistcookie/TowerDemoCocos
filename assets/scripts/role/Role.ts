@@ -2248,6 +2248,8 @@ export class Role extends Component {
                         const enemyScript = this.getEnemyScript(targetNode);
                         if (enemyScript && enemyScript.takeDamage) {
                             enemyScript.takeDamage(damage);
+                            // 记录伤害统计
+                            this.recordDamageToStatistics(damage);
                         }
                     }
                 }
@@ -3262,7 +3264,22 @@ export class Role extends Component {
             const unitTypeNameMap = DamageStatistics.getUnitTypeNameMap();
             const unitType = this.constructor.name; // 获取类名（如 'WatchTower', 'Arrower' 等）
             const unitName = unitTypeNameMap.get(unitType) || unitType;
-            damageStats.recordDamage(unitType, unitName, damage);
+            // 剑士：把受到的伤害记为“承伤贡献”
+            if (unitType === 'ElfSwordsman') {
+                console.info('[Role] 记录承伤统计',
+                    'unitType =', unitType,
+                    'unitName =', unitName,
+                    'damageTaken =', damage);
+                damageStats.recordDamageTaken(unitType, unitName, damage);
+            }
+            // 其它单位：正常按输出伤害统计
+            else {
+                console.info('[Role] 记录伤害统计',
+                    'unitType =', unitType,
+                    'unitName =', unitName,
+                    'damage =', damage);
+                damageStats.recordDamage(unitType, unitName, damage);
+            }
         } catch (error) {
             // 忽略错误，避免影响游戏流程
             console.warn('[Role] 记录伤害统计失败:', error);

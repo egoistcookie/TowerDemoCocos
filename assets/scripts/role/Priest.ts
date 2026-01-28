@@ -1,6 +1,7 @@
 import { _decorator, SpriteFrame, Prefab, Texture2D, AudioClip, Node, Vec3, find, CCString } from 'cc';
 import { Role } from './Role';
 import { GameManager, GameState } from '../GameManager';
+import { DamageStatistics } from '../DamageStatistics';
 const { ccclass, property } = _decorator;
 
 @ccclass('Priest')
@@ -362,6 +363,17 @@ export class Priest extends Role {
             const healAmount = this.attackDamage > 0 ? this.attackDamage : 10;
             if (script.heal && typeof script.heal === 'function') {
                 script.heal(healAmount);
+            }
+
+            // 记录牧师的治疗贡献到统计系统
+            try {
+                const damageStats = DamageStatistics.getInstance();
+                const unitTypeNameMap = DamageStatistics.getUnitTypeNameMap();
+                const unitType = this.constructor.name; // 'Priest'
+                const unitName = unitTypeNameMap.get(unitType) || this.unitName || '牧师';
+                damageStats.recordHeal(unitType, unitName, healAmount);
+            } catch (e) {
+                // 忽略异常，避免影响战斗流程
             }
         });
     }

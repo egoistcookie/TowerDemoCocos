@@ -190,6 +190,14 @@ export class TowerBuilder extends Component {
     }
 
     /**
+     * 重新开始游戏时重置内部状态，允许重新生成初始石墙和哨塔
+     */
+    public resetForRestart() {
+        this.initialStoneWallsPlaced = false;
+        this.initialWatchTowersPlaced = false;
+    }
+
+    /**
      * 从预制体的 Sprite 组件中自动提取图标（如果未在编辑器中手动指定）
      */
     private ensureIconsFromPrefabs() {
@@ -1750,10 +1758,10 @@ export class TowerBuilder extends Component {
                             this.stoneWallGridPanelComponent.occupyGrid(grid.x, grid.y + 1, tower)) {
                             towerScript.gridX = grid.x;
                             towerScript.gridY = grid.y;
-                            // 调整位置，使其居中在两个网格之间
+                            // 调整位置：在原有基础上整体向下偏移 25 像素
                             const gridPos = this.stoneWallGridPanelComponent.gridToWorld(grid.x, grid.y);
                             if (gridPos) {
-                                const adjustedPos = new Vec3(gridPos.x, gridPos.y + 25, gridPos.z); // 向上偏移25像素（半个网格）
+                                const adjustedPos = new Vec3(gridPos.x, gridPos.y, gridPos.z);
                                 tower.setWorldPosition(adjustedPos);
                             }
                         } else {
