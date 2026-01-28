@@ -1507,7 +1507,18 @@ export class UIManager extends Component {
             this.findGameManager();
         }
         
-        // 2. 在退出前结算经验值
+        // 2. 如果结算面板未显示，先显示结算面板
+        if (this.gameManager) {
+            const gameOverDialog = (this.gameManager as any).gameOverDialog;
+            if (!gameOverDialog || !gameOverDialog.active) {
+                // 显示结算面板（主动退出）
+                (this.gameManager as any).showGameResultPanel(null);
+                return; // 显示结算面板后，等待用户再次点击退出按钮
+            }
+        }
+        
+        // 3. 如果结算面板已显示，则真正退出游戏
+        // 在退出前结算经验值（虽然已经在showGameResultPanel中结算了，但这里确保保存）
         if (this.gameManager) {
             // 直接调用结算方法
             this.gameManager.settleGameExperience();
@@ -1515,7 +1526,7 @@ export class UIManager extends Component {
         } else {
         }
         
-        // 2. 立即手动重置UI状态，确保游戏立即退出到首页
+        // 4. 立即手动重置UI状态，确保游戏立即退出到首页
         // 查找或创建底部三页签UI
         let bottomSelectionNode = find('Canvas/BottomSelection');
         if (!bottomSelectionNode) {
@@ -1544,7 +1555,7 @@ export class UIManager extends Component {
             }
         }
         
-        // 3. 隐藏所有游戏元素
+        // 5. 隐藏所有游戏元素
         const gameNodes = [
             'Canvas/Crystal',
             'Enemies',
@@ -1556,6 +1567,18 @@ export class UIManager extends Component {
             const node = find(nodePath);
             if (node) {
                 node.active = false;
+            }
+        }
+        
+        // 6. 隐藏结算面板
+        if (this.gameManager) {
+            const gameOverDialog = (this.gameManager as any).gameOverDialog;
+            if (gameOverDialog) {
+                gameOverDialog.active = false;
+            }
+            const gameOverPanel = (this.gameManager as any).gameOverPanel;
+            if (gameOverPanel) {
+                gameOverPanel.active = false;
             }
         }
     }

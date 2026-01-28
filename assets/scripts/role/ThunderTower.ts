@@ -798,6 +798,8 @@ export class ThunderTower extends Build {
         
         if (enemyScript && enemyScript.takeDamage) {
             enemyScript.takeDamage(damage);
+            // 记录伤害统计
+            this.recordDamageToStatistics(damage);
         }
     }
 

@@ -166,6 +166,8 @@ export class Hunter extends Role {
             // 直接伤害（无特效）
             if (enemyScript.takeDamage) {
                 enemyScript.takeDamage(this.attackDamage);
+                // 记录伤害统计
+                this.recordDamageToStatistics(this.attackDamage);
             }
         }
     }
@@ -235,6 +237,8 @@ export class Hunter extends Role {
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         if (enemyScript.takeDamage) {
                             enemyScript.takeDamage(damage);
+                            // 记录伤害统计
+                            this.recordDamageToStatistics(damage);
                         }
                     }
                 }

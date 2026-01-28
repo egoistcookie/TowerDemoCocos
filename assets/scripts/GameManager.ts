@@ -8,6 +8,7 @@ import { UnitPool } from './UnitPool';
 import { BuildingPool } from './BuildingPool';
 import { GameState } from './GameState';
 import { GamePopup } from './GamePopup';
+import { DamageStatistics } from './DamageStatistics';
 const { ccclass, property } = _decorator;
 
 // 重新导出 GameState 以保持向后兼容
@@ -604,6 +605,15 @@ export class GameManager extends Component {
         // 游戏结束时，清理所有单位（敌人直接消失，塔停止移动）
         this.cleanupAllUnitsForEndGame();
         
+        // 显示结算面板
+        this.showGameResultPanel(state);
+    }
+    
+    /**
+     * 显示游戏结算面板（统一方法，用于游戏结束和主动退出）
+     * @param state 游戏状态（Victory/Defeat/Other），如果为null则显示为"主动退出"
+     */
+    showGameResultPanel(state: GameState | null = null) {
         // 结算经验值（即使为0也要保存，确保数据持久化）
         if (this.playerDataManager) {
             if (this.currentGameExp > 0) {
@@ -654,8 +664,12 @@ export class GameManager extends Component {
             this.exitGameButton.node.active = true;
         }
         
+        // 设置结果标签文本
         if (this.gameOverLabel) {
-            if (state === GameState.Victory) {
+            if (state === null) {
+                // 主动退出
+                this.gameOverLabel.string = '游戏结算';
+            } else if (state === GameState.Victory) {
                 this.gameOverLabel.string = '胜利！';
                 
                 // 记录当前关卡为已通过
@@ -663,15 +677,24 @@ export class GameManager extends Component {
                     const currentLevel = this.uiManager.getCurrentLevel();
                     if (this.playerDataManager && currentLevel) {
                         this.playerDataManager.passLevel(currentLevel);
-                        console.info(`[GameManager.endGame] 关卡 ${currentLevel} 已标记为通过`);
+                        console.info(`[GameManager.showGameResultPanel] 关卡 ${currentLevel} 已标记为通过`);
                     }
                 }
-            } else {
+            } else if (state === GameState.Defeat) {
                 this.gameOverLabel.string = '失败！';
+            } else {
+                this.gameOverLabel.string = '游戏结束';
             }
             // 调大字体
             this.gameOverLabel.fontSize = 48;
         }
+        
+        // 停止伤害统计
+        const damageStats = DamageStatistics.getInstance();
+        damageStats.stopRecording();
+        
+        // 创建伤害统计图表
+        this.createDamageStatsPanel();
         
         // 确保UI元素已移动到弹窗中
         this.moveUIElementsToDialog();
@@ -685,13 +708,156 @@ export class GameManager extends Component {
         // 显示弹窗
         if (this.gameOverDialog) {
             this.gameOverDialog.active = true;
-            console.info('[GameManager.endGame] 游戏结束弹窗已显示');
+            console.info('[GameManager.showGameResultPanel] 游戏结算弹窗已显示');
         } else {
-            console.warn('[GameManager.endGame] 游戏结束弹窗不存在！');
+            console.warn('[GameManager.showGameResultPanel] 游戏结算弹窗不存在！');
+        }
+    }
+    
+    /**
+     * 创建伤害统计图表面板
+     */
+    private createDamageStatsPanel() {
+        if (!this.gameOverDialog) {
+            return;
         }
         
-        // 确保游戏状态已更新
-        console.info(`[GameManager.endGame] 游戏状态已更新为: ${this.gameState}`);
+        // 检查是否已存在伤害统计面板
+        let statsPanel = this.gameOverDialog.getChildByName('DamageStatsPanel');
+        if (statsPanel) {
+            statsPanel.destroy();
+        }
+        
+        // 创建伤害统计面板
+        statsPanel = new Node('DamageStatsPanel');
+        statsPanel.setParent(this.gameOverDialog);
+        
+        // 添加UITransform组件（调整尺寸：高度增加，宽度减少）
+        const statsTransform = statsPanel.addComponent(UITransform);
+        statsTransform.setContentSize(380, 150);
+        
+        // 创建背景
+        const statsBg = new Node('StatsBackground');
+        statsBg.setParent(statsPanel);
+        const bgTransform = statsBg.addComponent(UITransform);
+        bgTransform.setContentSize(380, 150);
+        const bgGraphics = statsBg.addComponent(Graphics);
+        bgGraphics.fillColor = new Color(20, 20, 20, 200);
+        bgGraphics.roundRect(-190, -75, 380, 150, 8);
+        bgGraphics.fill();
+        bgGraphics.strokeColor = new Color(150, 150, 150, 255);
+        bgGraphics.lineWidth = 1;
+        bgGraphics.roundRect(-190, -75, 380, 150, 8);
+        bgGraphics.stroke();
+        
+        // 获取DPS前三位的单位
+        const damageStats = DamageStatistics.getInstance();
+        const topUnits = damageStats.getTopDPSUnits(3);
+        
+        if (topUnits.length === 0) {
+            // 如果没有伤害数据，显示提示
+            const noDataLabel = new Node('NoDataLabel');
+            noDataLabel.setParent(statsPanel);
+            const labelTransform = noDataLabel.addComponent(UITransform);
+            labelTransform.setContentSize(380, 150);
+            const label = noDataLabel.addComponent(Label);
+            label.string = '暂无伤害数据';
+            label.fontSize = 20;
+            label.color = new Color(150, 150, 150, 255);
+            label.horizontalAlign = Label.HorizontalAlign.CENTER;
+            label.verticalAlign = Label.VerticalAlign.CENTER;
+            return;
+        }
+        
+        // 创建标题
+        const titleLabel = new Node('TitleLabel');
+        titleLabel.setParent(statsPanel);
+        titleLabel.setPosition(0, 60, 0);
+        const titleTransform = titleLabel.addComponent(UITransform);
+        titleTransform.setContentSize(380, 25);
+        const title = titleLabel.addComponent(Label);
+        title.string = 'DPS排行榜';
+        title.fontSize = 18;
+        title.color = new Color(255, 255, 200, 255);
+        title.horizontalAlign = Label.HorizontalAlign.CENTER;
+        title.verticalAlign = Label.VerticalAlign.CENTER;
+        
+        // 计算最大DPS（用于比例显示）
+        const maxDPS = Math.max(...topUnits.map(u => u.dps));
+        
+        // 创建每个单位的统计项（调整布局：缩小名称和数值之间的距离）
+        const itemHeight = 28;
+        const itemSpacing = 6;
+        const startY = 25;
+        
+        topUnits.forEach((unit, index) => {
+            const itemNode = new Node(`StatsItem_${index}`);
+            itemNode.setParent(statsPanel);
+            itemNode.setPosition(0, startY - index * (itemHeight + itemSpacing), 0);
+            
+            const itemTransform = itemNode.addComponent(UITransform);
+            itemTransform.setContentSize(350, itemHeight);
+            
+            // 单位名称标签（向左移动，缩小与数值的距离）
+            const nameLabel = new Node('NameLabel');
+            nameLabel.setParent(itemNode);
+            nameLabel.setPosition(-140, 0, 0);
+            const nameTransform = nameLabel.addComponent(UITransform);
+            nameTransform.setContentSize(80, itemHeight);
+            const name = nameLabel.addComponent(Label);
+            name.string = unit.unitName;
+            name.fontSize = 16;
+            name.color = new Color(255, 255, 255, 255);
+            name.horizontalAlign = Label.HorizontalAlign.LEFT;
+            name.verticalAlign = Label.VerticalAlign.CENTER;
+            
+            // DPS数值标签（向右移动，缩小与名称的距离）
+            const dpsLabel = new Node('DPSLabel');
+            dpsLabel.setParent(itemNode);
+            dpsLabel.setPosition(-30, 0, 0);
+            const dpsTransform = dpsLabel.addComponent(UITransform);
+            dpsTransform.setContentSize(70, itemHeight);
+            const dps = dpsLabel.addComponent(Label);
+            dps.string = `${Math.floor(unit.dps)}`;
+            dps.fontSize = 14;
+            dps.color = new Color(200, 255, 200, 255);
+            dps.horizontalAlign = Label.HorizontalAlign.RIGHT;
+            dps.verticalAlign = Label.VerticalAlign.CENTER;
+            
+            // 伤害条背景（调整位置和大小）
+            const barBg = new Node('BarBackground');
+            barBg.setParent(itemNode);
+            barBg.setPosition(50, 0, 0);
+            const barBgTransform = barBg.addComponent(UITransform);
+            barBgTransform.setContentSize(250, 16);
+            const barBgGraphics = barBg.addComponent(Graphics);
+            barBgGraphics.fillColor = new Color(50, 50, 50, 255);
+            barBgGraphics.roundRect(-125, -8, 250, 16, 3);
+            barBgGraphics.fill();
+            
+            // 伤害条（根据DPS比例）
+            const bar = new Node('Bar');
+            bar.setParent(barBg);
+            const barTransform = bar.addComponent(UITransform);
+            const barWidth = maxDPS > 0 ? (unit.dps / maxDPS) * 250 : 0;
+            barTransform.setContentSize(barWidth, 16);
+            bar.setPosition(-125 + barWidth / 2, 0, 0);
+            const barGraphics = bar.addComponent(Graphics);
+            
+            // 根据排名设置不同颜色
+            let barColor: Color;
+            if (index === 0) {
+                barColor = new Color(255, 215, 0, 255); // 金色
+            } else if (index === 1) {
+                barColor = new Color(192, 192, 192, 255); // 银色
+            } else {
+                barColor = new Color(205, 127, 50, 255); // 铜色
+            }
+            
+            barGraphics.fillColor = barColor;
+            barGraphics.roundRect(-barWidth / 2, -8, barWidth, 16, 3);
+            barGraphics.fill();
+        });
     }
     
     /**
@@ -821,9 +987,25 @@ export class GameManager extends Component {
      * 退出游戏按钮点击事件
      */
     private onExitGameClick() {
-        // 结算经验值
+        // 如果结算面板未显示，先显示结算面板
+        if (!this.gameOverDialog || !this.gameOverDialog.active) {
+            // 显示结算面板（主动退出）
+            this.showGameResultPanel(null);
+            return; // 显示结算面板后，等待用户再次点击退出按钮
+        }
+        
+        // 如果结算面板已显示，则真正退出游戏
+        // 结算经验值（虽然已经在showGameResultPanel中结算了，但这里确保保存）
         if (this.playerDataManager) {
             this.settleGameExperience();
+        }
+        
+        // 隐藏结算面板
+        if (this.gameOverDialog) {
+            this.gameOverDialog.active = false;
+        }
+        if (this.gameOverPanel) {
+            this.gameOverPanel.active = false;
         }
         
         // 直接调用UIManager的onExitGameClick方法（无需确认框）
@@ -874,13 +1056,13 @@ export class GameManager extends Component {
         
         // 添加UITransform组件
         const dialogTransform = this.gameOverDialog.addComponent(UITransform);
-        dialogTransform.setContentSize(500, 400); // 弹窗大小
+        dialogTransform.setContentSize(500, 600); // 弹窗大小（增加高度以容纳伤害统计图表）
         
         // 创建弹窗背景（使用Graphics绘制半透明背景）
         const graphics = this.gameOverDialog.addComponent(Graphics);
         graphics.fillColor = new Color(30, 30, 30, 230); // 深色半透明背景
         const width = 500;
-        const height = 400;
+        const height = 600; // 增加高度
         const cornerRadius = 10; // 圆角半径
         graphics.roundRect(-width / 2, -height / 2, width, height, cornerRadius);
         graphics.fill();
@@ -970,7 +1152,7 @@ export class GameManager extends Component {
     
     /**
      * 调整游戏结束UI的布局
-     * 布局顺序（从上到下）：结果标签 -> 经验值标签 -> 退出游戏按钮 -> 重新开始按钮
+     * 布局顺序（从上到下）：结果标签 -> 伤害统计图表 -> 经验值标签 -> 退出游戏按钮 -> 重新开始按钮
      */
     private layoutGameOverUI() {
         if (!this.gameOverDialog) {
@@ -987,9 +1169,9 @@ export class GameManager extends Component {
         }
         
         // 所有元素相对于弹窗中心定位（弹窗中心为0,0）
-        const spacing = 25; // 元素间距
-        const buttonSpacing = 50; // 按钮与经验值标签之间的间距（增大）
-        let currentY = 120; // 从弹窗中心上方开始（结果标签位置）
+        const spacing = 20; // 元素间距
+        const buttonSpacing = 30; // 按钮与经验值标签之间的间距
+        let currentY = 250; // 从弹窗中心上方开始（结果标签位置，因为面板高度增加了）
         
         // 结果标签位置（最上方）
         if (this.gameOverLabel && this.gameOverLabel.node) {
@@ -999,11 +1181,20 @@ export class GameManager extends Component {
             currentY = currentY - labelHeight / 2 - spacing;
         }
         
-        // 经验值标签位置（在结果标签下方）
+        // 伤害统计图表位置（在结果标签下方）
+        const damageStatsNode = this.gameOverDialog.getChildByName('DamageStatsPanel');
+        if (damageStatsNode) {
+            const statsTransform = damageStatsNode.getComponent(UITransform);
+            const statsHeight = statsTransform ? statsTransform.height : 150;
+            damageStatsNode.setPosition(0, currentY - statsHeight / 2, 0);
+            currentY = currentY - statsHeight / 2 - spacing * 2; // 增加与经验值标签的间距
+        }
+        
+        // 经验值标签位置（在伤害统计图表下方）
         if (this.expLabel && this.expLabel.node) {
-            this.expLabel.fontSize = 28;
+            this.expLabel.fontSize = 24;
             const expLabelTransform = this.expLabel.node.getComponent(UITransform);
-            const expLabelHeight = expLabelTransform ? expLabelTransform.height : 100;
+            const expLabelHeight = expLabelTransform ? expLabelTransform.height : 80;
             this.expLabel.node.setPosition(0, currentY - expLabelHeight / 2, 0);
             currentY = currentY - expLabelHeight / 2 - buttonSpacing; // 使用更大的间距
         }
@@ -1376,6 +1567,9 @@ export class GameManager extends Component {
      * 真正的开始游戏逻辑（在分包加载完成后调用）
      */
     private _startGameInternal() {
+        // 启动伤害统计
+        const damageStats = DamageStatistics.getInstance();
+        damageStats.startRecording();
         // 确保时间缩放正常（防止退出时暂停导致的问题）
         const currentTimeScale = director.getScheduler().getTimeScale();
         if (currentTimeScale === 0) {
@@ -1637,6 +1831,11 @@ export class GameManager extends Component {
         // 恢复时间缩放（确保游戏时间正常，避免退出时暂停导致的问题）
         director.getScheduler().setTimeScale(1);
         this.originalTimeScale = 1;
+        
+        // 停止伤害统计
+        const damageStats = DamageStatistics.getInstance();
+        damageStats.stopRecording();
+        damageStats.reset();
         
         // 在重新开始游戏前，结算当前游戏的经验值
         this.settleGameExperience();

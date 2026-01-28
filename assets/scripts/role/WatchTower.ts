@@ -1020,6 +1020,8 @@ export class WatchTower extends Build {
             // 如果没有弓箭预制体，直接造成伤害
             if (targetScript.takeDamage) {
                 targetScript.takeDamage(this.attackDamage);
+                // 记录伤害统计
+                this.recordDamageToStatistics(this.attackDamage);
             }
         }
     }

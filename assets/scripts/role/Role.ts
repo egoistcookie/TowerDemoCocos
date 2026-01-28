@@ -10,6 +10,7 @@ import { UnitInfo } from '../UnitInfoPanel';
 import { UnitType } from '../UnitType';
 import { UnitManager } from '../UnitManager';
 import { UnitPool } from '../UnitPool';
+import { DamageStatistics } from '../DamageStatistics';
 // import { PerformanceMonitor } from './PerformanceMonitor';
 const { ccclass, property } = _decorator;
 
@@ -2274,6 +2275,9 @@ export class Role extends Component {
             const enemyScript = this.getEnemyScript(this.currentTarget);
             if (enemyScript && enemyScript.takeDamage) {
                 enemyScript.takeDamage(this.attackDamage);
+                
+                // 记录伤害统计
+                this.recordDamageToStatistics(this.attackDamage);
             }
         }
 
@@ -3242,6 +3246,27 @@ export class Role extends Component {
      */
     getIsHighlighted(): boolean {
         return this.isHighlighted;
+    }
+    
+    /**
+     * 记录伤害到统计系统
+     * @param damage 伤害值
+     */
+    protected recordDamageToStatistics(damage: number) {
+        if (damage <= 0) {
+            return;
+        }
+        
+        try {
+            const damageStats = DamageStatistics.getInstance();
+            const unitTypeNameMap = DamageStatistics.getUnitTypeNameMap();
+            const unitType = this.constructor.name; // 获取类名（如 'WatchTower', 'Arrower' 等）
+            const unitName = unitTypeNameMap.get(unitType) || unitType;
+            damageStats.recordDamage(unitType, unitName, damage);
+        } catch (error) {
+            // 忽略错误，避免影响游戏流程
+            console.warn('[Role] 记录伤害统计失败:', error);
+        }
     }
 }
 

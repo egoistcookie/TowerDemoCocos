@@ -318,6 +318,8 @@ export class WarAncientTree extends Build {
             // 直接伤害（无特效）
             if (enemyScript.takeDamage) {
                 enemyScript.takeDamage(this.attackDamage);
+                // 记录伤害统计
+                this.recordDamageToStatistics(this.attackDamage);
             }
         }
     }
@@ -463,6 +465,8 @@ export class WarAncientTree extends Build {
                 const enemyScript = this.currentTarget?.getComponent('Enemy') as any || this.currentTarget?.getComponent('OrcWarrior') as any || this.currentTarget?.getComponent('OrcWarlord') as any || this.currentTarget?.getComponent('TrollSpearman') as any;
                 if (enemyScript && enemyScript.takeDamage) {
                     enemyScript.takeDamage(damage);
+                    // 记录伤害统计
+                    this.recordDamageToStatistics(damage);
                 }
             }
         );

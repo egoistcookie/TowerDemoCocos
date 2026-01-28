@@ -173,6 +173,8 @@ export class ElfSwordsman extends Role {
             }
             // 直接造成伤害
             enemyScript.takeDamage(this.attackDamage);
+            // 记录伤害统计
+            this.recordDamageToStatistics(this.attackDamage);
         }
     }
 }
