@@ -25,6 +25,8 @@ interface PlayerData {
     talentLevels?: Record<string, number>;  // 天赋ID -> 等级
     unitEnhancements?: Record<string, UnitEnhancement>;  // 单位ID -> 强化数据
     passedLevels?: number[];  // 已通过的关卡列表（关卡号）
+    stamina?: number;  // 体力值（0-50）
+    lastStaminaRecoverTime?: number;  // 最后恢复体力的时间戳（毫秒）
 }
 
 @ccclass('PlayerDataManager')
@@ -35,7 +37,9 @@ export class PlayerDataManager {
         talentPoints: 0,
         talentLevels: {},
         unitEnhancements: {},
-        passedLevels: [1]  // 默认第一关已通过（解锁）
+        passedLevels: [1],  // 默认第一关已通过（解锁）
+        stamina: 50,  // 默认满体力
+        lastStaminaRecoverTime: Date.now()  // 默认当前时间
     };
     private isLoaded: boolean = false;
     private loadPromise: Promise<void> | null = null;
@@ -77,6 +81,8 @@ export class PlayerDataManager {
                         talentLevels: {},
                         unitEnhancements: {},
                         passedLevels: [1],  // 默认第一关已通过
+                        stamina: 50,  // 默认满体力
+                        lastStaminaRecoverTime: Date.now(),
                         ...parsedData
                     };
                     if (!this.playerData.talentLevels) {
@@ -87,6 +93,12 @@ export class PlayerDataManager {
                     }
                     if (!this.playerData.passedLevels || this.playerData.passedLevels.length === 0) {
                         this.playerData.passedLevels = [1];  // 默认第一关已通过
+                    }
+                    if (this.playerData.stamina === undefined) {
+                        this.playerData.stamina = 50;
+                    }
+                    if (this.playerData.lastStaminaRecoverTime === undefined) {
+                        this.playerData.lastStaminaRecoverTime = Date.now();
                     }
                     this.isLoaded = true;
                     resolve();
@@ -105,7 +117,9 @@ export class PlayerDataManager {
                         talentPoints: 0,
                         talentLevels: {},
                         unitEnhancements: {},
-                        passedLevels: [1]  // 默认第一关已通过
+                        passedLevels: [1],  // 默认第一关已通过
+                        stamina: 50,  // 默认满体力
+                        lastStaminaRecoverTime: Date.now()
                     };
                     this.isLoaded = true;
                     this.saveData(); // 保存默认值到localStorage
@@ -124,6 +138,8 @@ export class PlayerDataManager {
                             talentPoints: 5,
                             talentLevels: {},
                             unitEnhancements: {},
+                            stamina: 50,
+                            lastStaminaRecoverTime: Date.now(),
                             ...configData, 
                             ...localStorageData 
                         };
@@ -134,12 +150,20 @@ export class PlayerDataManager {
                         if (!this.playerData.unitEnhancements) {
                             this.playerData.unitEnhancements = {};
                         }
+                        if (this.playerData.stamina === undefined) {
+                            this.playerData.stamina = 50;
+                        }
+                        if (this.playerData.lastStaminaRecoverTime === undefined) {
+                            this.playerData.lastStaminaRecoverTime = Date.now();
+                        }
                     } catch (e) {
                         this.playerData = {
                             experience: 0,
                             talentPoints: 5,
                             talentLevels: {},
                             unitEnhancements: {},
+                            stamina: 50,
+                            lastStaminaRecoverTime: Date.now(),
                             ...configData
                         };
                     }
@@ -149,6 +173,8 @@ export class PlayerDataManager {
                         talentPoints: 5,
                         talentLevels: {},
                         unitEnhancements: {},
+                        stamina: 50,
+                        lastStaminaRecoverTime: Date.now(),
                         ...configData
                     };
                 }
@@ -358,6 +384,61 @@ export class PlayerDataManager {
      */
     public getPlayerData(): PlayerData {
         return { ...this.playerData };
+    }
+
+    /**
+     * 获取当前体力值（会自动计算恢复）
+     */
+    public getStamina(): number {
+        this.updateStaminaRecovery();
+        return Math.min(50, Math.max(0, this.playerData.stamina || 50));
+    }
+
+    /**
+     * 消耗体力
+     * @param amount 消耗的体力值
+     * @returns 是否成功消耗
+     */
+    public consumeStamina(amount: number): boolean {
+        this.updateStaminaRecovery();
+        const currentStamina = this.playerData.stamina || 50;
+        if (currentStamina >= amount) {
+            this.playerData.stamina = currentStamina - amount;
+            this.saveData();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 更新体力恢复（每分钟回复1点）
+     */
+    private updateStaminaRecovery(): void {
+        const now = Date.now();
+        const lastTime = this.playerData.lastStaminaRecoverTime || now;
+        const currentStamina = this.playerData.stamina || 50;
+        
+        // 计算经过的分钟数
+        const minutesPassed = Math.floor((now - lastTime) / (60 * 1000));
+        
+        if (minutesPassed > 0 && currentStamina < 50) {
+            // 每分钟回复1点，最多回复到50
+            const newStamina = Math.min(50, currentStamina + minutesPassed);
+            this.playerData.stamina = newStamina;
+            // 更新最后恢复时间（只记录到分钟级别）
+            this.playerData.lastStaminaRecoverTime = lastTime + minutesPassed * 60 * 1000;
+            this.saveData();
+        }
+    }
+
+    /**
+     * 检查是否有足够的体力
+     * @param amount 需要的体力值
+     * @returns 是否有足够的体力
+     */
+    public hasEnoughStamina(amount: number): boolean {
+        this.updateStaminaRecovery();
+        return (this.playerData.stamina || 50) >= amount;
     }
 }
 

@@ -73,11 +73,12 @@ export class GameManager extends Component {
     private prefabsSubLoaded: boolean = false;
     private isLoadingPrefabsSub: boolean = false;
 
-    // 顶部左侧等级 HUD（头像 + 等级文字 + 经验条）
+    // 顶部左侧等级 HUD（头像 + 等级文字 + 经验条 + 体力）
     private levelHudNode: Node | null = null;
     private levelLabel: Label | null = null;
     private levelExpBarNode: Node | null = null;
     private levelExpBarMaxWidth: number = 120;
+    private staminaLabel: Label | null = null;  // 体力标签
 
     // 结算页等级进度条
     private gameOverLevelBarBg: Node | null = null;
@@ -87,19 +88,21 @@ export class GameManager extends Component {
     private gameOverLevelBarHeight: number = 20;
 
     /**
-     * 在结算页创建或更新“升级进度条”，并根据本局战斗的经验变化播放从0到当前进度的动画。
+     * 在结算页创建或更新"升级进度条"，并根据本局战斗的经验变化播放从0到当前进度的动画。
      * @param prevLevel 结算前等级（使用天赋点数量表示等级）
      * @param prevExp   结算前当前等级内的经验（0-99）
      * @param currentLevel 结算后等级
      * @param currentExp   结算后当前等级内的经验（0-99）
      * @param levelsGained 本局提升的等级数
+     * @param expGained 本局获得的经验值
      */
     private createOrUpdateGameOverLevelBar(
         prevLevel: number,
         prevExp: number,
         currentLevel: number,
         currentExp: number,
-        levelsGained: number
+        levelsGained: number,
+        expGained: number = 0
     ) {
         if (!this.gameOverDialog) {
             return;
@@ -114,7 +117,7 @@ export class GameManager extends Component {
             bgTransform.setContentSize(this.gameOverLevelBarMaxWidth, this.gameOverLevelBarHeight + 8);
 
             // 放在经验说明文字下方一点（布局函数会整体调整Y）
-            this.gameOverLevelBarBg.setPosition(0, -40, 0);
+            this.gameOverLevelBarBg.setPosition(0, -100, 0);
 
             const bgG = this.gameOverLevelBarBg.addComponent(Graphics);
             bgG.fillColor = new Color(40, 40, 40, 220);
@@ -146,10 +149,11 @@ export class GameManager extends Component {
 
             const barG = this.gameOverLevelBar.addComponent(Graphics);
             barG.fillColor = new Color(120, 220, 80, 255);
-            barG.roundRect(0, - (this.gameOverLevelBarHeight - 4) / 2, this.gameOverLevelBarMaxWidth, this.gameOverLevelBarHeight - 4, (this.gameOverLevelBarHeight - 4) / 2);
+            // 初始绘制为0宽度，后续会根据UITransform宽度动态更新
+            barG.roundRect(0, - (this.gameOverLevelBarHeight - 4) / 2, 0, this.gameOverLevelBarHeight - 4, (this.gameOverLevelBarHeight - 4) / 2);
             barG.fill();
 
-            // 等级文字：例如 "等级 Lv.3 → Lv.5"
+            // 等级文字：例如 "等级 Lv.3 → Lv.5 (+50经验值)"
             const labelNode = new Node('GameOverLevelLabel');
             labelNode.setParent(this.gameOverLevelBarBg);
             this.gameOverLevelLabel = labelNode.addComponent(Label);
@@ -160,18 +164,25 @@ export class GameManager extends Component {
 
             const labelTransform = labelNode.addComponent(UITransform);
             labelTransform.setContentSize(this.gameOverLevelBarMaxWidth, 24);
-            labelNode.setPosition(0, this.gameOverLevelBarHeight / 2 + 18, 0);
+            // 增加Y坐标间隔，从18改为28
+            labelNode.setPosition(0, this.gameOverLevelBarHeight / 2 + 28, 0);
         }
 
-        // 更新等级文字
+        // 更新等级文字（添加经验值显示）
         const fromLevel = Math.max(1, prevLevel);
         const toLevel = Math.max(1, currentLevel);
         if (this.gameOverLevelLabel) {
+            let levelText = '';
             if (fromLevel === toLevel) {
-                this.gameOverLevelLabel.string = `等级 Lv.${toLevel}`;
+                levelText = `等级 Lv.${toLevel}`;
             } else {
-                this.gameOverLevelLabel.string = `等级 Lv.${fromLevel} → Lv.${toLevel}`;
+                levelText = `等级 Lv.${fromLevel} → Lv.${toLevel}`;
             }
+            // 添加经验值显示
+            if (expGained > 0) {
+                levelText += ` (+${expGained}经验值)`;
+            }
+            this.gameOverLevelLabel.string = levelText;
         }
 
         // 确保进度条存在
@@ -180,12 +191,24 @@ export class GameManager extends Component {
         }
 
         const barTransform = this.gameOverLevelBar.getComponent(UITransform);
-        if (!barTransform) {
+        const barG = this.gameOverLevelBar.getComponent(Graphics);
+        if (!barTransform || !barG) {
             return;
         }
 
+        // 更新进度条Graphics绘制的辅助方法
+        const updateBarGraphics = (width: number) => {
+            barG.clear();
+            if (width > 0) {
+                barG.fillColor = new Color(120, 220, 80, 255);
+                barG.roundRect(0, - (this.gameOverLevelBarHeight - 4) / 2, width, this.gameOverLevelBarHeight - 4, (this.gameOverLevelBarHeight - 4) / 2);
+                barG.fill();
+            }
+        };
+
         // 先重置为0宽度，再播放动画
         barTransform.setContentSize(0, this.gameOverLevelBarHeight - 4);
+        updateBarGraphics(0);
 
         const totalLevelsGained = Math.max(0, levelsGained);
         const finalExpRatio = Math.max(0, Math.min(1, currentExp / 100));
@@ -193,11 +216,13 @@ export class GameManager extends Component {
         // 如果没有获得经验，只显示静态进度
         if (this.currentGameExp <= 0 || (totalLevelsGained === 0 && prevLevel === currentLevel && prevExp === currentExp)) {
             const ratio = finalExpRatio;
-            barTransform.setContentSize(this.gameOverLevelBarMaxWidth * ratio, this.gameOverLevelBarHeight - 4);
+            const finalWidth = this.gameOverLevelBarMaxWidth * ratio;
+            barTransform.setContentSize(finalWidth, this.gameOverLevelBarHeight - 4);
+            updateBarGraphics(finalWidth);
             return;
         }
 
-        // 播放多级升级动画：每级一次“拉满”效果，最后一段拉到当前经验
+        // 播放多级升级动画：每级一次"拉满"效果，最后一段拉到当前经验
         const singleDuration = 0.4; // 每次拉满的时间
 
         const playFill = (targetRatio: number, onComplete?: () => void) => {
@@ -210,6 +235,8 @@ export class GameManager extends Component {
                 const t = Math.min(1, elapsed / singleDuration);
                 const width = startWidth + (targetWidth - startWidth) * t;
                 barTransform.setContentSize(width, this.gameOverLevelBarHeight - 4);
+                // 每次更新宽度时，重新绘制Graphics
+                updateBarGraphics(width);
                 if (t >= 1) {
                     this.unschedule(step);
                     if (onComplete) {
@@ -228,6 +255,7 @@ export class GameManager extends Component {
             if (remainingLevels > 0) {
                 // 对每一个完整升级，进度条从0拉满
                 barTransform.setContentSize(0, this.gameOverLevelBarHeight - 4);
+                updateBarGraphics(0);
                 playFill(1, () => {
                     remainingLevels--;
                     playSequence();
@@ -235,6 +263,7 @@ export class GameManager extends Component {
             } else {
                 // 最后一段：从0拉到当前经验进度
                 barTransform.setContentSize(0, this.gameOverLevelBarHeight - 4);
+                updateBarGraphics(0);
                 playFill(finalExpRatio);
             }
         };
@@ -471,6 +500,9 @@ export class GameManager extends Component {
         
         // 在游戏开始前隐藏所有游戏主体相关内容
         this.hideGameElements();
+        
+        // 初始化并显示左上角等级HUD（首页显示）
+        this.updateLevelHud();
     }
     
     /**
@@ -609,6 +641,9 @@ export class GameManager extends Component {
             if (pIcon) pIcon.active = false;
         }
 
+        // 更新左上角等级HUD显示状态（会根据gameMainPanel的显示状态自动控制）
+        this.updateLevelHud();
+
     }
     
     /**
@@ -661,6 +696,8 @@ export class GameManager extends Component {
      * 在游戏开始后显示所有游戏主体相关内容
      */
     showGameElements() {
+        // 隐藏左上角等级HUD（游戏开始时隐藏，由updateLevelHud根据gameMainPanel状态控制）
+        // 这里不需要手动隐藏，updateLevelHud会自动处理
         
         // 显示所有游戏元素
         const enemies = find('Enemies');
@@ -830,6 +867,24 @@ export class GameManager extends Component {
         // 统一控制 HUD 显隐：只有战斗中才显示，首页/暂停/结算等都隐藏
         this.setInGameUIVisible(isPlaying);
 
+        // 定期更新左上角等级HUD的显示状态（根据gameMainPanel的显示状态）
+        // 只在非游戏状态时检查，避免频繁检查影响性能
+        if (!isPlaying && this.levelHudNode && this.levelHudNode.isValid) {
+            const bottomSelectionNode = find('Canvas/BottomSelection');
+            let gameMainPanel: Node | null = null;
+            if (bottomSelectionNode) {
+                gameMainPanel = bottomSelectionNode.getChildByName('GameMainPanel');
+            }
+            const shouldShow = gameMainPanel && gameMainPanel.active === true;
+            if (this.levelHudNode.active !== shouldShow) {
+                this.levelHudNode.active = shouldShow;
+                if (shouldShow) {
+                    // 如果显示，更新内容
+                    this.updateLevelHud();
+                }
+            }
+        }
+
         if (!isPlaying) {
             return;
         }
@@ -885,10 +940,10 @@ export class GameManager extends Component {
             const uiTransform = this.levelHudNode.addComponent(UITransform);
             uiTransform.setContentSize(260, 60);
 
-            // 放到左上角（相对于 Canvas）
+            // 放到左上角（相对于 Canvas），位置继续往上移动
             const visibleSize = view.getVisibleSize();
             const offsetX = -visibleSize.width / 2 + 150;
-            const offsetY = visibleSize.height / 2 - 40;
+            const offsetY = visibleSize.height / 2 + 10;  // 继续往上移动，从-20改为+10
             this.levelHudNode.setPosition(offsetX, offsetY, 0);
 
             // 头像区域（左侧一个圆形或方形占位）
@@ -946,6 +1001,20 @@ export class GameManager extends Component {
             barG.fill();
 
             this.levelExpBarNode = barNode;
+
+            // 体力标签（显示在经验条下方）
+            const staminaLabelNode = new Node('StaminaLabel');
+            staminaLabelNode.setParent(this.levelHudNode);
+            this.staminaLabel = staminaLabelNode.addComponent(Label);
+            this.staminaLabel.string = '体力: 50/50';
+            this.staminaLabel.fontSize = 18;
+            this.staminaLabel.color = new Color(255, 200, 100, 255);
+            this.staminaLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
+            this.staminaLabel.verticalAlign = Label.VerticalAlign.CENTER;
+
+            const staminaLabelTransform = staminaLabelNode.addComponent(UITransform);
+            staminaLabelTransform.setContentSize(120, 24);
+            staminaLabelNode.setPosition(-30, -32, 0);  // 在经验条下方
         }
 
         if (!this.playerDataManager) {
@@ -966,6 +1035,26 @@ export class GameManager extends Component {
             if (barTransform) {
                 barTransform.setContentSize(this.levelExpBarMaxWidth * ratio, 12);
             }
+        }
+
+        // 更新体力显示
+        if (this.staminaLabel) {
+            const stamina = this.playerDataManager.getStamina();
+            this.staminaLabel.string = `体力: ${stamina}/50`;
+        }
+
+        // 根据游戏首页（gameMainPanel）的显示状态来控制levelHudNode的显示/隐藏
+        // 参考上一关、下一关按钮的显示逻辑：只在gameMainPanel显示时显示
+        const bottomSelectionNode = find('Canvas/BottomSelection');
+        let gameMainPanel: Node | null = null;
+        if (bottomSelectionNode) {
+            gameMainPanel = bottomSelectionNode.getChildByName('GameMainPanel');
+        }
+        
+        if (this.levelHudNode && this.levelHudNode.isValid) {
+            // 只在游戏首页（gameMainPanel）显示时显示levelHudNode
+            const shouldShow = gameMainPanel && gameMainPanel.active === true;
+            this.levelHudNode.active = shouldShow;
         }
     }
 
@@ -996,18 +1085,32 @@ export class GameManager extends Component {
     showGameResultPanel(state: GameState | null = null) {
         // 记录本次结果状态（null 表示主动退出）
         this.lastGameResultState = state;
+        
+        // 消耗体力（每局游戏无论输赢都消耗5点体力）
+        if (this.playerDataManager) {
+            this.playerDataManager.consumeStamina(5);
+        }
+        
+        // 保存经验相关的数据，用于后续创建进度条
+        let prevLevel = 0;
+        let prevExp = 0;
+        let currentLevel = 0;
+        let currentExp = 0;
+        let levelsGained = 0;
+        let expGainedThisGame = 0;
+        
         // 结算经验值（即使为0也要保存，确保数据持久化）
         if (this.playerDataManager) {
             if (this.currentGameExp > 0) {
                 // 结算前的等级和经验（用于做升级进度动画）
-                const prevLevel = this.playerDataManager.getTalentPoints();
-                const prevExp = this.playerDataManager.getExperience(); // 0-99
+                prevLevel = this.playerDataManager.getTalentPoints();
+                prevExp = this.playerDataManager.getExperience(); // 0-99
 
                 // 保存本次获得的经验值（用于显示）
-                const expGainedThisGame = this.currentGameExp;
-                const levelsGained = this.playerDataManager.addExperience(this.currentGameExp);
-                const currentLevel = this.playerDataManager.getTalentPoints();
-                const currentExp = this.playerDataManager.getExperience();
+                expGainedThisGame = this.currentGameExp;
+                levelsGained = this.playerDataManager.addExperience(this.currentGameExp);
+                currentLevel = this.playerDataManager.getTalentPoints();
+                currentExp = this.playerDataManager.getExperience();
                 const remainingExp = this.playerDataManager.getRemainingExpForNextLevel();
                 
                 // 在游戏结束面板显示经验和等级概览
@@ -1020,29 +1123,19 @@ export class GameManager extends Component {
                     // 如果expLabel未设置，尝试在gameOverPanel中创建
                     this.createExpLabelIfNeeded(expGainedThisGame, 0);
                 }
-
-                // 创建 / 更新结算页等级进度条，并播放从0到当前进度的动画
-                this.createOrUpdateGameOverLevelBar(prevLevel, prevExp, currentLevel, currentExp, levelsGained);
             } else {
                 // 即使没有获得经验值，也要保存数据
                 this.playerDataManager.saveData();
-                const currentLevel = this.playerDataManager.getTalentPoints();
-                const currentExp = this.playerDataManager.getExperience();
+                currentLevel = this.playerDataManager.getTalentPoints();
+                currentExp = this.playerDataManager.getExperience();
                 const remainingExp = this.playerDataManager.getRemainingExpForNextLevel();
+                prevLevel = Math.max(1, currentLevel);
+                prevExp = currentExp;
                 if (this.expLabel) {
                     this.expLabel.string = `本次获得经验值: +0\n当前等级: Lv.${Math.max(1, currentLevel)}\n当前经验值: ${currentExp} / 100 (下一级还需 ${remainingExp})`;
                 } else {
                     this.createExpLabelIfNeeded(0, 0);
                 }
-
-                // 经验没有增加时，仍然显示当前进度条（但不播放动画）
-                this.createOrUpdateGameOverLevelBar(
-                    Math.max(1, currentLevel),
-                    currentExp,
-                    Math.max(1, currentLevel),
-                    currentExp,
-                    0
-                );
             }
         }
         
@@ -1050,8 +1143,25 @@ export class GameManager extends Component {
             this.gameOverPanel.active = true;
         }
 
-        // 创建或获取游戏结束弹窗
+        // 创建或获取游戏结束弹窗（必须在创建进度条之前）
         this.createGameOverDialog();
+        
+        // 创建 / 更新结算页等级进度条，并播放从0到当前进度的动画（必须在createGameOverDialog之后）
+        if (this.playerDataManager) {
+            if (this.currentGameExp > 0) {
+                this.createOrUpdateGameOverLevelBar(prevLevel, prevExp, currentLevel, currentExp, levelsGained, expGainedThisGame);
+            } else {
+                // 经验没有增加时，仍然显示当前进度条（但不播放动画）
+                this.createOrUpdateGameOverLevelBar(
+                    prevLevel,
+                    prevExp,
+                    currentLevel,
+                    currentExp,
+                    0,
+                    0
+                );
+            }
+        }
         
         // 初始化退出游戏按钮（查找场景中的ReturnButton）
         this.initExitGameButton();
@@ -1109,6 +1219,9 @@ export class GameManager extends Component {
         } else {
             console.warn('[GameManager.showGameResultPanel] 游戏结算弹窗不存在！');
         }
+
+        // 更新左上角等级HUD显示状态（会根据gameMainPanel的显示状态自动控制）
+        this.updateLevelHud();
     }
     
     /**
@@ -2410,6 +2523,9 @@ export class GameManager extends Component {
         
         // 在重新开始游戏前，结算当前游戏的经验值
         this.settleGameExperience();
+
+        // 更新左上角等级HUD显示状态（会根据gameMainPanel的显示状态自动控制）
+        this.updateLevelHud();
         
         // 清理所有敌人和防御塔
         this.cleanupAllUnits();
