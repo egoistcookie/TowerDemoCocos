@@ -819,6 +819,18 @@ export class UIManager extends Component {
             this.startGameButtonNode.active = isGame;
         }
 
+        // 首页（game面板）显示时，刷新首页头像/等级/体力 HUD（与上一关/下一关按钮同属 gameMainPanel）
+        if (isGame) {
+            this.findGameManager();
+            const gm = this.gameManager as any;
+            if (gm && gm.refreshHomeLevelHud) {
+                // 延迟一帧，确保 gameMainPanel 的 active 和层级已生效
+                this.scheduleOnce(() => {
+                    gm.refreshHomeLevelHud();
+                }, 0);
+            }
+        }
+
         // 游戏 HUD：金币 / 人口 / 时间标签
         if (this.gameManager) {
             if (!this.timerLabelNode && (this.gameManager as any).timerLabel) {

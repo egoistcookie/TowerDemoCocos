@@ -73,12 +73,23 @@ export class GameManager extends Component {
     private prefabsSubLoaded: boolean = false;
     private isLoadingPrefabsSub: boolean = false;
 
-    // 顶部左侧等级 HUD（头像 + 等级文字 + 经验条 + 体力）
+    // 顶部左侧等级 HUD（头像 + 等级文字 + 等级经验条 + 体力条）
     private levelHudNode: Node | null = null;
     private levelLabel: Label | null = null;
     private levelExpBarNode: Node | null = null;
-    private levelExpBarMaxWidth: number = 120;
-    private staminaLabel: Label | null = null;  // 体力标签
+    // 顶部 HUD 进度条宽度，适当放大（原来 120，整体增加约 20%）
+    private levelExpBarMaxWidth: number = 144;
+    private levelExpValueLabel: Label | null = null;      // 等级经验条上的数值文字
+    private staminaBarNode: Node | null = null;           // 体力条前景节点
+    private staminaLabel: Label | null = null;            // 体力条上的数值文字（在条内部）
+    private staminaTitleLabel: Label | null = null;       // “体力”标题文字（在体力条上方）
+    private staminaCountdownLabel: Label | null = null;   // 体力括号说明（体力已满/xx:xx后恢复）
+
+    // 首次加载分包/预制体时的全屏加载界面
+    private loadingOverlay: Node | null = null;
+    private loadingBarNode: Node | null = null;
+    private loadingBarMaxWidth: number = 300;
+    private loadingLabel: Label | null = null;
 
     // 结算页等级进度条
     private gameOverLevelBarBg: Node | null = null;
@@ -641,8 +652,8 @@ export class GameManager extends Component {
             if (pIcon) pIcon.active = false;
         }
 
-        // 更新左上角等级HUD显示状态（会根据gameMainPanel的显示状态自动控制）
-        this.updateLevelHud();
+        // LevelHUD 作为 gameMainPanel 的子节点，会自动随着 gameMainPanel 显示隐藏
+        // 游戏开始时 gameMainPanel 隐藏，LevelHUD 也会自动隐藏，无需手动更新
 
     }
     
@@ -867,25 +878,9 @@ export class GameManager extends Component {
         // 统一控制 HUD 显隐：只有战斗中才显示，首页/暂停/结算等都隐藏
         this.setInGameUIVisible(isPlaying);
 
-        // 定期更新左上角等级HUD的显示状态（根据gameMainPanel的显示状态）
-        // 只在非游戏状态时检查，避免频繁检查影响性能
-        if (!isPlaying && this.levelHudNode && this.levelHudNode.isValid) {
-            const bottomSelectionNode = find('Canvas/BottomSelection');
-            let gameMainPanel: Node | null = null;
-            if (bottomSelectionNode) {
-                gameMainPanel = bottomSelectionNode.getChildByName('GameMainPanel');
-            }
-            const shouldShow = gameMainPanel && gameMainPanel.active === true;
-            if (this.levelHudNode.active !== shouldShow) {
-                this.levelHudNode.active = shouldShow;
-                if (shouldShow) {
-                    // 如果显示，更新内容
-                    this.updateLevelHud();
-                }
-            }
-        }
-
+        // 首页体力倒计时：即使不在 Playing 状态，也需要按秒刷新
         if (!isPlaying) {
+            this.updateLevelHud();
             return;
         }
 
@@ -919,43 +914,63 @@ export class GameManager extends Component {
             this.populationLabel.string = `${this.population}/${this.maxPopulation}`;
         }
 
-        // 更新左上角等级 HUD（头像 + 等级 + 经验条）
-        this.updateLevelHud();
+        // LevelHUD 只在首页显示，游戏进行中（Playing状态）不更新
+        // 它会在 start()、showGameResultPanel() 等返回首页时更新
     }
 
     /**
      * 创建或更新左上角的等级 HUD（头像 + 等级文字 + 经验进度条）
+     * 作为 gameMainPanel 的子节点，与上一关/下一关按钮的显示逻辑完全一致
      */
+    /**
+     * 首页专用：刷新（并在需要时创建）头像/等级/体力 HUD
+     * 说明：LevelHUD 作为 gameMainPanel 子节点，显示隐藏由 gameMainPanel 决定；
+     * 这里负责确保它在首页能被创建出来并更新内容。
+     */
+    public refreshHomeLevelHud() {
+        this.updateLevelHud();
+    }
+
     private updateLevelHud() {
-        const uiRoot = find('Canvas/UI') || find('UI');
-        if (!uiRoot) {
+        // 查找 gameMainPanel（与上一关/下一关按钮的父节点一致）
+        const bottomSelectionNode = find('Canvas/BottomSelection');
+        let gameMainPanel: Node | null = null;
+        if (bottomSelectionNode) {
+            gameMainPanel = bottomSelectionNode.getChildByName('GameMainPanel');
+        }
+        
+        if (!gameMainPanel) {
+            // 如果 gameMainPanel 不存在，不创建 HUD
             return;
         }
 
         if (!this.levelHudNode || !this.levelHudNode.isValid) {
-            // 创建 HUD 根节点
+            // 创建 HUD 根节点，作为 gameMainPanel 的子节点
             this.levelHudNode = new Node('LevelHUD');
-            this.levelHudNode.setParent(uiRoot);
+            this.levelHudNode.setParent(gameMainPanel);
 
             const uiTransform = this.levelHudNode.addComponent(UITransform);
-            uiTransform.setContentSize(260, 60);
+            // 整个 HUD 区域再放大一些，适配更大的头像和进度条
+            uiTransform.setContentSize(320, 70);
 
-            // 放到左上角（相对于 Canvas），位置继续往上移动
+            // 放到左上角（相对于 gameMainPanel），整体靠近屏幕顶部
             const visibleSize = view.getVisibleSize();
             const offsetX = -visibleSize.width / 2 + 150;
-            const offsetY = visibleSize.height / 2 + 10;  // 继续往上移动，从-20改为+10
+            // 往下移一点，避免贴边
+            const offsetY = visibleSize.height / 2 - 60; // 整体再下移 20 像素
             this.levelHudNode.setPosition(offsetX, offsetY, 0);
 
             // 头像区域（左侧一个圆形或方形占位）
             const avatarNode = new Node('Avatar');
             avatarNode.setParent(this.levelHudNode);
             const avatarTransform = avatarNode.addComponent(UITransform);
-            avatarTransform.setContentSize(48, 48);
-            avatarNode.setPosition(-90, 0, 0);
+            // 头像整体再放大约 20%（在之前基础上）
+            avatarTransform.setContentSize(74, 74);
+            avatarNode.setPosition(-100, 0, 0);
 
             const avatarG = avatarNode.addComponent(Graphics);
             avatarG.fillColor = new Color(80, 80, 80, 255);
-            avatarG.circle(0, 0, 24);
+            avatarG.circle(0, 0, 30);
             avatarG.fill();
 
             // 等级文字
@@ -963,99 +978,192 @@ export class GameManager extends Component {
             levelLabelNode.setParent(this.levelHudNode);
             this.levelLabel = levelLabelNode.addComponent(Label);
             this.levelLabel.string = 'Lv.1';
-            this.levelLabel.fontSize = 20;
+            // 等级文字在之前基础上再放大约 20%
+            this.levelLabel.fontSize = 32;
             this.levelLabel.color = new Color(255, 255, 255, 255);
             this.levelLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
             this.levelLabel.verticalAlign = Label.VerticalAlign.CENTER;
 
             const levelLabelTransform = levelLabelNode.addComponent(UITransform);
-            levelLabelTransform.setContentSize(120, 24);
-            levelLabelNode.setPosition(-30, 16, 0);
+            levelLabelTransform.setContentSize(180, 34);
+            levelLabelNode.setPosition(-10, 26, 0);
 
-            // 经验条背景
+            // 等级经验条背景
             const barBgNode = new Node('LevelExpBarBg');
             barBgNode.setParent(this.levelHudNode);
             const barBgTransform = barBgNode.addComponent(UITransform);
-            barBgTransform.setContentSize(this.levelExpBarMaxWidth, 16);
-            barBgNode.setPosition(-20, -12, 0);
+            // 经验条整体高度略增，宽度使用 levelExpBarMaxWidth
+            barBgTransform.setContentSize(this.levelExpBarMaxWidth, 24);
+            // 放在头像右侧下方一点
+            barBgNode.setPosition(-10, -10, 0);
 
             const bgG = barBgNode.addComponent(Graphics);
             bgG.fillColor = new Color(40, 40, 40, 200);
-            bgG.roundRect(-this.levelExpBarMaxWidth / 2, -8, this.levelExpBarMaxWidth, 16, 8);
+            bgG.roundRect(-this.levelExpBarMaxWidth / 2, -10, this.levelExpBarMaxWidth, 20, 10);
             bgG.fill();
             bgG.lineWidth = 2;
             bgG.strokeColor = new Color(200, 200, 200, 255);
-            bgG.roundRect(-this.levelExpBarMaxWidth / 2, -8, this.levelExpBarMaxWidth, 16, 8);
+            bgG.roundRect(-this.levelExpBarMaxWidth / 2, -10, this.levelExpBarMaxWidth, 20, 10);
             bgG.stroke();
 
-            // 经验条前景
+            // 等级经验条前景
             const barNode = new Node('LevelExpBar');
             barNode.setParent(barBgNode);
             const barTransform = barNode.addComponent(UITransform);
-            barTransform.setContentSize(0, 12);
+            // 固定绘制整条宽度，通过缩放来控制进度比例
+            barTransform.setAnchorPoint(0, 0.5);
+            barTransform.setContentSize(this.levelExpBarMaxWidth, 16);
             barNode.setPosition(-this.levelExpBarMaxWidth / 2, 0, 0);
 
             const barG = barNode.addComponent(Graphics);
             barG.fillColor = new Color(80, 200, 120, 255);
-            barG.roundRect(0, -6, this.levelExpBarMaxWidth, 12, 6);
+            barG.roundRect(0, -8, this.levelExpBarMaxWidth, 16, 8);
             barG.fill();
+
+            // 初始缩放为 0，后续根据经验值动态设置
+            barNode.setScale(0, 1, 1);
 
             this.levelExpBarNode = barNode;
 
-            // 体力标签（显示在经验条下方）
-            const staminaLabelNode = new Node('StaminaLabel');
-            staminaLabelNode.setParent(this.levelHudNode);
-            this.staminaLabel = staminaLabelNode.addComponent(Label);
-            this.staminaLabel.string = '体力: 50/50';
+            // 等级经验数值（显示在经验条上）
+            const levelExpLabelNode = new Node('LevelExpValue');
+            levelExpLabelNode.setParent(barBgNode);
+            this.levelExpValueLabel = levelExpLabelNode.addComponent(Label);
+            this.levelExpValueLabel.string = '0 / 100';
+            this.levelExpValueLabel.fontSize = 18;
+            this.levelExpValueLabel.color = new Color(255, 255, 255, 255);
+            this.levelExpValueLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            this.levelExpValueLabel.verticalAlign = Label.VerticalAlign.CENTER;
+            const levelExpLabelTrans = levelExpLabelNode.addComponent(UITransform);
+            levelExpLabelTrans.setContentSize(this.levelExpBarMaxWidth, 24);
+            levelExpLabelNode.setPosition(0, 0, 0);
+
+            // 体力条背景（与等级经验条等宽，位于其右侧，x 轴保持 50 像素间距）
+            const staminaBgNode = new Node('StaminaBarBg');
+            staminaBgNode.setParent(this.levelHudNode);
+            const staminaBgTransform = staminaBgNode.addComponent(UITransform);
+            staminaBgTransform.setContentSize(this.levelExpBarMaxWidth, 24);
+            const staminaBgPosX = -10 + this.levelExpBarMaxWidth + 50; // 等级条中心 x + 半宽 + 50
+            staminaBgNode.setPosition(staminaBgPosX, -10, 0);
+
+            const staminaBgG = staminaBgNode.addComponent(Graphics);
+            staminaBgG.fillColor = new Color(40, 40, 40, 200);
+            staminaBgG.roundRect(-this.levelExpBarMaxWidth / 2, -10, this.levelExpBarMaxWidth, 20, 10);
+            staminaBgG.fill();
+            staminaBgG.lineWidth = 2;
+            staminaBgG.strokeColor = new Color(255, 220, 120, 255);
+            staminaBgG.roundRect(-this.levelExpBarMaxWidth / 2, -10, this.levelExpBarMaxWidth, 20, 10);
+            staminaBgG.stroke();
+
+            // 体力条前景
+            const staminaBarNode = new Node('StaminaBar');
+            staminaBarNode.setParent(staminaBgNode);
+            const staminaBarTrans = staminaBarNode.addComponent(UITransform);
+            staminaBarTrans.setAnchorPoint(0, 0.5);
+            staminaBarTrans.setContentSize(this.levelExpBarMaxWidth, 16);
+            staminaBarNode.setPosition(-this.levelExpBarMaxWidth / 2, 0, 0);
+
+            const staminaBarG = staminaBarNode.addComponent(Graphics);
+            staminaBarG.fillColor = new Color(255, 200, 100, 255);
+            staminaBarG.roundRect(0, -8, this.levelExpBarMaxWidth, 16, 8);
+            staminaBarG.fill();
+
+            // 初始缩放为 0，后续根据体力动态设置
+            staminaBarNode.setScale(0, 1, 1);
+
+            this.staminaBarNode = staminaBarNode;
+
+            // 体力数值（显示在体力条上）
+            const staminaValueNode = new Node('StaminaValue');
+            staminaValueNode.setParent(staminaBgNode);
+            this.staminaLabel = staminaValueNode.addComponent(Label);
+            this.staminaLabel.string = '50/50';
             this.staminaLabel.fontSize = 18;
-            this.staminaLabel.color = new Color(255, 200, 100, 255);
-            this.staminaLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
+            this.staminaLabel.color = new Color(255, 255, 255, 255);
+            this.staminaLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
             this.staminaLabel.verticalAlign = Label.VerticalAlign.CENTER;
+            const staminaValueTrans = staminaValueNode.addComponent(UITransform);
+            staminaValueTrans.setContentSize(this.levelExpBarMaxWidth, 24);
+            staminaValueNode.setPosition(0, 0, 0);
 
-            const staminaLabelTransform = staminaLabelNode.addComponent(UITransform);
-            staminaLabelTransform.setContentSize(120, 24);
-            staminaLabelNode.setPosition(-30, -32, 0);  // 在经验条下方
+            // 体力括号说明（位于体力条右侧 20 像素）
+            const staminaCountdownNode = new Node('StaminaCountdown');
+            staminaCountdownNode.setParent(this.levelHudNode);
+            this.staminaCountdownLabel = staminaCountdownNode.addComponent(Label);
+            this.staminaCountdownLabel.string = '';
+            this.staminaCountdownLabel.fontSize = 18;
+            this.staminaCountdownLabel.color = new Color(255, 255, 255, 255);
+            // 倒计时作为“换行”内容：单独放在体力条下方一行，居中显示
+            this.staminaCountdownLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            this.staminaCountdownLabel.verticalAlign = Label.VerticalAlign.CENTER;
+            const staminaCountdownTrans = staminaCountdownNode.addComponent(UITransform);
+            staminaCountdownTrans.setContentSize(this.levelExpBarMaxWidth, 24);
+            staminaCountdownNode.setPosition(staminaBgPosX, -38, 0);
+
+            // 体力标题（显示在体力进度条上方，类似于 Lv 等级标题）
+            const staminaTitleNode = new Node('StaminaTitle');
+            staminaTitleNode.setParent(this.levelHudNode);
+            this.staminaTitleLabel = staminaTitleNode.addComponent(Label);
+            this.staminaTitleLabel.string = '体力';
+            // 与 Lv 等级字号保持一致
+            this.staminaTitleLabel.fontSize = 32;
+            this.staminaTitleLabel.color = new Color(255, 255, 255, 255);
+            this.staminaTitleLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            this.staminaTitleLabel.verticalAlign = Label.VerticalAlign.CENTER;
+            const staminaTitleTrans = staminaTitleNode.addComponent(UITransform);
+            staminaTitleTrans.setContentSize(80, 26);
+            staminaTitleNode.setPosition(staminaBgPosX, 26, 0);
         }
 
-        if (!this.playerDataManager) {
-            return;
-        }
+        // 注意：playerDataManager 可能还没加载完；先展示默认值，等数据可用后再刷新
 
-        const talentPoints = this.playerDataManager.getTalentPoints();
+        const talentPoints = this.playerDataManager ? this.playerDataManager.getTalentPoints() : 1;
         const level = Math.max(1, talentPoints); // 将天赋点概念直接视为等级
-        const currentExp = this.playerDataManager.getExperience(); // 0-99
+        const currentExp = this.playerDataManager ? this.playerDataManager.getExperience() : 0; // 0-99
         const ratio = Math.max(0, Math.min(1, currentExp / 100));
 
         if (this.levelLabel) {
             this.levelLabel.string = `Lv.${level}`;
         }
 
+        // 更新等级经验条进度和文字
         if (this.levelExpBarNode && this.levelExpBarNode.isValid) {
-            const barTransform = this.levelExpBarNode.getComponent(UITransform);
-            if (barTransform) {
-                barTransform.setContentSize(this.levelExpBarMaxWidth * ratio, 12);
-            }
+            // 通过 X 轴缩放控制填充比例
+            this.levelExpBarNode.setScale(ratio, 1, 1);
+        }
+        if (this.levelExpValueLabel) {
+            this.levelExpValueLabel.string = `${currentExp} / 100`;
         }
 
-        // 更新体力显示
+        // 更新体力条和文字
+        const stamina = this.playerDataManager ? this.playerDataManager.getStamina() : 0;
+        const staminaRatio = Math.max(0, Math.min(1, stamina / 50));
+        if (this.staminaBarNode && this.staminaBarNode.isValid) {
+            // 通过 X 轴缩放控制填充比例
+            this.staminaBarNode.setScale(staminaRatio, 1, 1);
+        }
         if (this.staminaLabel) {
-            const stamina = this.playerDataManager.getStamina();
-            this.staminaLabel.string = `体力: ${stamina}/50`;
+            this.staminaLabel.string = `${stamina}/50`;
+        }
+        if (this.staminaCountdownLabel) {
+            let countdownText = '';
+            if (this.playerDataManager) {
+                const ms = this.playerDataManager.getMsUntilNextStamina();
+                if (ms > 0 && stamina < 50) {
+                    const totalSec = Math.ceil(ms / 1000);
+                    const mm = Math.floor(totalSec / 60);
+                    const ss = totalSec % 60;
+                    const ssStr = ss < 10 ? `0${ss}` : `${ss}`;
+                    countdownText = `（${mm}:${ssStr}后恢复）`;
+                } else {
+                    countdownText = `（体力已满）`;
+                }
+            }
+            this.staminaCountdownLabel.string = countdownText;
         }
 
-        // 根据游戏首页（gameMainPanel）的显示状态来控制levelHudNode的显示/隐藏
-        // 参考上一关、下一关按钮的显示逻辑：只在gameMainPanel显示时显示
-        const bottomSelectionNode = find('Canvas/BottomSelection');
-        let gameMainPanel: Node | null = null;
-        if (bottomSelectionNode) {
-            gameMainPanel = bottomSelectionNode.getChildByName('GameMainPanel');
-        }
-        
-        if (this.levelHudNode && this.levelHudNode.isValid) {
-            // 只在游戏首页（gameMainPanel）显示时显示levelHudNode
-            const shouldShow = gameMainPanel && gameMainPanel.active === true;
-            this.levelHudNode.active = shouldShow;
-        }
+        // LevelHUD 作为 gameMainPanel 的子节点，会自动随着 gameMainPanel 的显示隐藏而显示隐藏
+        // 无需手动控制 active，与上一关/下一关按钮的显示逻辑完全一致
     }
 
     onCrystalDestroyed() {
@@ -1347,41 +1455,7 @@ export class GameManager extends Component {
             name.horizontalAlign = Label.HorizontalAlign.LEFT;
             name.verticalAlign = Label.VerticalAlign.CENTER;
             
-            // 贡献数值标签（向右移动，缩小与名称的距离）
-            const contribLabelNode = new Node('ContributionLabel');
-            contribLabelNode.setParent(itemNode);
-            contribLabelNode.setPosition(-30, 0, 0);
-            const contribTransform = contribLabelNode.addComponent(UITransform);
-            contribTransform.setContentSize(110, itemHeight);
-            const contribLabel = contribLabelNode.addComponent(Label);
-
             const contributionValue = getContributionValue(unit);
-            let suffix = '';
-            // 剑士：承伤（红色数字，黑色描边）
-            if (unit.unitName === '剑士') {
-                suffix = '（承伤）';
-                contribLabel.color = new Color(255, 0, 0, 255);      // 红色数字
-                contribLabel.enableOutline = true;
-                contribLabel.outlineColor = new Color(0, 0, 0, 255);   // 黑色描边
-                contribLabel.outlineWidth = 2;
-            }
-            // 牧师：治疗量（绿色数字，黑色描边）
-            else if (unit.unitName === '牧师') {
-                suffix = '（治疗量）';
-                contribLabel.color = new Color(0, 255, 0, 255);     // 绿色文字
-                contribLabel.enableOutline = true;
-                contribLabel.outlineColor = new Color(0, 0, 0, 255); // 黑色描边
-                contribLabel.outlineWidth = 2;
-            }
-            // 其它单位：默认伤害贡献
-            else {
-                contribLabel.color = new Color(200, 255, 200, 255);
-            }
-
-            contribLabel.string = `${Math.floor(contributionValue)}${suffix}`;
-            contribLabel.fontSize = 14;
-            contribLabel.horizontalAlign = Label.HorizontalAlign.RIGHT;
-            contribLabel.verticalAlign = Label.VerticalAlign.CENTER;
             
             // 伤害条背景（调整位置和大小）
             const barBg = new Node('BarBackground');
@@ -1417,35 +1491,31 @@ export class GameManager extends Component {
             barGraphics.roundRect(-barWidth / 2, -8, barWidth, 16, 3);
             barGraphics.fill();
 
-            // 在条状图上显示对应的“贡献值”数值（居中显示，数值本身变色，描边统一黑色）
+            // 在条状图上显示对应的"贡献值"数值（所有单位都在条中显示数值）
             const contribValueLabelNode = new Node('ContributionValueLabel');
-            // 挂在实际的贡献条上，这样文本始终被限制在条内部，不会跑到前端之外出现“多出来的1”
             contribValueLabelNode.setParent(bar);
             contribValueLabelNode.setPosition(0, 0, 0);
             const contribValueLabelTransform = contribValueLabelNode.addComponent(UITransform);
-            // 宽度跟随当前条宽
             contribValueLabelTransform.setContentSize(barWidth, 16);
             const contribValueLabel = contribValueLabelNode.addComponent(Label);
-            // 与右侧数字保持一致的后缀显示
+
+            // 根据单位类型设置后缀和颜色
             let centerSuffix = '';
             if (unit.unitName === '剑士') {
                 centerSuffix = '（承伤）';
+                contribValueLabel.color = new Color(255, 0, 0, 255);   // 红色数字
             } else if (unit.unitName === '牧师') {
                 centerSuffix = '（治疗量）';
-            }
-            contribValueLabel.string = `${Math.floor(contributionValue)}${centerSuffix}`;
-            contribValueLabel.fontSize = 14;
-            // 数值颜色：剑士红字，牧师绿色，其它白字
-            if (unit.unitName === '牧师') {
                 contribValueLabel.color = new Color(0, 255, 0, 255);   // 绿色数字
-            } else if (unit.unitName === '剑士') {
-                contribValueLabel.color = new Color(255, 0, 0, 255);   // 红色数字
             } else {
+                // 其他单位：无后缀，白色数字
                 contribValueLabel.color = new Color(255, 255, 255, 255);
             }
+            
+            contribValueLabel.string = `${Math.floor(contributionValue)}${centerSuffix}`;
+            contribValueLabel.fontSize = 14;
             contribValueLabel.enableOutline = true;
-            // 描边统一黑色，避免在条前端出现彩色块
-            contribValueLabel.outlineColor = new Color(0, 0, 0, 255);
+            contribValueLabel.outlineColor = new Color(0, 0, 0, 255);   // 黑色描边
             contribValueLabel.outlineWidth = 2;
             contribValueLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
             contribValueLabel.verticalAlign = Label.VerticalAlign.CENTER;
@@ -1836,7 +1906,8 @@ export class GameManager extends Component {
         const damageStatsNode = this.gameOverDialog.getChildByName('DamageStatsPanel');
         if (damageStatsNode) {
             const statsTransform = damageStatsNode.getComponent(UITransform);
-            const statsHeight = statsTransform ? statsTransform.height : 150;
+            // 为防止某些情况下 UITransform 高度被意外改成 0，增加一个下限，避免与“关卡奖励”分割线重叠
+            const statsHeight = statsTransform ? Math.max(150, statsTransform.height) : 150;
             damageStatsNode.setPosition(0, currentY - statsHeight / 2, 0);
             currentY = currentY - statsHeight - statsToExpSpacing; // DPS 面板整体高度 + 额外间距
 
@@ -1872,7 +1943,7 @@ export class GameManager extends Component {
         if (this.expLabel && this.expLabel.node) {
             this.expLabel.fontSize = 24;
             const expLabelTransform = this.expLabel.node.getComponent(UITransform);
-            const expLabelHeight = expLabelTransform ? expLabelTransform.height : 80;
+            const expLabelHeight = expLabelTransform ? Math.max(60, expLabelTransform.height) : 80;
             this.expLabel.node.setPosition(0, currentY - expLabelHeight / 2, 0);
             currentY = currentY - expLabelHeight / 2 - buttonSpacing; // 使用更大的间距
         }
@@ -2155,6 +2226,108 @@ export class GameManager extends Component {
     }
     
     /**
+     * 显示全屏加载界面（用于首次加载分包和预制体时）
+     */
+    private showLoadingOverlay() {
+        if (this.loadingOverlay && this.loadingOverlay.isValid) {
+            this.loadingOverlay.active = true;
+            return;
+        }
+
+        const canvas = find('Canvas');
+        if (!canvas) {
+            return;
+        }
+
+        const overlay = new Node('LoadingOverlay');
+        overlay.setParent(canvas);
+
+        const uiTransform = overlay.addComponent(UITransform);
+        const vs = view.getVisibleSize();
+        uiTransform.setContentSize(vs.width, vs.height);
+        overlay.setPosition(0, 0, 0);
+
+        // 全屏半透明背景
+        const bg = overlay.addComponent(Graphics);
+        bg.fillColor = new Color(0, 0, 0, 200);
+        bg.rect(-vs.width / 2, -vs.height / 2, vs.width, vs.height);
+        bg.fill();
+
+        // 阻止点击穿透
+        overlay.addComponent(BlockInputEvents);
+
+        // 进度条背景
+        const barBgNode = new Node('LoadingBarBg');
+        barBgNode.setParent(overlay);
+        const barBgTrans = barBgNode.addComponent(UITransform);
+        barBgTrans.setContentSize(this.loadingBarMaxWidth, 30);
+        barBgNode.setPosition(0, -20, 0);
+
+        const barBgG = barBgNode.addComponent(Graphics);
+        barBgG.fillColor = new Color(40, 40, 40, 255);
+        barBgG.roundRect(-this.loadingBarMaxWidth / 2, -15, this.loadingBarMaxWidth, 30, 15);
+        barBgG.fill();
+
+        // 进度条前景
+        const barNode = new Node('LoadingBar');
+        barNode.setParent(barBgNode);
+        const barTrans = barNode.addComponent(UITransform);
+        barTrans.setAnchorPoint(0, 0.5);
+        barTrans.setContentSize(this.loadingBarMaxWidth, 22);
+        barNode.setPosition(-this.loadingBarMaxWidth / 2, 0, 0);
+
+        const barG = barNode.addComponent(Graphics);
+        barG.fillColor = new Color(120, 200, 255, 255);
+        barG.roundRect(0, -11, this.loadingBarMaxWidth, 22, 11);
+        barG.fill();
+        barNode.setScale(0, 1, 1);
+
+        // 进度文字
+        const labelNode = new Node('LoadingLabel');
+        labelNode.setParent(overlay);
+        this.loadingLabel = labelNode.addComponent(Label);
+        this.loadingLabel.string = '正在加载... 0%';
+        this.loadingLabel.fontSize = 22;
+        this.loadingLabel.color = new Color(255, 255, 255, 255);
+        this.loadingLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        this.loadingLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        const labelTrans = labelNode.addComponent(UITransform);
+        labelTrans.setContentSize(400, 40);
+        labelNode.setPosition(0, 30, 0);
+
+        this.loadingOverlay = overlay;
+        this.loadingBarNode = barNode;
+        // 初始进度 0
+        this.updateLoadingProgress(0);
+    }
+
+    /**
+     * 更新加载界面的进度（0~1）
+     */
+    private updateLoadingProgress(progress: number) {
+        const p = Math.max(0, Math.min(1, progress));
+        if (this.loadingBarNode && this.loadingBarNode.isValid) {
+            this.loadingBarNode.setScale(p, 1, 1);
+        }
+        if (this.loadingLabel && this.loadingLabel.isValid) {
+            const percent = Math.round(p * 100);
+            this.loadingLabel.string = `正在加载... ${percent}%`;
+        }
+    }
+
+    /**
+     * 隐藏并销毁加载界面
+     */
+    private hideLoadingOverlay() {
+        if (this.loadingOverlay && this.loadingOverlay.isValid) {
+            this.loadingOverlay.destroy();
+        }
+        this.loadingOverlay = null;
+        this.loadingBarNode = null;
+        this.loadingLabel = null;
+    }
+    
+    /**
      * 开始游戏（对外入口）：先确保加载分包目录 prefabs_sub 下的所有预制体，再执行真正的开始逻辑
      */
     startGame() {
@@ -2170,23 +2343,34 @@ export class GameManager extends Component {
             this.isLoadingPrefabsSub = true;
             console.info('[GameManager] 开始加载分包 prefabs_sub');
 
+            // 首次加载时显示全屏加载读条
+            this.showLoadingOverlay();
+            // 初始进度 0
+            this.updateLoadingProgress(0);
+
+            // 加载步骤: 1) 加载 bundle (20%)  2) 四个预制体 (共 80%，每个 20%)
             assetManager.loadBundle('prefabs_sub', (err, bundle) => {
                 if (err) {
                     console.error('[GameManager] 加载分包 prefabs_sub 失败:', err);
                     this.isLoadingPrefabsSub = false;
+                    this.hideLoadingOverlay();
                     return;
                 }
 
                 if (!bundle) {
                     console.error('[GameManager] 分包 prefabs_sub 加载结果为空');
                     this.isLoadingPrefabsSub = false;
+                    this.hideLoadingOverlay();
                     return;
                 }
+
+                // bundle 成功，进度到 20%
+                this.updateLoadingProgress(0.2);
 
                 // 直接按名字加载分包中的几个建筑预制体（石墙、冰塔、雷塔、哨塔）
                 console.info('[GameManager] 开始从分包 prefabs_sub 加载建筑预制体 StoneWall / IceTower / ThunderTower / WatchTower');
 
-                const loadPrefab = (name: string, onLoaded: (prefab: Prefab | null) => void) => {
+                const loadPrefab = (name: string, stepIndex: number, totalSteps: number, onLoaded: (prefab: Prefab | null) => void) => {
                     bundle.load(name, Prefab, (err2, prefab) => {
                         if (err2 || !prefab) {
                             console.error('[GameManager] 从分包 prefabs_sub 加载预制体失败:', name, err2);
@@ -2195,14 +2379,21 @@ export class GameManager extends Component {
                             console.info('[GameManager] 从分包 prefabs_sub 成功加载预制体:', name);
                             onLoaded(prefab as Prefab);
                         }
+
+                        // 每个预制体完成后更新进度：0.2 ~ 1.0 之间线性分配
+                        const base = 0.2;
+                        const remain = 0.8;
+                        const p = base + remain * (stepIndex / totalSteps);
+                        this.updateLoadingProgress(p);
                     });
                 };
 
                 // 顺序加载四个预制体，全部尝试完后再注入 TowerBuilder
-                loadPrefab('StoneWall', (stoneWallPrefab) => {
-                    loadPrefab('IceTower', (iceTowerPrefab) => {
-                        loadPrefab('ThunderTower', (thunderTowerPrefab) => {
-                            loadPrefab('WatchTower', (watchTowerPrefab) => {
+                const totalSteps = 4;
+                loadPrefab('StoneWall', 1, totalSteps, (stoneWallPrefab) => {
+                    loadPrefab('IceTower', 2, totalSteps, (iceTowerPrefab) => {
+                        loadPrefab('ThunderTower', 3, totalSteps, (thunderTowerPrefab) => {
+                            loadPrefab('WatchTower', 4, totalSteps, (watchTowerPrefab) => {
                                 try {
                                     const towerBuilder = this.findComponentInScene('TowerBuilder') as any;
                                     if (towerBuilder) {
@@ -2231,6 +2422,10 @@ export class GameManager extends Component {
 
                                 this.prefabsSubLoaded = true;
                                 this.isLoadingPrefabsSub = false;
+
+                                // 确保进度条拉满，然后关闭加载界面
+                                this.updateLoadingProgress(1);
+                                this.hideLoadingOverlay();
 
                                 // 分包加载完毕后，再次调用开始逻辑（这次会直接走内部实现）
                                 this._startGameInternal();
@@ -2523,6 +2718,10 @@ export class GameManager extends Component {
         
         // 在重新开始游戏前，结算当前游戏的经验值
         this.settleGameExperience();
+
+        // 重置本局计时与 UI 显示
+        this.gameTime = 0;
+        this.updateUI();
 
         // 更新左上角等级HUD显示状态（会根据gameMainPanel的显示状态自动控制）
         this.updateLevelHud();

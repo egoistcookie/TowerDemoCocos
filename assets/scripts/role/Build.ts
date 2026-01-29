@@ -59,7 +59,8 @@ export class Build extends Component {
     protected defaultSpriteFrame: SpriteFrame = null!;
     protected defaultScale: Vec3 = new Vec3(1, 1, 1);
     // 建筑在完全体时的基准底部Y坐标（用于在建造/风化/损坏过程中保持“贴地”）
-    protected baseY: number = 0;
+    // 使用 NaN 作为“尚未初始化”的标记，避免合法的 0 高度被误判为未设置
+    protected baseY: number = Number.NaN;
 
     // 选择面板相关
     protected selectionPanel: Node = null!; // 选择面板节点
@@ -130,7 +131,8 @@ export class Build extends Component {
             this.defaultSpriteFrame = this.sprite.spriteFrame;
         }
         this.defaultScale = this.node.scale.clone();
-        this.baseY = 0;
+        // 重置基准底部高度为“未初始化”状态
+        this.baseY = Number.NaN;
 
         // 查找游戏管理器
         this.findGameManager();
@@ -1124,7 +1126,7 @@ export class Build extends Component {
         }
 
         // 如果还未记录基准底部Y，则根据当前所在网格/位置计算一次
-        if (this.baseY === 0) {
+        if (Number.isNaN(this.baseY)) {
             if (this.gridPanel && this.gridX >= 0 && this.gridY >= 0) {
                 const gridPanel = this.gridPanel as any;
                 const gridCenter = this.gridPanel.gridToWorld(this.gridX, this.gridY);

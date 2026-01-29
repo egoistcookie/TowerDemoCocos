@@ -151,7 +151,8 @@ export class WatchTower extends Build {
         this.destructionFrameIndex = 0;
         this.weatheringStage = WeatheringStage.NONE;
         this.weatheringTimer = 0;
-        this.baseY = 0;
+        // 交给父类根据网格/当前位置重新计算基准底部高度
+        this.baseY = Number.NaN;
 
         // 获取Sprite组件
         const sprite = this.node.getComponent(Sprite);
@@ -206,7 +207,8 @@ export class WatchTower extends Build {
         this.destructionFrameIndex = 0;
         this.weatheringStage = WeatheringStage.NONE;
         this.weatheringTimer = 0;
-        this.baseY = 0;
+        // 交给父类根据网格/当前位置重新计算基准底部高度
+        this.baseY = Number.NaN;
 
         // 初始化占领相关属性
         this.captureState = CaptureState.Neutral;

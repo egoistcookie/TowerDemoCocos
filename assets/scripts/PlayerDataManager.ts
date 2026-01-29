@@ -365,7 +365,9 @@ export class PlayerDataManager {
             talentPoints: 0,
             talentLevels: {},
             unitEnhancements: {},
-            passedLevels: [1]  // 默认第一关已通过
+            passedLevels: [1],  // 默认第一关已通过
+            stamina: 50,
+            lastStaminaRecoverTime: Date.now()
         };
         this.saveData();
     }
@@ -411,24 +413,43 @@ export class PlayerDataManager {
     }
 
     /**
-     * 更新体力恢复（每分钟回复1点）
+     * 更新体力恢复（每5分钟回复1点）
      */
     private updateStaminaRecovery(): void {
         const now = Date.now();
         const lastTime = this.playerData.lastStaminaRecoverTime || now;
         const currentStamina = this.playerData.stamina || 50;
         
-        // 计算经过的分钟数
-        const minutesPassed = Math.floor((now - lastTime) / (60 * 1000));
+        // 每 5 分钟回复 1 点
+        const intervalMs = 5 * 60 * 1000;
+        const intervalsPassed = Math.floor((now - lastTime) / intervalMs);
         
-        if (minutesPassed > 0 && currentStamina < 50) {
-            // 每分钟回复1点，最多回复到50
-            const newStamina = Math.min(50, currentStamina + minutesPassed);
+        if (intervalsPassed > 0 && currentStamina < 50) {
+            // 每5分钟回复1点，最多回复到50
+            const newStamina = Math.min(50, currentStamina + intervalsPassed);
             this.playerData.stamina = newStamina;
-            // 更新最后恢复时间（只记录到分钟级别）
-            this.playerData.lastStaminaRecoverTime = lastTime + minutesPassed * 60 * 1000;
+            // 更新最后恢复时间（只记录到 5 分钟粒度）
+            this.playerData.lastStaminaRecoverTime = lastTime + intervalsPassed * intervalMs;
             this.saveData();
         }
+    }
+
+    /**
+     * 获取距离下一次恢复 1 点体力的剩余毫秒数
+     * - 若体力已满，返回 0
+     */
+    public getMsUntilNextStamina(): number {
+        this.updateStaminaRecovery();
+        const currentStamina = Math.min(50, Math.max(0, this.playerData.stamina || 50));
+        if (currentStamina >= 50) {
+            return 0;
+        }
+        const now = Date.now();
+        const lastTime = this.playerData.lastStaminaRecoverTime || now;
+        const intervalMs = 5 * 60 * 1000;
+        const elapsed = now - lastTime;
+        const remain = intervalMs - (elapsed % intervalMs);
+        return Math.max(0, remain);
     }
 
     /**
