@@ -1350,22 +1350,23 @@ export class GameManager extends Component {
         statsPanel = new Node('DamageStatsPanel');
         statsPanel.setParent(this.gameOverDialog);
         
-        // 添加UITransform组件（调整尺寸：高度增加，宽度减少）
+        // 添加UITransform组件（调整尺寸：高度增加以容纳3条数据）
         const statsTransform = statsPanel.addComponent(UITransform);
-        statsTransform.setContentSize(380, 150);
+        const panelHeight = Math.max(150, 25 + 3 * (28 + 6) + 20); // 动态计算高度：标题(25) + 3条数据 + 底部间距(20)
+        statsTransform.setContentSize(380, panelHeight);
         
         // 创建背景
         const statsBg = new Node('StatsBackground');
         statsBg.setParent(statsPanel);
         const bgTransform = statsBg.addComponent(UITransform);
-        bgTransform.setContentSize(380, 150);
+        bgTransform.setContentSize(380, panelHeight);
         const bgGraphics = statsBg.addComponent(Graphics);
         bgGraphics.fillColor = new Color(20, 20, 20, 200);
-        bgGraphics.roundRect(-190, -75, 380, 150, 8);
+        bgGraphics.roundRect(-190, -panelHeight / 2, 380, panelHeight, 8);
         bgGraphics.fill();
         bgGraphics.strokeColor = new Color(150, 150, 150, 255);
         bgGraphics.lineWidth = 1;
-        bgGraphics.roundRect(-190, -75, 380, 150, 8);
+        bgGraphics.roundRect(-190, -panelHeight / 2, 380, panelHeight, 8);
         bgGraphics.stroke();
         
         // 获取总伤害前三位的单位（按总伤害排序，更符合“谁打得最多”的直觉）
@@ -1388,12 +1389,18 @@ export class GameManager extends Component {
         filteredUnits.sort((a, b) => getContributionValue(b) - getContributionValue(a));
         const topUnits = filteredUnits.slice(0, 3);
         
+        // 调试日志：输出所有单位和过滤后的结果
+        console.info(`[GameManager] 贡献榜统计: 总单位数=${allUnits.length}, 有贡献的单位数=${filteredUnits.length}, 显示前${topUnits.length}名`);
+        topUnits.forEach((u, i) => {
+            console.info(`[GameManager] 第${i + 1}名: ${u.unitName}, 贡献值=${getContributionValue(u)}`);
+        });
+        
         if (topUnits.length === 0) {
             // 如果没有伤害数据，显示提示
             const noDataLabel = new Node('NoDataLabel');
             noDataLabel.setParent(statsPanel);
             const labelTransform = noDataLabel.addComponent(UITransform);
-            labelTransform.setContentSize(380, 150);
+            labelTransform.setContentSize(380, panelHeight);
             const label = noDataLabel.addComponent(Label);
             label.string = '暂无贡献数据';
             label.fontSize = 20;
@@ -1406,7 +1413,7 @@ export class GameManager extends Component {
         // 创建标题
         const titleLabel = new Node('TitleLabel');
         titleLabel.setParent(statsPanel);
-        titleLabel.setPosition(0, 60, 0);
+        titleLabel.setPosition(0, panelHeight / 2 - 20, 0); // 动态计算标题位置
         const titleTransform = titleLabel.addComponent(UITransform);
         titleTransform.setContentSize(380, 25);
         const title = titleLabel.addComponent(Label);
@@ -1423,7 +1430,7 @@ export class GameManager extends Component {
         // 创建每个单位的统计项（调整布局：缩小名称和数值之间的距离）
         const itemHeight = 28;
         const itemSpacing = 6;
-        const startY = 25;
+        const startY = panelHeight / 2 - 50; // 动态计算起始Y位置
         
         topUnits.forEach((unit, index) => {
             const itemNode = new Node(`StatsItem_${index}`);
@@ -1433,12 +1440,12 @@ export class GameManager extends Component {
             const itemTransform = itemNode.addComponent(UITransform);
             itemTransform.setContentSize(350, itemHeight);
             
-            // 单位名称标签（向左移动，缩小与数值的距离）
+            // 单位名称标签（增加宽度以容纳 MVP/SVP 前缀）
             const nameLabel = new Node('NameLabel');
             nameLabel.setParent(itemNode);
             nameLabel.setPosition(-140, 0, 0);
             const nameTransform = nameLabel.addComponent(UITransform);
-            nameTransform.setContentSize(80, itemHeight);
+            nameTransform.setContentSize(120, itemHeight); // 从80增加到120，确保能显示"SVP 剑士"
             const name = nameLabel.addComponent(Label);
             // 第一名加上 MVP/SVP 前缀，并使用金色高亮
             let displayName = unit.unitName;
@@ -1454,6 +1461,7 @@ export class GameManager extends Component {
             name.fontSize = 16;
             name.horizontalAlign = Label.HorizontalAlign.LEFT;
             name.verticalAlign = Label.VerticalAlign.CENTER;
+            // 宽度已增加到120，应该足够显示"SVP 剑士"等文本
             
             const contributionValue = getContributionValue(unit);
             
