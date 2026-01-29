@@ -21,16 +21,16 @@ const { ccclass, property } = _decorator;
 
 @ccclass('TowerBuilder')
 export class TowerBuilder extends Component {
-    @property(Prefab)
-    warAncientTreePrefab: Prefab = null!; // 战争古树预制体
+    // 战争古树预制体：已经移动到分包 prefabs_sub，由 GameManager 在运行时注入
+    private warAncientTreePrefab: Prefab = null!; // 战争古树预制体（运行时赋值）
 
     @property(SpriteFrame)
     warAncientTreeIcon: SpriteFrame = null!; // 战争古树图标
 
 
 
-    @property(Prefab)
-    hunterHallPrefab: Prefab = null!; // 猎手大厅预制体
+    // 猎手大厅预制体：已经移动到分包 prefabs_sub，由 GameManager 在运行时注入
+    private hunterHallPrefab: Prefab = null!; // 猎手大厅预制体（运行时赋值）
 
     @property(SpriteFrame)
     hunterHallIcon: SpriteFrame = null!; // 猎手大厅图标
@@ -59,14 +59,14 @@ export class TowerBuilder extends Component {
     @property(SpriteFrame)
     thunderTowerIcon: SpriteFrame = null!; // 雷元素塔图标
 
-    @property(Prefab)
-    swordsmanHallPrefab: Prefab = null!; // 剑士小屋预制体
+    // 剑士小屋预制体：已经移动到分包 prefabs_sub，由 GameManager 在运行时注入
+    private swordsmanHallPrefab: Prefab = null!; // 剑士小屋预制体（运行时赋值）
 
     @property(SpriteFrame)
     swordsmanHallIcon: SpriteFrame = null!; // 剑士小屋图标
 
-    @property(Prefab)
-    churchPrefab: Prefab = null!; // 教堂预制体
+    // 教堂预制体：已经移动到分包 prefabs_sub，由 GameManager 在运行时注入
+    private churchPrefab: Prefab = null!; // 教堂预制体（运行时赋值）
 
     @property(SpriteFrame)
     churchIcon: SpriteFrame = null!; // 教堂图标
@@ -189,6 +189,149 @@ export class TowerBuilder extends Component {
         this.ensureIconsFromPrefabs();
     }
 
+    public setWarAncientTreePrefab(prefab: Prefab) {
+        this.warAncientTreePrefab = prefab;
+        // 预制体更新后，尝试从中提取图标
+        this.ensureIconsFromPrefabs();
+    }
+
+    public setHunterHallPrefab(prefab: Prefab) {
+        this.hunterHallPrefab = prefab;
+        // 预制体更新后，尝试从中提取图标
+        this.ensureIconsFromPrefabs();
+    }
+
+    public setSwordsmanHallPrefab(prefab: Prefab) {
+        this.swordsmanHallPrefab = prefab;
+        // 预制体更新后，尝试从中提取图标
+        this.ensureIconsFromPrefabs();
+    }
+
+    public setChurchPrefab(prefab: Prefab) {
+        this.churchPrefab = prefab;
+        // 预制体更新后，尝试从中提取图标
+        this.ensureIconsFromPrefabs();
+    }
+
+    /**
+     * 在所有预制体加载完成后调用，更新建筑类型列表
+     */
+    public refreshBuildingTypes() {
+        this.updateBuildingTypes();
+    }
+
+    /**
+     * 更新建筑类型列表（当预制体被注入后调用）
+     */
+    private updateBuildingTypes() {
+        if (!this.buildingPanel) {
+            return; // 如果面板还未初始化，直接返回
+        }
+
+        const buildingTypes: BuildingType[] = [];
+        const configManager = UnitConfigManager.getInstance();
+        
+        // 确保配置文件已加载（如果未加载，使用预制体的默认值作为后备）
+        if (this.warAncientTreePrefab) {
+            let cost = this.towerCost; // 默认使用预制体的值
+            if (configManager.isConfigLoaded()) {
+                const configCost = this.getBuildCostFromConfig('WarAncientTree');
+                if (configCost > 0) {
+                    cost = this.getActualBuildCost('WarAncientTree', configCost);
+                }
+            }
+            buildingTypes.push({
+                name: '弓箭手小屋',
+                prefab: this.warAncientTreePrefab,
+                cost: cost,
+                icon: this.warAncientTreeIcon || null!,
+                description: '可以生产Tower单位'
+            });
+        }
+        if (this.hunterHallPrefab) {
+            let cost = this.hunterHallCost; // 默认使用预制体的值
+            if (configManager.isConfigLoaded()) {
+                const configCost = this.getBuildCostFromConfig('HunterHall');
+                if (configCost > 0) {
+                    cost = this.getActualBuildCost('HunterHall', configCost);
+                }
+            }
+            buildingTypes.push({
+                name: '猎手大厅',
+                prefab: this.hunterHallPrefab,
+                cost: cost,
+                icon: this.hunterHallIcon || null!,
+                description: '可以生产女猎手单位'
+            });
+        }
+        // if (this.stoneWallPrefab) {
+        //     let cost = this.stoneWallCost; // 默认使用预制体的值
+        //     if (configManager.isConfigLoaded()) {
+        //         const configCost = this.getBuildCostFromConfig('StoneWall');
+        //         if (configCost > 0) {
+        //             cost = this.getActualBuildCost('StoneWall', configCost);
+        //         }
+        //     }
+        //     buildingTypes.push({
+        //         name: '石墙',
+        //         prefab: this.stoneWallPrefab,
+        //         cost: cost,
+        //         icon: this.stoneWallIcon || null!,
+        //         description: '坚固的障碍物，阻挡敌人进攻路线'
+        //     });
+        // }
+        // 哨塔不在建造面板中显示，只能通过初始化生成
+        // if (this.watchTowerPrefab) {
+        //     let cost = this.watchTowerCost; // 默认使用预制体的值
+        //     if (configManager.isConfigLoaded()) {
+        //         const configCost = this.getBuildCostFromConfig('WatchTower');
+        //         if (configCost > 0) {
+        //             cost = this.getActualBuildCost('WatchTower', configCost);
+        //         }
+        //     }
+        //     buildingTypes.push({
+        //         name: '哨塔',
+        //         prefab: this.watchTowerPrefab,
+        //         cost: cost,
+        //         icon: this.watchTowerIcon || null!,
+        //         description: '可以攻击敌人的防御塔，使用弓箭攻击'
+        //     });
+        // }
+        if (this.swordsmanHallPrefab) {
+            let cost = this.swordsmanHallCost; // 默认使用预制体的值
+            if (configManager.isConfigLoaded()) {
+                const configCost = this.getBuildCostFromConfig('SwordsmanHall');
+                if (configCost > 0) {
+                    cost = this.getActualBuildCost('SwordsmanHall', configCost);
+                }
+            }
+            buildingTypes.push({
+                name: '剑士小屋',
+                prefab: this.swordsmanHallPrefab,
+                cost: cost,
+                icon: this.swordsmanHallIcon || null!,
+                description: '可以生产精灵剑士单位'
+            });
+        }
+        if (this.churchPrefab) {
+            let cost = this.churchCost; // 默认使用预制体的值
+            if (configManager.isConfigLoaded()) {
+                const configCost = this.getBuildCostFromConfig('Church');
+                if (configCost > 0) {
+                    cost = this.getActualBuildCost('Church', configCost);
+                }
+            }
+            buildingTypes.push({
+                name: '教堂',
+                prefab: this.churchPrefab,
+                cost: cost,
+                icon: this.churchIcon || null!,
+                description: '可以生产为友军治疗的牧师单位'
+            });
+        }
+        this.buildingPanel.setBuildingTypes(buildingTypes);
+    }
+
     /**
      * 重新开始游戏时重置内部状态，允许重新生成初始石墙和哨塔
      */
@@ -219,11 +362,15 @@ export class TowerBuilder extends Component {
             return currentIcon;
         };
 
-        // 石墙 / 哨塔 / 冰塔 / 雷塔图标，如果未手动设置，则自动从对应预制体根节点（或子节点）的 Sprite 中提取
+        // 石墙 / 哨塔 / 冰塔 / 雷塔 / 战争古树 / 猎手大厅 / 剑士小屋 / 教堂图标，如果未手动设置，则自动从对应预制体根节点（或子节点）的 Sprite 中提取
         this.stoneWallIcon = extractIconFromPrefab(this.stoneWallPrefab, this.stoneWallIcon) as SpriteFrame;
         this.watchTowerIcon = extractIconFromPrefab(this.watchTowerPrefab, this.watchTowerIcon) as SpriteFrame;
         this.iceTowerIcon = extractIconFromPrefab(this.iceTowerPrefab, this.iceTowerIcon) as SpriteFrame;
         this.thunderTowerIcon = extractIconFromPrefab(this.thunderTowerPrefab, this.thunderTowerIcon) as SpriteFrame;
+        this.warAncientTreeIcon = extractIconFromPrefab(this.warAncientTreePrefab, this.warAncientTreeIcon) as SpriteFrame;
+        this.hunterHallIcon = extractIconFromPrefab(this.hunterHallPrefab, this.hunterHallIcon) as SpriteFrame;
+        this.swordsmanHallIcon = extractIconFromPrefab(this.swordsmanHallPrefab, this.swordsmanHallIcon) as SpriteFrame;
+        this.churchIcon = extractIconFromPrefab(this.churchPrefab, this.churchIcon) as SpriteFrame;
     }
 
     start() {
@@ -493,108 +640,7 @@ export class TowerBuilder extends Component {
         }
 
         // 设置建筑物类型
-        const buildingTypes: BuildingType[] = [];
-        const configManager = UnitConfigManager.getInstance();
-        
-        // 确保配置文件已加载（如果未加载，使用预制体的默认值作为后备）
-        if (this.warAncientTreePrefab) {
-            let cost = this.towerCost; // 默认使用预制体的值
-            if (configManager.isConfigLoaded()) {
-                const configCost = this.getBuildCostFromConfig('WarAncientTree');
-                if (configCost > 0) {
-                    cost = this.getActualBuildCost('WarAncientTree', configCost);
-                }
-            }
-            buildingTypes.push({
-                name: '弓箭手小屋',
-                prefab: this.warAncientTreePrefab,
-                cost: cost,
-                icon: this.warAncientTreeIcon || null!,
-                description: '可以生产Tower单位'
-            });
-        }
-        if (this.hunterHallPrefab) {
-            let cost = this.hunterHallCost; // 默认使用预制体的值
-            if (configManager.isConfigLoaded()) {
-                const configCost = this.getBuildCostFromConfig('HunterHall');
-                if (configCost > 0) {
-                    cost = this.getActualBuildCost('HunterHall', configCost);
-                }
-            }
-            buildingTypes.push({
-                name: '猎手大厅',
-                prefab: this.hunterHallPrefab,
-                cost: cost,
-                icon: this.hunterHallIcon || null!,
-                description: '可以生产女猎手单位'
-            });
-        }
-        if (this.stoneWallPrefab) {
-            let cost = this.stoneWallCost; // 默认使用预制体的值
-            if (configManager.isConfigLoaded()) {
-                const configCost = this.getBuildCostFromConfig('StoneWall');
-                if (configCost > 0) {
-                    cost = this.getActualBuildCost('StoneWall', configCost);
-                }
-            }
-            buildingTypes.push({
-                name: '石墙',
-                prefab: this.stoneWallPrefab,
-                cost: cost,
-                icon: this.stoneWallIcon || null!,
-                description: '坚固的障碍物，阻挡敌人进攻路线'
-            });
-        }
-        // 哨塔不在建造面板中显示，只能通过初始化生成
-        // if (this.watchTowerPrefab) {
-        //     let cost = this.watchTowerCost; // 默认使用预制体的值
-        //     if (configManager.isConfigLoaded()) {
-        //         const configCost = this.getBuildCostFromConfig('WatchTower');
-        //         if (configCost > 0) {
-        //             cost = this.getActualBuildCost('WatchTower', configCost);
-        //         }
-        //     }
-        //     buildingTypes.push({
-        //         name: '哨塔',
-        //         prefab: this.watchTowerPrefab,
-        //         cost: cost,
-        //         icon: this.watchTowerIcon || null!,
-        //         description: '可以攻击敌人的防御塔，使用弓箭攻击'
-        //     });
-        // }
-        if (this.swordsmanHallPrefab) {
-            let cost = this.swordsmanHallCost; // 默认使用预制体的值
-            if (configManager.isConfigLoaded()) {
-                const configCost = this.getBuildCostFromConfig('SwordsmanHall');
-                if (configCost > 0) {
-                    cost = this.getActualBuildCost('SwordsmanHall', configCost);
-                }
-            }
-            buildingTypes.push({
-                name: '剑士小屋',
-                prefab: this.swordsmanHallPrefab,
-                cost: cost,
-                icon: this.swordsmanHallIcon || null!,
-                description: '可以生产精灵剑士单位'
-            });
-        }
-        if (this.churchPrefab) {
-            let cost = this.churchCost; // 默认使用预制体的值
-            if (configManager.isConfigLoaded()) {
-                const configCost = this.getBuildCostFromConfig('Church');
-                if (configCost > 0) {
-                    cost = this.getActualBuildCost('Church', configCost);
-                }
-            }
-            buildingTypes.push({
-                name: '教堂',
-                prefab: this.churchPrefab,
-                cost: cost,
-                icon: this.churchIcon || null!,
-                description: '可以生产为友军治疗的牧师单位'
-            });
-        }
-        this.buildingPanel.setBuildingTypes(buildingTypes);
+        this.updateBuildingTypes();
 
         // 设置回调
         this.buildingPanel.setOnBuildingSelected((building: BuildingType) => {

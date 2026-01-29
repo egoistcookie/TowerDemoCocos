@@ -654,7 +654,7 @@ export class GameManager extends Component {
 
         // LevelHUD 作为 gameMainPanel 的子节点，会自动随着 gameMainPanel 显示隐藏
         // 游戏开始时 gameMainPanel 隐藏，LevelHUD 也会自动隐藏，无需手动更新
-
+        
     }
     
     /**
@@ -2348,7 +2348,7 @@ export class GameManager extends Component {
             // 初始进度 0
             this.updateLoadingProgress(0);
 
-            // 加载步骤: 1) 加载 bundle (20%)  2) 四个预制体 (共 80%，每个 20%)
+            // 加载步骤: 1) 加载 bundle (20%)  2) 八个预制体 (共 80%，每个 10%)
             assetManager.loadBundle('prefabs_sub', (err, bundle) => {
                 if (err) {
                     console.error('[GameManager] 加载分包 prefabs_sub 失败:', err);
@@ -2367,8 +2367,8 @@ export class GameManager extends Component {
                 // bundle 成功，进度到 20%
                 this.updateLoadingProgress(0.2);
 
-                // 直接按名字加载分包中的几个建筑预制体（石墙、冰塔、雷塔、哨塔）
-                console.info('[GameManager] 开始从分包 prefabs_sub 加载建筑预制体 StoneWall / IceTower / ThunderTower / WatchTower');
+                // 直接按名字加载分包中的几个建筑预制体（石墙、冰塔、雷塔、哨塔、战争古树、猎手大厅、剑士小屋、教堂）
+                console.info('[GameManager] 开始从分包 prefabs_sub 加载建筑预制体 StoneWall / IceTower / ThunderTower / WatchTower / WarAncientTree / HunterHall / SwordsmanHall / Church');
 
                 const loadPrefab = (name: string, stepIndex: number, totalSteps: number, onLoaded: (prefab: Prefab | null) => void) => {
                     bundle.load(name, Prefab, (err2, prefab) => {
@@ -2388,47 +2388,77 @@ export class GameManager extends Component {
                     });
                 };
 
-                // 顺序加载四个预制体，全部尝试完后再注入 TowerBuilder
-                const totalSteps = 4;
+                // 顺序加载八个预制体，全部尝试完后再注入 TowerBuilder
+                const totalSteps = 8;
                 loadPrefab('StoneWall', 1, totalSteps, (stoneWallPrefab) => {
                     loadPrefab('IceTower', 2, totalSteps, (iceTowerPrefab) => {
                         loadPrefab('ThunderTower', 3, totalSteps, (thunderTowerPrefab) => {
                             loadPrefab('WatchTower', 4, totalSteps, (watchTowerPrefab) => {
-                                try {
-                                    const towerBuilder = this.findComponentInScene('TowerBuilder') as any;
-                                    if (towerBuilder) {
-                                        if (stoneWallPrefab && typeof towerBuilder.setStoneWallPrefab === 'function') {
-                                            console.info('[GameManager] 将分包中的 StoneWall 预制体注入 TowerBuilder');
-                                            towerBuilder.setStoneWallPrefab(stoneWallPrefab);
-                                        }
-                                        if (iceTowerPrefab && typeof towerBuilder.setIceTowerPrefab === 'function') {
-                                            console.info('[GameManager] 将分包中的 IceTower 预制体注入 TowerBuilder');
-                                            towerBuilder.setIceTowerPrefab(iceTowerPrefab);
-                                        }
-                                        if (thunderTowerPrefab && typeof towerBuilder.setThunderTowerPrefab === 'function') {
-                                            console.info('[GameManager] 将分包中的 ThunderTower 预制体注入 TowerBuilder');
-                                            towerBuilder.setThunderTowerPrefab(thunderTowerPrefab);
-                                        }
-                                        if (watchTowerPrefab && typeof towerBuilder.setWatchTowerPrefab === 'function') {
-                                            console.info('[GameManager] 将分包中的 WatchTower 预制体注入 TowerBuilder');
-                                            towerBuilder.setWatchTowerPrefab(watchTowerPrefab);
-                                        }
-                                    } else {
-                                        console.warn('[GameManager] TowerBuilder 组件不存在，无法注入分包预制体');
-                                    }
-                                } catch (e) {
-                                    console.error('[GameManager] 注入分包建筑预制体到 TowerBuilder 时出错:', e);
-                                }
+                                loadPrefab('WarAncientTree', 5, totalSteps, (warAncientTreePrefab) => {
+                                    loadPrefab('HunterHall', 6, totalSteps, (hunterHallPrefab) => {
+                                        loadPrefab('SwordsmanHall', 7, totalSteps, (swordsmanHallPrefab) => {
+                                            loadPrefab('Church', 8, totalSteps, (churchPrefab) => {
+                                                try {
+                                                    const towerBuilder = this.findComponentInScene('TowerBuilder') as any;
+                                                    if (towerBuilder) {
+                                                        if (stoneWallPrefab && typeof towerBuilder.setStoneWallPrefab === 'function') {
+                                                            console.info('[GameManager] 将分包中的 StoneWall 预制体注入 TowerBuilder');
+                                                            towerBuilder.setStoneWallPrefab(stoneWallPrefab);
+                                                        }
+                                                        if (iceTowerPrefab && typeof towerBuilder.setIceTowerPrefab === 'function') {
+                                                            console.info('[GameManager] 将分包中的 IceTower 预制体注入 TowerBuilder');
+                                                            towerBuilder.setIceTowerPrefab(iceTowerPrefab);
+                                                        }
+                                                        if (thunderTowerPrefab && typeof towerBuilder.setThunderTowerPrefab === 'function') {
+                                                            console.info('[GameManager] 将分包中的 ThunderTower 预制体注入 TowerBuilder');
+                                                            towerBuilder.setThunderTowerPrefab(thunderTowerPrefab);
+                                                        }
+                                                        if (watchTowerPrefab && typeof towerBuilder.setWatchTowerPrefab === 'function') {
+                                                            console.info('[GameManager] 将分包中的 WatchTower 预制体注入 TowerBuilder');
+                                                            towerBuilder.setWatchTowerPrefab(watchTowerPrefab);
+                                                        }
+                                                        if (warAncientTreePrefab && typeof towerBuilder.setWarAncientTreePrefab === 'function') {
+                                                            console.info('[GameManager] 将分包中的 WarAncientTree 预制体注入 TowerBuilder');
+                                                            towerBuilder.setWarAncientTreePrefab(warAncientTreePrefab);
+                                                        }
+                                                        if (hunterHallPrefab && typeof towerBuilder.setHunterHallPrefab === 'function') {
+                                                            console.info('[GameManager] 将分包中的 HunterHall 预制体注入 TowerBuilder');
+                                                            towerBuilder.setHunterHallPrefab(hunterHallPrefab);
+                                                        }
+                                                        if (swordsmanHallPrefab && typeof towerBuilder.setSwordsmanHallPrefab === 'function') {
+                                                            console.info('[GameManager] 将分包中的 SwordsmanHall 预制体注入 TowerBuilder');
+                                                            towerBuilder.setSwordsmanHallPrefab(swordsmanHallPrefab);
+                                                        }
+                                                        if (churchPrefab && typeof towerBuilder.setChurchPrefab === 'function') {
+                                                            console.info('[GameManager] 将分包中的 Church 预制体注入 TowerBuilder');
+                                                            towerBuilder.setChurchPrefab(churchPrefab);
+                                                        }
+                                                        
+                                                        // 所有预制体注入完成后，更新建筑类型列表
+                                                        if (typeof towerBuilder.refreshBuildingTypes === 'function') {
+                                                            console.info('[GameManager] 刷新建筑类型列表');
+                                                            towerBuilder.refreshBuildingTypes();
+                                                        }
+                                                    } else {
+                                                        console.warn('[GameManager] TowerBuilder 组件不存在，无法注入分包预制体');
+                                                    }
+                                                } catch (e) {
+                                                    console.error('[GameManager] 注入分包建筑预制体到 TowerBuilder 时出错:', e);
+                                                }
 
-                                this.prefabsSubLoaded = true;
-                                this.isLoadingPrefabsSub = false;
+                                                this.prefabsSubLoaded = true;
+                                                this.isLoadingPrefabsSub = false;
 
-                                // 确保进度条拉满，然后关闭加载界面
-                                this.updateLoadingProgress(1);
-                                this.hideLoadingOverlay();
+                                                // 确保进度条拉满，然后关闭加载界面
+                                                this.updateLoadingProgress(1);
+                                                this.hideLoadingOverlay();
 
-                                // 分包加载完毕后，再次调用开始逻辑（这次会直接走内部实现）
-                                this._startGameInternal();
+                                                // 分包加载完毕后，再次调用开始逻辑（这次会直接走内部实现）
+                                                this._startGameInternal();
+                                            });
+                                        });
+                                    });
+                                });
                             });
                         });
                     });
