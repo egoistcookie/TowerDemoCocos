@@ -1433,10 +1433,11 @@ export class GameManager extends Component {
         const allUnits = damageStats.getAllDamageData();
         
         // 计算单位的贡献值：剑士用承伤，牧师用治疗，其它用总伤害
+        // 使用 unitName 判断，避免代码压缩后 unitType 不准确
         const getContributionValue = (unit: any): number => {
-            if (unit.unitType === 'ElfSwordsman') {
+            if (unit.unitName === '剑士' || unit.unitType === 'ElfSwordsman') {
                 return unit.damageTaken || 0;
-            } else if (unit.unitType === 'Priest') {
+            } else if (unit.unitName === '牧师' || unit.unitType === 'Priest') {
                 return unit.healAmount || 0;
             }
             return unit.totalDamage || 0;

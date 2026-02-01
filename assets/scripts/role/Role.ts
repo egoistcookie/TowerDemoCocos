@@ -3254,10 +3254,21 @@ export class Role extends Component {
         try {
             const damageStats = DamageStatistics.getInstance();
             const unitTypeNameMap = DamageStatistics.getUnitTypeNameMap();
-            const unitType = this.constructor.name; // 获取类名（如 'WatchTower', 'Arrower' 等）
-            const unitName = unitTypeNameMap.get(unitType) || unitType;
+            // 优先使用 this.unitName，避免 constructor.name 在代码压缩后变成单个字母（如 't'）
+            let unitType = this.constructor.name; // 获取类名（如 'WatchTower', 'Arrower' 等）
+            let unitName: string;
+            
+            // 优先使用 this.unitName（在编辑器中已设置）
+            if (this.unitName && this.unitName.trim() !== '') {
+                unitName = this.unitName;
+            } else {
+                // 如果 this.unitName 为空，尝试从映射表获取
+                unitName = unitTypeNameMap.get(unitType) || unitType;
+            }
+            
             // 剑士：把受到的伤害记为"承伤贡献"
-            if (unitType === 'ElfSwordsman') {
+            // 判断是否为剑士：通过 unitName 或 unitType
+            if (unitName === '剑士' || unitType === 'ElfSwordsman') {
                 damageStats.recordDamageTaken(unitType, unitName, damage);
             }
             // 其它单位：正常按输出伤害统计

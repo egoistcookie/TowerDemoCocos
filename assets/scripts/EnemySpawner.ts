@@ -31,10 +31,6 @@ interface LevelConfig {
     waves: WaveConfig[];
 }
 
-interface WaveConfigFile {
-    waves?: WaveConfig[]; // 兼容旧格式
-    levels?: LevelConfig[]; // 新格式：关卡数组
-}
 
 @ccclass('EnemySpawner')
 export class EnemySpawner extends Component {
@@ -75,7 +71,6 @@ export class EnemySpawner extends Component {
     private uiManager: any = null!;
     
     // 波次配置
-    private waveConfig: WaveConfigFile | null = null;
     private currentLevel: number = 1; // 当前关卡（1-5）
     private currentLevelConfig: LevelConfig | null = null; // 当前关卡配置
     private currentWaveIndex: number = -1;
@@ -233,17 +228,23 @@ export class EnemySpawner extends Component {
     }
     
     /**
-     * 加载波次配置文件
+     * 加载波次配置文件（按关卡加载对应的levelX.json文件）
      */
     private loadWaveConfig() {
+        this.loadLevelConfig(this.currentLevel);
+    }
+    
+    /**
+     * 加载指定关卡的配置文件
+     */
+    private loadLevelConfig(level: number) {
         // 尝试多种路径加载配置文件（兼容不同平台）
         const configPaths = [
-            'waveConfig',           // 默认路径（resources目录下）
-            'config/waveConfig',    // 带config目录的路径
-            'resources/waveConfig'  // 完整路径
+            `level${level}`,           // 默认路径（resources目录下）
+            `config/level${level}`,    // 带config目录的路径
+            `resources/level${level}`  // 完整路径
         ];
         
-        let loadAttempts = 0;
         const maxRetries = 3; // 最大重试次数
         let retryCount = 0;
         
@@ -252,7 +253,7 @@ export class EnemySpawner extends Component {
                 // 所有路径都失败，尝试重试
                 if (retryCount < maxRetries) {
                     retryCount++;
-                    console.warn(`[EnemySpawner] 所有配置文件路径加载失败，${1}秒后重试 (${retryCount}/${maxRetries})`);
+                    console.warn(`[EnemySpawner] 所有配置文件路径加载失败，1秒后重试 (${retryCount}/${maxRetries})`);
                     // 延迟1秒后重试
                     this.scheduleOnce(() => {
                         tryLoadConfig(0);
@@ -261,7 +262,7 @@ export class EnemySpawner extends Component {
                 }
                 
                 // 重试次数用完，使用本地配置作为备用方案
-                console.warn('[EnemySpawner] 所有配置文件路径加载失败，使用本地配置');
+                console.warn(`[EnemySpawner] 关卡${level}配置文件加载失败，使用本地配置`);
                 this.useLocalWaveConfig();
                 // 使用本地配置后也要标记为已加载
                 if (this.currentLevelConfig) {
@@ -274,7 +275,7 @@ export class EnemySpawner extends Component {
             }
             
             const configPath = configPaths[pathIndex];
-            console.log(`[EnemySpawner] 尝试加载配置文件: ${configPath} (路径索引: ${pathIndex})`);
+            console.log(`[EnemySpawner] 尝试加载关卡${level}配置文件: ${configPath} (路径索引: ${pathIndex})`);
             
             resources.load(configPath, JsonAsset, (err, jsonAsset) => {
                 if (err) {
@@ -290,33 +291,29 @@ export class EnemySpawner extends Component {
                     return;
                 }
                 
-                console.log(`[EnemySpawner] 成功加载配置文件: ${configPath}`);
-                console.log(`[EnemySpawner] 配置文件内容:`, {
-                    hasLevels: !!jsonAsset.json.levels,
-                    levelsCount: jsonAsset.json.levels?.length || 0,
-                    hasWaves: !!jsonAsset.json.waves,
-                    wavesCount: jsonAsset.json.waves?.length || 0
-                });
+                console.log(`[EnemySpawner] 成功加载关卡${level}配置文件: ${configPath}`);
                 
-                this.waveConfig = jsonAsset.json as WaveConfigFile;
+                // 直接作为LevelConfig使用（每个levelX.json文件就是一个LevelConfig）
+                const levelConfig = jsonAsset.json as LevelConfig;
                 
                 // 验证配置数据
-                if (!this.waveConfig || (!this.waveConfig.levels && !this.waveConfig.waves)) {
-                    console.error('[EnemySpawner] 配置文件格式错误，缺少levels或waves字段');
+                if (!levelConfig || !levelConfig.waves) {
+                    console.error(`[EnemySpawner] 关卡${level}配置文件格式错误，缺少waves字段`);
                     tryLoadConfig(pathIndex + 1);
                     return;
                 }
                 
-                // 更新当前关卡配置
-                this.updateCurrentLevel();
+                // 设置当前关卡配置
+                this.currentLevelConfig = levelConfig;
+                this.currentLevel = levelConfig.id || level; // 使用配置文件中的id，如果没有则使用传入的level
                 
                 // 验证关卡配置是否加载成功
                 if (this.currentLevelConfig) {
-                    console.log(`[EnemySpawner] 关卡配置加载成功，当前关卡: ${this.currentLevel}, 波次数: ${this.currentLevelConfig.waves?.length || 0}`);
+                    console.log(`[EnemySpawner] 关卡${this.currentLevel}配置加载成功，波次数: ${this.currentLevelConfig.waves?.length || 0}`);
                     this.isConfigLoaded = true; // 标记配置已加载
                     console.log('[EnemySpawner] 配置加载完成，可以开始刷怪');
                 } else {
-                    console.error('[EnemySpawner] 关卡配置加载失败');
+                    console.error(`[EnemySpawner] 关卡${level}配置加载失败`);
                     this.isConfigLoaded = false;
                     // 如果关卡配置加载失败，尝试下一个路径
                     tryLoadConfig(pathIndex + 1);
@@ -331,34 +328,27 @@ export class EnemySpawner extends Component {
     }
     
     /**
-     * 设置当前关卡
+     * 设置当前关卡（会重新加载对应关卡的配置文件）
      */
     setLevel(level: number) {
-        if (level >= 1 && level <= 5) {
+        if (level >= 1 && level <= 5 && level !== this.currentLevel) {
             this.currentLevel = level;
-            this.updateCurrentLevel();
+            this.currentLevelConfig = null;
+            this.isConfigLoaded = false;
+            // 重新加载对应关卡的配置文件
+            this.loadLevelConfig(level);
         }
     }
     
     /**
-     * 更新当前关卡配置
+     * 更新当前关卡配置（已废弃，现在直接通过loadLevelConfig加载）
+     * 保留此方法以兼容可能存在的调用
      */
     private updateCurrentLevel() {
-        if (!this.waveConfig || !this.waveConfig.levels) {
-            this.currentLevelConfig = null;
-            return;
-        }
-        
-        // 查找对应ID的关卡配置
-        const levelConfig = this.waveConfig.levels.find(level => level.id === this.currentLevel);
-        if (levelConfig) {
-            this.currentLevelConfig = levelConfig;
-        } else {
-            // 如果找不到对应关卡，使用第一个关卡
-            this.currentLevelConfig = this.waveConfig.levels[0] || null;
-            if (this.currentLevelConfig) {
-                this.currentLevel = this.currentLevelConfig.id;
-            }
+        // 不再需要从waveConfig中查找，因为现在直接加载levelX.json
+        // 如果配置未加载，尝试加载
+        if (!this.currentLevelConfig) {
+            this.loadLevelConfig(this.currentLevel);
         }
     }
 
@@ -450,7 +440,7 @@ export class EnemySpawner extends Component {
             // 每5秒输出一次日志，提醒配置还在加载中（用于调试小程序环境）
             const timerSeconds = Math.floor(this.enemySpawnTimer);
             if (timerSeconds > 0 && timerSeconds % 5 === 0 && this.enemySpawnTimer - timerSeconds < deltaTime) {
-                console.warn(`[EnemySpawner] 配置尚未加载完成，等待中... (waveConfig: ${this.waveConfig ? '已加载' : '未加载'}, isConfigLoaded: ${this.isConfigLoaded}, currentLevelConfig: ${this.currentLevelConfig ? '已加载' : '未加载'})`);
+                console.warn(`[EnemySpawner] 配置尚未加载完成，等待中... (isConfigLoaded: ${this.isConfigLoaded}, currentLevelConfig: ${this.currentLevelConfig ? '已加载' : '未加载'}, currentLevel: ${this.currentLevel})`);
             }
             this.enemySpawnTimer += deltaTime;
             return;
@@ -622,8 +612,8 @@ export class EnemySpawner extends Component {
         }
         
         // 检查是否还有波次
-        if (this.waveConfig === null) {
-            console.warn(`[EnemySpawner] startNextWave() waveConfig为null，返回`);
+        if (this.currentLevelConfig === null) {
+            console.warn(`[EnemySpawner] startNextWave() currentLevelConfig为null，返回`);
             return;
         }
         
@@ -1207,9 +1197,11 @@ export class EnemySpawner extends Component {
      * 使用本地波次配置作为备用方案
      */
     private useLocalWaveConfig() {
-        
-        // 创建本地波次配置（兼容旧格式）
-        this.waveConfig = {
+        // 创建本地关卡配置（直接是LevelConfig格式）
+        this.currentLevelConfig = {
+            id: this.currentLevel,
+            name: `关卡${this.currentLevel}`,
+            description: "本地备用配置",
             waves: [
                 {
                     id: 1,
@@ -1218,7 +1210,7 @@ export class EnemySpawner extends Component {
                     preWaveDelay: 3,
                     enemies: [
                         {
-                            prefabName: "Enemy",
+                            prefabName: "Orc",
                             count: 10,
                             interval: 1.0
                         }
@@ -1226,9 +1218,6 @@ export class EnemySpawner extends Component {
                 }
             ]
         };
-        
-        // 更新当前关卡配置
-        this.updateCurrentLevel();
         
         // 使用本地配置后也要标记为已加载
         if (this.currentLevelConfig) {

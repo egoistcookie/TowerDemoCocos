@@ -369,8 +369,18 @@ export class Priest extends Role {
             try {
                 const damageStats = DamageStatistics.getInstance();
                 const unitTypeNameMap = DamageStatistics.getUnitTypeNameMap();
+                // 优先使用 this.unitName，避免 constructor.name 在代码压缩后变成单个字母（如 't'）
                 const unitType = this.constructor.name; // 'Priest'
-                const unitName = unitTypeNameMap.get(unitType) || this.unitName || '牧师';
+                let unitName: string;
+                
+                // 优先使用 this.unitName（在编辑器中已设置）
+                if (this.unitName && this.unitName.trim() !== '') {
+                    unitName = this.unitName;
+                } else {
+                    // 如果 this.unitName 为空，尝试从映射表获取，最后使用默认值
+                    unitName = unitTypeNameMap.get(unitType) || '牧师';
+                }
+                
                 damageStats.recordHeal(unitType, unitName, healAmount);
             } catch (e) {
                 // 忽略异常，避免影响战斗流程

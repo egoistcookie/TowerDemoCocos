@@ -24,7 +24,7 @@ export interface UnitDamageData {
 export class DamageStatistics {
     private static instance: DamageStatistics | null = null;
     
-    // 存储每个单位的伤害数据（key: unitType, value: UnitDamageData）
+    // 存储每个单位的伤害数据（key: unitName，避免代码压缩后 unitType 相同导致合并）
     private damageMap: Map<string, UnitDamageData> = new Map();
     
     // 游戏开始时间
@@ -82,8 +82,12 @@ export class DamageStatistics {
             return;
         }
         
+        // 使用 unitName 作为 key，避免代码压缩后 unitType 相同导致不同单位类型被合并
+        // 如果 unitName 为空，使用 unitType 作为回退
+        const key = unitName && unitName.trim() !== '' ? unitName : unitType;
+        
         // 获取或创建该单位的伤害数据
-        let data = this.damageMap.get(unitType);
+        let data = this.damageMap.get(key);
         if (!data) {
             data = {
                 unitType: unitType,
@@ -96,7 +100,7 @@ export class DamageStatistics {
                 damageTaken: 0,
                 healAmount: 0
             };
-            this.damageMap.set(unitType, data);
+            this.damageMap.set(key, data);
         }
         
         // 更新伤害数据
@@ -115,6 +119,7 @@ export class DamageStatistics {
         // console.info('[DamageStatistics] recordDamage',
         //     'unitType =', unitType,
         //     'unitName =', unitName,
+        //     'key =', key,
         //     'damage =', damage,
         //     'totalDamage =', data.totalDamage,
         //     'hitCount =', data.hitCount,
@@ -129,7 +134,11 @@ export class DamageStatistics {
             return;
         }
 
-        let data = this.damageMap.get(unitType);
+        // 使用 unitName 作为 key，避免代码压缩后 unitType 相同导致不同单位类型被合并
+        // 如果 unitName 为空，使用 unitType 作为回退
+        const key = unitName && unitName.trim() !== '' ? unitName : unitType;
+
+        let data = this.damageMap.get(key);
         if (!data) {
             data = {
                 unitType,
@@ -142,7 +151,7 @@ export class DamageStatistics {
                 damageTaken: 0,
                 healAmount: 0
             };
-            this.damageMap.set(unitType, data);
+            this.damageMap.set(key, data);
         }
 
         data.damageTaken = (data.damageTaken || 0) + damage;
@@ -151,6 +160,7 @@ export class DamageStatistics {
         // console.info('[DamageStatistics] recordDamageTaken',
         //     'unitType =', unitType,
         //     'unitName =', unitName,
+        //     'key =', key,
         //     'damageTaken =', data.damageTaken);
     }
 
@@ -162,7 +172,11 @@ export class DamageStatistics {
             return;
         }
 
-        let data = this.damageMap.get(unitType);
+        // 使用 unitName 作为 key，避免代码压缩后 unitType 相同导致不同单位类型被合并
+        // 如果 unitName 为空，使用 unitType 作为回退
+        const key = unitName && unitName.trim() !== '' ? unitName : unitType;
+
+        let data = this.damageMap.get(key);
         if (!data) {
             data = {
                 unitType,
@@ -175,7 +189,7 @@ export class DamageStatistics {
                 damageTaken: 0,
                 healAmount: 0
             };
-            this.damageMap.set(unitType, data);
+            this.damageMap.set(key, data);
         }
 
         data.healAmount = (data.healAmount || 0) + heal;
@@ -184,6 +198,7 @@ export class DamageStatistics {
         // console.info('[DamageStatistics] recordHeal',
         //     'unitType =', unitType,
         //     'unitName =', unitName,
+        //     'key =', key,
         //     'healAmount =', data.healAmount);
     }
     
