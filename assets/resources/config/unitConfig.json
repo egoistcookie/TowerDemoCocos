@@ -270,6 +270,54 @@
       "回收奖励": "2金币"
     }
   },
+  "IceTower": {
+    "baseStats": {
+      "maxHealth": 100,
+      "buildCost": 20,
+      "attackRange": 250,
+      "attackDamage": 20,
+      "attackInterval": 1.5,
+      "goldReward": 2,
+      "level": 1,
+      "collisionRadius": 25
+    },
+    "displayInfo": {
+      "name": "冰元素塔",
+      "description": "释放冰霜之力，减缓敌人移动速度。"
+    },
+    "displayStats": {
+      "生命值": 100,
+      "攻击力": 20,
+      "攻击范围": "250像素",
+      "攻击间隔": "1.5秒",
+      "建造成本": "20金币",
+      "回收奖励": "2金币"
+    }
+  },
+  "ThunderTower": {
+    "baseStats": {
+      "maxHealth": 100,
+      "buildCost": 30,
+      "attackRange": 250,
+      "attackDamage": 25,
+      "attackInterval": 1.8,
+      "goldReward": 2,
+      "level": 1,
+      "collisionRadius": 25
+    },
+    "displayInfo": {
+      "name": "雷元素塔",
+      "description": "召唤雷电，对多个敌人造成连锁伤害。"
+    },
+    "displayStats": {
+      "生命值": 100,
+      "攻击力": 25,
+      "攻击范围": "250像素",
+      "攻击间隔": "1.8秒",
+      "建造成本": "30金币",
+      "回收奖励": "2金币"
+    }
+  },
   "Orc": {
     "baseStats": {
       "maxHealth": 30,
@@ -392,6 +440,31 @@
       "移动速度": "60像素/秒",
       "金币奖励": "2金币",
       "经验奖励": "2点"
+    }
+  },
+  "OrcShaman": {
+    "baseStats": {
+      "maxHealth": 80,
+      "attackRange": 200,
+      "attackDamage": 25,
+      "attackInterval": 2.0,
+      "moveSpeed": 30,
+      "collisionRadius": 20,
+      "goldReward": 8,
+      "expReward": 8
+    },
+    "displayInfo": {
+      "name": "兽人萨满",
+      "description": "强大的兽人萨满，释放绿色法球攻击，移动缓慢但攻击力极高。每30秒释放一次图腾，治疗附近敌人。"
+    },
+    "displayStats": {
+      "生命值": 80,
+      "攻击力": 25,
+      "攻击范围": "200像素",
+      "攻击间隔": "2.0秒",
+      "移动速度": "30像素/秒",
+      "金币奖励": "8金币",
+      "经验奖励": "8点"
     }
   }
 }

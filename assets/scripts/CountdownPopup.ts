@@ -34,6 +34,7 @@ export class CountdownPopup extends Component {
     private arcBorderGraphics: any = null; // 圆弧边框的Graphics组件
     private gameManager: GameManager = null!; // GameManager引用
     private initialCountdownTime: number = 60; // 初始倒计时时间（秒）
+    private hideTween: any = null; // hide() 动画的tween引用，用于取消
 
     onLoad() {
         // 确保弹窗初始状态为隐藏
@@ -163,8 +164,10 @@ export class CountdownPopup extends Component {
      * 弹窗点击事件处理
      */
     private onPopupClick() {
+        console.info(`[CountdownPopup] onPopupClick() 被调用，isShowingNextWaveText=${this.isShowingNextWaveText}, isCounting=${this.isCounting}, onManualClose存在=${!!this.onManualClose}`);
         // 如果正在显示"下一波敌人"文本，不处理点击（等待5秒后开始倒计时）
         if (this.isShowingNextWaveText) {
+            console.info(`[CountdownPopup] onPopupClick() 正在显示"下一波敌人"文本，忽略点击`);
             return;
         }
         
@@ -173,6 +176,8 @@ export class CountdownPopup extends Component {
             // 计算剩余倒计时时间（向上取整，确保至少奖励1金币）
             const remainingSeconds = Math.ceil(this.countdownTime);
             const goldReward = remainingSeconds;
+            
+            console.info(`[CountdownPopup] onPopupClick() 倒计时中，剩余时间=${remainingSeconds}秒，奖励金币=${goldReward}`);
             
             // 添加金币奖励
             if (this.gameManager) {
@@ -184,10 +189,20 @@ export class CountdownPopup extends Component {
         }
         
         this.isCounting = false;
-        if (this.onManualClose) {
-            this.onManualClose();
+        
+        // 保存回调引用，因为hide()可能会清空它
+        const savedOnManualClose = this.onManualClose;
+        console.info(`[CountdownPopup] onPopupClick() 保存回调引用，savedOnManualClose存在=${!!savedOnManualClose}`);
+        
+        // 先调用回调，再隐藏（避免hide()清空回调）
+        if (savedOnManualClose) {
+            console.info(`[CountdownPopup] onPopupClick() 调用 onManualClose 回调`);
+            savedOnManualClose();
         } else {
+            console.warn(`[CountdownPopup] onPopupClick() onManualClose 回调不存在，无法继续下一波`);
         }
+        
+        // 然后隐藏弹窗
         this.hide();
     }
     
@@ -312,8 +327,26 @@ export class CountdownPopup extends Component {
      * @param onManualClose 手动关闭回调
      */
     show(onComplete: () => void, onManualClose: () => void) {
+        console.info(`[CountdownPopup] show() 被调用，onComplete存在=${!!onComplete}, onManualClose存在=${!!onManualClose}`);
+        
+        // 取消之前的hide()动画（如果存在）
+        if (this.hideTween) {
+            console.info(`[CountdownPopup] show() 取消之前的hide()动画`);
+            tween(this.node).stop();
+            this.hideTween = null;
+            // 重置节点状态
+            this.node.setScale(1, 1, 1);
+            this.node.angle = 0;
+            const uiOpacity = this.node.getComponent(UIOpacity);
+            if (uiOpacity) {
+                uiOpacity.opacity = 255;
+            }
+        }
+        
+        // 设置回调（必须在取消动画之后，避免被清空）
         this.onCountdownComplete = onComplete;
         this.onManualClose = onManualClose;
+        console.info(`[CountdownPopup] show() 设置回调后，onManualClose存在=${!!this.onManualClose}`);
         this.countdownTime = 60;
         this.initialCountdownTime = 60; // 保存初始倒计时时间
         
@@ -328,32 +361,104 @@ export class CountdownPopup extends Component {
         this.nextWaveTextTimer = 0;
         
         this.node.active = true;
+        console.info(`[CountdownPopup] show() 设置 node.active = true`);
+        
+        // 恢复显示状态（确保可见）
+        const uiOpacity = this.node.getComponent(UIOpacity);
+        if (uiOpacity) {
+            uiOpacity.opacity = 255;
+            console.info(`[CountdownPopup] show() 设置 opacity = 255`);
+        }
+        
+        // 恢复siblingIndex到最顶层
+        if (this.node.parent) {
+            const maxIndex = this.node.parent.children.length - 1;
+            this.node.setSiblingIndex(maxIndex);
+            console.info(`[CountdownPopup] show() 设置 siblingIndex = ${maxIndex}`);
+        }
         
         // 显示"下一波敌人"文本，隐藏倒计时
         if (this.nextWaveLabel) {
             this.nextWaveLabel.node.active = true;
+            console.info(`[CountdownPopup] show() 显示 nextWaveLabel`);
         }
         if (this.countdownLabel) {
             this.countdownLabel.node.active = false;
+            console.info(`[CountdownPopup] show() 隐藏 countdownLabel`);
         }
         
+        console.info(`[CountdownPopup] show() 完成，node.active=${this.node.active}, isShowingNextWaveText=${this.isShowingNextWaveText}, isCounting=${this.isCounting}`);
     }
 
+    /**
+     * 临时隐藏倒计时弹窗（不停止倒计时，用于显示增益卡片时）
+     * 通过降低 siblingIndex 来隐藏，而不是设置 active = false
+     */
+    temporaryHide() {
+        console.info(`[CountdownPopup] temporaryHide() 被调用，当前 node.active=${this.node.active}, isCounting=${this.isCounting}, isShowingNextWaveText=${this.isShowingNextWaveText}`);
+        // 将节点移到最底层，这样它会被其他UI遮挡
+        // 但不设置 active = false，这样 update() 方法会继续执行，倒计时继续运行
+        if (this.node.parent) {
+            const oldIndex = this.node.getSiblingIndex();
+            this.node.setSiblingIndex(0);
+            console.info(`[CountdownPopup] temporaryHide() 设置 siblingIndex: ${oldIndex} -> 0`);
+        }
+        // 也可以设置透明度为0，使其不可见
+        const uiOpacity = this.node.getComponent(UIOpacity);
+        if (uiOpacity) {
+            const oldOpacity = uiOpacity.opacity;
+            uiOpacity.opacity = 0;
+            console.info(`[CountdownPopup] temporaryHide() 设置 opacity: ${oldOpacity} -> 0`);
+        }
+        console.info(`[CountdownPopup] temporaryHide() 完成，node.active=${this.node.active}`);
+    }
+    
+    /**
+     * 恢复显示倒计时弹窗（临时隐藏后恢复）
+     */
+    temporaryShow() {
+        console.info(`[CountdownPopup] temporaryShow() 被调用，当前 node.active=${this.node.active}, isCounting=${this.isCounting}, isShowingNextWaveText=${this.isShowingNextWaveText}`);
+        // 确保节点是激活的
+        if (!this.node.active) {
+            this.node.active = true;
+            console.info(`[CountdownPopup] temporaryShow() 设置 node.active = true`);
+        }
+        // 恢复节点到最顶层
+        if (this.node.parent) {
+            const maxIndex = this.node.parent.children.length - 1;
+            const oldIndex = this.node.getSiblingIndex();
+            this.node.setSiblingIndex(maxIndex);
+            console.info(`[CountdownPopup] temporaryShow() 设置 siblingIndex: ${oldIndex} -> ${maxIndex}`);
+        }
+        // 恢复透明度
+        const uiOpacity = this.node.getComponent(UIOpacity);
+        if (uiOpacity) {
+            const oldOpacity = uiOpacity.opacity;
+            uiOpacity.opacity = 255;
+            console.info(`[CountdownPopup] temporaryShow() 设置 opacity: ${oldOpacity} -> 255`);
+        }
+        console.info(`[CountdownPopup] temporaryShow() 完成，node.active=${this.node.active}`);
+    }
+    
     /**
      * 隐藏倒计时弹窗，添加泡沫破碎消失效果
      */
     hide() {
-        
+        console.info(`[CountdownPopup] hide() 被调用，onManualClose存在=${!!this.onManualClose}`);
         this.isCounting = false;
         
         // 获取UIOpacity组件
         const uiOpacity = this.node.getComponent(UIOpacity);
         
+        // 保存回调引用，因为动画完成后会清空
+        const savedOnManualClose = this.onManualClose;
+        const savedOnComplete = this.onCountdownComplete;
+        
         // 使用tween创建泡沫破碎消失效果
         // 1. 先放大一点
         // 2. 然后缩小并旋转
         // 3. 同时降低透明度
-        tween(this.node)
+        this.hideTween = tween(this.node)
             .to(0.1, { scale: new Vec3(1.2, 1.2, 1) }) // 稍微放大
             .to(0.3, {
                 scale: new Vec3(0.1, 0.1, 1), // 缩小
@@ -366,14 +471,19 @@ export class CountdownPopup extends Component {
             )
             .call(() => {
                 // 动画完成后，重置状态并隐藏节点
+                console.info(`[CountdownPopup] hide() 动画完成，清空回调`);
                 this.node.active = false;
                 this.node.setScale(1, 1, 1);
                 this.node.angle = 0; // 重置旋转角度为0度
                 if (uiOpacity) {
                     uiOpacity.opacity = 255;
                 }
-                this.onCountdownComplete = null;
-                this.onManualClose = null;
+                // 只有在动画正常完成时才清空回调（如果被show()取消，则不清空）
+                if (this.hideTween) {
+                    this.onCountdownComplete = null;
+                    this.onManualClose = null;
+                    this.hideTween = null;
+                }
             })
             .start();
     }
@@ -424,12 +534,18 @@ export class CountdownPopup extends Component {
     }
 
     update(deltaTime: number) {
+        // 如果节点未激活，不执行更新逻辑
+        if (!this.node.active) {
+            return;
+        }
+        
         // 如果正在显示"下一波敌人"文本
         if (this.isShowingNextWaveText) {
             this.nextWaveTextTimer += deltaTime;
             
             // 显示5秒后，切换到倒计时
             if (this.nextWaveTextTimer >= 5) {
+                console.info(`[CountdownPopup] update() 5秒后切换到倒计时，node.active=${this.node.active}`);
                 
                 // 隐藏"下一波敌人"文本，显示倒计时
                 if (this.nextWaveLabel) {
@@ -437,12 +553,14 @@ export class CountdownPopup extends Component {
                 }
                 if (this.countdownLabel) {
                     this.countdownLabel.node.active = true;
+                    console.info(`[CountdownPopup] update() 显示 countdownLabel`);
                 }
                 
                 // 开始倒计时
                 this.isShowingNextWaveText = false;
                 this.isCounting = true;
                 this.updateCountdownLabel();
+                console.info(`[CountdownPopup] update() 开始倒计时，isCounting=${this.isCounting}`);
             }
             return;
         }
@@ -467,6 +585,7 @@ export class CountdownPopup extends Component {
                 // 倒计时结束，边框变为完全红色
                 this.updateArcBorder(1);
                 
+                console.info(`[CountdownPopup] update() 倒计时结束`);
                 if (this.onCountdownComplete) {
                     this.onCountdownComplete();
                 } else {

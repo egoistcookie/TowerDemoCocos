@@ -121,12 +121,10 @@ export class Arrow extends Component {
             this.onHitCallback(this.damage);
         }
 
-        // 直接销毁弓箭节点，避免scheduleOnce的警告
-        this.scheduleOnce(() => {
-            if (this.node && this.node.isValid) {
-                this.node.destroy();
-            }
-        }, 0.1);
+        // 立即销毁弓箭节点，避免在 timeScale=0 时 scheduleOnce 不执行
+        if (this.node && this.node.isValid) {
+            this.node.destroy();
+        }
     }
 
     update(deltaTime: number) {

@@ -48,6 +48,9 @@ export class WatchTower extends Build {
     @property
     attackInterval: number = 1.2; // 攻击间隔（秒）
 
+    // 人口占用（哨塔占用1个人口）
+    protected populationCost: number = 1;
+
     @property(Prefab)
     arrowPrefab: Prefab = null!; // 弓箭预制体
 
@@ -136,6 +139,17 @@ export class WatchTower extends Build {
         // 哨塔特有的初始化：监听点击事件
         this.node.on(Node.EventType.TOUCH_END, this.onWatchTowerClick, this);
         
+        // 重置节点缩放为默认值（确保defaultScale正确）
+        this.node.setScale(1, 1, 1);
+        this.defaultScale = new Vec3(1, 1, 1);
+        
+        // 重置哨塔高度为两个网格（100像素），确保从对象池回收后大小正确
+        const uiTransform = this.node.getComponent(UITransform);
+        if (uiTransform) {
+            // 确保高度为100（两个网格），宽度保持原有值
+            uiTransform.setContentSize(uiTransform.width, 100);
+        }
+        
         // 初始化攻击相关属性
         this.attackTimer = 0;
         this.currentTarget = null!;
@@ -173,7 +187,10 @@ export class WatchTower extends Build {
 
         // 创建建造进度条并设置初始贴图
         this.createConstructionProgressBar();
-        this.updateSprite();
+        // 延迟一帧再调用updateSprite，确保UITransform的尺寸已正确设置
+        this.scheduleOnce(() => {
+            this.updateSprite();
+        }, 0);
     }
 
     protected start() {
@@ -297,7 +314,7 @@ export class WatchTower extends Build {
     }
 
     /**
-     * 构造哨塔的单位信息（包含回收回调，供九宫格面板使用）
+     * 构造哨塔的单位信息（包含回收和升级回调，供九宫格面板使用）
      */
     private buildUnitInfo(): UnitInfo {
         return {
@@ -306,11 +323,15 @@ export class WatchTower extends Build {
             currentHealth: this.currentHealth,
             maxHealth: this.maxHealth,
             attackDamage: this.attackDamage,
-            populationCost: 0,
+            attackFrequency: 1.0 / this.attackInterval,
+            populationCost: this.populationCost,
             icon: this.cardIcon || this.defaultSpriteFrame,
             collisionRadius: this.collisionRadius,
             onSellClick: () => {
                 this.onSellClick();
+            },
+            onUpgradeClick: () => {
+                this.onUpgradeClick();
             }
         };
     }
@@ -405,13 +426,67 @@ export class WatchTower extends Build {
             // 回收80%金币
             const refund = Math.floor(this.buildCost * 0.8);
             this.gameManager.addGold(refund);
+            // 注意：不在这里释放人口，因为die()方法中已经处理了人口释放
         }
 
         // 隐藏面板
         this.hideSelectionPanel();
         
         // 销毁哨塔（使用die方法，会返回到对象池）
+        // die()方法中会释放人口，避免重复释放
         this.die();
+    }
+
+    /**
+     * 升级按钮点击事件（参考Role的升级机制）
+     */
+    protected onUpgradeClick(event?: EventTouch) {
+        if (event) {
+            event.propagationStopped = true;
+        }
+        
+        // 限制最高等级为3级
+        if (this.level >= 3) {
+            return;
+        }
+
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+
+        if (!this.gameManager) {
+            return;
+        }
+
+        // 升级费用：1到2级是10金币，此后每次升级多10金币
+        // 公式：10 + (level - 1) * 10
+        const upgradeCost = 10 + (this.level - 1) * 10;
+        
+        if (!this.gameManager.canAfford(upgradeCost)) {
+            return;
+        }
+
+        // 消耗金币
+        this.gameManager.spendGold(upgradeCost);
+
+        // 升级单位
+        this.level++;
+        this.attackDamage = Math.floor(this.attackDamage * 1.25); // 攻击力增加25%
+        this.attackInterval = this.attackInterval / 1.1; // 攻击速度增加10%（间隔减少10%）
+
+        // 更新单位信息面板
+        if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            this.unitSelectionManager.updateUnitInfo({
+                level: this.level,
+                attackDamage: this.attackDamage,
+                currentHealth: this.currentHealth,
+                maxHealth: this.maxHealth,
+                attackFrequency: 1.0 / this.attackInterval
+            });
+        }
+
+        // 隐藏面板
+        this.hideSelectionPanel();
     }
 
     /**
@@ -1119,6 +1194,14 @@ export class WatchTower extends Build {
         this.isDestroying = true;
         this.destructionTimer = 0;
         this.destructionFrameIndex = 0;
+
+        // 释放人口
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        if (this.gameManager) {
+            this.gameManager.removePopulation(this.populationCost);
+        }
 
         // 停止攻击
         this.currentTarget = null!;

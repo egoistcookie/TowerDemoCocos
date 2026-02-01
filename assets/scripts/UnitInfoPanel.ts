@@ -433,7 +433,17 @@ export class UnitInfoPanel extends Component {
 
         // 更新生命值
         if (this.healthLabel) {
-            this.healthLabel.string = `生命值: ${unitInfo.currentHealth}/${unitInfo.maxHealth}`;
+            // 检查生命值是否有效
+            if (unitInfo.currentHealth !== undefined && unitInfo.maxHealth !== undefined && 
+                !isNaN(unitInfo.currentHealth) && !isNaN(unitInfo.maxHealth) &&
+                unitInfo.currentHealth >= 0 && unitInfo.maxHealth > 0) {
+                this.healthLabel.string = `生命值: ${unitInfo.currentHealth}/${unitInfo.maxHealth}`;
+                this.healthLabel.node.active = true;
+            } else {
+                console.warn(`[UnitInfoPanel] showUnitInfo() 生命值无效: currentHealth=${unitInfo.currentHealth}, maxHealth=${unitInfo.maxHealth}`);
+                this.healthLabel.string = `生命值: 0/0`;
+                this.healthLabel.node.active = true;
+            }
         }
 
         // 更新攻击力
@@ -562,7 +572,6 @@ export class UnitInfoPanel extends Component {
      * @param selectedUnits 所有选中的单位节点数组
      */
     showMultipleUnitsInfo(firstUnitInfo: UnitInfo, selectedUnits: Node[]) {
-        console.info('[UnitInfoPanel] showMultipleUnitsInfo: 开始，传入单位数量 =', selectedUnits.length);
         if (!this.panelNode) {
             console.info('[UnitInfoPanel] showMultipleUnitsInfo: panelNode不存在，初始化面板');
             this.initPanel();
@@ -572,7 +581,6 @@ export class UnitInfoPanel extends Component {
         this.currentUnitInfo = firstUnitInfo;
         this.currentSelectedUnits = selectedUnits.filter(node => node && node.isValid && node.active);
         this.isMultiSelection = this.currentSelectedUnits.length > 1;
-        console.info('[UnitInfoPanel] showMultipleUnitsInfo: 过滤后单位数量 =', this.currentSelectedUnits.length, '，是否多选 =', this.isMultiSelection);
 
         // 更新图标（使用第一个单位的图标）
         if (this.iconNode) {
@@ -643,13 +651,10 @@ export class UnitInfoPanel extends Component {
         }
 
         // 更新按钮（支持批量操作）
-        console.info('[UnitInfoPanel] showMultipleUnitsInfo: 更新按钮');
         this.updateButtonsForMultiSelection(firstUnitInfo);
 
         // 显示面板
-        console.info('[UnitInfoPanel] showMultipleUnitsInfo: 调用show()显示面板');
         this.show();
-        console.info('[UnitInfoPanel] showMultipleUnitsInfo: 完成');
     }
 
     /**
@@ -1003,7 +1008,6 @@ export class UnitInfoPanel extends Component {
      * 批量升级（金币不足时先升级先选中的单位）
      */
     private batchUpgrade() {
-        console.info('[UnitInfoPanel] batchUpgrade: 开始批量升级，选中单位数量 =', this.currentSelectedUnits.length);
         if (this.currentSelectedUnits.length === 0) {
             console.info('[UnitInfoPanel] batchUpgrade: 没有选中的单位');
             return;
@@ -1084,9 +1088,6 @@ export class UnitInfoPanel extends Component {
                     continue;
                 }
             }
-
-            // 执行升级（不传递event参数，避免触发hideSelectionPanel）
-            console.info('[UnitInfoPanel] batchUpgrade: 执行升级，单位名称 =', unitNode.name, '，升级费用 =', upgradeCost, '，当前金币 =', gameManager.gold);
             
             // 保存升级前的等级，用于判断是否真的升级了
             const levelBeforeUpgrade = unitScript.level || 1;
@@ -1101,7 +1102,6 @@ export class UnitInfoPanel extends Component {
                 // 检查是否真的升级了（通过等级变化判断）
                 const levelAfterUpgrade = unitScript.level || 1;
                 if (levelAfterUpgrade > levelBeforeUpgrade) {
-                    console.info('[UnitInfoPanel] batchUpgrade: 升级成功，单位名称 =', unitNode.name, '，等级从', levelBeforeUpgrade, '升级到', levelAfterUpgrade);
                     upgradedCount++;
                     upgradedUnits.push(unitNode);
                 } else {
@@ -1133,7 +1133,6 @@ export class UnitInfoPanel extends Component {
             }
         }
         
-        console.info('[UnitInfoPanel] batchUpgrade: 批量升级完成，成功升级单位数量 =', upgradedCount);
     }
 
     /**
@@ -1218,13 +1217,11 @@ export class UnitInfoPanel extends Component {
      * 显示面板
      */
     show() {
-        console.info('[UnitInfoPanel] show: 开始显示面板');
         if (!this.panelNode) {
             console.info('[UnitInfoPanel] show: panelNode不存在，初始化面板');
             this.initPanel();
         }
         if (this.panelNode) {
-            console.info('[UnitInfoPanel] show: panelNode存在，设置active = true');
             this.panelNode.active = true;
             console.info('[UnitInfoPanel] show: panelNode.active =', this.panelNode.active);
         } else {

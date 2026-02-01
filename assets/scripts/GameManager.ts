@@ -1,7 +1,9 @@
 import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, BlockInputEvents } from 'cc';
 import { Crystal } from './role/Crystal';
 import { UnitIntroPopup } from './UnitIntroPopup';
+import { BuffCardPopup, BuffCardData } from './BuffCardPopup';
 import { UnitConfigManager } from './UnitConfigManager';
+import { BuffCardConfigManager } from './BuffCardConfigManager';
 import { PlayerDataManager } from './PlayerDataManager';
 import { UnitManager } from './UnitManager';
 import { UnitPool } from './UnitPool';
@@ -49,6 +51,9 @@ export class GameManager extends Component {
 
     @property(UnitIntroPopup)
     unitIntroPopup: UnitIntroPopup = null!;
+    
+    @property(BuffCardPopup)
+    buffCardPopup: BuffCardPopup = null!;
 
     private gameState: GameState = GameState.Ready;
     private gameTime: number = 0; // 已防御时间（累积时间，从0开始）
@@ -64,6 +69,37 @@ export class GameManager extends Component {
     // 单位首次出现相关
     private appearedUnitTypes: Set<string> = new Set();
     private originalTimeScale: number = 1; // 保存原始时间缩放值
+    
+    // 全局增益卡片图标（在初始化时加载）
+    private populationIcon: SpriteFrame | null = null; // 人口增加卡片图标
+    private goldIcon: SpriteFrame | null = null; // 金币增加卡片图标
+    
+    /**
+     * 加载全局增益卡片图标资源
+     */
+    private loadGlobalBuffIcons() {
+        // 加载人口增加卡片图标（资源在 assets/resources/textures/icon 目录下）
+        // 注意：加载 SpriteFrame 需要添加 /spriteFrame 后缀
+        resources.load('textures/icon/PIcon/spriteFrame', SpriteFrame, (err, spriteFrame) => {
+            if (err) {
+                console.error('[GameManager] 加载人口增加卡片图标失败:', err);
+            } else {
+                this.populationIcon = spriteFrame;
+                console.info('[GameManager] 人口增加卡片图标加载成功');
+            }
+        });
+        
+        // 加载金币增加卡片图标（资源在 assets/resources/textures/icon 目录下）
+        // 注意：加载 SpriteFrame 需要添加 /spriteFrame 后缀
+        resources.load('textures/icon/GIcon/spriteFrame', SpriteFrame, (err, spriteFrame) => {
+            if (err) {
+                console.error('[GameManager] 加载金币增加卡片图标失败:', err);
+            } else {
+                this.goldIcon = spriteFrame;
+                console.info('[GameManager] 金币增加卡片图标加载成功');
+            }
+        });
+    }
     
     // 单位信息属性，用于调试
     @property
@@ -324,6 +360,12 @@ export class GameManager extends Component {
         // 设置容器位置，使其底部与屏幕底部对齐
         containerNode.setPosition(0, 0, 0);
         
+        // 检查节点状态（在绘制 Graphics 之前）
+        console.info('[GameManager] UnitIntroPopup Graphics 创建前：containerNode.active=', containerNode.active);
+        console.info('[GameManager] UnitIntroPopup Graphics 创建前：containerNode.isValid=', containerNode.isValid);
+        console.info('[GameManager] UnitIntroPopup Graphics 创建前：containerNode.parent=', containerNode.parent?.name);
+        console.info('[GameManager] UnitIntroPopup Graphics 创建前：containerNode.parent.active=', containerNode.parent?.active);
+        
         // 设置容器颜色和透明度
         const containerGraphics = containerNode.addComponent(Graphics);
         containerGraphics.fillColor = new Color(0, 0, 0, 200);
@@ -332,6 +374,7 @@ export class GameManager extends Component {
         const cornerRadius = 15;
         
         // 绘制半透明黑色背景（圆角矩形）
+        console.info('[GameManager] UnitIntroPopup 开始绘制背景，containerNode.active=', containerNode.active);
         containerGraphics.roundRect(-popupWidth / 2, -popupHeight / 2, popupWidth, popupHeight, cornerRadius);
         containerGraphics.fill();
         
@@ -340,6 +383,9 @@ export class GameManager extends Component {
         containerGraphics.lineWidth = 3;
         containerGraphics.roundRect(-popupWidth / 2, -popupHeight / 2, popupWidth, popupHeight, cornerRadius);
         containerGraphics.stroke();
+        
+        console.info('[GameManager] UnitIntroPopup Graphics 绘制完成，containerNode.active=', containerNode.active);
+        console.info('[GameManager] UnitIntroPopup Graphics 绘制完成，containerGraphics.enabled=', containerGraphics.enabled);
         
         // 计算左右区域的宽度和位置（使用调整后的popupWidth）
         const halfWidth = popupWidth / 2;
@@ -436,6 +482,15 @@ export class GameManager extends Component {
         }).catch((err) => {
         });
         
+        // 加载增益卡片配置
+        const buffCardConfigManager = BuffCardConfigManager.getInstance();
+        buffCardConfigManager.loadConfig().then(() => {
+        }).catch((err) => {
+        });
+        
+        // 加载全局增益卡片图标资源
+        this.loadGlobalBuffIcons();
+        
         // 初始化玩家数据管理器
         this.playerDataManager = PlayerDataManager.getInstance();
         this.playerDataManager.loadData().then(() => {
@@ -506,6 +561,9 @@ export class GameManager extends Component {
         
         // 自动创建单位介绍弹窗
         this.autoCreateUnitIntroPopup();
+        
+        // 自动创建BuffCardPopup（在游戏开始前就创建好，参考UnitIntroPopup的做法）
+        this.autoCreateBuffCardPopup();
         
         this.updateUI();
         
@@ -2124,6 +2182,51 @@ export class GameManager extends Component {
                 }
             }
         }
+
+        // 清理所有ThunderChain（防止游戏失败后继续执行导致报错）
+        this.cleanupAllThunderChains();
+    }
+
+    /**
+     * 清理所有ThunderChain
+     */
+    private cleanupAllThunderChains() {
+        const scene = director.getScene();
+        if (!scene) return;
+
+        // 查找所有ThunderChain节点（可能在Canvas下，也可能在其他地方）
+        const findThunderChains = (node: Node): Node[] => {
+            const chains: Node[] = [];
+            if (node && node.isValid) {
+                const chainComponent = node.getComponent('ThunderChain');
+                if (chainComponent) {
+                    chains.push(node);
+                }
+                // 递归查找子节点
+                for (const child of node.children) {
+                    chains.push(...findThunderChains(child));
+                }
+            }
+            return chains;
+        };
+
+        // 从Canvas开始查找
+        const canvas = find('Canvas');
+        if (canvas) {
+            const chains = findThunderChains(canvas);
+            for (const chain of chains) {
+                if (chain && chain.isValid) {
+                    // 调用destroyChain方法（如果存在）
+                    const chainScript = chain.getComponent('ThunderChain') as any;
+                    if (chainScript && chainScript.destroyChain) {
+                        chainScript.destroyChain();
+                    } else {
+                        // 如果方法不存在，直接销毁
+                        chain.destroy();
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -2210,11 +2313,14 @@ export class GameManager extends Component {
         // 设置游戏状态为暂停
         this.gameState = GameState.Paused;
         
-        // 保存当前时间缩放值
-        this.originalTimeScale = director.getScheduler().getTimeScale();
+        // 保存当前时间缩放值（如果当前为 0，则保存为 1，确保恢复时能正常工作）
+        const currentTimeScale = director.getScheduler().getTimeScale();
+        this.originalTimeScale = currentTimeScale > 0 ? currentTimeScale : 1;
         
         // 暂停游戏时间
         director.getScheduler().setTimeScale(0);
+        
+        console.info(`[GameManager] pauseGame() 游戏已暂停，保存的 timeScale=${this.originalTimeScale}`);
         
     }
     
@@ -2225,9 +2331,12 @@ export class GameManager extends Component {
         // 设置游戏状态为继续
         this.gameState = GameState.Playing;
         
-        // 恢复游戏时间
-        director.getScheduler().setTimeScale(this.originalTimeScale);
+        // 恢复游戏时间（确保 timeScale 至少为 1，避免恢复为 0）
+        const targetTimeScale = this.originalTimeScale > 0 ? this.originalTimeScale : 1;
+        director.getScheduler().setTimeScale(targetTimeScale);
+        this.originalTimeScale = targetTimeScale; // 更新保存的值，确保下次暂停时能正确恢复
         
+        console.info(`[GameManager] resumeGame() 游戏已恢复，timeScale=${targetTimeScale}`);
         
         // 通知所有单位游戏已恢复，确保动画能够正确播放
         this.notifyGameResumed();
@@ -2699,6 +2808,547 @@ export class GameManager extends Component {
             return true;
         }
         return false;
+    }
+
+    /**
+     * 获取所有已上场的单位类型列表
+     */
+    getActiveUnitTypes(): string[] {
+        const unitTypes = new Set<string>();
+        
+        // 单位容器路径映射
+        const unitContainers: Record<string, string[]> = {
+            'Arrower': ['Canvas/Towers'],
+            'Hunter': ['Canvas/Hunters'],
+            'ElfSwordsman': ['Canvas/Swordsmen'],
+            'Priest': ['Canvas/Towers'],
+            'WatchTower': ['Canvas/WatchTowers'],
+            'IceTower': ['Canvas/IceTowers'],
+            'ThunderTower': ['Canvas/ThunderTowers'],
+            'WarAncientTree': ['Canvas/WarAncientTrees'],
+            'HunterHall': ['Canvas/HunterHalls'],
+            'SwordsmanHall': ['Canvas/SwordsmanHalls'],
+            'Church': ['Canvas/Churches'],
+        };
+        
+        // 检查每个单位类型是否有已上场的单位
+        for (const unitType in unitContainers) {
+            const containers = unitContainers[unitType];
+            for (const containerPath of containers) {
+                const container = find(containerPath);
+                if (container) {
+                    for (const child of container.children) {
+                        if (child && child.isValid && child.active) {
+                            // 检查是否有对应的组件
+                            // 对于建筑类单位（WatchTower, IceTower, ThunderTower等），需要检查具体的组件类名
+                            // 对于其他单位，检查Role或Build组件
+                            let script: any = null;
+                            if (unitType === 'WatchTower' || unitType === 'IceTower' || unitType === 'ThunderTower' ||
+                                unitType === 'WarAncientTree' || unitType === 'HunterHall' || 
+                                unitType === 'SwordsmanHall' || unitType === 'Church') {
+                                // 建筑类单位，检查具体的组件类名
+                                script = child.getComponent(unitType) as any;
+                            } else {
+                                // 其他单位，必须精确匹配组件类名
+                                script = child.getComponent(unitType) as any;
+                                // 如果找不到精确匹配，检查是否有unitType属性匹配
+                                if (!script) {
+                                    const roleScript = child.getComponent('Role') as any;
+                                    const buildScript = child.getComponent('Build') as any;
+                                    const tempScript = roleScript || buildScript;
+                                    if (tempScript && tempScript.unitType === unitType) {
+                                        script = tempScript;
+                                    }
+                                }
+                            }
+                            
+                            if (script) {
+                                unitTypes.add(unitType);
+                                console.info(`[GameManager] 找到已上场的单位类型: ${unitType}，容器: ${containerPath}`);
+                                break; // 找到一个就够了
+                            }
+                        }
+                    }
+                }
+                if (unitTypes.has(unitType)) {
+                    break; // 已经找到，不需要继续检查其他容器
+                }
+            }
+        }
+        
+        console.info(`[GameManager] 已上场的单位类型列表:`, Array.from(unitTypes));
+        return Array.from(unitTypes);
+    }
+
+    /**
+     * 生成增益卡片数据（总是生成3张卡片）
+     */
+    generateBuffCards(): BuffCardData[] {
+        const activeUnitTypes = this.getActiveUnitTypes();
+        console.info(`[GameManager] generateBuffCards: 已上场的单位类型数量=${activeUnitTypes.length}`);
+        
+        const cards: BuffCardData[] = [];
+        const configManager = UnitConfigManager.getInstance();
+        const buffCardConfigManager = BuffCardConfigManager.getInstance();
+        
+        if (!buffCardConfigManager.isConfigLoaded()) {
+            console.warn('[GameManager] generateBuffCards: 增益卡片配置未加载，使用默认配置');
+        }
+        
+        // 总是生成3张卡片
+        for (let cardCount = 0; cardCount < 3; cardCount++) {
+            // 生成卡片稀有度
+            const rarity = buffCardConfigManager.generateRarity();
+            console.info(`[GameManager] generateBuffCards: 卡片 ${cardCount + 1} 稀有度=${rarity}`);
+            
+            // 决定是单位增益还是全局增益（20%概率生成全局增益）
+            const isGlobalBuff = Math.random() < 0.2;
+            
+            let cardData: BuffCardData;
+            
+            if (isGlobalBuff && activeUnitTypes.length > 0) {
+                // 生成全局增益卡片（人口或金币）
+                const globalEffects = buffCardConfigManager.getGlobalBuffEffects(rarity);
+                const globalBuffTypes = Object.keys(globalEffects);
+                if (globalBuffTypes.length > 0) {
+                    const randomGlobalBuffType = globalBuffTypes[Math.floor(Math.random() * globalBuffTypes.length)];
+                    const globalBuff = globalEffects[randomGlobalBuffType];
+                    
+                    // 根据增益类型选择对应的图标
+                    let unitIcon: SpriteFrame | null = null;
+                    let unitName: string = '';
+                    
+                    if (randomGlobalBuffType === 'populationIncrease') {
+                        // 人口增加卡片：使用人口图标
+                        unitIcon = this.populationIcon;
+                        unitName = '人口上限';
+                    } else if (randomGlobalBuffType === 'goldReward') {
+                        // 金币增加卡片：使用金币图标
+                        unitIcon = this.goldIcon;
+                        unitName = '金币奖励';
+                    } else {
+                        // 其他全局增益：随机选择一个单位类型用于显示图标（兼容性处理）
+                        const randomUnitType = activeUnitTypes[Math.floor(Math.random() * activeUnitTypes.length)];
+                        const displayInfo = configManager.getUnitDisplayInfo(randomUnitType);
+                        unitName = displayInfo ? displayInfo.name : randomUnitType;
+                        
+                        const unitInstance = this.findFirstUnitInstance(randomUnitType);
+                        if (unitInstance) {
+                            const unitScript = unitInstance.getComponent(randomUnitType) as any ||
+                                             unitInstance.getComponent('Role') as any ||
+                                             unitInstance.getComponent('Build') as any;
+                            if (unitScript) {
+                                if (unitScript.cardIcon) {
+                                    unitIcon = unitScript.cardIcon;
+                                } else if (unitScript.defaultSpriteFrame) {
+                                    unitIcon = unitScript.defaultSpriteFrame;
+                                }
+                            }
+                        }
+                    }
+                    
+                    cardData = {
+                        unitId: randomGlobalBuffType,
+                        unitName: unitName,
+                        unitIcon: unitIcon,
+                        buffType: randomGlobalBuffType,
+                        buffValue: globalBuff.value,
+                        buffDescription: globalBuff.desc,
+                        rarity: rarity
+                    };
+                } else {
+                    // 如果没有全局增益，生成单位增益
+                    cardData = this.generateUnitBuffCard(activeUnitTypes, configManager, buffCardConfigManager, rarity, cardCount);
+                }
+            } else if (activeUnitTypes.length > 0) {
+                // 生成单位增益卡片
+                cardData = this.generateUnitBuffCard(activeUnitTypes, configManager, buffCardConfigManager, rarity, cardCount);
+            } else {
+                // 没有已上场的单位，生成全局增益
+                const globalEffects = buffCardConfigManager.getGlobalBuffEffects(rarity);
+                const globalBuffTypes = Object.keys(globalEffects);
+                if (globalBuffTypes.length > 0) {
+                    const randomGlobalBuffType = globalBuffTypes[Math.floor(Math.random() * globalBuffTypes.length)];
+                    const globalBuff = globalEffects[randomGlobalBuffType];
+                    
+                    // 根据增益类型选择对应的图标
+                    let unitIcon: SpriteFrame | null = null;
+                    let unitName: string = '全局增益';
+                    
+                    if (randomGlobalBuffType === 'populationIncrease') {
+                        // 人口增加卡片：使用人口图标
+                        unitIcon = this.populationIcon;
+                        unitName = '人口上限';
+                    } else if (randomGlobalBuffType === 'goldReward') {
+                        // 金币增加卡片：使用金币图标
+                        unitIcon = this.goldIcon;
+                        unitName = '金币奖励';
+                    }
+                    
+                    cardData = {
+                        unitId: randomGlobalBuffType,
+                        unitName: unitName,
+                        unitIcon: unitIcon,
+                        buffType: randomGlobalBuffType,
+                        buffValue: globalBuff.value,
+                        buffDescription: globalBuff.desc,
+                        rarity: rarity
+                    };
+                } else {
+                    console.warn('[GameManager] generateBuffCards: 无法生成卡片，没有可用的增益效果');
+                    continue;
+                }
+            }
+            
+            console.info(`[GameManager] generateBuffCards: 生成卡片 ${cardCount + 1}`, cardData);
+            cards.push(cardData);
+        }
+        
+        console.info(`[GameManager] generateBuffCards: 总共生成了 ${cards.length} 张卡片`);
+        return cards;
+    }
+    
+    /**
+     * 生成单位增益卡片
+     */
+    private generateUnitBuffCard(
+        activeUnitTypes: string[],
+        configManager: UnitConfigManager,
+        buffCardConfigManager: BuffCardConfigManager,
+        rarity: 'R' | 'SR' | 'SSR',
+        cardIndex: number
+    ): BuffCardData {
+        // 打乱单位类型
+        const shuffledTypes = [...activeUnitTypes].sort(() => Math.random() - 0.5);
+        const unitType = shuffledTypes[cardIndex % shuffledTypes.length];
+        
+        // 获取单位显示信息
+        const displayInfo = configManager.getUnitDisplayInfo(unitType);
+        const unitName = displayInfo ? displayInfo.name : unitType;
+        
+        // 从实际的预制体实例中获取 cardIcon
+        let unitIcon: SpriteFrame | null = null;
+        const unitInstance = this.findFirstUnitInstance(unitType);
+        console.info(`[GameManager] generateUnitBuffCard: 查找单位类型 ${unitType}，找到实例=${!!unitInstance}`);
+        if (unitInstance) {
+            const unitScript = unitInstance.getComponent(unitType) as any ||
+                             unitInstance.getComponent('Role') as any ||
+                             unitInstance.getComponent('Build') as any;
+            if (unitScript) {
+                if (unitScript.cardIcon) {
+                    unitIcon = unitScript.cardIcon;
+                    console.info(`[GameManager] generateUnitBuffCard: 使用 cardIcon，单位类型=${unitType}`);
+                } else if (unitScript.defaultSpriteFrame) {
+                    unitIcon = unitScript.defaultSpriteFrame;
+                    console.info(`[GameManager] generateUnitBuffCard: 使用 defaultSpriteFrame，单位类型=${unitType}`);
+                } else if (unitScript.node) {
+                    const spriteComponent = unitScript.node.getComponent(Sprite);
+                    if (spriteComponent && spriteComponent.spriteFrame) {
+                        unitIcon = spriteComponent.spriteFrame;
+                        console.info(`[GameManager] generateUnitBuffCard: 使用 Sprite.spriteFrame，单位类型=${unitType}`);
+                    }
+                }
+            } else {
+                console.warn(`[GameManager] generateUnitBuffCard: 单位实例 ${unitType} 没有找到脚本组件`);
+            }
+        } else {
+            console.warn(`[GameManager] generateUnitBuffCard: 没有找到单位类型 ${unitType} 的实例`);
+        }
+        
+        // 获取单位类型分类
+        const unitCategory = buffCardConfigManager.getUnitTypeCategory(unitType);
+        
+        // 获取该单位类型可用的增益效果
+        const buffEffects = buffCardConfigManager.getBuffEffects(rarity, unitCategory);
+        const buffTypes = Object.keys(buffEffects);
+        
+        if (buffTypes.length === 0) {
+            console.warn(`[GameManager] generateUnitBuffCard: 单位类型 ${unitType} 没有可用的增益效果`);
+            // 使用默认增益
+            return {
+                unitId: unitType,
+                unitName: unitName,
+                unitIcon: unitIcon,
+                buffType: 'attackDamage',
+                buffValue: 20,
+                buffDescription: `${unitName}: 攻击力+20%`,
+                rarity: rarity
+            };
+        }
+        
+        // 随机选择一个增益类型
+        const randomBuffType = buffTypes[Math.floor(Math.random() * buffTypes.length)];
+        const buff = buffEffects[randomBuffType];
+        
+        return {
+            unitId: unitType,
+            unitName: unitName,
+            unitIcon: unitIcon,
+            buffType: randomBuffType,
+            buffValue: buff.value,
+            buffDescription: `${unitName}: ${buff.desc}`,
+            rarity: rarity
+        };
+    }
+    
+    /**
+     * 查找第一个指定类型的单位实例
+     */
+    private findFirstUnitInstance(unitType: string): Node | null {
+        // 使用与 getActiveUnitTypes 相同的容器路径映射
+        const unitContainers: Record<string, string[]> = {
+            'Arrower': ['Canvas/Towers', 'Canvas/Arrows', 'Canvas/Units'],
+            'Hunter': ['Canvas/Hunters'],
+            'ElfSwordsman': ['Canvas/Swordsmen'],
+            'Priest': ['Canvas/Towers', 'Canvas/Priests'],
+            'WatchTower': ['Canvas/WatchTowers'],
+            'IceTower': ['Canvas/IceTowers'],
+            'ThunderTower': ['Canvas/ThunderTowers'],
+            'WarAncientTree': ['Canvas/WarAncientTrees'],
+            'HunterHall': ['Canvas/HunterHalls'],
+            'SwordsmanHall': ['Canvas/SwordsmanHalls'],
+            'Church': ['Canvas/Churches'],
+            'StoneWall': ['Canvas/StoneWalls'],
+        };
+        
+        const containers = unitContainers[unitType] || [];
+        
+        for (const containerPath of containers) {
+            const container = find(containerPath);
+            if (container) {
+                for (const child of container.children) {
+                    if (!child.active || !child.isValid) continue;
+                    
+                    // 检查是否有对应的组件
+                    let script: any = null;
+                    if (unitType === 'WatchTower' || unitType === 'IceTower' || unitType === 'ThunderTower' ||
+                        unitType === 'WarAncientTree' || unitType === 'HunterHall' || 
+                        unitType === 'SwordsmanHall' || unitType === 'Church') {
+                        // 建筑类单位，检查具体的组件类名
+                        script = child.getComponent(unitType) as any;
+                    } else {
+                        // 其他单位，必须精确匹配组件类名
+                        script = child.getComponent(unitType) as any;
+                        // 如果找不到精确匹配，检查是否有unitType属性匹配
+                        if (!script) {
+                            const roleScript = child.getComponent('Role') as any;
+                            const buildScript = child.getComponent('Build') as any;
+                            const tempScript = roleScript || buildScript;
+                            if (tempScript && tempScript.unitType === unitType) {
+                                script = tempScript;
+                            }
+                        }
+                    }
+                    
+                    if (script) {
+                        return child;
+                    }
+                }
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * 显示增益卡片
+     * @param onClose 可选的回调函数，在卡片弹窗关闭时调用
+     */
+    showBuffCards(onClose?: () => void) {
+        console.info('[GameManager] showBuffCards 被调用');
+        // BuffCardPopup 应该在 onLoad() 中已经创建好了，这里不需要再创建
+        if (!this.buffCardPopup) {
+            console.error('[GameManager] BuffCardPopup不存在，应该在onLoad()中已创建');
+            return;
+        }
+        
+        console.info('[GameManager] BuffCardPopup存在，开始生成卡片数据');
+        const cards = this.generateBuffCards();
+        if (cards && cards.length > 0) {
+            console.info(`[GameManager] 生成了 ${cards.length} 张卡片`);
+            if (cards.length > 0) {
+                console.info('[GameManager] 调用 BuffCardPopup.show()');
+                this.buffCardPopup.show(cards, onClose);
+            } else {
+                console.warn('[GameManager] 没有可用的增益卡片生成，跳过显示。');
+                if (onClose) onClose();
+            }
+        } else {
+            console.warn('[GameManager] BuffCardPopup 创建失败，跳过显示。');
+            if (onClose) onClose();
+        }
+    }
+
+    /**
+     * 自动创建BuffCardPopup（如果不存在）
+     */
+    private autoCreateBuffCardPopup() {
+        if (this.buffCardPopup && this.buffCardPopup.isValid) {
+            return;
+        }
+        
+        const canvasNode = find('Canvas');
+        if (!canvasNode) {
+            console.error('[GameManager] Canvas node not found for BuffCardPopup');
+            return;
+        }
+        
+        // 创建主容器节点
+        const containerNode = new Node('BuffCardPopup');
+        containerNode.setParent(canvasNode);
+        
+        const uiTransform = containerNode.addComponent(UITransform);
+        const visibleSize = view.getVisibleSize();
+        // 容器宽度增加
+        const popupWidth = visibleSize.width * 0.95;
+        const popupHeight = visibleSize.height * 0.6;
+        uiTransform.setContentSize(popupWidth, popupHeight);
+        
+        // 设置锚点为中心（默认就是中心，但明确设置）
+        uiTransform.setAnchorPoint(0.5, 0.5);
+        
+        // 设置容器位置为屏幕中心
+        containerNode.setPosition(0, 0, 0);
+        
+        // 确保容器在最上层（设置最高的siblingIndex）
+        containerNode.setSiblingIndex(canvasNode.children.length);
+        
+        console.info('[GameManager] BuffCardPopup容器创建完成，位置=', containerNode.position, 
+                    '尺寸=', popupWidth, 'x', popupHeight,
+                    '父节点=', canvasNode.name,
+                    'siblingIndex=', containerNode.getSiblingIndex());
+        
+        // 检查节点状态（在绘制 Graphics 之前）
+        console.info('[GameManager] BuffCardPopup Graphics 创建前：containerNode.active=', containerNode.active);
+        console.info('[GameManager] BuffCardPopup Graphics 创建前：containerNode.isValid=', containerNode.isValid);
+        console.info('[GameManager] BuffCardPopup Graphics 创建前：containerNode.parent=', containerNode.parent?.name);
+        console.info('[GameManager] BuffCardPopup Graphics 创建前：containerNode.parent.active=', containerNode.parent?.active);
+        
+        // 容器背景完全透明（不绘制背景）
+        // 如果需要边框，可以取消下面的注释
+        // const bgGraphics = containerNode.addComponent(Graphics);
+        // bgGraphics.strokeColor = new Color(255, 215, 0, 255);
+        // bgGraphics.lineWidth = 3;
+        // bgGraphics.roundRect(-popupWidth / 2, -popupHeight / 2, popupWidth, popupHeight, 15);
+        // bgGraphics.stroke();
+        
+        console.info('[GameManager] BuffCardPopup 容器创建完成，背景完全透明');
+        
+        // 创建卡片容器
+        const cardContainer = new Node('CardContainer');
+        cardContainer.setParent(containerNode);
+        cardContainer.addComponent(UITransform).setContentSize(popupWidth, popupHeight * 0.8);
+        cardContainer.setPosition(0, 0, 0);
+        
+        // 创建三张卡片节点
+        const cardWidth = (popupWidth - 60) / 3; // 减去间隔，每张卡片宽度（已随容器宽度增加）
+        const cardHeight = popupHeight * 0.7 - 50; // 高度减少50像素
+        const cardSpacing = 20;
+        const startX = -cardWidth - cardSpacing;
+        
+        const createCardNode = (name: string, x: number): Node => {
+            const cardNode = new Node(name);
+            cardNode.setParent(cardContainer);
+            cardNode.addComponent(UITransform).setContentSize(cardWidth, cardHeight);
+            cardNode.setPosition(x, 0, 0);
+            
+            // 卡片背景
+            const cardBg = new Node('CardBackground');
+            cardBg.setParent(cardNode);
+            cardBg.addComponent(UITransform).setContentSize(cardWidth, cardHeight);
+            const cardBgGraphics = cardBg.addComponent(Graphics);
+            cardBgGraphics.fillColor = new Color(50, 50, 50, 255);
+            cardBgGraphics.roundRect(-cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, 10);
+            cardBgGraphics.fill();
+            cardBgGraphics.strokeColor = new Color(100, 100, 100, 255);
+            cardBgGraphics.lineWidth = 2;
+            cardBgGraphics.roundRect(-cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, 10);
+            cardBgGraphics.stroke();
+            
+            // 图标（顶部）
+            const iconNode = new Node('Icon');
+            iconNode.setParent(cardNode);
+            iconNode.addComponent(UITransform).setContentSize(cardWidth * 0.6, cardWidth * 0.6);
+            iconNode.setPosition(0, cardHeight / 2 - cardWidth * 0.3 - 10, 0);
+            iconNode.addComponent(Sprite);
+            
+            // 单位图片（中间，替代原来的名称标签）
+            const unitImageNode = new Node('Name'); // 保持名称不变以兼容现有代码
+            unitImageNode.setParent(cardNode);
+            // 适配卡片中央大小，使用卡片宽度的80%作为图片尺寸
+            const unitImageSize = Math.min(cardWidth * 0.8, cardHeight * 0.4);
+            unitImageNode.addComponent(UITransform).setContentSize(unitImageSize, unitImageSize);
+            unitImageNode.setPosition(0, 0, 0);
+            const unitImageSprite = unitImageNode.addComponent(Sprite);
+            unitImageSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+            
+            // 描述标签
+            const descLabelNode = new Node('Description');
+            descLabelNode.setParent(cardNode);
+            descLabelNode.addComponent(UITransform).setContentSize(cardWidth * 0.8, cardHeight * 0.3);
+            descLabelNode.setPosition(0, -cardHeight / 2 + cardHeight * 0.15 + 10, 0);
+            const descLabel = descLabelNode.addComponent(Label);
+            descLabel.fontSize = 16;
+            descLabel.color = Color.WHITE;
+            descLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            descLabel.verticalAlign = Label.VerticalAlign.CENTER;
+            descLabel.overflow = Label.Overflow.RESIZE_HEIGHT;
+            
+            // 按钮（覆盖整个卡片）
+            const buttonNode = new Node('Button');
+            buttonNode.setParent(cardNode);
+            buttonNode.addComponent(UITransform).setContentSize(cardWidth, cardHeight);
+            buttonNode.addComponent(Button);
+            
+            return cardNode;
+        };
+        
+        const card1 = createCardNode('Card1', startX);
+        const card2 = createCardNode('Card2', 0);
+        const card3 = createCardNode('Card3', -startX);
+        
+        // 添加BuffCardPopup组件
+        const buffCardPopup = containerNode.addComponent(BuffCardPopup);
+        this.buffCardPopup = buffCardPopup;
+        
+        // 手动设置gameManager（因为start()可能已经执行过了）
+        (buffCardPopup as any).gameManager = this;
+        
+        // 绑定属性
+        buffCardPopup.container = containerNode;
+        buffCardPopup.cardContainer = cardContainer;
+        buffCardPopup.card1 = card1;
+        buffCardPopup.card1Icon = card1.getChildByName('Icon')?.getComponent(Sprite) || null;
+        buffCardPopup.card1Name = card1.getChildByName('Name')?.getComponent(Sprite) || null; // 改为 Sprite
+        buffCardPopup.card1Description = card1.getChildByName('Description')?.getComponent(Label) || null;
+        buffCardPopup.card1Button = card1.getChildByName('Button')?.getComponent(Button) || null;
+        
+        buffCardPopup.card2 = card2;
+        buffCardPopup.card2Icon = card2.getChildByName('Icon')?.getComponent(Sprite) || null;
+        buffCardPopup.card2Name = card2.getChildByName('Name')?.getComponent(Sprite) || null; // 改为 Sprite
+        buffCardPopup.card2Description = card2.getChildByName('Description')?.getComponent(Label) || null;
+        buffCardPopup.card2Button = card2.getChildByName('Button')?.getComponent(Button) || null;
+        
+        buffCardPopup.card3 = card3;
+        buffCardPopup.card3Icon = card3.getChildByName('Icon')?.getComponent(Sprite) || null;
+        buffCardPopup.card3Name = card3.getChildByName('Name')?.getComponent(Sprite) || null; // 改为 Sprite
+        buffCardPopup.card3Description = card3.getChildByName('Description')?.getComponent(Label) || null;
+        buffCardPopup.card3Button = card3.getChildByName('Button')?.getComponent(Button) || null;
+        
+        // 验证绑定
+        console.info('[GameManager] BuffCardPopup 属性绑定验证:');
+        console.info('  container:', !!buffCardPopup.container);
+        console.info('  cardContainer:', !!buffCardPopup.cardContainer);
+        console.info('  card1:', !!buffCardPopup.card1, 'card1Icon:', !!buffCardPopup.card1Icon, 'card1Name:', !!buffCardPopup.card1Name);
+        console.info('  card2:', !!buffCardPopup.card2, 'card2Icon:', !!buffCardPopup.card2Icon, 'card2Name:', !!buffCardPopup.card2Name);
+        console.info('  card3:', !!buffCardPopup.card3, 'card3Icon:', !!buffCardPopup.card3Icon, 'card3Name:', !!buffCardPopup.card3Name);
+        
+        // 不要在这里设置 active = false！
+        // 参考 UnitIntroPopup 的做法：Graphics 在节点 active 时绘制，然后在 start() 中才设置为 inactive
+        // 这样可以确保 Graphics 内容被正确保存
+        // containerNode.active = false; // 注释掉，让 start() 方法来设置
+        
+        console.info('[GameManager] BuffCardPopup UI已动态创建完成，containerNode.active=', containerNode.active);
     }
 
     canAfford(amount: number): boolean {

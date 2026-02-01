@@ -1723,11 +1723,29 @@ export class TowerBuilder extends Component {
         // 获取实际建造成本（考虑单位卡片强化减少）
         const actualCost = this.getActualBuildCost('WatchTower');
         
-        // 消耗金币
-        if (this.gameManager && !skipCost) {
-            this.gameManager.spendGold(actualCost);
+        // 检查人口（哨塔占用1个人口）
+        const populationCost = 1;
+        if (this.gameManager) {
+            // 即使skipCost=true，也需要占用人口（初始化建造的哨塔也需要占用人口）
+            if (!this.gameManager.canAddPopulation(populationCost)) {
+                if (!skipCost) {
+                    GamePopup.showMessage('人口不足，无法建造哨塔');
+                }
+                return;
+            }
+            // 消耗金币（仅在非skipCost时）
+            if (!skipCost) {
+                this.gameManager.spendGold(actualCost);
+            }
+            // 占用人口（无论是否skipCost都需要占用）
+            this.gameManager.addPopulation(populationCost);
         }
 
+        // 确保容器已初始化
+        if (!this.watchTowerContainer) {
+            this.initializeContainers();
+        }
+        
         // 性能优化：从对象池获取建筑物，而不是直接实例化
         const buildingPool = BuildingPool.getInstance();
         let tower: Node | null = null;
@@ -1745,9 +1763,23 @@ export class TowerBuilder extends Component {
             tower = instantiate(this.watchTowerPrefab);
         }
         
+        // 检查tower是否有效
+        if (!tower || !tower.isValid) {
+            console.error('[TowerBuilder] buildWatchTower: 无法创建哨塔节点');
+            return;
+        }
+        
         // 设置父节点
         const parent = this.watchTowerContainer || this.node;
-        if (parent && !parent.active) {
+        if (!parent || !parent.isValid) {
+            console.error('[TowerBuilder] buildWatchTower: 父节点无效');
+            if (tower && tower.isValid) {
+                tower.destroy();
+            }
+            return;
+        }
+        
+        if (!parent.active) {
             parent.active = true;
         }
         
@@ -1989,9 +2021,22 @@ export class TowerBuilder extends Component {
         // 获取实际建造成本（考虑单位卡片强化减少）
         const actualCost = this.getActualBuildCost('IceTower', 20); // 默认20金币
         
-        // 消耗金币
-        if (this.gameManager && !skipCost) {
-            this.gameManager.spendGold(actualCost);
+        // 检查人口（冰塔占用1个人口）
+        const populationCost = 1;
+        if (this.gameManager) {
+            // 即使skipCost=true，也需要占用人口
+            if (!this.gameManager.canAddPopulation(populationCost)) {
+                if (!skipCost) {
+                    GamePopup.showMessage('人口不足，无法建造冰塔');
+                }
+                return;
+            }
+            // 消耗金币（仅在非skipCost时）
+            if (!skipCost) {
+                this.gameManager.spendGold(actualCost);
+            }
+            // 占用人口（无论是否skipCost都需要占用）
+            this.gameManager.addPopulation(populationCost);
         }
 
         // 性能优化：从对象池获取建筑物
@@ -2140,9 +2185,22 @@ export class TowerBuilder extends Component {
         // 获取实际建造成本（考虑单位卡片强化减少）
         const actualCost = this.getActualBuildCost('ThunderTower', 30); // 默认30金币
         
-        // 消耗金币
-        if (this.gameManager && !skipCost) {
-            this.gameManager.spendGold(actualCost);
+        // 检查人口（雷塔占用2个人口）
+        const populationCost = 2;
+        if (this.gameManager) {
+            // 即使skipCost=true，也需要占用人口
+            if (!this.gameManager.canAddPopulation(populationCost)) {
+                if (!skipCost) {
+                    GamePopup.showMessage('人口不足，无法建造雷塔');
+                }
+                return;
+            }
+            // 消耗金币（仅在非skipCost时）
+            if (!skipCost) {
+                this.gameManager.spendGold(actualCost);
+            }
+            // 占用人口（无论是否skipCost都需要占用）
+            this.gameManager.addPopulation(populationCost);
         }
 
         // 性能优化：从对象池获取建筑物

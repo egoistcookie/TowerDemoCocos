@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip, Animation, AnimationState, view } from 'cc';
+import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip, Animation, AnimationState, view, UIOpacity } from 'cc';
 import { GameManager } from '../GameManager';
 import { GameState } from '../GameState';
 import { HealthBar } from '../HealthBar';
@@ -2386,6 +2386,102 @@ export class Enemy extends Component {
             this.currentHealth = 0;
             this.die();
         }
+    }
+
+    /**
+     * 恢复血量
+     * @param amount 恢复的血量
+     */
+    heal(amount: number) {
+        if (this.isDestroyed) {
+            return;
+        }
+
+        // 如果血量已满，不恢复
+        if (this.currentHealth >= this.maxHealth) {
+            return;
+        }
+
+        const oldHealth = this.currentHealth;
+        this.currentHealth = Math.min(this.currentHealth + amount, this.maxHealth);
+        const actualHeal = this.currentHealth - oldHealth;
+
+        // 更新血条
+        if (this.healthBar) {
+            this.healthBar.setHealth(this.currentHealth);
+        }
+
+        // 显示治疗特效（绿光）
+        if (actualHeal > 0) {
+            this.showHealEffect(actualHeal);
+        }
+    }
+
+    /**
+     * 显示治疗特效（绿光 + 文字）
+     * @param amount 治疗量
+     */
+    showHealEffect(amount: number) {
+        // 创建治疗特效节点
+        const healEffectNode = new Node('HealEffect');
+        const canvas = find('Canvas');
+        if (canvas) {
+            healEffectNode.setParent(canvas);
+        } else {
+            healEffectNode.setParent(this.node.scene);
+        }
+        
+        // 设置位置（在敌人上方）
+        const healPos = this.node.worldPosition.clone();
+        healPos.y += 30;
+        healEffectNode.setWorldPosition(healPos);
+
+        // 添加UITransform
+        const uiTransform = healEffectNode.addComponent(UITransform);
+        if (uiTransform) {
+            uiTransform.setContentSize(60, 40);
+        }
+
+        // 添加绿色圆形背景（可选，用于视觉效果）
+        const sprite = healEffectNode.addComponent(Sprite);
+        if (sprite) {
+            sprite.color = new Color(0, 255, 0, 150); // 绿色，半透明
+        }
+
+        // 添加文字标签显示治疗量
+        const labelNode = new Node('HealLabel');
+        labelNode.setParent(healEffectNode);
+        labelNode.setPosition(0, 0, 0);
+        const label = labelNode.addComponent(Label);
+        label.string = `+${amount}`;
+        label.fontSize = 20;
+        label.color = Color.GREEN;
+        
+        const labelUITransform = labelNode.addComponent(UITransform);
+        if (labelUITransform) {
+            labelUITransform.setContentSize(60, 30);
+        }
+
+        // 添加UIOpacity用于淡出效果
+        const uiOpacity = healEffectNode.addComponent(UIOpacity);
+        if (uiOpacity) {
+            uiOpacity.opacity = 255;
+        }
+
+        // 播放治疗特效动画（向上移动并淡出）
+        const startPos = healEffectNode.worldPosition.clone();
+        tween(healEffectNode)
+            .by(1.0, { position: new Vec3(0, 50, 0) }, { easing: 'sineOut' })
+            .to(0.5, { scale: new Vec3(0.5, 0.5, 1) }, { easing: 'sineIn' })
+            .parallel(
+                tween(uiOpacity).to(1.0, { opacity: 0 })
+            )
+            .call(() => {
+                if (healEffectNode && healEffectNode.isValid) {
+                    healEffectNode.destroy();
+                }
+            })
+            .start();
     }
 
     // 恢复移动

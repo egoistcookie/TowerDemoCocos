@@ -31,6 +31,9 @@ export class Build extends Component {
     protected level: number = 1; // 建筑物等级
 
     @property
+    protected populationCost: number = 0; // 人口占用（防御塔需要占用人口）
+
+    @property
     protected collisionRadius: number = 50; // 占地范围（像素）
 
     @property(SpriteFrame)
@@ -363,6 +366,9 @@ export class Build extends Component {
         this.rallyPoint = null;
         this.isSettingRallyPoint = false;
         
+        // 重置baseY，确保下次建造时重新计算
+        this.baseY = Number.NaN;
+        
         // 重置血条（如果血条节点存在，尝试更新；否则重新创建）
         if (this.healthBarNode && this.healthBarNode.isValid) {
             // 血条节点存在，尝试获取或重新获取HealthBar组件
@@ -389,6 +395,8 @@ export class Build extends Component {
         if (this.node) {
             this.node.setScale(this.defaultScale);
             this.node.angle = 0;
+            // 重置UITransform的size（对于哨塔等有固定高度的建筑很重要）
+            // 注意：子类（如WatchTower）会在start()中重新设置正确的size
             if (this.sprite && this.defaultSpriteFrame) {
                 this.sprite.spriteFrame = this.defaultSpriteFrame;
             }
@@ -1116,13 +1124,15 @@ export class Build extends Component {
             return;
         }
 
-        // 计算完全体高度：优先使用网格 cellSize，其次用自身高度 * 默认缩放
+        // 计算完全体高度：优先使用网格 cellSize，其次用自身高度（假设defaultScale.y为1）
         let fullHeight: number;
         const gridPanelAny = this.gridPanel as any;
         if (gridPanelAny && gridPanelAny.cellSize) {
             fullHeight = gridPanelAny.cellSize * fullGridHeightInCells;
         } else {
-            fullHeight = uiTransform.height * this.defaultScale.y;
+            // 使用当前UITransform的高度作为基准（假设defaultScale.y为1）
+            // 如果节点刚从对象池回收，高度应该已经重置为100（两个网格）
+            fullHeight = uiTransform.height;
         }
 
         // 如果还未记录基准底部Y，则根据当前所在网格/位置计算一次
@@ -1134,10 +1144,12 @@ export class Build extends Component {
                     // 网格底部 = 中心Y - cellSize/2
                     this.baseY = gridCenter.y - gridPanel.cellSize / 2;
                 } else {
+                    // 如果无法获取网格中心，使用当前世界位置计算
                     const currentHeight = fullHeight * heightScale;
                     this.baseY = this.node.worldPosition.y - currentHeight / 2;
                 }
             } else {
+                // 如果没有网格信息，使用当前世界位置计算
                 const currentHeight = fullHeight * heightScale;
                 this.baseY = this.node.worldPosition.y - currentHeight / 2;
             }
@@ -1147,6 +1159,7 @@ export class Build extends Component {
         const newY = this.baseY + currentHeight / 2;
 
         // 按比例缩放 Y，X/Z 使用默认缩放（保持宽度不变）
+        // 注意：这里使用heightScale直接作为Y缩放，因为fullHeight已经是实际像素高度
         this.node.setScale(this.defaultScale.x, heightScale, this.defaultScale.z);
 
         const pos = this.node.worldPosition.clone();
@@ -1248,10 +1261,10 @@ export class Build extends Component {
             const unitTypeNameMap = DamageStatistics.getUnitTypeNameMap();
             const unitType = this.constructor.name; // 获取类名（如 'WatchTower', 'IceTower' 等）
             const unitName = unitTypeNameMap.get(unitType) || unitType;
-            console.info('[Build] 记录伤害统计',
-                'unitType =', unitType,
-                'unitName =', unitName,
-                'damage =', damage);
+            // console.info('[Build] 记录伤害统计',
+            //     'unitType =', unitType,
+            //     'unitName =', unitName,
+            //     'damage =', damage);
             damageStats.recordDamage(unitType, unitName, damage);
         } catch (error) {
             // 忽略错误，避免影响游戏流程

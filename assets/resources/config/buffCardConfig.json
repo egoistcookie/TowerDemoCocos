@@ -1,0 +1,74 @@
+{
+  "rarityProbabilities": {
+    "R": 0.7,
+    "SR": 0.25,
+    "SSR": 0.05
+  },
+  "buffEffects": {
+    "R": {
+      "tower": {
+        "attackDamage": { "value": 5, "desc": "攻击力+5%" },
+        "attackSpeed": { "value": 10, "desc": "攻击速度+10%" },
+        "maxHealth": { "value": 20, "desc": "生命值+20%" }
+      },
+      "role": {
+        "attackDamage": { "value": 5, "desc": "攻击力+5%" },
+        "attackSpeed": { "value": 10, "desc": "攻击速度+10%" },
+        "maxHealth": { "value": 20, "desc": "生命值+20%" },
+        "moveSpeed": { "value": 8, "desc": "移动速度+8%" }
+      },
+      "building": {
+        "maxHealth": { "value": 20, "desc": "生命值+20%" }
+      },
+      "global": {
+        "populationIncrease": { "value": 1, "desc": "人口上限+1" },
+        "goldReward": { "value": 10, "desc": "获得10金币" }
+      }
+    },
+    "SR": {
+      "tower": {
+        "attackDamage": { "value": 10, "desc": "攻击力+10%" },
+        "attackSpeed": { "value": 18, "desc": "攻击速度+18%" },
+        "maxHealth": { "value": 35, "desc": "生命值+35%" }
+      },
+      "role": {
+        "attackDamage": { "value": 10, "desc": "攻击力+10%" },
+        "attackSpeed": { "value": 18, "desc": "攻击速度+18%" },
+        "maxHealth": { "value": 20, "desc": "生命值+20%" },
+        "moveSpeed": { "value": 15, "desc": "移动速度+15%" }
+      },
+      "building": {
+        "maxHealth": { "value": 20, "desc": "生命值+20%" }
+      },
+      "global": {
+        "populationIncrease": { "value": 2, "desc": "人口上限+2" },
+        "goldReward": { "value": 20, "desc": "获得20金币" }
+      }
+    },
+    "SSR": {
+      "tower": {
+        "attackDamage": { "value": 20, "desc": "攻击力+20%" },
+        "attackSpeed": { "value": 30, "desc": "攻击速度+30%" },
+        "maxHealth": { "value": 50, "desc": "生命值+50%" }
+      },
+      "role": {
+        "attackDamage": { "value": 40, "desc": "攻击力+40%" },
+        "attackSpeed": { "value": 30, "desc": "攻击速度+30%" },
+        "maxHealth": { "value": 50, "desc": "生命值+50%" },
+        "moveSpeed": { "value": 25, "desc": "移动速度+25%" }
+      },
+      "building": {
+        "maxHealth": { "value": 50, "desc": "生命值+50%" }
+      },
+      "global": {
+        "populationIncrease": { "value": 4, "desc": "人口上限+4" },
+        "goldReward": { "value": 50, "desc": "获得50金币" }
+      }
+    }
+  },
+  "unitTypeCategories": {
+    "tower": ["WatchTower", "IceTower", "ThunderTower"],
+    "role": ["Arrower", "Hunter", "ElfSwordsman", "Priest"],
+    "building": ["WarAncientTree"]
+  }
+}

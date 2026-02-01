@@ -52,6 +52,20 @@ export class ThunderChain extends Component {
     }
 
     /**
+     * 安全获取节点的世界位置
+     */
+    private getSafeWorldPosition(node: Node | null): Vec3 | null {
+        if (!node || !node.isValid || !node.active) {
+            return null;
+        }
+        try {
+            return node.worldPosition;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    /**
      * 攻击目标
      */
     private attackTarget(fromPos: Vec3, target: Node) {
@@ -62,6 +76,13 @@ export class ThunderChain extends Component {
 
         // 检查是否已经命中过这个目标
         if (this.hitEnemies.has(target)) {
+            this.destroyChain();
+            return;
+        }
+
+        // 安全获取目标位置（在访问前再次检查）
+        const targetPos = this.getSafeWorldPosition(target);
+        if (!targetPos) {
             this.destroyChain();
             return;
         }
@@ -78,10 +99,10 @@ export class ThunderChain extends Component {
 
         // 显示闪电特效（起点往上移20像素）
         const adjustedFromPos = new Vec3(fromPos.x, fromPos.y + 20, fromPos.z);
-        this.createLightningEffect(adjustedFromPos, target.worldPosition);
+        this.createLightningEffect(adjustedFromPos, targetPos);
 
         // 显示电火花特效
-        this.createSparkEffect(target.worldPosition);
+        this.createSparkEffect(targetPos);
 
         // 应用伤害（使用计算后的当前伤害）
         if (this.onHitCallback) {
@@ -91,11 +112,21 @@ export class ThunderChain extends Component {
         // 检查是否可以继续弹射
         if (this.bounceCount < this.maxBounces) {
             // 查找下一个目标
-            const nextTarget = this.findNextTarget(target.worldPosition);
+            const nextTarget = this.findNextTarget(targetPos);
             if (nextTarget) {
                 // 延迟一小段时间后攻击下一个目标（视觉效果）
                 this.scheduleOnce(() => {
-                    this.attackTarget(target.worldPosition, nextTarget);
+                    // 在回调中再次检查目标有效性
+                    if (!target || !target.isValid || !target.active) {
+                        this.destroyChain();
+                        return;
+                    }
+                    const nextTargetPos = this.getSafeWorldPosition(target);
+                    if (!nextTargetPos) {
+                        this.destroyChain();
+                        return;
+                    }
+                    this.attackTarget(nextTargetPos, nextTarget);
                 }, 0.1);
             } else {
                 // 没有找到下一个目标，结束
@@ -440,9 +471,9 @@ export class ThunderChain extends Component {
     }
 
     /**
-     * 销毁闪电链
+     * 销毁闪电链（公开方法，允许外部调用）
      */
-    private destroyChain() {
+    public destroyChain() {
         // 清理所有闪电链特效节点
         for (const node of this.chainNodes) {
             if (node && node.isValid) {

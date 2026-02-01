@@ -535,7 +535,6 @@ export class Role extends Component {
                 if (elfSwordsmansNode) roleCount += elfSwordsmansNode.children.filter(node => node && node.isValid && node.active).length;
             }
             
-            //console.info(`[Role.update] 单位数量统计 - 敌人: ${enemyCount}, 角色: ${roleCount}, 总计: ${enemyCount + roleCount}`);
         }
 
         // 更新对话框系统（在游戏状态检查之前，确保对话框能正常显示）
@@ -924,21 +923,17 @@ export class Role extends Component {
         let minDistanceSq = Infinity; // 使用平方距离，避免开方运算
         const detectionRange = this.getDetectionRange(); // 使用可重写的方法获取索敌范围
         
-        // console.info(`[Role.findTarget] ${this.node.name} 开始查找目标, detectionRange: ${detectionRange}, unitManager: ${this.unitManager ? '存在' : 'null'}`);
         
         // 使用公共函数获取敌人（已优化，使用UnitManager）
         const enemies = this.getEnemies(true, detectionRange);
         
-        // console.info(`[Role.findTarget] ${this.node.name} 获取到 ${enemies.length} 个敌人`);
         
         // 如果没有找到敌人，可能是UnitManager还没初始化或敌人列表为空，尝试使用降级方案
         if (enemies.length === 0 && this.unitManager) {
-            // console.info(`[Role.findTarget] ${this.node.name} 敌人列表为空，尝试刷新UnitManager`);
             // 强制更新一次敌人列表
             this.unitManager.refreshUnitLists();
             // 再次尝试获取
             const enemiesRetry = this.getEnemies(true, detectionRange);
-            // console.info(`[Role.findTarget] ${this.node.name} 刷新后获取到 ${enemiesRetry.length} 个敌人`);
             if (enemiesRetry.length > 0) {
                 // 使用重新获取的敌人列表
                 const myPos = this.node.worldPosition;
@@ -957,7 +952,6 @@ export class Role extends Component {
                     }
                 }
                 this.currentTarget = nearestEnemy;
-                // console.info(`[Role.findTarget] ${this.node.name} 找到目标: ${nearestEnemy ? nearestEnemy.name : 'null'}`);
                 return;
             }
         }
@@ -2689,7 +2683,6 @@ export class Role extends Component {
      * 显示单位信息面板（不显示头顶的选择面板）
      */
     showUnitInfoPanel() {
-        console.info('[Role.showUnitInfoPanel] 显示单位信息面板，单位名称:', this.node?.name);
         // 显示单位信息面板和范围
         if (!this.unitSelectionManager) {
             this.findUnitSelectionManager();
@@ -2699,11 +2692,19 @@ export class Role extends Component {
             // 公式：10 + (level - 1) * 10
             const upgradeCost = this.level < 3 ? (10 + (this.level - 1) * 10) : undefined;
             
+            // 确保生命值有效
+            const currentHealth = (this.currentHealth !== undefined && !isNaN(this.currentHealth) && this.currentHealth >= 0) 
+                ? this.currentHealth 
+                : (this.maxHealth || 0);
+            const maxHealth = (this.maxHealth !== undefined && !isNaN(this.maxHealth) && this.maxHealth > 0) 
+                ? this.maxHealth 
+                : 0;
+            
             const unitInfo: UnitInfo = {
                 name: this.unitName || '角色',
                 level: this.level,
-                currentHealth: this.currentHealth,
-                maxHealth: this.maxHealth,
+                currentHealth: currentHealth,
+                maxHealth: maxHealth,
                 attackDamage: this.attackDamage,
                 populationCost: 1, // Tower占用1个人口
                 icon: this.cardIcon || this.defaultSpriteFrame,
@@ -2730,10 +2731,8 @@ export class Role extends Component {
         const canvas = find('Canvas');
         this.scheduleOnce(() => {
             if (canvas) {
-                console.info('[Role.showUnitInfoPanel] 注册globalTouchHandler到Canvas，单位名称:', this.node?.name);
                 // 创建全局触摸事件处理器
                 this.globalTouchHandler = (event: EventTouch) => {
-                    console.info('[Role.globalTouchHandler] 全局触摸事件触发，单位名称:', this.node?.name);
                     
                     // 检查当前单位是否仍被选中
                     // 注意：globalTouchHandler只有在单位被选中时才会注册
@@ -2743,15 +2742,12 @@ export class Role extends Component {
                         const currentSelectedUnit = this.unitSelectionManager.getCurrentSelectedUnit();
                         const isSelected = this.unitSelectionManager.isUnitSelected(this.node);
                         
-                        console.info('[Role.globalTouchHandler] 检查选中状态，单位名称:', this.node?.name, '是否选中:', isSelected, '当前选中单位:', currentSelectedUnit?.name);
                         
                         // 如果选中了其他单位（不是当前单位），移除监听器
                         if (currentSelectedUnit !== null && currentSelectedUnit !== this.node) {
-                            console.info('[Role.globalTouchHandler] 选中了其他单位，移除当前单位的监听器，单位名称:', this.node?.name);
                             const canvas = find('Canvas');
                             if (canvas && this.globalTouchHandler) {
                                 canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
-                                console.info('[Role.globalTouchHandler] 已移除监听器，单位名称:', this.node?.name);
                             }
                             this.globalTouchHandler = null!;
                             return;
@@ -2760,12 +2756,10 @@ export class Role extends Component {
                         // 如果当前单位未被选中，也不执行移动操作
                         // 或者如果没有任何选中（currentSelectedUnit为null），也不执行移动操作
                         if (!isSelected || currentSelectedUnit === null) {
-                            console.info('[Role.globalTouchHandler] 单位未被选中或没有任何选中，不执行移动操作，单位名称:', this.node?.name);
                             // 移除监听器，因为单位已不再被选中
                             const canvas = find('Canvas');
                             if (canvas && this.globalTouchHandler) {
                                 canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
-                                console.info('[Role.globalTouchHandler] 已移除监听器（单位未选中），单位名称:', this.node?.name);
                             }
                             this.globalTouchHandler = null!;
                             return;
@@ -2781,14 +2775,12 @@ export class Role extends Component {
                             // 检查节点名称是否包含 UnitInfoPanel（信息面板的节点名称）
                             if (currentNode.name === 'UnitInfoPanel' || currentNode.name.includes('UnitInfoPanel')) {
                                 // 点击在信息面板上，不设置移动目标
-                                console.info('[Role.globalTouchHandler] 点击在信息面板上，不设置移动目标，节点名称:', currentNode.name);
                                 return;
                             }
                             // 检查节点的路径是否包含 UnitInfoPanel
                             const nodePath = currentNode.getPathInHierarchy();
                             if (nodePath && nodePath.includes('UnitInfoPanel')) {
                                 // 点击在信息面板上，不设置移动目标
-                                console.info('[Role.globalTouchHandler] 点击在信息面板路径上，不设置移动目标，节点路径:', nodePath);
                                 return;
                             }
                             currentNode = currentNode.parent;
@@ -2800,7 +2792,6 @@ export class Role extends Component {
                     }
                     
                     // 点击不在信息面板上，设置移动目标
-                    console.info('[Role.globalTouchHandler] 点击不在信息面板上，设置移动目标');
                     this.setManualMoveTarget(event);
                 };
                 
@@ -2814,7 +2805,6 @@ export class Role extends Component {
      * @param worldPos 世界坐标位置
      */
     setManualMoveTargetPosition(worldPos: Vec3) {
-        console.info('[Role.setManualMoveTargetPosition] 设置手动移动目标位置，单位名称:', this.node?.name, '目标位置:', worldPos);
         // 智能调整目标位置，避免与单位重叠
         const adjustedPos = this.findAvailableMovePosition(worldPos);
         
@@ -2824,7 +2814,6 @@ export class Role extends Component {
         
         // 清除当前自动寻敌目标，优先执行手动移动
         this.currentTarget = null!;
-        console.info('[Role.setManualMoveTargetPosition] 手动移动目标已设置，调整后位置:', adjustedPos);
     }
 
     /**
@@ -2832,7 +2821,6 @@ export class Role extends Component {
      * @param event 触摸事件
      */
     setManualMoveTarget(event: EventTouch) {
-        console.info('[Role.setManualMoveTarget] 设置手动移动目标，单位名称:', this.node?.name);
         // 阻止事件冒泡，避免触发其他点击事件
         event.propagationStopped = true;
         
@@ -2857,24 +2845,19 @@ export class Role extends Component {
         const worldPos = new Vec3();
         camera.screenToWorld(screenPos, worldPos);
         worldPos.z = 0;
-        console.info('[Role.setManualMoveTarget] 屏幕坐标转换为世界坐标，屏幕:', touchLocation, '世界:', worldPos);
         
         // 使用setManualMoveTargetPosition方法设置移动目标
         this.setManualMoveTargetPosition(worldPos);
         
         // 隐藏选择面板（这会移除全局触摸监听，确保只有一次控制机会）
-        console.info('[Role.setManualMoveTarget] 调用hideSelectionPanel清除globalTouchHandler');
         this.hideSelectionPanel();
         
         // 清除选中状态（只有当前单位被选中时才清除选择）
         if (this.unitSelectionManager) {
             const isSelected = this.unitSelectionManager.isUnitSelected(this.node);
-            console.info('[Role.setManualMoveTarget] 检查单位是否被选中，单位名称:', this.node?.name, '是否选中:', isSelected);
             if (isSelected) {
-                console.info('[Role.setManualMoveTarget] 单位当前被选中，调用clearSelection清除选择，单位名称:', this.node?.name);
                 this.unitSelectionManager.clearSelection();
             } else {
-                console.info('[Role.setManualMoveTarget] 单位当前未被选中，不执行移动操作，单位名称:', this.node?.name);
                 // 单位未被选中，不应该执行移动操作，直接返回
                 return;
             }
@@ -3029,10 +3012,8 @@ export class Role extends Component {
     }
 
     hideSelectionPanel() {
-        console.info('[Role.hideSelectionPanel] 隐藏选择面板，单位名称:', this.node?.name);
         // 移除全局触摸事件监听
         if (this.globalTouchHandler) {
-            console.info('[Role.hideSelectionPanel] 清除globalTouchHandler');
             const canvas = find('Canvas');
             if (canvas) {
                 canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
@@ -3047,7 +3028,6 @@ export class Role extends Component {
         if (this.unitSelectionManager) {
             // 检查是否当前选中的是这个单位
             if (this.unitSelectionManager.isUnitSelected(this.node)) {
-                console.info('[Role.hideSelectionPanel] 当前选中的是这个单位，调用clearSelection');
                 this.unitSelectionManager.clearSelection();
             } else {
                 console.info('[Role.hideSelectionPanel] 当前选中的不是这个单位，不调用clearSelection');
@@ -3117,11 +3097,15 @@ export class Role extends Component {
 
         // 更新单位信息面板
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            // 确保生命值有效
+            const currentHealth = (this.currentHealth !== undefined && !isNaN(this.currentHealth)) ? this.currentHealth : (this.maxHealth || 0);
+            const maxHealth = (this.maxHealth !== undefined && !isNaN(this.maxHealth) && this.maxHealth > 0) ? this.maxHealth : 0;
+            
             this.unitSelectionManager.updateUnitInfo({
                 level: this.level,
                 attackDamage: this.attackDamage,
-                currentHealth: this.currentHealth,
-                maxHealth: this.maxHealth,
+                currentHealth: currentHealth,
+                maxHealth: maxHealth,
                 attackFrequency: 1.0 / this.attackInterval,
                 moveSpeed: this.moveSpeed
             });
@@ -3155,12 +3139,20 @@ export class Role extends Component {
         
         // 更新单位信息面板（刷新按钮显示）
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            // 确保生命值有效
+            const currentHealth = (this.currentHealth !== undefined && !isNaN(this.currentHealth) && this.currentHealth >= 0) 
+                ? this.currentHealth 
+                : (this.maxHealth || 0);
+            const maxHealth = (this.maxHealth !== undefined && !isNaN(this.maxHealth) && this.maxHealth > 0) 
+                ? this.maxHealth 
+                : 0;
+            
             // 通过重新显示单位信息来刷新按钮状态
             const unitInfo: UnitInfo = {
                 name: this.unitName || '角色',
                 level: this.level,
-                currentHealth: this.currentHealth,
-                maxHealth: this.maxHealth,
+                currentHealth: currentHealth,
+                maxHealth: maxHealth,
                 attackDamage: this.attackDamage,
                 populationCost: 1,
                 icon: this.cardIcon || this.defaultSpriteFrame,
@@ -3264,20 +3256,12 @@ export class Role extends Component {
             const unitTypeNameMap = DamageStatistics.getUnitTypeNameMap();
             const unitType = this.constructor.name; // 获取类名（如 'WatchTower', 'Arrower' 等）
             const unitName = unitTypeNameMap.get(unitType) || unitType;
-            // 剑士：把受到的伤害记为“承伤贡献”
+            // 剑士：把受到的伤害记为"承伤贡献"
             if (unitType === 'ElfSwordsman') {
-                console.info('[Role] 记录承伤统计',
-                    'unitType =', unitType,
-                    'unitName =', unitName,
-                    'damageTaken =', damage);
                 damageStats.recordDamageTaken(unitType, unitName, damage);
             }
             // 其它单位：正常按输出伤害统计
             else {
-                console.info('[Role] 记录伤害统计',
-                    'unitType =', unitType,
-                    'unitName =', unitName,
-                    'damage =', damage);
                 damageStats.recordDamage(unitType, unitName, damage);
             }
         } catch (error) {

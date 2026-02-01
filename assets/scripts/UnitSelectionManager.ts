@@ -36,7 +36,6 @@ export class UnitSelectionManager extends Component {
      * 全局触摸结束事件处理
      */
     onGlobalTouchEnd(event: EventTouch) {
-        console.info('[UnitSelectionManager.onGlobalTouchEnd] 全局触摸结束事件触发');
         // 如果没有选中任何单位（单选或多选），直接返回
         if (!this.currentSelectedUnit && this.currentSelectedUnits.length === 0) {
             console.info('[UnitSelectionManager.onGlobalTouchEnd] 没有选中任何单位，直接返回');
@@ -130,7 +129,6 @@ export class UnitSelectionManager extends Component {
         // 点击不在单位和信息面板上，取消选择
         // 注意：延迟清除选择，让单位的globalTouchHandler先处理移动操作
         // 这样单位可以在清除选择前响应移动命令
-        console.info('[UnitSelectionManager.onGlobalTouchEnd] 点击在空地上，延迟清除选择');
         // 延迟一帧清除选择，确保单位的globalTouchHandler先执行
         // 使用scheduleOnce延迟到下一帧，让Role.globalTouchHandler先处理移动
         this.scheduleOnce(() => {
@@ -209,7 +207,6 @@ export class UnitSelectionManager extends Component {
      * @param unitNodes 单位节点数组
      */
     selectMultipleUnits(unitNodes: Node[]) {
-        console.info('[UnitSelectionManager] selectMultipleUnits: 开始，传入单位数量 =', unitNodes.length);
         if (unitNodes.length === 0) {
             console.info('[UnitSelectionManager] selectMultipleUnits: 传入单位数量为0，清除选择');
             this.clearSelection();
@@ -217,12 +214,10 @@ export class UnitSelectionManager extends Component {
         }
 
         // 清除之前的选择
-        console.info('[UnitSelectionManager] selectMultipleUnits: 清除之前的选择');
         this.clearSelection();
 
         // 设置当前选中的单位数组
         this.currentSelectedUnits = unitNodes.filter(node => node && node.isValid && node.active);
-        console.info('[UnitSelectionManager] selectMultipleUnits: 过滤后的单位数量 =', this.currentSelectedUnits.length);
         this.currentSelectedUnit = null!; // 清除单选
 
         if (this.currentSelectedUnits.length === 0) {
@@ -232,13 +227,11 @@ export class UnitSelectionManager extends Component {
 
         // 获取第一个单位的信息
         const firstUnit = this.currentSelectedUnits[0];
-        console.info('[UnitSelectionManager] selectMultipleUnits: 第一个单位节点名称 =', firstUnit?.name);
         const unitInfo = this.getUnitInfo(firstUnit);
         if (!unitInfo) {
             console.info('[UnitSelectionManager] selectMultipleUnits: 无法获取单位信息，返回');
             return;
         }
-        console.info('[UnitSelectionManager] selectMultipleUnits: 成功获取单位信息，单位名称 =', unitInfo.name);
 
         // 确保unitInfoPanel已初始化
         if (!this.unitInfoPanel) {
@@ -248,24 +241,19 @@ export class UnitSelectionManager extends Component {
 
         // 显示单位信息面板（使用第一个单位的信息，但标记为多选模式）
         if (this.unitInfoPanel) {
-            console.info('[UnitSelectionManager] selectMultipleUnits: 调用showMultipleUnitsInfo');
             this.unitInfoPanel.showMultipleUnitsInfo(unitInfo, this.currentSelectedUnits);
-            console.info('[UnitSelectionManager] selectMultipleUnits: showMultipleUnitsInfo调用完成');
         } else {
             console.info('[UnitSelectionManager] selectMultipleUnits: unitInfoPanel仍然为null，无法显示');
         }
 
         // 多选时不显示攻击范围
-        // console.info('[UnitSelectionManager] selectMultipleUnits: 显示范围');
         // this.showRangeDisplay(firstUnit, unitInfo);
-        console.info('[UnitSelectionManager] selectMultipleUnits: 完成');
     }
 
     /**
      * 获取单位信息（辅助方法）
      */
     private getUnitInfo(unitNode: Node): UnitInfo | null {
-        console.info('[UnitSelectionManager] getUnitInfo: 开始获取单位信息，节点名称 =', unitNode?.name);
         if (!unitNode || !unitNode.isValid) {
             console.info('[UnitSelectionManager] getUnitInfo: 节点无效');
             return null;
@@ -275,7 +263,6 @@ export class UnitSelectionManager extends Component {
         // 使用字符串 'Role' 避免循环引用（Role.ts 导入了 UnitSelectionManager）
         const roleScript = unitNode.getComponent('Role') as any;
         if (roleScript) {
-            console.info('[UnitSelectionManager] getUnitInfo: 找到Role组件，单位名称 =', roleScript.unitName);
             // 计算升级费用：1到2级是10金币，此后每次升级多10金币
             // 公式：10 + (level - 1) * 10
             const level = roleScript.level !== undefined ? roleScript.level : 1;
@@ -303,7 +290,6 @@ export class UnitSelectionManager extends Component {
         // 备用方案：尝试从各种单位类型获取信息
         const arrowerScript = unitNode.getComponent('Arrower') as any;
         if (arrowerScript) {
-            console.info('[UnitSelectionManager] getUnitInfo: 找到Arrower组件');
             const level = arrowerScript.level || 1;
             const upgradeCost = level < 3 ? (10 + (level - 1) * 10) : undefined;
             return {
@@ -328,7 +314,6 @@ export class UnitSelectionManager extends Component {
 
         const hunterScript = unitNode.getComponent('Hunter') as any;
         if (hunterScript) {
-            console.info('[UnitSelectionManager] getUnitInfo: 找到Hunter组件');
             const level = hunterScript.level || 1;
             const upgradeCost = level < 3 ? (10 + (level - 1) * 10) : undefined;
             return {
@@ -353,7 +338,6 @@ export class UnitSelectionManager extends Component {
 
         const swordsmanScript = unitNode.getComponent('ElfSwordsman') as any;
         if (swordsmanScript) {
-            console.info('[UnitSelectionManager] getUnitInfo: 找到ElfSwordsman组件');
             const level = swordsmanScript.level || 1;
             const upgradeCost = level < 3 ? (10 + (level - 1) * 10) : undefined;
             return {
@@ -407,7 +391,6 @@ export class UnitSelectionManager extends Component {
      * 清除选择
      */
     clearSelection() {
-        console.info('[UnitSelectionManager.clearSelection] 开始清除选择');
         // 隐藏信息面板
         if (this.unitInfoPanel) {
             this.unitInfoPanel.hide();
@@ -419,19 +402,16 @@ export class UnitSelectionManager extends Component {
         // 先保存当前选中的单位，然后清除选中状态
         const selectedUnit = this.currentSelectedUnit;
         const selectedUnits = [...this.currentSelectedUnits]; // 复制数组，避免引用问题
-        console.info('[UnitSelectionManager.clearSelection] 当前选中单位:', selectedUnit?.name, '多选单位数量:', selectedUnits.length);
         
         // 重要：先清除所有单位的globalTouchHandler，防止在清除选中状态后仍响应触摸事件
         // 这样Role.globalTouchHandler就不会在清除选择后执行了
         if (selectedUnit && selectedUnit.isValid) {
-            console.info('[UnitSelectionManager.clearSelection] 清除单选单位的globalTouchHandler，单位名称:', selectedUnit.name);
             this.clearUnitTouchHandler(selectedUnit);
         }
         
         // 清除多选单位的globalTouchHandler
         for (const unitNode of selectedUnits) {
             if (unitNode && unitNode.isValid) {
-                console.info('[UnitSelectionManager.clearSelection] 清除多选单位的globalTouchHandler，单位名称:', unitNode.name);
                 this.clearUnitTouchHandler(unitNode);
             }
         }
@@ -442,19 +422,16 @@ export class UnitSelectionManager extends Component {
         
         // 清除单选单位的高亮
         if (selectedUnit && selectedUnit.isValid) {
-            console.info('[UnitSelectionManager.clearSelection] 清除单选单位高亮，单位名称:', selectedUnit.name);
             this.clearUnitHighlight(selectedUnit);
         }
         
         // 清除多选单位的高亮
         for (const unitNode of selectedUnits) {
             if (unitNode && unitNode.isValid) {
-                console.info('[UnitSelectionManager.clearSelection] 清除多选单位高亮，单位名称:', unitNode.name);
                 this.clearUnitHighlight(unitNode);
             }
         }
         
-        console.info('[UnitSelectionManager.clearSelection] 清除选择完成');
     }
     
     /**
@@ -534,7 +511,6 @@ export class UnitSelectionManager extends Component {
             return;
         }
         
-        console.info('[UnitSelectionManager.clearUnitTouchHandler] 开始清除单位的globalTouchHandler，单位名称:', unitNode?.name);
         
         // 尝试获取Role组件（所有单位都继承自Role）
         const roleScript = unitNode.getComponent('Role') as any;
@@ -542,16 +518,13 @@ export class UnitSelectionManager extends Component {
             // 不调用hideSelectionPanel，因为它会再次调用clearSelection导致循环
             // 直接清除globalTouchHandler
             if (roleScript.globalTouchHandler) {
-                console.info('[UnitSelectionManager.clearUnitTouchHandler] 找到Role组件的globalTouchHandler，准备清除，单位名称:', unitNode?.name);
                 const canvas = find('Canvas');
                 if (canvas) {
                     canvas.off(Node.EventType.TOUCH_END, roleScript.globalTouchHandler, roleScript);
-                    console.info('[UnitSelectionManager.clearUnitTouchHandler] 已从Canvas移除Role组件的TOUCH_END监听器，单位名称:', unitNode?.name);
                 } else {
                     console.info('[UnitSelectionManager.clearUnitTouchHandler] 找不到Canvas节点，无法清除监听器，单位名称:', unitNode?.name);
                 }
                 roleScript.globalTouchHandler = null!;
-                console.info('[UnitSelectionManager.clearUnitTouchHandler] Role组件的globalTouchHandler已设置为null，单位名称:', unitNode?.name);
             } else {
                 console.info('[UnitSelectionManager.clearUnitTouchHandler] Role组件没有globalTouchHandler，无需清除，单位名称:', unitNode?.name);
             }
@@ -562,19 +535,15 @@ export class UnitSelectionManager extends Component {
         // 尝试获取Build组件（建筑物）
         const buildScript = unitNode.getComponent('Build') as any;
         if (buildScript && buildScript.globalTouchHandler) {
-            console.info('[UnitSelectionManager.clearUnitTouchHandler] 找到Build组件的globalTouchHandler，准备清除，单位名称:', unitNode?.name);
             const canvas = find('Canvas');
             if (canvas) {
                 canvas.off(Node.EventType.TOUCH_END, buildScript.globalTouchHandler, buildScript);
-                console.info('[UnitSelectionManager.clearUnitTouchHandler] 已从Canvas移除Build组件的TOUCH_END监听器，单位名称:', unitNode?.name);
             } else {
                 console.info('[UnitSelectionManager.clearUnitTouchHandler] 找不到Canvas节点，无法清除监听器，单位名称:', unitNode?.name);
             }
             buildScript.globalTouchHandler = null;
-            console.info('[UnitSelectionManager.clearUnitTouchHandler] Build组件的globalTouchHandler已设置为null，单位名称:', unitNode?.name);
         }
         
-        console.info('[UnitSelectionManager.clearUnitTouchHandler] 清除单位的globalTouchHandler完成，单位名称:', unitNode?.name);
     }
 
     /**

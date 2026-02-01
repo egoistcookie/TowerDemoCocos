@@ -1270,19 +1270,22 @@ export class UIManager extends Component {
      * @param onManualClose 手动关闭回调
      */
     showCountdownPopup(onComplete: () => void, onManualClose: () => void) {
-        
+        console.info(`[UIManager] showCountdownPopup() 被调用`);
         this.onCountdownComplete = onComplete;
         this.onCountdownManualClose = onManualClose;
         
         // 确保CountdownPopup存在
         this.autoCreateCountdownPopup();
+        console.info(`[UIManager] showCountdownPopup() countdownPopup存在=${!!this.countdownPopup}`);
         
         if (this.countdownPopup) {
+            console.info(`[UIManager] showCountdownPopup() 调用 countdownPopup.show()`);
             this.countdownPopup.show(
                 this.onCountdownCompleteHandler.bind(this),
                 this.onCountdownManualCloseHandler.bind(this)
             );
         } else {
+            console.error(`[UIManager] showCountdownPopup() 创建失败，直接调用onComplete`);
             // 如果创建失败，直接调用onComplete
             onComplete();
         }
