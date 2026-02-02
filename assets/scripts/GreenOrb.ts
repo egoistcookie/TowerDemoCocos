@@ -1,6 +1,7 @@
 import { _decorator, Component, Node, Vec3, find } from 'cc';
 import { GameManager, GameState } from './GameManager';
 import { AudioManager } from './AudioManager';
+import { GreenOrbExplosionEffect } from './GreenOrbExplosionEffect';
 
 const { ccclass, property } = _decorator;
 
@@ -160,10 +161,16 @@ export class GreenOrb extends Component {
 
         this.isFlying = false;
 
+        // 获取命中位置
+        const hitPos = this.node.worldPosition.clone();
+
         // 调用命中回调
         if (this.onHitCallback) {
             this.onHitCallback(this.damage);
         }
+
+        // 播放爆炸特效
+        this.playExplosionEffect(hitPos);
 
         // 销毁法球节点
         this.scheduleOnce(() => {
@@ -171,5 +178,31 @@ export class GreenOrb extends Component {
                 this.node.destroy();
             }
         }, 0.1);
+    }
+
+    /**
+     * 播放爆炸特效
+     */
+    private playExplosionEffect(explosionPos: Vec3) {
+        // 创建爆炸特效节点
+        const explosionNode = new Node('GreenOrbExplosionEffect');
+        
+        // 设置父节点
+        const canvas = find('Canvas');
+        const scene = this.node.scene;
+        const parentNode = canvas || scene || this.node.parent;
+        if (parentNode) {
+            explosionNode.setParent(parentNode);
+        } else {
+            explosionNode.setParent(this.node.parent);
+        }
+
+        // 设置位置
+        explosionNode.setWorldPosition(explosionPos);
+        explosionNode.active = true;
+
+        // 添加 GreenOrbExplosionEffect 组件
+        const explosionScript = explosionNode.addComponent(GreenOrbExplosionEffect);
+        explosionScript.init();
     }
 }

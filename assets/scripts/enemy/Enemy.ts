@@ -32,6 +32,11 @@ export class Enemy extends Component {
     @property
     collisionRadius: number = 20; // 碰撞半径（像素），默认20，子类可以重写
 
+    @property({
+        tooltip: "韧性（0-1）：1秒内遭受此百分比血量损失才会触发僵直。0表示没有抗性（受到攻击就会播放受击动画），1表示最大抗性（需要100%血量损失才触发僵直）"
+    })
+    tenacity: number = 0; // 韧性，默认0表示没有抗性，子类可以重写
+
     @property(Node)
     targetCrystal: Node = null!;
 

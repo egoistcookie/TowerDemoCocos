@@ -1912,6 +1912,23 @@ export class OrcWarlord extends Component {
             return;
         }
 
+        // 如果正在播放战争咆哮动画，不被打断，只扣血
+        if (this.isPlayingWarcryAnimation) {
+            this.currentHealth -= damage;
+            // 更新血条
+            if (this.healthBar) {
+                this.healthBar.setHealth(this.currentHealth);
+            }
+            // 显示伤害数字
+            this.showDamageNumber(damage);
+            
+            if (this.currentHealth <= 0) {
+                this.currentHealth = 0;
+                this.die();
+            }
+            return;
+        }
+
         // 显示伤害数字
         this.showDamageNumber(damage);
         

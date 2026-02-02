@@ -7,12 +7,13 @@ const { ccclass, property } = _decorator;
 @ccclass('OrcShaman')
 export class OrcShaman extends Enemy {
     // 重写父类属性，设置 OrcShaman 的默认值
-    maxHealth: number = 80;
+    maxHealth: number = 250; // 强化生命值：从200增加到250
     moveSpeed: number = 30; // 移动速度缓慢
     attackDamage: number = 25; // 攻击力很高
     attackInterval: number = 2.0;
     attackRange: number = 200; // 远程攻击范围
     collisionRadius: number = 20; // 碰撞半径（像素）
+    tenacity: number = 0.3; // 韧性与督军保持一致（0.3）
     unitName: string = "兽人萨满";
     unitDescription: string = "强大的兽人萨满，释放绿色法球攻击，移动缓慢但攻击力极高。";
     goldReward: number = 8;
@@ -31,6 +32,8 @@ export class OrcShaman extends Enemy {
     private readonly TOTEM_SPAWN_DELAY: number = 5; // 萨满出现5秒后释放图腾
     private totemCooldown: number = 0; // 图腾冷却时间
     private readonly TOTEM_COOLDOWN: number = 30; // 图腾冷却时间30秒
+    private hasCastLowHealthTotem: boolean = false; // 是否已经释放过70%血量以下的图腾
+    private readonly LOW_HEALTH_THRESHOLD: number = 0.7; // 70%血量阈值
     @property(Prefab)
     totemPrefab: Prefab = null!; // 图腾预制体
     
@@ -49,6 +52,7 @@ export class OrcShaman extends Enemy {
         // 重置图腾相关状态
         this.totemSpawnTimer = 0;
         this.totemCooldown = 0;
+        this.hasCastLowHealthTotem = false;
     }
     
     update(deltaTime: number) {
@@ -441,6 +445,29 @@ export class OrcShaman extends Enemy {
         // 初始化图腾
         if (totemScript && totemScript.init) {
             totemScript.init(totemPos);
+        }
+    }
+
+    /**
+     * 重写受击方法，检查生命值是否降到70%以下，如果是则释放额外图腾
+     */
+    takeDamage(damage: number) {
+        if (this.isDestroyed) {
+            return;
+        }
+
+        // 调用父类的takeDamage方法
+        super.takeDamage(damage);
+
+        // 检查生命值是否降到70%以下，且还没有释放过低血量图腾
+        if (!this.hasCastLowHealthTotem && this.currentHealth > 0) {
+            const healthPercentage = this.currentHealth / this.maxHealth;
+            if (healthPercentage <= this.LOW_HEALTH_THRESHOLD) {
+                // 标记已释放过低血量图腾
+                this.hasCastLowHealthTotem = true;
+                // 立即释放额外图腾（不受冷却时间限制）
+                this.castTotem();
+            }
         }
     }
 }
