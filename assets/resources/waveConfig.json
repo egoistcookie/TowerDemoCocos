@@ -499,9 +499,9 @@
           "interval": 0.55
         },
         {
-          "prefabName": "OrcWarlord",
-          "count": 4,
-          "interval": 1.5
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 3.0
         },
         {
           "prefabName": "Dragon",
