@@ -530,323 +530,329 @@ export class Enemy extends Component {
     }
 
     update(deltaTime: number) {
+        // 简化版索敌和攻击逻辑（参考 Boss），优先使用该逻辑
+        if (this.runSimpleAI(deltaTime)) {
+            return;
+        }
+
+        // 下面为旧的复杂逻辑，目前通常不会再执行，仅作为兼容和备份保留
         // 性能监控：开始计时
         // const updateStartTime = PerformanceMonitor.startTiming('Enemy.update');
         
         // 如果被销毁，只更新动画，不执行其他逻辑
-        if (this.isDestroyed) {
-            this.updateAnimation(deltaTime);
-            // PerformanceMonitor.endTiming('Enemy.update', updateStartTime, 5);
-            return;
-        }
+        // if (this.isDestroyed) {
+        //     this.updateAnimation(deltaTime);
+        //     // PerformanceMonitor.endTiming('Enemy.update', updateStartTime, 5);
+        //     return;
+        // }
 
-        // 性能监控：单位数量统计和日志输出（降低频率，避免每帧都输出）
-        Enemy.unitCountLogTimer += deltaTime;
-        if (Enemy.unitCountLogTimer >= Enemy.UNIT_COUNT_LOG_INTERVAL) {
-            Enemy.unitCountLogTimer = 0;
+        // // 性能监控：单位数量统计和日志输出（降低频率，避免每帧都输出）
+        // Enemy.unitCountLogTimer += deltaTime;
+        // if (Enemy.unitCountLogTimer >= Enemy.UNIT_COUNT_LOG_INTERVAL) {
+        //     Enemy.unitCountLogTimer = 0;
             
-            // 获取单位数量
-            let enemyCount = 0;
-            let roleCount = 0;
+        //     // 获取单位数量
+        //     let enemyCount = 0;
+        //     let roleCount = 0;
             
-            if (this.unitManager) {
-                const enemies = this.unitManager.getEnemies();
-                enemyCount = enemies.length;
+        //     if (this.unitManager) {
+        //         const enemies = this.unitManager.getEnemies();
+        //         enemyCount = enemies.length;
                 
-                // 统计Role单位数量（包括弓箭手、女猎手、精灵剑士、牧师）
-                const towers = this.unitManager.getTowers();
-                const hunters = this.unitManager.getHunters();
-                const elfSwordsmans = this.unitManager.getElfSwordsmans();
-                roleCount = towers.length + hunters.length + elfSwordsmans.length;
-            } else {
-                // 降级方案：直接查找节点
-                const enemiesNode = find('Canvas/Enemies');
-                if (enemiesNode) {
-                    enemyCount = enemiesNode.children.filter(node => node && node.isValid && node.active).length;
-                }
+        //         // 统计Role单位数量（包括弓箭手、女猎手、精灵剑士、牧师）
+        //         const towers = this.unitManager.getTowers();
+        //         const hunters = this.unitManager.getHunters();
+        //         const elfSwordsmans = this.unitManager.getElfSwordsmans();
+        //         roleCount = towers.length + hunters.length + elfSwordsmans.length;
+        //     } else {
+        //         // 降级方案：直接查找节点
+        //         const enemiesNode = find('Canvas/Enemies');
+        //         if (enemiesNode) {
+        //             enemyCount = enemiesNode.children.filter(node => node && node.isValid && node.active).length;
+        //         }
                 
-                const towersNode = find('Canvas/Towers');
-                const huntersNode = find('Canvas/Hunters');
-                const elfSwordsmansNode = find('Canvas/ElfSwordsmans');
-                if (towersNode) roleCount += towersNode.children.filter(node => node && node.isValid && node.active).length;
-                if (huntersNode) roleCount += huntersNode.children.filter(node => node && node.isValid && node.active).length;
-                if (elfSwordsmansNode) roleCount += elfSwordsmansNode.children.filter(node => node && node.isValid && node.active).length;
-            }
+        //         const towersNode = find('Canvas/Towers');
+        //         const huntersNode = find('Canvas/Hunters');
+        //         const elfSwordsmansNode = find('Canvas/ElfSwordsmans');
+        //         if (towersNode) roleCount += towersNode.children.filter(node => node && node.isValid && node.active).length;
+        //         if (huntersNode) roleCount += huntersNode.children.filter(node => node && node.isValid && node.active).length;
+        //         if (elfSwordsmansNode) roleCount += elfSwordsmansNode.children.filter(node => node && node.isValid && node.active).length;
+        //     }
             
-            //console.info(`[Enemy.update] 单位数量统计 - 敌人: ${enemyCount}, 角色: ${roleCount}, 总计: ${enemyCount + roleCount}`);
-        }
+        //     //console.info(`[Enemy.update] 单位数量统计 - 敌人: ${enemyCount}, 角色: ${roleCount}, 总计: ${enemyCount + roleCount}`);
+        // }
 
-        // 性能优化：LOD系统 - 根据距离摄像机远近，降低更新频率
-        // 使用累计时间而不是Date.now()，避免系统调用开销
-        this.lastDistanceCheckTime += deltaTime;
-        if (this.lastDistanceCheckTime >= this.DISTANCE_CHECK_INTERVAL) {
-            // const lodStartTime = PerformanceMonitor.startTiming('Enemy.updateLOD');
-            this.updateLOD();
-            // PerformanceMonitor.endTiming('Enemy.updateLOD', lodStartTime, 1);
-            this.lastDistanceCheckTime = 0;
-        }
+        // // 性能优化：LOD系统 - 根据距离摄像机远近，降低更新频率
+        // // 使用累计时间而不是Date.now()，避免系统调用开销
+        // this.lastDistanceCheckTime += deltaTime;
+        // if (this.lastDistanceCheckTime >= this.DISTANCE_CHECK_INTERVAL) {
+        //     // const lodStartTime = PerformanceMonitor.startTiming('Enemy.updateLOD');
+        //     this.updateLOD();
+        //     // PerformanceMonitor.endTiming('Enemy.updateLOD', lodStartTime, 1);
+        //     this.lastDistanceCheckTime = 0;
+        // }
         
-        // 根据LOD级别决定是否跳过本次更新
-        this.updateSkipCounter++;
-        if (this.updateSkipCounter < this.updateSkipInterval) {
-            // 跳过更新，但更新动画（降低频率）
-            this.animationUpdateTimer += deltaTime;
-            if (this.animationUpdateTimer >= this.ANIMATION_UPDATE_INTERVAL) {
-                this.animationUpdateTimer = 0;
-                this.updateAnimation(deltaTime);
-            }
-            // PerformanceMonitor.endTiming('Enemy.update', updateStartTime, 5);
-            return;
-        }
-        this.updateSkipCounter = 0;
+        // // 根据LOD级别决定是否跳过本次更新
+        // this.updateSkipCounter++;
+        // if (this.updateSkipCounter < this.updateSkipInterval) {
+        //     // 跳过更新，但更新动画（降低频率）
+        //     this.animationUpdateTimer += deltaTime;
+        //     if (this.animationUpdateTimer >= this.ANIMATION_UPDATE_INTERVAL) {
+        //         this.animationUpdateTimer = 0;
+        //         this.updateAnimation(deltaTime);
+        //     }
+        //     // PerformanceMonitor.endTiming('Enemy.update', updateStartTime, 5);
+        //     return;
+        // }
+        // this.updateSkipCounter = 0;
 
-        // 检查游戏状态 - 如果GameManager不存在，尝试重新查找
-        if (!this.gameManager) {
-            this.findGameManager();
-        }
+        // // 检查游戏状态 - 如果GameManager不存在，尝试重新查找
+        // if (!this.gameManager) {
+        //     this.findGameManager();
+        // }
         
-        // 检查游戏状态，只在Playing状态下运行
-        if (this.gameManager) {
-            const gameState = this.gameManager.getGameState();
-            if (gameState !== GameState.Playing) {
-                // 游戏已结束或暂停，停止移动和攻击
-                this.stopMoving();
-                this.currentTarget = null!;
-                return;
-            }
-        }
+        // // 检查游戏状态，只在Playing状态下运行
+        // if (this.gameManager) {
+        //     const gameState = this.gameManager.getGameState();
+        //     if (gameState !== GameState.Playing) {
+        //         // 游戏已结束或暂停，停止移动和攻击
+        //         this.stopMoving();
+        //         this.currentTarget = null!;
+        //         return;
+        //     }
+        // }
 
-        // 更新攻击计时器
-        this.attackTimer += deltaTime;
-        this.targetFindTimer += deltaTime;
+        // // 更新攻击计时器
+        // this.attackTimer += deltaTime;
+        // this.targetFindTimer += deltaTime;
         
-        // 更新对话框系统（降低频率，只在更新时执行）
-        this.updateDialogSystem(deltaTime);
+        // // 更新对话框系统（降低频率，只在更新时执行）
+        // this.updateDialogSystem(deltaTime);
 
-        // 查找目标（优先防御塔，然后水晶）- 按间隔查找而不是每帧都查找
-        if (this.targetFindTimer >= this.TARGET_FIND_INTERVAL) {
-            this.targetFindTimer = 0;
-            // const findTargetStartTime = PerformanceMonitor.startTiming('Enemy.findTarget');
-            this.findTarget();
-            // PerformanceMonitor.endTiming('Enemy.findTarget', findTargetStartTime, 3);
-        }
+        // // 查找目标（优先防御塔，然后水晶）- 按间隔查找而不是每帧都查找
+        // if (this.targetFindTimer >= this.TARGET_FIND_INTERVAL) {
+        //     this.targetFindTimer = 0;
+        //     // const findTargetStartTime = PerformanceMonitor.startTiming('Enemy.findTarget');
+        //     this.findTarget();
+        //     // PerformanceMonitor.endTiming('Enemy.findTarget', findTargetStartTime, 3);
+        // }
         
-        // 如果当前目标已失效，立即重新查找（不等待间隔）
-        if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
-            if (this.targetFindTimer >= 0.1) { // 至少间隔0.1秒
-                this.targetFindTimer = 0;
-                // const findTargetStartTime = PerformanceMonitor.startTiming('Enemy.findTarget');
-                this.findTarget();
-                // PerformanceMonitor.endTiming('Enemy.findTarget', findTargetStartTime, 3);
-            }
-        }
+        // // 如果当前目标已失效，立即重新查找（不等待间隔）
+        // if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
+        //     if (this.targetFindTimer >= 0.1) { // 至少间隔0.1秒
+        //         this.targetFindTimer = 0;
+        //         // const findTargetStartTime = PerformanceMonitor.startTiming('Enemy.findTarget');
+        //         this.findTarget();
+        //         // PerformanceMonitor.endTiming('Enemy.findTarget', findTargetStartTime, 3);
+        //     }
+        // }
 
-        // 最高优先级：如果在网格中寻路，优先执行网格寻路逻辑
-        // 但如果当前目标是我方单位，放弃网格寻路，直接朝我方单位移动
-        if (this.isInStoneWallGrid) {
-            // 检查当前目标是否是我方单位
-            let isFriendlyUnit = false;
-            if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
-                const arrowerScript = this.currentTarget.getComponent('Arrower') as any;
-                const hunterScript = this.currentTarget.getComponent('Hunter') as any;
-                const swordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
-                const priestScript = this.currentTarget.getComponent('Priest') as any;
-                if (arrowerScript || hunterScript || swordsmanScript || priestScript) {
-                    isFriendlyUnit = true;
-                }
-            }
+        // // 最高优先级：如果在网格中寻路，优先执行网格寻路逻辑
+        // // 但如果当前目标是我方单位，放弃网格寻路，直接朝我方单位移动
+        // if (this.isInStoneWallGrid) {
+        //     // 检查当前目标是否是我方单位
+        //     let isFriendlyUnit = false;
+        //     if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
+        //         const arrowerScript = this.currentTarget.getComponent('Arrower') as any;
+        //         const hunterScript = this.currentTarget.getComponent('Hunter') as any;
+        //         const swordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
+        //         const priestScript = this.currentTarget.getComponent('Priest') as any;
+        //         if (arrowerScript || hunterScript || swordsmanScript || priestScript) {
+        //             isFriendlyUnit = true;
+        //         }
+        //     }
             
-            // 如果当前目标是我方单位，退出网格寻路模式，直接朝我方单位移动
-            if (isFriendlyUnit) {
-                this.isInStoneWallGrid = false;
-                this.gridMoveState = null;
-                this.gridMoveTargetX = null;
-                // 继续执行后续逻辑，直接朝我方单位移动
-            } else {
-                // 如果正在播放攻击动画，停止攻击动画并切换到移动动画
-                if (this.isPlayingAttackAnimation) {
-                    this.isPlayingAttackAnimation = false;
-                    this.attackComplete = false;
-                    this.stopAllAnimations();
-                }
-                const hadTargetBefore = !!this.currentTarget;
-                // const moveInGridStartTime = PerformanceMonitor.startTiming('Enemy.moveInStoneWallGrid');
-                this.moveInStoneWallGrid(deltaTime);
-                // PerformanceMonitor.endTiming('Enemy.moveInStoneWallGrid', moveInGridStartTime, 3);
-                // 如果moveInStoneWallGrid检测到我方单位并设置了currentTarget，且退出了网格寻路模式，不直接return，让后续逻辑处理目标
-                if (!this.isInStoneWallGrid && this.currentTarget && !hadTargetBefore) {
-                    // 不return，继续执行后续逻辑处理移动和攻击
-                } else {
-                    this.updateAnimation(deltaTime);
-                    return;
-                }
-            }
-        }
+        //     // 如果当前目标是我方单位，退出网格寻路模式，直接朝我方单位移动
+        //     if (isFriendlyUnit) {
+        //         this.isInStoneWallGrid = false;
+        //         this.gridMoveState = null;
+        //         this.gridMoveTargetX = null;
+        //         // 继续执行后续逻辑，直接朝我方单位移动
+        //     } else {
+        //         // 如果正在播放攻击动画，停止攻击动画并切换到移动动画
+        //         if (this.isPlayingAttackAnimation) {
+        //             this.isPlayingAttackAnimation = false;
+        //             this.attackComplete = false;
+        //             this.stopAllAnimations();
+        //         }
+        //         const hadTargetBefore = !!this.currentTarget;
+        //         // const moveInGridStartTime = PerformanceMonitor.startTiming('Enemy.moveInStoneWallGrid');
+        //         this.moveInStoneWallGrid(deltaTime);
+        //         // PerformanceMonitor.endTiming('Enemy.moveInStoneWallGrid', moveInGridStartTime, 3);
+        //         // 如果moveInStoneWallGrid检测到我方单位并设置了currentTarget，且退出了网格寻路模式，不直接return，让后续逻辑处理目标
+        //         if (!this.isInStoneWallGrid && this.currentTarget && !hadTargetBefore) {
+        //             // 不return，继续执行后续逻辑处理移动和攻击
+        //         } else {
+        //             this.updateAnimation(deltaTime);
+        //             return;
+        //         }
+        //     }
+        // }
 
-        // 检查敌人是否在网格上方，如果是，先移动到缺口
-        // 优先级：如果有缺口目标，优先移动到缺口；如果没有，检查是否在网格上方并查找缺口
-        if (!this.currentTarget && !this.isInStoneWallGrid) {
-            // 性能优化：缓存网格位置，减少worldToGrid调用
-            this.lastGridCheckTime += deltaTime;
-            if (this.lastGridCheckTime >= this.GRID_CHECK_INTERVAL || !this.cachedCurrentGrid) {
-                this.cachedCurrentGrid = this.stoneWallGridPanelComponent?.worldToGrid(this.node.worldPosition) || null;
-                this.lastGridCheckTime = 0;
-            }
+        // // 检查敌人是否在网格上方，如果是，先移动到缺口
+        // // 优先级：如果有缺口目标，优先移动到缺口；如果没有，检查是否在网格上方并查找缺口
+        // if (!this.currentTarget && !this.isInStoneWallGrid) {
+        //     // 性能优化：缓存网格位置，减少worldToGrid调用
+        //     this.lastGridCheckTime += deltaTime;
+        //     if (this.lastGridCheckTime >= this.GRID_CHECK_INTERVAL || !this.cachedCurrentGrid) {
+        //         this.cachedCurrentGrid = this.stoneWallGridPanelComponent?.worldToGrid(this.node.worldPosition) || null;
+        //         this.lastGridCheckTime = 0;
+        //     }
             
-            // 先检查是否已经在最底层，如果是，清除所有网格相关状态，直接向水晶移动
-            if (this.cachedCurrentGrid && this.cachedCurrentGrid.y <= 0) {
-                // 已在最底层，清除所有网格相关状态，直接向水晶移动
-                this.topLayerGapTarget = null;
-                // 直接跳过后续的网格和绕行逻辑，进入向水晶移动的逻辑
-            } else {
-                // 性能优化：缓存"是否在网格上方"状态，减少checkEnemyAboveGrid调用
-                this.lastAboveGridCheckTime += deltaTime;
-                if (this.lastAboveGridCheckTime >= this.ABOVE_GRID_CHECK_INTERVAL || this.lastAboveGridCheckTime === deltaTime) {
-                    this.cachedIsAboveGrid = this.checkEnemyAboveGrid();
-                    this.lastAboveGridCheckTime = 0;
-                }
+        //     // 先检查是否已经在最底层，如果是，清除所有网格相关状态，直接向水晶移动
+        //     if (this.cachedCurrentGrid && this.cachedCurrentGrid.y <= 0) {
+        //         // 已在最底层，清除所有网格相关状态，直接向水晶移动
+        //         this.topLayerGapTarget = null;
+        //         // 直接跳过后续的网格和绕行逻辑，进入向水晶移动的逻辑
+        //     } else {
+        //         // 性能优化：缓存"是否在网格上方"状态，减少checkEnemyAboveGrid调用
+        //         this.lastAboveGridCheckTime += deltaTime;
+        //         if (this.lastAboveGridCheckTime >= this.ABOVE_GRID_CHECK_INTERVAL || this.lastAboveGridCheckTime === deltaTime) {
+        //             this.cachedIsAboveGrid = this.checkEnemyAboveGrid();
+        //             this.lastAboveGridCheckTime = 0;
+        //         }
                 
-                if ((this.topLayerGapTarget || this.cachedIsAboveGrid) && !this.currentTarget) {
-                    // 如果已经有缺口目标，或者敌人在网格上方，且没有当前目标，处理缺口移动逻辑
-                    // 如果还没有找到缺口目标，寻找缺口
-                    if (!this.topLayerGapTarget) {
-                        const gapPos = this.findGapInTopLayer();
-                        if (gapPos) {
-                            this.topLayerGapTarget = gapPos;
-                        } else {
-                            // 找不到缺口，攻击最近的石墙
-                            const nearestWall = this.findNearestStoneWall();
-                            if (nearestWall) {
-                                this.currentTarget = nearestWall;
-                                // 清除缺口目标，确保不会进入缺口移动逻辑
-                                this.topLayerGapTarget = null;
-                                // 直接跳出缺口处理分支，继续执行后续的"处理当前目标"逻辑
-                                // 不执行return，让后续逻辑处理移动和攻击
-                            } else {
-                                // 如果正在播放攻击动画，停止攻击动画
-                                if (this.isPlayingAttackAnimation) {
-                                    this.isPlayingAttackAnimation = false;
-                                }
-                                return;
-                            }
-                        }
-                    }
+        //         if ((this.topLayerGapTarget || this.cachedIsAboveGrid) && !this.currentTarget) {
+        //             // 如果已经有缺口目标，或者敌人在网格上方，且没有当前目标，处理缺口移动逻辑
+        //             // 如果还没有找到缺口目标，寻找缺口
+        //             if (!this.topLayerGapTarget) {
+        //                 const gapPos = this.findGapInTopLayer();
+        //                 if (gapPos) {
+        //                     this.topLayerGapTarget = gapPos;
+        //                 } else {
+        //                     // 找不到缺口，攻击最近的石墙
+        //                     const nearestWall = this.findNearestStoneWall();
+        //                     if (nearestWall) {
+        //                         this.currentTarget = nearestWall;
+        //                         // 清除缺口目标，确保不会进入缺口移动逻辑
+        //                         this.topLayerGapTarget = null;
+        //                         // 直接跳出缺口处理分支，继续执行后续的"处理当前目标"逻辑
+        //                         // 不执行return，让后续逻辑处理移动和攻击
+        //                     } else {
+        //                         // 如果正在播放攻击动画，停止攻击动画
+        //                         if (this.isPlayingAttackAnimation) {
+        //                             this.isPlayingAttackAnimation = false;
+        //                         }
+        //                         return;
+        //                     }
+        //                 }
+        //             }
 
-                    // 如果设置了石墙目标，不应该进入缺口移动逻辑，应该跳出这个分支
-                    if (this.currentTarget && !this.topLayerGapTarget) {
-                        // 已经设置了石墙目标，跳出缺口处理逻辑，让后续逻辑处理移动和攻击
-                        // 清除可能存在的缺口目标标记
-                        this.topLayerGapTarget = null;
-                        // 不执行return，跳出这个else if分支，继续执行后续的"处理当前目标"逻辑
-                    } else if (this.topLayerGapTarget) {
-                        // 移动到缺口（性能优化：复用Vec3对象）
-                        this.cachedWorldPosition.set(this.node.worldPosition);
-                        Vec3.subtract(this.tempVec3_1, this.topLayerGapTarget, this.cachedWorldPosition);
-                        const gapDistance = this.tempVec3_1.length();
+        //             // 如果设置了石墙目标，不应该进入缺口移动逻辑，应该跳出这个分支
+        //             if (this.currentTarget && !this.topLayerGapTarget) {
+        //                 // 已经设置了石墙目标，跳出缺口处理逻辑，让后续逻辑处理移动和攻击
+        //                 // 清除可能存在的缺口目标标记
+        //                 this.topLayerGapTarget = null;
+        //                 // 不执行return，跳出这个else if分支，继续执行后续的"处理当前目标"逻辑
+        //             } else if (this.topLayerGapTarget) {
+        //                 // 移动到缺口（性能优化：复用Vec3对象）
+        //                 this.cachedWorldPosition.set(this.node.worldPosition);
+        //                 Vec3.subtract(this.tempVec3_1, this.topLayerGapTarget, this.cachedWorldPosition);
+        //                 const gapDistance = this.tempVec3_1.length();
 
-                        if (gapDistance < 15) {
-                            // 已到达缺口，清除缺口标记，进入网格寻路模式
+        //                 if (gapDistance < 15) {
+        //                     // 已到达缺口，清除缺口标记，进入网格寻路模式
                             
-                            // 确保敌人位置精确对齐到缺口位置
-                            const clampedPos = this.clampPositionToScreen(this.topLayerGapTarget);
-                            this.node.setWorldPosition(clampedPos);
+        //                     // 确保敌人位置精确对齐到缺口位置
+        //                     const clampedPos = this.clampPositionToScreen(this.topLayerGapTarget);
+        //                     this.node.setWorldPosition(clampedPos);
                             
-                            this.topLayerGapTarget = null;
+        //                     this.topLayerGapTarget = null;
                             
-                            // 进入网格寻路模式（简化：直接进入，不使用A*算法）
-                            this.isInStoneWallGrid = true;
-                            // const moveInGridStartTime2 = PerformanceMonitor.startTiming('Enemy.moveInStoneWallGrid');
-                            this.moveInStoneWallGrid(deltaTime);
-                            // PerformanceMonitor.endTiming('Enemy.moveInStoneWallGrid', moveInGridStartTime2, 3);
-                            return;
-                            // 继续执行，让后续逻辑处理石墙攻击
-                        } else {
-                            // 向缺口移动（性能优化：复用Vec3对象）
-                            this.tempVec3_1.normalize();
-                            const moveDistance = this.moveSpeed * deltaTime;
-                            Vec3.scaleAndAdd(this.tempVec3_2, this.cachedWorldPosition, this.tempVec3_1, moveDistance);
+        //                     // 进入网格寻路模式（简化：直接进入，不使用A*算法）
+        //                     this.isInStoneWallGrid = true;
+        //                     // const moveInGridStartTime2 = PerformanceMonitor.startTiming('Enemy.moveInStoneWallGrid');
+        //                     this.moveInStoneWallGrid(deltaTime);
+        //                     // PerformanceMonitor.endTiming('Enemy.moveInStoneWallGrid', moveInGridStartTime2, 3);
+        //                     return;
+        //                     // 继续执行，让后续逻辑处理石墙攻击
+        //                 } else {
+        //                     // 向缺口移动（性能优化：复用Vec3对象）
+        //                     this.tempVec3_1.normalize();
+        //                     const moveDistance = this.moveSpeed * deltaTime;
+        //                     Vec3.scaleAndAdd(this.tempVec3_2, this.cachedWorldPosition, this.tempVec3_1, moveDistance);
                             
-                            const clampedPos = this.clampPositionToScreen(this.tempVec3_2);
-                            this.node.setWorldPosition(clampedPos);
+        //                     const clampedPos = this.clampPositionToScreen(this.tempVec3_2);
+        //                     this.node.setWorldPosition(clampedPos);
                             
-                            // 根据移动方向翻转
-                            this.flipDirection(this.tempVec3_1);
+        //                     // 根据移动方向翻转
+        //                     this.flipDirection(this.tempVec3_1);
                             
-                            // 播放行走动画
-                            this.playWalkAnimation();
+        //                     // 播放行走动画
+        //                     this.playWalkAnimation();
                             
-                            // 如果正在播放攻击动画，停止攻击动画
-                            if (this.isPlayingAttackAnimation) {
-                                this.isPlayingAttackAnimation = false;
-                            }
-                        }
-                        // modify by lf 2025-12-27 fix:修复敌人在网格上方移动时，没有播放行走动画的问题
-                        this.updateAnimation(deltaTime);
-                        return; // 优先处理缺口移动，不继续执行后续逻辑
-                    }
-                }
-            }
-        }
+        //                     // 如果正在播放攻击动画，停止攻击动画
+        //                     if (this.isPlayingAttackAnimation) {
+        //                         this.isPlayingAttackAnimation = false;
+        //                     }
+        //                 }
+        //                 // modify by lf 2025-12-27 fix:修复敌人在网格上方移动时，没有播放行走动画的问题
+        //                 this.updateAnimation(deltaTime);
+        //                 return; // 优先处理缺口移动，不继续执行后续逻辑
+        //             }
+        //         }
+        //     }
+        // }
 
-        // 处理当前目标（性能优化：使用平方距离比较，缓存位置和组件）
-        if (this.currentTarget && this.currentTarget.isValid) {
-            // 缓存位置
-            this.cachedWorldPosition.set(this.node.worldPosition);
-            this.cachedTargetWorldPosition.set(this.currentTarget.worldPosition);
-            const dx = this.cachedTargetWorldPosition.x - this.cachedWorldPosition.x;
-            const dy = this.cachedTargetWorldPosition.y - this.cachedWorldPosition.y;
-            const distanceSq = dx * dx + dy * dy;
-            const attackRangeSq = this.attackRange * this.attackRange;
+        // // 处理当前目标（性能优化：使用平方距离比较，缓存位置和组件）
+        // if (this.currentTarget && this.currentTarget.isValid) {
+        //     // 缓存位置
+        //     this.cachedWorldPosition.set(this.node.worldPosition);
+        //     this.cachedTargetWorldPosition.set(this.currentTarget.worldPosition);
+        //     const dx = this.cachedTargetWorldPosition.x - this.cachedWorldPosition.x;
+        //     const dy = this.cachedTargetWorldPosition.y - this.cachedWorldPosition.y;
+        //     const distanceSq = dx * dx + dy * dy;
+        //     const attackRangeSq = this.attackRange * this.attackRange;
             
-            // 性能优化：缓存组件查找，避免重复getComponent调用
-            this.lastComponentCheckTime += deltaTime;
-            if (this.lastComponentCheckTime >= this.COMPONENT_CHECK_INTERVAL || !this.cachedTargetComponent) {
-                const stoneWallComp = this.currentTarget.getComponent('StoneWall') as any;
-                const crystalComp = this.currentTarget.getComponent('Crystal') as any;
-                this.cachedTargetComponent = stoneWallComp || crystalComp;
-                this.lastComponentCheckTime = 0;
-            }
+        //     // 性能优化：缓存组件查找，避免重复getComponent调用
+        //     this.lastComponentCheckTime += deltaTime;
+        //     if (this.lastComponentCheckTime >= this.COMPONENT_CHECK_INTERVAL || !this.cachedTargetComponent) {
+        //         const stoneWallComp = this.currentTarget.getComponent('StoneWall') as any;
+        //         const crystalComp = this.currentTarget.getComponent('Crystal') as any;
+        //         this.cachedTargetComponent = stoneWallComp || crystalComp;
+        //         this.lastComponentCheckTime = 0;
+        //     }
 
-            if (distanceSq <= attackRangeSq) {
-                // 在攻击范围内，停止移动并攻击
-                // 只有在攻击条件满足时才停止移动并攻击，避免在等待攻击时重置动画状态
-                if (this.attackTimer >= this.attackInterval && !this.isHit && !this.isPlayingAttackAnimation) {
-                    // 攻击条件满足，停止移动并攻击
-                    this.stopMoving();
-                    // const attackStartTime = PerformanceMonitor.startTiming('Enemy.attack');
-                    this.attack();
-                    // PerformanceMonitor.endTiming('Enemy.attack', attackStartTime, 2);
-                    this.attackTimer = 0;
-                } else {
-                    // 攻击条件不满足，不调用移动方法也不调用stopMoving()，保持当前状态等待攻击
-                    // 不调用移动方法，敌人自然停止移动，也不调用stopMoving()避免重置动画状态
-                }
-            } else {
-                // 不在攻击范围内，只有在没有被攻击时才继续移动
-                if (!this.isHit && !this.isPlayingAttackAnimation) {
-                    this.moveTowardsTarget(deltaTime);
-                    // 如果正在播放攻击动画，停止攻击动画
-                    if (this.isPlayingAttackAnimation) {
-                        this.isPlayingAttackAnimation = false;
-                    }
-                } else {
-                }
-            }
-        } else {
-            // 没有目标，检查路径是否被石墙阻挡（使用缓存结果）
-            if (this.targetCrystal && this.targetCrystal.isValid && !this.isHit) {
-                // 路径畅通，向水晶移动
-                this.moveTowardsCrystal(deltaTime);
-                // 如果正在播放攻击动画，停止攻击动画
-                if (this.isPlayingAttackAnimation) {
-                    this.isPlayingAttackAnimation = false;
-                }
-            }
-        }
+        //     if (distanceSq <= attackRangeSq) {
+        //         // 在攻击范围内，停止移动并攻击
+        //         // 只有在攻击条件满足时才停止移动并攻击，避免在等待攻击时重置动画状态
+        //         if (this.attackTimer >= this.attackInterval && !this.isHit && !this.isPlayingAttackAnimation) {
+        //             // 攻击条件满足，停止移动并攻击
+        //             this.stopMoving();
+        //             // const attackStartTime = PerformanceMonitor.startTiming('Enemy.attack');
+        //             this.attack();
+        //             // PerformanceMonitor.endTiming('Enemy.attack', attackStartTime, 2);
+        //             this.attackTimer = 0;
+        //         } else {
+        //             // 攻击条件不满足，不调用移动方法也不调用stopMoving()，保持当前状态等待攻击
+        //             // 不调用移动方法，敌人自然停止移动，也不调用stopMoving()避免重置动画状态
+        //         }
+        //     } else {
+        //         // 不在攻击范围内，只有在没有被攻击时才继续移动
+        //         if (!this.isHit && !this.isPlayingAttackAnimation) {
+        //             this.moveTowardsTarget(deltaTime);
+        //             // 如果正在播放攻击动画，停止攻击动画
+        //             if (this.isPlayingAttackAnimation) {
+        //                 this.isPlayingAttackAnimation = false;
+        //             }
+        //         } else {
+        //         }
+        //     }
+        // } else {
+        //     // 没有目标，检查路径是否被石墙阻挡（使用缓存结果）
+        //     if (this.targetCrystal && this.targetCrystal.isValid && !this.isHit) {
+        //         // 路径畅通，向水晶移动
+        //         this.moveTowardsCrystal(deltaTime);
+        //         // 如果正在播放攻击动画，停止攻击动画
+        //         if (this.isPlayingAttackAnimation) {
+        //             this.isPlayingAttackAnimation = false;
+        //         }
+        //     }
+        // }
         
-        // 更新动画
-        // const updateAnimationStartTime = PerformanceMonitor.startTiming('Enemy.updateAnimation');
-        this.updateAnimation(deltaTime);
+        // // 更新动画
+        // // const updateAnimationStartTime = PerformanceMonitor.startTiming('Enemy.updateAnimation');
+        // this.updateAnimation(deltaTime);
         // PerformanceMonitor.endTiming('Enemy.updateAnimation', updateAnimationStartTime, 2);
 
         // 性能监控：结束 update 方法计时
@@ -2686,7 +2692,91 @@ export class Enemy extends Component {
     isAlive(): boolean {
         return !this.isDestroyed && this.currentHealth > 0;
     }
-    
+
+    /**
+     * 简化版 AI：索敌 + 移动 + 攻击
+     * 参考 Boss.update，实现清晰的流程，并**忽略石墙网格复杂寻路**：
+     * 1) 检查游戏状态
+     * 2) 更新攻击计时器
+     * 3) 查找目标（防御塔 / 角色 / 建筑 / 石墙 / 水晶）
+     * 4) 在攻击范围内则攻击，否则向目标移动（包括石墙），没有目标时追水晶
+     *
+     * 返回值：true 表示已经用简化逻辑处理完本帧，外层 update 不需要再走旧逻辑。
+     */
+    private runSimpleAI(deltaTime: number): boolean {
+        // 关闭旧的石墙网格寻路状态，避免卡在石墙上方不动
+        this.isInStoneWallGrid = false;
+        this.topLayerGapTarget = null;
+        this.gridMoveState = null;
+        this.gridMoveTargetX = null;
+
+        // 已死亡：只更新动画
+        if (this.isDestroyed) {
+            this.updateAnimation(deltaTime);
+            return true;
+        }
+
+        // 检查 GameManager 和游戏状态
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        if (this.gameManager) {
+            const state = this.gameManager.getGameState();
+            if (state !== GameState.Playing) {
+                this.stopMoving();
+                this.currentTarget = null!;
+                return true;
+            }
+        }
+
+        // 更新攻击计时器
+        this.attackTimer += deltaTime;
+
+        // 正在播放攻击动画时，保持当前目标，仅检查其是否仍然有效
+        if (this.isPlayingAttackAnimation) {
+            if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
+                this.currentTarget = null!;
+            }
+        } else {
+            // 不在攻击动画中，正常索敌
+            this.findTarget();
+        }
+
+        // 如果没有找到任何单位目标，且水晶存活，则以水晶为目标
+        if (!this.currentTarget && this.targetCrystal && this.targetCrystal.isValid) {
+            const crystalScript = this.targetCrystal.getComponent('Crystal') as any;
+            if (crystalScript && crystalScript.isAlive && crystalScript.isAlive()) {
+                this.currentTarget = this.targetCrystal;
+            }
+        }
+
+        // 有目标：根据距离决定攻击或前进（目标可能是塔 / 角色 / 建筑 / 石墙 / 水晶）
+        if (this.currentTarget) {
+            const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
+
+            if (this.isPlayingAttackAnimation) {
+                // 攻击动画期间不移动
+                this.stopMoving();
+            } else if (distance <= this.attackRange) {
+                // 在攻击范围内，停止移动并尝试攻击
+                this.stopMoving();
+                if (this.attackTimer >= this.attackInterval && !this.isPlayingAttackAnimation) {
+                    this.attackTimer = 0;
+                    this.attack();
+                }
+            } else {
+                // 不在攻击范围内，向目标移动
+                this.moveTowardsTarget(deltaTime);
+            }
+        } else {
+            // 没有任何目标，保持待机动画
+            this.stopMoving();
+        }
+
+        // 更新动画
+        this.updateAnimation(deltaTime);
+        return true;
+    }
     /**
      * 重置敌人状态（用于对象池回收）
      */

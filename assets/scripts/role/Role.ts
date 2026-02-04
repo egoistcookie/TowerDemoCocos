@@ -661,7 +661,7 @@ export class Role extends Component {
             }
         }
 
-        // 处理移动和攻击逻辑
+        // 处理自动移动和攻击逻辑
         if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
             const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
             
@@ -678,10 +678,38 @@ export class Role extends Component {
                     }
                 }
             } else if (distance <= this.getMovementRange()) {
-                // 在移动范围内，朝敌人移动
+                // 在移动范围内，尝试朝敌人移动
+                const beforePos = this.node.worldPosition.clone();
                 // const moveStartTime = PerformanceMonitor.startTiming('Role.moveTowardsTarget');
                 this.moveTowardsTarget(deltaTime);
                 // PerformanceMonitor.endTiming('Role.moveTowardsTarget', moveStartTime, 3);
+
+                const afterPos = this.node.worldPosition.clone();
+                const movedDistance = Vec3.distance(beforePos, afterPos);
+
+                // 自动移动时，如果因为障碍物导致本帧几乎没有移动，则视为被阻挡
+                if (movedDistance < 0.1) {
+                    // 尝试在当前攻击范围内重新索敌
+                    this.findTarget();
+                    if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
+                        const newDistance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
+                        if (newDistance <= this.attackRange) {
+                            // 障碍前方有敌人：停止移动，开始攻击
+                            this.stopMoving();
+                            if (this.attackTimer >= this.attackInterval) {
+                                if (this.gameManager && this.gameManager.getGameState() === GameState.Playing) {
+                                    this.attack();
+                                    this.attackTimer = 0;
+                                }
+                            }
+                            return;
+                        }
+                    }
+
+                    // 范围内没有可以攻击的敌人：停止自动移动
+                    this.stopMoving();
+                    return;
+                }
             } else {
                 // 超出移动范围，停止移动
                 this.stopMoving();
@@ -714,20 +742,14 @@ export class Role extends Component {
             return;
         }
 
-        // 首先检查当前位置是否有碰撞，如果有，先推开
+        // 手动移动：如果当前位置或目标方向上有障碍，只尝试有限次数避让，避让不开就直接停止移动
         const hasCollision = this.checkCollisionAtPosition(towerPos);
-        
         if (hasCollision) {
-            // 当前位置有碰撞，先推开
-            const pushDirection = this.calculatePushAwayDirection(towerPos);
-            if (pushDirection.length() > 0.1) {
-                const pushDistance = this.moveSpeed * deltaTime * 1.5;
-                const pushPos = new Vec3();
-                Vec3.scaleAndAdd(pushPos, towerPos, pushDirection, pushDistance);
-                const finalPushPos = this.checkCollisionAndAdjust(towerPos, pushPos);
-                this.node.setWorldPosition(finalPushPos);
-                return; // 先推开，下一帧再移动
-            }
+            // 不再无限尝试挤出，直接结束手动移动
+            this.manualMoveTarget = null;
+            this.isManuallyControlled = false;
+            this.stopMoving();
+            return;
         }
 
         // 计算移动方向
@@ -735,16 +757,21 @@ export class Role extends Component {
         Vec3.subtract(direction, targetPos, towerPos);
         direction.normalize();
 
-        // 应用避障逻辑
-        const finalDirection = this.calculateAvoidanceDirection(towerPos, direction, deltaTime);
-
-        // 计算移动距离
+        // 计算移动方向
         const moveDistance = this.moveSpeed * deltaTime;
         const newPos = new Vec3();
-        Vec3.scaleAndAdd(newPos, towerPos, finalDirection, moveDistance);
+        Vec3.scaleAndAdd(newPos, towerPos, direction, moveDistance);
 
-        // 检查新位置是否有碰撞，并调整
+        // 检查新位置是否有碰撞，并用三次避让逻辑调整
         const adjustedPos = this.checkCollisionAndAdjust(towerPos, newPos);
+
+        // 如果避让后仍然停在原地，说明三次避让全部失败，直接停止手动移动
+        if (Vec3.distance(adjustedPos, towerPos) < 0.1) {
+            this.manualMoveTarget = null;
+            this.isManuallyControlled = false;
+            this.stopMoving();
+            return;
+        }
 
         // 更新位置
         this.node.setWorldPosition(adjustedPos);
@@ -1468,8 +1495,14 @@ export class Role extends Component {
 
         direction.normalize();
 
-        // 尝试多个角度偏移（更密集的角度）
-        const offsetAngles = [-30, 30, -60, 60, -90, 90, -120, 120, -150, 150, 180]; // 尝试更多角度
+        // 尝试多个角度偏移，但**单次移动最多尝试3次避开**，
+        // 防止左右来回无限晃动导致画面抖动和性能问题
+        let tryCount = 0;
+        const maxTries = 3;
+
+        const offsetAngles = [-30, 30, -60, 60, -90, 90, -120, 120, -150, 150, 180];
+
+        outerLoop:
         for (const angle of offsetAngles) {
             const rad = angle * Math.PI / 180;
             const offsetDir = new Vec3(
@@ -1485,8 +1518,15 @@ export class Role extends Component {
                 Vec3.scaleAndAdd(testPos, currentPos, offsetDir, moveDistance * distMultiplier);
                 const clampedTestPos = this.clampPositionToScreen(testPos);
 
+                tryCount++;
+
                 if (!this.checkCollisionAtPosition(clampedTestPos)) {
                     return clampedTestPos;
+                }
+
+                // 单次控制移动最多只尝试 maxTries 次避让
+                if (tryCount >= maxTries) {
+                    break outerLoop;
                 }
             }
         }

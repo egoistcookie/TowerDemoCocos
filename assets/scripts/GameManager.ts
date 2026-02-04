@@ -11,6 +11,8 @@ import { BuildingPool } from './BuildingPool';
 import { GameState } from './GameState';
 import { GamePopup } from './GamePopup';
 import { DamageStatistics } from './DamageStatistics';
+import { ShamanTotem } from './ShamanTotem';
+import { WarAncientTree } from './role/WarAncientTree';
 const { ccclass, property } = _decorator;
 
 // 重新导出 GameState 以保持向后兼容
@@ -2301,6 +2303,54 @@ export class GameManager extends Component {
                 }
             }
         }
+
+        // 清理所有萨满图腾（如果还有残留，强制销毁）
+        const totems = scene.getComponentsInChildren(ShamanTotem);
+        for (const totem of totems) {
+            if (totem && totem.node && totem.node.isValid) {
+                totem.node.destroy();
+            }
+        }
+
+        // 兜底：如果场景中还有战争古树实例，强制销毁，避免等级状态残留
+        const warAncientTrees = scene.getComponentsInChildren(WarAncientTree);
+        for (const tree of warAncientTrees) {
+            if (tree && tree.node && tree.node.isValid) {
+                tree.node.destroy();
+            }
+        }
+    }
+
+    /**
+     * 重新开始一局时重置 GameManager 的局内状态（金币 / 时间 / 血量等）
+     */
+    resetGameStateForRestart() {
+        // 重置基础数值
+        this.gameTime = 0;
+        this.gold = 20;              // 初始金币固定为 20
+        this.population = 0;
+        this.currentGameExp = 0;
+        this.hasShownPopulationLimitWarning = false;
+        this.hasShownFirstArrowerDeathPopup = false;
+        this.appearedUnitTypes.clear();
+        this.gameState = GameState.Ready;
+
+        // 重置水晶（血量和等级）
+        if (this.crystalScript) {
+            // 恢复到默认等级和满血
+            this.crystalScript.level = 1;
+            // 直接重置 currentHealth 和销毁标记
+            (this.crystalScript as any).currentHealth = this.crystalScript.getMaxHealth();
+            (this.crystalScript as any).isDestroyed = false;
+
+            // 确保水晶节点激活
+            if (this.crystal && this.crystal.isValid) {
+                this.crystal.active = true;
+            }
+        }
+
+        // 更新一次 UI（血量 / 金币 / 时间等）
+        this.updateUI();
     }
 
     getGameState(): GameState {

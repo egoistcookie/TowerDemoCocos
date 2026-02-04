@@ -294,6 +294,27 @@ export class StoneWallGridPanel extends Component {
     }
 
     /**
+     * 重置整个石墙网格（用于重新开始游戏）
+     */
+    public resetGrid() {
+        // 重新初始化占用状态
+        this.initializeGrid();
+
+        // 清除高亮和绘制
+        if (this.highlightGraphics) {
+            this.highlightGraphics.clear();
+        }
+        if (this.gridGraphics) {
+            this.gridGraphics.clear();
+            this.drawGrid();
+        }
+
+        this.isHighlighted = false;
+        this.highlightedCell = null;
+        this.excludeBuildingForHighlight = null;
+    }
+
+    /**
      * 更新面板位置（固定位置：x:0-750，y:500-1000）
      */
     private updatePanelPosition() {

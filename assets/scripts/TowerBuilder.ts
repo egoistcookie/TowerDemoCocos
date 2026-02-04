@@ -338,6 +338,22 @@ export class TowerBuilder extends Component {
     public resetForRestart() {
         this.initialStoneWallsPlaced = false;
         this.initialWatchTowersPlaced = false;
+
+        // 重置建筑网格占用状态
+        if (!this.gridPanel) {
+            this.findGridPanel();
+        }
+        if (this.gridPanel && (this.gridPanel as any).resetGrid) {
+            (this.gridPanel as any).resetGrid();
+        }
+
+        // 重置石墙网格占用状态
+        if (!this.stoneWallGridPanelComponent) {
+            this.findStoneWallGridPanel();
+        }
+        if (this.stoneWallGridPanelComponent && (this.stoneWallGridPanelComponent as any).resetGrid) {
+            (this.stoneWallGridPanelComponent as any).resetGrid();
+        }
     }
 
     /**
@@ -1741,9 +1757,17 @@ export class TowerBuilder extends Component {
             this.gameManager.addPopulation(populationCost);
         }
 
-        // 确保容器已初始化
+        // 确保容器已初始化（如果编辑器没有手动绑定，则在此处兜底查找）
         if (!this.watchTowerContainer) {
-            this.initializeContainers();
+            const canvas = find('Canvas');
+            if (canvas) {
+                // 兼容多种命名：WatchTowers / Towers / 直接在 Canvas 下
+                this.watchTowerContainer =
+                    this.watchTowerContainer ||
+                    canvas.getChildByName('WatchTowers') ||
+                    canvas.getChildByName('Towers') ||
+                    canvas;
+            }
         }
         
         // 性能优化：从对象池获取建筑物，而不是直接实例化

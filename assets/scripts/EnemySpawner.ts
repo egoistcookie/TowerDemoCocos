@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Prefab, instantiate, Vec3, view, find, resources, JsonAsset } from 'cc';
+import { _decorator, Component, Node, Prefab, instantiate, Vec3, view, find, resources, JsonAsset, assetManager } from 'cc';
 import { GameManager, GameState } from './GameManager';
 // 移除UIManager导入，避免循环导入
 import { Enemy } from './enemy/Enemy';
@@ -96,6 +96,14 @@ export class EnemySpawner extends Component {
     
     // 敌人预制体映射表
     private enemyPrefabMap: Map<string, Prefab> = new Map();
+
+    // Orc / OrcWarrior / TrollSpearman 敌人预制体（从分包懒加载并注入），减少主包体积
+    private static sharedOrcPrefab: Prefab | null = null; // 所有 EnemySpawner 实例共享
+    private static sharedOrcWarriorPrefab: Prefab | null = null;
+    private static sharedTrollSpearmanPrefab: Prefab | null = null;
+    private static orcPrefabLoaded: boolean = false; // 全局标记：整个游戏过程中只加载一次
+    private static orcWarriorPrefabLoaded: boolean = false;
+    private static trollSpearmanPrefabLoaded: boolean = false;
     
     // 对象池引用
     private enemyPool: EnemyPool = null!;
@@ -146,14 +154,151 @@ export class EnemySpawner extends Component {
             this.enemyContainer.setParent(this.node.scene);
         }
         
-        // 初始化敌人预制体映射表
+        // 初始化敌人预制体映射表（此时只包含主包里通过属性面板指定的敌人）
         this.initEnemyPrefabMap();
-        
-        // 初始化对象池
-        this.initEnemyPool();
-        
-        // 加载波次配置
-        this.loadWaveConfig();
+
+        // 敌人预制体：从分包懒加载 Orc / OrcWarrior / TrollSpearman，全部尝试完成后再初始化对象池和波次配置
+        this.loadAllEnemyPrefabsFromSubpackage(() => {
+            // 将已经加载到内存中的敌人预制体注入当前 Spawner 的映射表
+            this.injectOrcPrefabToMap();
+            this.injectOrcWarriorPrefabToMap();
+            this.injectTrollSpearmanPrefabToMap();
+
+            // 初始化对象池并加载关卡配置
+            this.initEnemyPool();
+            this.loadWaveConfig();
+        });
+    }
+
+    /**
+     * 从分包 prefabs_sub 懒加载所有需要的敌人预制体（Orc / OrcWarrior / TrollSpearman）
+     * 全局每种敌人只加载一次，多个 EnemySpawner 共享。
+     */
+    private loadAllEnemyPrefabsFromSubpackage(onComplete: () => void) {
+        // 统计本次实际上需要等待的加载次数
+        let pending = 0;
+
+        const doneOne = () => {
+            pending--;
+            if (pending <= 0) {
+                onComplete();
+            }
+        };
+
+        // 需要加载 Orc
+        if (!EnemySpawner.orcPrefabLoaded) {
+            pending++;
+            this.loadSingleEnemyPrefabFromSubpackage(
+                ['Orc', 'orc'],
+                (prefab) => {
+                    if (prefab) {
+                        EnemySpawner.sharedOrcPrefab = prefab;
+                        EnemySpawner.orcPrefabLoaded = true;
+                    }
+                    doneOne();
+                }
+            );
+        }
+
+        // 需要加载 OrcWarrior
+        if (!EnemySpawner.orcWarriorPrefabLoaded) {
+            pending++;
+            this.loadSingleEnemyPrefabFromSubpackage(
+                ['OrcWarrior', 'orcwarrior', 'orc_warrior', 'Orc_Warrior'],
+                (prefab) => {
+                    if (prefab) {
+                        EnemySpawner.sharedOrcWarriorPrefab = prefab;
+                        EnemySpawner.orcWarriorPrefabLoaded = true;
+                    }
+                    doneOne();
+                }
+            );
+        }
+
+        // 需要加载 TrollSpearman
+        if (!EnemySpawner.trollSpearmanPrefabLoaded) {
+            pending++;
+            this.loadSingleEnemyPrefabFromSubpackage(
+                ['TrollSpearman', 'trollSpearman', 'troll_spearman', 'trollspearman'],
+                (prefab) => {
+                    if (prefab) {
+                        EnemySpawner.sharedTrollSpearmanPrefab = prefab;
+                        EnemySpawner.trollSpearmanPrefabLoaded = true;
+                    }
+                    doneOne();
+                }
+            );
+        }
+
+        // 如果本次三种敌人都已经加载过了，直接回调
+        if (pending === 0) {
+            onComplete();
+        }
+    }
+
+    /**
+     * 从分包 prefabs_sub 懒加载一种敌人预制体（根据一组可能的资源名尝试）
+     */
+    private loadSingleEnemyPrefabFromSubpackage(
+        tryNames: string[],
+        onLoaded: (prefab: Prefab | null) => void
+    ) {
+        console.info('[EnemySpawner] 开始从分包 prefabs_sub 懒加载敌人预制体，候选名称列表:', tryNames);
+
+        assetManager.loadBundle('prefabs_sub', (err, bundle) => {
+            if (err || !bundle) {
+                console.error('[EnemySpawner] 加载分包 prefabs_sub 失败，使用主包中已有的敌人预制体:', err);
+                onLoaded(null);
+                return;
+            }
+
+            let lastError: any = null;
+
+            const tryLoadByIndex = (index: number) => {
+                if (index >= tryNames.length) {
+                    console.error('[EnemySpawner] 从分包 prefabs_sub 加载敌人预制体失败，尝试的名称均未找到:', tryNames, lastError);
+                    onLoaded(null);
+                    return;
+                }
+
+                const name = tryNames[index];
+                bundle.load(name, Prefab, (err2, prefab) => {
+                    if (err2 || !prefab) {
+                        lastError = err2;
+                        console.warn('[EnemySpawner] 从分包 prefabs_sub 按名称加载敌人预制体失败，名称:', name, '错误:', err2);
+                        tryLoadByIndex(index + 1);
+                        return;
+                    }
+
+                    console.info('[EnemySpawner] 从分包 prefabs_sub 成功加载敌人预制体，名称:', name);
+                    onLoaded(prefab as Prefab);
+                });
+            };
+
+            tryLoadByIndex(0);
+        });
+    }
+
+    /**
+     * 将已加载的 Orc / OrcWarrior / TrollSpearman 预制体注入当前 EnemySpawner 的映射表
+     */
+    private injectOrcPrefabToMap() {
+        if (EnemySpawner.sharedOrcPrefab) {
+            // 将 Orc 预制体写入映射表，键名与关卡配置中的 prefabName 保持一致
+            this.enemyPrefabMap.set('Orc', EnemySpawner.sharedOrcPrefab);
+        }
+    }
+
+    private injectOrcWarriorPrefabToMap() {
+        if (EnemySpawner.sharedOrcWarriorPrefab) {
+            this.enemyPrefabMap.set('OrcWarrior', EnemySpawner.sharedOrcWarriorPrefab);
+        }
+    }
+
+    private injectTrollSpearmanPrefabToMap() {
+        if (EnemySpawner.sharedTrollSpearmanPrefab) {
+            this.enemyPrefabMap.set('TrollSpearman', EnemySpawner.sharedTrollSpearmanPrefab);
+        }
     }
     
     /**

@@ -1137,6 +1137,12 @@ export class UIManager extends Component {
                 towerBuilderComp.resetForRestart();
             }
 
+            // 重置 GameManager 的局内状态（金币 / 时间 / 水晶血量与等级等）
+            const gmAny = this.gameManager as any;
+            if (gmAny.resetGameStateForRestart) {
+                gmAny.resetGameStateForRestart();
+            }
+
             // 隐藏所有游戏元素
             const gameNodes = [
                 'Canvas/Crystal',

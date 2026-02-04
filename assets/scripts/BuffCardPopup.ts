@@ -598,15 +598,35 @@ export class BuffCardPopup extends Component {
                 // 生命值提升（百分比叠加）
                 unitScript._buffMaxHealthPercent += cardData.buffValue;
                 const healthMultiplier = 1 + unitScript._buffMaxHealthPercent / 100;
+
+                // 记录旧的最大生命值，用于按比例调整当前血量
+                const oldMaxHealth = unitScript.maxHealth || unitScript._originalMaxHealth || 1;
                 const newMaxHealth = Math.floor(unitScript._originalMaxHealth * healthMultiplier);
-                const healthIncrease = newMaxHealth - (unitScript.maxHealth || unitScript._originalMaxHealth);
                 unitScript.maxHealth = newMaxHealth;
-                // 增加当前生命值（按比例增加）
+
+                // 按比例调整当前生命值，保持血量百分比不变
                 if (unitScript.currentHealth !== undefined) {
-                    const currentHealthRatio = (unitScript.currentHealth || 0) / (unitScript.maxHealth - healthIncrease || 1);
+                    const currentHealthRatio = (unitScript.currentHealth || oldMaxHealth) / oldMaxHealth;
                     unitScript.currentHealth = Math.floor(unitScript.maxHealth * currentHealthRatio);
                 }
-                console.info(`[BuffCardPopup] 应用生命值增幅 ${cardData.buffValue}%，累积增幅 ${unitScript._buffMaxHealthPercent}%，最终生命值: ${unitScript.maxHealth}`);
+
+                // 同步刷新血条组件（Role / Enemy / Build 等都有 healthBar）
+                if (unitScript.healthBar && typeof unitScript.healthBar.setMaxHealth === 'function') {
+                    unitScript.healthBar.setMaxHealth(unitScript.maxHealth);
+                    const curHp = unitScript.currentHealth !== undefined ? unitScript.currentHealth : unitScript.maxHealth;
+                    unitScript.healthBar.setHealth(curHp);
+                }
+
+                // 同步刷新单位信息面板（如果当前被选中）
+                if (unitScript.unitSelectionManager && unitScript.unitSelectionManager.isUnitSelected &&
+                    unitScript.unitSelectionManager.isUnitSelected(unitScript.node)) {
+                    unitScript.unitSelectionManager.updateUnitInfo({
+                        currentHealth: unitScript.currentHealth !== undefined ? unitScript.currentHealth : unitScript.maxHealth,
+                        maxHealth: unitScript.maxHealth
+                    });
+                }
+
+                console.info(`[BuffCardPopup] 应用生命值增幅 ${cardData.buffValue}%，累积增幅 ${unitScript._buffMaxHealthPercent}%，最终生命上限: ${unitScript.maxHealth}`);
                 break;
             case 'moveSpeed':
                 // 移动速度提升（百分比叠加）
