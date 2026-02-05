@@ -132,6 +132,16 @@ export class TowerBuilder extends Component {
     @property
     watchTowerCost: number = 5; // 哨塔建造成本（5金币）
 
+    // 木材消耗：基础数值提升 10 倍（哨塔 10 木，冰塔/雷塔 30 木）
+    @property
+    watchTowerWoodCost: number = 10;
+
+    @property
+    iceTowerWoodCost: number = 30;
+
+    @property
+    thunderTowerWoodCost: number = 30;
+
     @property
     swordsmanHallCost: number = 10; // 剑士小屋建造成本（10金币）
 
@@ -1749,8 +1759,19 @@ export class TowerBuilder extends Component {
                 }
                 return;
             }
-            // 消耗金币（仅在非skipCost时）
+            // 消耗金币与木材（仅在非skipCost时）
             if (!skipCost) {
+                // 先检查木材是否足够
+                const woodCost = this.watchTowerWoodCost || 1;
+                const gmAny = this.gameManager as any;
+                if (gmAny.getWood && gmAny.spendWood) {
+                    const currentWood = gmAny.getWood();
+                    if (currentWood < woodCost) {
+                        GamePopup.showMessage('木材不足，无法建造哨塔');
+                        return;
+                    }
+                    gmAny.spendWood(woodCost);
+                }
                 this.gameManager.spendGold(actualCost);
             }
             // 占用人口（无论是否skipCost都需要占用）
@@ -2055,8 +2076,18 @@ export class TowerBuilder extends Component {
                 }
                 return;
             }
-            // 消耗金币（仅在非skipCost时）
+            // 消耗金币与木材（仅在非skipCost时）
             if (!skipCost) {
+                const woodCost = this.iceTowerWoodCost || 3;
+                const gmAny = this.gameManager as any;
+                if (gmAny.getWood && gmAny.spendWood) {
+                    const currentWood = gmAny.getWood();
+                    if (currentWood < woodCost) {
+                        GamePopup.showMessage('木材不足，无法建造冰塔');
+                        return;
+                    }
+                    gmAny.spendWood(woodCost);
+                }
                 this.gameManager.spendGold(actualCost);
             }
             // 占用人口（无论是否skipCost都需要占用）
@@ -2219,8 +2250,18 @@ export class TowerBuilder extends Component {
                 }
                 return;
             }
-            // 消耗金币（仅在非skipCost时）
+            // 消耗金币与木材（仅在非skipCost时）
             if (!skipCost) {
+                const woodCost = this.thunderTowerWoodCost || 3;
+                const gmAny = this.gameManager as any;
+                if (gmAny.getWood && gmAny.spendWood) {
+                    const currentWood = gmAny.getWood();
+                    if (currentWood < woodCost) {
+                        GamePopup.showMessage('木材不足，无法建造雷塔');
+                        return;
+                    }
+                    gmAny.spendWood(woodCost);
+                }
                 this.gameManager.spendGold(actualCost);
             }
             // 占用人口（无论是否skipCost都需要占用）

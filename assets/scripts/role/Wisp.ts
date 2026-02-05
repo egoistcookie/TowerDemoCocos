@@ -5,19 +5,12 @@ import { DamageNumber } from '../DamageNumber';
 import { UnitSelectionManager } from '../UnitSelectionManager';
 import { UnitInfo } from '../UnitInfoPanel';
 import { GamePopup } from '../GamePopup';
+import { Role } from './Role';
+import { ForestGridPanel } from '../ForestGridPanel';
 const { ccclass, property } = _decorator;
 
 @ccclass('Wisp')
-export class Wisp extends Component {
-    @property
-    maxHealth: number = 30; // 小精灵血量
-
-    @property(Prefab)
-    explosionEffect: Prefab = null!;
-
-    @property(Prefab)
-    damageNumberPrefab: Prefab = null!;
-
+export class Wisp extends Role {
     @property(Prefab)
     healEffectPrefab: Prefab = null!; // 治疗特效预制体
 
@@ -28,91 +21,47 @@ export class Wisp extends Component {
     healInterval: number = 1.0; // 治疗间隔（秒）
 
     @property
-    moveSpeed: number = 80; // 移动速度（像素/秒）
-
-    @property
-    collisionRadius: number = 20; // 碰撞半径（像素）
-
-    @property
     attachOffset: Vec3 = new Vec3(0, 30, 0); // 依附在建筑物上的偏移位置
-
-    @property(SpriteFrame)
-    cardIcon: SpriteFrame = null!; // 单位名片图片
-
-    // 移动动画相关属性
-    @property(SpriteFrame)
-    moveAnimationFrames: SpriteFrame[] = []; // 移动动画帧数组（可选）
-    
-    @property
-    moveAnimationDuration: number = 0.3; // 移动动画时长（秒）
-
-    private currentHealth: number = 30;
-    private healthBar: HealthBar = null!;
-    private healthBarNode: Node = null!;
-    private isDestroyed: boolean = false;
-    private gameManager: GameManager = null!;
-    private spriteComponent: Sprite = null!; // Sprite组件引用
-    private defaultSpriteFrame: SpriteFrame = null!; // 默认SpriteFrame
-    private defaultScale: Vec3 = new Vec3(1, 1, 1); // 默认缩放，用于方向翻转
-    private unitSelectionManager: UnitSelectionManager = null!; // 单位选择管理器
-    private isHighlighted: boolean = false; // 是否高亮显示
-    private highlightNode: Node = null!; // 高亮效果节点
     
     // 依附相关
     private attachedBuilding: Node = null!; // 依附的建筑物
     private isAttached: boolean = false; // 是否已依附
     private healTimer: number = 0; // 治疗计时器
-    
-    // 移动相关
-    private moveTarget: Vec3 | null = null!; // 移动目标位置
-    private isMoving: boolean = false; // 是否正在移动
-    private isPlayingMoveAnimation: boolean = false; // 是否正在播放移动动画
-    private manualMoveTarget: Vec3 | null = null!; // 手动移动目标位置
-    private isManuallyControlled: boolean = false; // 是否正在手动控制
 
+    // 树林隐蔽效果相关
+    private isInForestArea: boolean = false;
+    private originalSpriteColor: Color | null = null;
+    
+    // 单位类型标识（用于首次出现时的单位介绍框）
+    unitType: string = 'Wisp';
+    
     start() {
-        this.currentHealth = this.maxHealth;
-        this.isDestroyed = false;
+        // 调用父类初始化（血量、血条、选择、对话等）
+        super.start();
+
+        // 小精灵是辅助单位，没有攻击能力
+        this.attackDamage = 0;
+        this.attackRange = 0;
+
+        // 初始化依附状态
         this.isAttached = false;
         this.attachedBuilding = null!;
         this.healTimer = 0;
-        this.isMoving = false;
-        this.moveTarget = null!;
-        this.manualMoveTarget = null!;
-        this.isManuallyControlled = false;
 
-        // 获取Sprite组件
-        this.spriteComponent = this.node.getComponent(Sprite);
-        if (this.spriteComponent) {
-            // 设置Sprite的sizeMode为CUSTOM，确保所有动画帧使用相同的尺寸
-            this.spriteComponent.sizeMode = Sprite.SizeMode.CUSTOM;
-            // 启用trim并设置offset，确保人物始终位于中心
-            this.spriteComponent.trim = true;
-            if (this.spriteComponent.spriteFrame) {
-                this.defaultSpriteFrame = this.spriteComponent.spriteFrame;
-            }
+        // 设置默认名称（如果未在编辑器中配置）
+        if (!this.unitName || this.unitName === '') {
+            this.unitName = '小精灵';
         }
-        
-        // 保存默认缩放
-        this.defaultScale = this.node.scale.clone();
 
-        // 查找游戏管理器
-        this.findGameManager();
-
-        // 查找单位选择管理器
-        this.findUnitSelectionManager();
-
-        // 创建血条
-        this.createHealthBar();
-
-        // 监听点击事件
-        this.node.on(Node.EventType.TOUCH_END, this.onWispClick, this);
+        // 小精灵的 Sprite 使用自定义尺寸并启用裁剪
+        if (this.sprite) {
+            this.sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+            this.sprite.trim = true;
+            this.originalSpriteColor = this.sprite.color.clone();
+        }
     }
 
     onDestroy() {
-        // 移除点击事件监听
-        this.node.off(Node.EventType.TOUCH_END, this.onWispClick, this);
-
         // 如果依附在建筑物上，通知建筑物移除小精灵
         if (this.isAttached && this.attachedBuilding && this.attachedBuilding.isValid) {
             this.detachFromBuilding();
@@ -125,16 +74,11 @@ export class Wisp extends Component {
     }
 
     update(deltaTime: number) {
+        // 先让父类处理移动、选中、碰撞等通用逻辑
+        super.update(deltaTime);
+
         if (this.isDestroyed) {
             return;
-        }
-
-        // 检查游戏状态
-        if (this.gameManager) {
-            const gameState = this.gameManager.getGameState();
-            if (gameState !== GameState.Playing) {
-                return;
-            }
         }
 
         // 如果依附在建筑物上，更新位置并治疗
@@ -151,111 +95,65 @@ export class Wisp extends Component {
                 this.healBuilding();
             }
         } else {
-            // 优先处理手动移动
-            if (this.isManuallyControlled && this.manualMoveTarget) {
-                const currentPos = this.node.worldPosition.clone();
-                const targetPos = this.manualMoveTarget.clone(); // 克隆目标位置，避免被修改
-                const direction = new Vec3(); // 创建新的方向向量
-                Vec3.subtract(direction, targetPos, currentPos); // 使用静态方法计算方向，不会修改原始向量
-                const distance = direction.length();
+            // 未依附时，静止时检查是否与建筑物重叠，从而自动依附
+            this.checkBuildingOverlap();
+        }
 
-                if (distance <= 5) {
-                    // 到达目标位置
-                    this.node.setWorldPosition(targetPos);
-                    this.isManuallyControlled = false;
-                    this.manualMoveTarget = null!;
-                    
-                    // 到达目标位置后，检查附近是否有建筑物，如果有则依附
-                    const attached = this.checkBuildingNearbyAndAttach(targetPos);
-                    
-                    // 如果没有依附到建筑物，再检查是否与建筑物重叠
-                    if (!attached) {
-                        this.checkBuildingOverlap();
-                    }
-                } else {
-                    // 继续移动
-                    const moveDistance = this.moveSpeed * deltaTime;
-                    const moveStep = direction.normalize().multiplyScalar(Math.min(moveDistance, distance));
-                    const newPos = currentPos.add(moveStep);
-                    this.node.setWorldPosition(newPos);
-                    
-                    // 根据移动方向翻转小精灵
-                    if (direction.x < 0) {
-                        // 向左移动，翻转
-                        this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-                        // 血条反向翻转，保持正常朝向
-                        if (this.healthBarNode && this.healthBarNode.isValid) {
-                            this.healthBarNode.setScale(-1, 1, 1);
-                        }
-                    } else {
-                        // 向右移动，正常朝向
-                        this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-                        // 血条保持正常朝向
-                        if (this.healthBarNode && this.healthBarNode.isValid) {
-                            this.healthBarNode.setScale(1, 1, 1);
-                        }
-                    }
-                    
-                    // 播放移动动画
-                    if (!this.isPlayingMoveAnimation) {
-                        this.playMoveAnimation();
-                    }
-                    
-                    // 移动过程中不检查重叠，避免在移动时被依附
-                }
-            } else if (this.isMoving && this.moveTarget) {
-                // 自动移动到目标位置
-                const currentPos = this.node.worldPosition.clone();
-                const targetPos = this.moveTarget.clone(); // 克隆目标位置，避免被修改
-                const direction = new Vec3(); // 创建新的方向向量
-                Vec3.subtract(direction, targetPos, currentPos); // 使用静态方法计算方向，不会修改原始向量
-                const distance = direction.length();
+        // 更新树林隐蔽效果
+        this.updateForestStealthState();
+    }
 
-                if (distance <= 5) {
-                    // 到达目标位置
-                    this.node.setWorldPosition(targetPos);
-                    this.isMoving = false;
-                    this.moveTarget = null!;
-                    
-                    // 到达目标位置后，检查是否与建筑物重叠
-                    this.checkBuildingOverlap();
-                } else {
-                    // 继续移动
-                    const moveDistance = this.moveSpeed * deltaTime;
-                    const moveStep = direction.normalize().multiplyScalar(Math.min(moveDistance, distance));
-                    const newPos = currentPos.add(moveStep);
-                    this.node.setWorldPosition(newPos);
-                    
-                    // 根据移动方向翻转小精灵
-                    if (direction.x < 0) {
-                        // 向左移动，翻转
-                        this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-                        // 血条反向翻转，保持正常朝向
-                        if (this.healthBarNode && this.healthBarNode.isValid) {
-                            this.healthBarNode.setScale(-1, 1, 1);
-                        }
-                    } else {
-                        // 向右移动，正常朝向
-                        this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-                        // 血条保持正常朝向
-                        if (this.healthBarNode && this.healthBarNode.isValid) {
-                            this.healthBarNode.setScale(1, 1, 1);
-                        }
-                    }
-                    
-                    // 播放移动动画
-                    if (!this.isPlayingMoveAnimation) {
-                        this.playMoveAnimation();
-                    }
-                    
-                    // 移动过程中不检查重叠，避免在移动时被依附
-                }
-            } else {
-                // 停止移动动画
-                this.stopMoveAnimation();
-                // 静止状态下检查是否与建筑物重叠
-                this.checkBuildingOverlap();
+    /**
+     * 更新小精灵在树林网格中的半透明隐身效果：
+     * - 进入任意一片树林网格：身体变淡到 50% 不透明度
+     * - 离开所有树林网格：恢复原始不透明度
+     */
+    private updateForestStealthState() {
+        if (!this.sprite || !this.node || !this.node.isValid) {
+            return;
+        }
+
+        const worldPos = this.node.worldPosition.clone();
+        let inForest = false;
+
+        // 左侧树林
+        const leftNode = find('Canvas/ForestGridLeft') || find('ForestGridLeft');
+        if (leftNode) {
+            const panel = leftNode.getComponent(ForestGridPanel);
+            if (panel && panel.worldToGrid(worldPos)) {
+                inForest = true;
             }
+        }
+
+        // 右侧树林（如果左侧未命中）
+        if (!inForest) {
+            const rightNode = find('Canvas/ForestGridRight') || find('ForestGridRight');
+            if (rightNode) {
+                const panel = rightNode.getComponent(ForestGridPanel);
+                if (panel && panel.worldToGrid(worldPos)) {
+                    inForest = true;
+                }
+            }
+        }
+
+        if (inForest === this.isInForestArea) {
+            // 状态未变化，无需重复设置
+            return;
+        }
+
+        this.isInForestArea = inForest;
+
+        if (!this.originalSpriteColor) {
+            this.originalSpriteColor = this.sprite.color.clone();
+        }
+
+        if (this.isInForestArea) {
+            // 进入树林：将透明度降到 50%
+            const c = this.originalSpriteColor;
+            this.sprite.color = new Color(c.r, c.g, c.b, 128);
+        } else {
+            // 离开树林：恢复原有颜色（包含原始透明度）
+            this.sprite.color = this.originalSpriteColor.clone();
         }
     }
 
@@ -310,21 +208,6 @@ export class Wisp extends Component {
                 return null;
             };
             this.unitSelectionManager = findInScene(scene, UnitSelectionManager);
-        }
-    }
-
-    /**
-     * 创建血条
-     */
-    createHealthBar() {
-        this.healthBarNode = new Node('HealthBar');
-        this.healthBarNode.setParent(this.node);
-        this.healthBarNode.setPosition(0, 30, 0);
-
-        this.healthBar = this.healthBarNode.addComponent(HealthBar);
-        if (this.healthBar) {
-            this.healthBar.setMaxHealth(this.maxHealth);
-            this.healthBar.setHealth(this.currentHealth);
         }
     }
 
@@ -406,95 +289,8 @@ export class Wisp extends Component {
     }
 
     /**
-     * 移动到指定位置
-     */
-    moveToPosition(targetPos: Vec3) {
-        this.moveTarget = targetPos.clone();
-        this.isMoving = true;
-        this.isManuallyControlled = false;
-        this.manualMoveTarget = null!;
-        this.playMoveAnimation();
-    }
-
-    /**
-     * 播放移动动画
-     */
-    private playMoveAnimation() {
-        // 如果正在播放移动动画，不重复播放
-        if (this.isPlayingMoveAnimation) {
-            return;
-        }
-
-        // 如果没有移动动画帧，使用默认SpriteFrame
-        if (!this.moveAnimationFrames || this.moveAnimationFrames.length === 0) {
-            return;
-        }
-
-        if (!this.spriteComponent) {
-            return;
-        }
-
-        // 检查帧是否有效
-        const validFrames = this.moveAnimationFrames.filter(frame => frame != null);
-        if (validFrames.length === 0) {
-            return;
-        }
-
-        this.isPlayingMoveAnimation = true;
-
-        const frames = validFrames;
-        const frameCount = frames.length;
-        const frameDuration = this.moveAnimationDuration / frameCount;
-        let animationTimer = 0;
-        let lastFrameIndex = -1;
-
-        // 立即播放第一帧
-        if (frames[0]) {
-            this.spriteComponent.spriteFrame = frames[0];
-            lastFrameIndex = 0;
-        }
-
-        // 使用update方法逐帧播放
-        const animationUpdate = (deltaTime: number) => {
-            // 停止条件：如果不在移动状态且不在手动控制状态，或者组件无效，或者被销毁，或者已依附
-            if ((!this.isMoving && !this.isManuallyControlled) || !this.spriteComponent || !this.spriteComponent.isValid || this.isDestroyed || this.isAttached) {
-                this.isPlayingMoveAnimation = false;
-                this.unschedule(animationUpdate);
-                // 恢复默认SpriteFrame
-                if (this.spriteComponent && this.spriteComponent.isValid && this.defaultSpriteFrame) {
-                    this.spriteComponent.spriteFrame = this.defaultSpriteFrame;
-                }
-                return;
-            }
-
-            animationTimer += deltaTime;
-
-            // 循环播放动画
-            const targetFrameIndex = Math.floor(animationTimer / frameDuration) % frameCount;
-
-            if (targetFrameIndex !== lastFrameIndex && frames[targetFrameIndex]) {
-                this.spriteComponent.spriteFrame = frames[targetFrameIndex];
-                lastFrameIndex = targetFrameIndex;
-            }
-        };
-
-        // 开始动画更新
-        this.schedule(animationUpdate, 0);
-    }
-
-    /**
-     * 停止移动动画
-     */
-    private stopMoveAnimation() {
-        this.isPlayingMoveAnimation = false;
-        // 恢复默认SpriteFrame
-        if (this.spriteComponent && this.spriteComponent.isValid && this.defaultSpriteFrame) {
-            this.spriteComponent.spriteFrame = this.defaultSpriteFrame;
-        }
-    }
-
-    /**
      * 设置手动移动目标位置（用于选中移动）
+     * 覆盖父类实现：如果小精灵当前依附在建筑物上，先卸下再执行父类的移动逻辑。
      * @param worldPos 世界坐标位置
      */
     setManualMoveTargetPosition(worldPos: Vec3) {
@@ -503,11 +299,8 @@ export class Wisp extends Component {
             this.detachFromBuilding();
         }
         
-        // 设置手动移动目标
-        this.manualMoveTarget = worldPos.clone();
-        this.isManuallyControlled = true;
-        this.isMoving = false;
-        this.moveTarget = null!;
+        // 调用父类的手动移动逻辑（带智能分散/避让）
+        super.setManualMoveTargetPosition(worldPos);
         
         console.debug(`Wisp: Manual move target set to (${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
     }
@@ -806,6 +599,27 @@ export class Wisp extends Component {
     }
 
     /**
+     * 覆盖父类的索敌逻辑：小精灵不索敌、不攻击敌人
+     */
+    findTarget() {
+        this.currentTarget = null!;
+    }
+
+    /**
+     * 覆盖父类的攻击逻辑：小精灵不能攻击敌人
+     */
+    attack() {
+        // 小精灵是辅助单位，没有攻击能力，这里什么都不做
+    }
+
+    /**
+     * 覆盖父类的实际攻击执行逻辑，确保不会发射子弹/箭矢
+     */
+    executeAttack() {
+        // 空实现，避免父类创建子弹或箭矢
+    }
+
+    /**
      * 受到伤害
      */
     takeDamage(damage: number) {
@@ -978,117 +792,6 @@ export class Wisp extends Component {
         return this.attachedBuilding;
     }
 
-    /**
-     * 设置高亮显示
-     */
-    setHighlight(highlight: boolean) {
-        this.isHighlighted = highlight;
-        
-        if (!this.highlightNode && highlight) {
-            // 创建高亮效果节点
-            this.highlightNode = new Node('Highlight');
-            this.highlightNode.setParent(this.node);
-            this.highlightNode.setPosition(0, 0, 0);
-            
-            const graphics = this.highlightNode.addComponent(Graphics);
-            graphics.strokeColor = new Color(255, 255, 0, 255); // 黄色边框
-            graphics.lineWidth = 3;
-            graphics.circle(0, 0, this.collisionRadius);
-            graphics.stroke();
-        }
-        
-        if (this.highlightNode) {
-            this.highlightNode.active = highlight;
-        }
-        
-        // 如果取消高亮，同时清除UnitSelectionManager中的选中状态
-        // 避免递归调用：检查当前选中的单位是否是自己，如果是，就不调用clearSelection
-        if (!highlight && this.unitSelectionManager) {
-            const currentSelectedUnit = (this.unitSelectionManager as any).currentSelectedUnit;
-            if (currentSelectedUnit !== this.node) {
-                if (this.unitSelectionManager.isUnitSelected(this.node)) {
-                    this.unitSelectionManager.clearSelection();
-                }
-            }
-        }
-    }
-
-    /**
-     * 点击事件
-     */
-    onWispClick(event: EventTouch) {
-        console.debug('Wisp.onWispClick: Wisp clicked, event:', event);
-        // 阻止事件冒泡
-        event.propagationStopped = true;
-
-        // 检查是否处于建造模式，如果是，先退出建造模式
-        console.debug('Wisp.onWispClick: Checking building mode...');
-        const towerBuilderNode = find('TowerBuilder');
-        if (towerBuilderNode) {
-            console.debug('Wisp.onWispClick: TowerBuilder node found');
-            const towerBuilder = towerBuilderNode.getComponent('TowerBuilder') as any;
-            if (towerBuilder) {
-                console.debug('Wisp.onWispClick: TowerBuilder component found');
-                // 直接调用disableBuildingMode，不管当前是否处于建造模式
-                console.debug('Wisp.onWispClick: Calling disableBuildingMode() to exit building mode');
-                if (towerBuilder.disableBuildingMode) {
-                    towerBuilder.disableBuildingMode();
-                    console.debug('Wisp.onWispClick: disableBuildingMode() called successfully');
-                } else {
-                    console.debug('Wisp.onWispClick: disableBuildingMode() method not found');
-                }
-                
-                // 直接设置isBuildingMode为false，确保建造模式被退出
-                console.debug('Wisp.onWispClick: Setting isBuildingMode to false directly');
-                towerBuilder.isBuildingMode = false;
-                console.debug('Wisp.onWispClick: After setting, isBuildingMode is now:', towerBuilder.isBuildingMode);
-            } else {
-                console.debug('Wisp.onWispClick: TowerBuilder component not found');
-            }
-        } else {
-            console.debug('Wisp.onWispClick: TowerBuilder node not found');
-        }
-
-        // 显示单位信息面板
-        if (!this.unitSelectionManager) {
-            console.debug('Wisp.onWispClick: Finding UnitSelectionManager');
-            this.findUnitSelectionManager();
-        }
-        if (this.unitSelectionManager) {
-            console.debug('Wisp.onWispClick: UnitSelectionManager found');
-            // 检查是否已经选中了小精灵
-            if (this.unitSelectionManager.isUnitSelected(this.node)) {
-                console.debug('Wisp.onWispClick: Wisp already selected, clearing selection');
-                // 如果已经选中，清除选择
-                this.unitSelectionManager.clearSelection();
-                return;
-            }
-
-            const unitInfo: UnitInfo = {
-                name: '小精灵',
-                level: 1,
-                currentHealth: this.currentHealth,
-                maxHealth: this.maxHealth,
-                attackDamage: 0, // 小精灵没有攻击能力
-                populationCost: 1, // 占用1个人口
-                icon: this.cardIcon || this.defaultSpriteFrame,
-                collisionRadius: this.collisionRadius
-            };
-            console.debug('Wisp.onWispClick: Selecting wisp in UnitSelectionManager');
-            this.unitSelectionManager.selectUnit(this.node, unitInfo);
-            
-            // 注意：小精灵已经通过 UnitSelectionManager.selectUnit() 被选中
-            // 不需要再调用 addToSelectionManager()，因为 SelectionManager 没有 setSelectedWisps 方法
-        } else {
-            console.debug('Wisp.onWispClick: UnitSelectionManager not found');
-        }
-    }
-    
-    // 注意：已移除 addToSelectionManager() 方法
-    // 因为 SelectionManager 没有 setSelectedWisps 方法
-    // 小精灵已经通过 UnitSelectionManager.selectUnit() 被选中，不需要额外的处理
-    
-    // 注意：已移除 clearSelectionInSelectionManager() 和 findSelectionManager() 方法
-    // 因为小精灵的选择由 UnitSelectionManager 统一管理，不需要额外的 SelectionManager 处理
+    // 选择和高亮逻辑由父类 Role 和 UnitSelectionManager 统一管理
 }
 

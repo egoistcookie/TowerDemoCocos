@@ -13,6 +13,7 @@ import { GamePopup } from './GamePopup';
 import { DamageStatistics } from './DamageStatistics';
 import { ShamanTotem } from './ShamanTotem';
 import { WarAncientTree } from './role/WarAncientTree';
+import { ForestGridPanel } from './ForestGridPanel';
 const { ccclass, property } = _decorator;
 
 // 重新导出 GameState 以保持向后兼容
@@ -61,6 +62,7 @@ export class GameManager extends Component {
     private gameTime: number = 0; // 已防御时间（累积时间，从0开始）
     private crystalScript: Crystal = null!;
     private gold: number = 20; // 初始金币
+    private wood: number = 50; // 初始木材（提升到 50）
     private population: number = 0; // 当前人口
     private maxPopulation: number = 10; // 人口上限
     private currentGameExp: number = 0; // 本局游戏获得的经验值
@@ -135,6 +137,13 @@ export class GameManager extends Component {
     private gameOverLevelLabel: Label | null = null;
     private gameOverLevelBarMaxWidth: number = 260;
     private gameOverLevelBarHeight: number = 20;
+
+    // 木材 UI 标签（左上角），在场景中通过代码创建并缓存
+    private woodLabel: Label | null = null;
+
+    // 树林网格（左右各一块）
+    private forestLeftNode: Node | null = null;
+    private forestRightNode: Node | null = null;
 
     /**
      * 在结算页创建或更新"升级进度条"，并根据本局战斗的经验变化播放从0到当前进度的动画。
@@ -574,6 +583,119 @@ export class GameManager extends Component {
         
         // 初始化并显示左上角等级HUD（首页显示）
         this.updateLevelHud();
+
+        // 创建或查找左上角木材标签（与金币标签放在一起）
+        this.initWoodLabel();
+
+        // 在画面下方左右两角创建树林网格并种树
+        this.createForestGrids();
+    }
+
+    /**
+     * 初始化左上角木材标签：放在金币标签附近，显示当前木材数量。
+     * 优先复用场景中已有的节点，如果没有则动态创建。
+     */
+    private initWoodLabel() {
+        if (this.woodLabel && this.woodLabel.node && this.woodLabel.node.isValid) {
+            // 已经初始化过，则仅更新数值并保持当前显隐状态
+            this.woodLabel.string = `${this.wood}`;
+            return;
+        }
+
+        // 如果场景中已经手动放置了名为 WoodLabel 的节点，则直接复用
+        const existingNode = find('Canvas/UI/WoodLabel') ||
+                             find('Canvas/WoodLabel') ||
+                             find('WoodLabel');
+        if (existingNode) {
+            this.woodLabel = existingNode.getComponent(Label);
+            if (!this.woodLabel) {
+                this.woodLabel = existingNode.addComponent(Label);
+            }
+            this.woodLabel.string = `${this.wood}`;
+            // 首页时默认隐藏，等真正开始游戏后再显示
+            if (this.woodLabel.node) {
+                this.woodLabel.node.active = false;
+            }
+            return;
+        }
+
+        // 否则，在金币标签的父节点下动态创建一个新的木材标签
+        if (!this.goldLabel || !this.goldLabel.node || !this.goldLabel.node.isValid) {
+            return;
+        }
+
+        const goldNode = this.goldLabel.node;
+        const parent = goldNode.parent || this.node;
+        const woodNode = new Node('WoodLabel');
+        woodNode.setParent(parent);
+
+        // 复制金币标签的样式
+        const goldTransform = goldNode.getComponent(UITransform);
+        const woodTransform = woodNode.addComponent(UITransform);
+        if (goldTransform) {
+            woodTransform.setContentSize(goldTransform.contentSize);
+        }
+
+        const woodLabel = woodNode.addComponent(Label);
+        woodLabel.fontSize = this.goldLabel.fontSize;
+        woodLabel.color = this.goldLabel.color.clone();
+        woodLabel.string = `${this.wood}`;
+
+        // 将木材标签放在金币标签的右侧留一点间距（例如 80 像素）
+        const offsetX = 80;
+        const goldPos = goldNode.position.clone();
+        woodNode.setPosition(goldPos.x + offsetX, goldPos.y, goldPos.z);
+
+        this.woodLabel = woodLabel;
+        // 首页时默认隐藏，等真正开始游戏后再显示
+        if (this.woodLabel && this.woodLabel.node) {
+            this.woodLabel.node.active = false;
+        }
+    }
+
+    /**
+     * 创建两片树林网格（左下角和右下角），用于种植树木
+     */
+    private createForestGrids() {
+        if (this.forestLeftNode && this.forestLeftNode.isValid &&
+            this.forestRightNode && this.forestRightNode.isValid) {
+            return;
+        }
+
+        const canvas = find('Canvas');
+        if (!canvas) {
+            return;
+        }
+
+        // 左侧树林
+        if (!this.forestLeftNode || !this.forestLeftNode.isValid) {
+            const leftNode = new Node('ForestGridLeft');
+            leftNode.setParent(canvas);
+            const leftPanel = leftNode.addComponent(ForestGridPanel);
+            leftPanel.gridWidth = 6;
+            leftPanel.gridHeight = 4;
+            leftPanel.cellSize = 50;
+            leftPanel.cellSpacing = 0;
+            leftPanel.alignRight = false;
+            // 首页阶段默认隐藏，等开始游戏后再显示
+            leftNode.active = false;
+            this.forestLeftNode = leftNode;
+        }
+
+        // 右侧树林
+        if (!this.forestRightNode || !this.forestRightNode.isValid) {
+            const rightNode = new Node('ForestGridRight');
+            rightNode.setParent(canvas);
+            const rightPanel = rightNode.addComponent(ForestGridPanel);
+            rightPanel.gridWidth = 6;
+            rightPanel.gridHeight = 4;
+            rightPanel.cellSize = 50;
+            rightPanel.cellSpacing = 0;
+            rightPanel.alignRight = true;
+            // 首页阶段默认隐藏，等开始游戏后再显示
+            rightNode.active = false;
+            this.forestRightNode = rightNode;
+        }
     }
     
     /**
@@ -681,6 +803,18 @@ export class GameManager extends Component {
         if (this.populationLabel) {
             this.populationLabel.node.active = false;
         }
+        // 首页隐藏木材标签
+        if (this.woodLabel && this.woodLabel.node && this.woodLabel.node.isValid) {
+            this.woodLabel.node.active = false;
+        }
+
+        // 首页隐藏两片树林网格
+        if (this.forestLeftNode && this.forestLeftNode.isValid) {
+            this.forestLeftNode.active = false;
+        }
+        if (this.forestRightNode && this.forestRightNode.isValid) {
+            this.forestRightNode.active = false;
+        }
 
         // 隐藏建造按钮（多种路径兼容）
         const buildButtonNode = find('UI/BuildButton') || find('Canvas/UI/BuildButton') || find('BuildButton');
@@ -710,6 +844,9 @@ export class GameManager extends Component {
             if (gIcon) gIcon.active = false;
             const pIcon = uiRoot.getChildByName('PIcon');
             if (pIcon) pIcon.active = false;
+            // 首页隐藏木材图标
+            const wIcon = uiRoot.getChildByName('WIcon');
+            if (wIcon) wIcon.active = false;
         }
 
         // LevelHUD 作为 gameMainPanel 的子节点，会自动随着 gameMainPanel 显示隐藏
@@ -839,6 +976,19 @@ export class GameManager extends Component {
         if (this.populationLabel) {
             this.populationLabel.node.active = true;
         }
+
+        // 显示木材标签（如果已初始化）
+        if (this.woodLabel && this.woodLabel.node && this.woodLabel.node.isValid) {
+            this.woodLabel.node.active = true;
+        }
+
+        // 显示两片树林网格（如果已创建）
+        if (this.forestLeftNode && this.forestLeftNode.isValid) {
+            this.forestLeftNode.active = true;
+        }
+        if (this.forestRightNode && this.forestRightNode.isValid) {
+            this.forestRightNode.active = true;
+        }
         
         // 显示建造按钮（尝试多种路径）
         const buildButton = find('UI/BuildButton') || find('Canvas/UI/BuildButton') || find('BuildButton');
@@ -864,6 +1014,12 @@ export class GameManager extends Component {
                 if (child.name !== 'container' && child.name !== 'GameOverPanel') {
                     child.active = true;
                 }
+            }
+
+            // 确保木材图标 WIcon 也被显示
+            const wIcon = uiNode.getChildByName('WIcon');
+            if (wIcon) {
+                wIcon.active = true;
             }
         } else {
         }
@@ -897,6 +1053,10 @@ export class GameManager extends Component {
         if (this.populationLabel && this.populationLabel.node.isValid) {
             this.populationLabel.node.active = visible;
         }
+        // 同步控制木材标签显隐，保持与金币标签一致
+        if (this.woodLabel && this.woodLabel.node && this.woodLabel.node.isValid) {
+            this.woodLabel.node.active = visible;
+        }
 
         // 注意：exitGameButton 在结算时可能会被移动到 GameOverDialog 作为“结算页退出按钮”
         // 如果它已经不在 HUD（Canvas/UI）下，就不要在这里强制隐藏，否则会导致结算页只剩“重新开始”
@@ -912,7 +1072,21 @@ export class GameManager extends Component {
         // 通过节点路径兜底，确保即使序列化引用未绑定也能正确隐藏
         const uiRoot = find('Canvas/UI') || find('UI');
         if (uiRoot) {
-            const names = ['HealthLabel', 'TimerLabel', 'GoldLabel', 'PopulationLabel', 'HIcon', 'GIcon', 'PIcon', 'BuildButton', 'ExitGameButton', 'ReturnButton'];
+            const names = [
+                'HealthLabel',
+                'TimerLabel',
+                'GoldLabel',
+                'PopulationLabel',
+                'HIcon',
+                'GIcon',
+                'PIcon',
+                'BuildButton',
+                'ExitGameButton',
+                'ReturnButton',
+                // 木材相关：标签和图标
+                'WoodLabel',
+                'WIcon',
+            ];
             for (const name of names) {
                 const child = uiRoot.getChildByName(name);
                 if (child && child.isValid) {
@@ -967,6 +1141,11 @@ export class GameManager extends Component {
         // 更新金币显示
         if (this.goldLabel) {
             this.goldLabel.string = `${this.gold}`;
+        }
+
+        // 更新木材显示
+        if (this.woodLabel && this.woodLabel.node && this.woodLabel.node.isValid) {
+            this.woodLabel.string = `${this.wood}`;
         }
 
         // 更新人口显示
@@ -2328,6 +2507,7 @@ export class GameManager extends Component {
         // 重置基础数值
         this.gameTime = 0;
         this.gold = 20;              // 初始金币固定为 20
+        this.wood = 50;              // 初始木材固定为 50
         this.population = 0;
         this.currentGameExp = 0;
         this.hasShownPopulationLimitWarning = false;
@@ -2664,6 +2844,14 @@ export class GameManager extends Component {
             // 显示所有游戏元素
             this.showGameElements();
 
+            // 游戏正式开始时，让生命之树自动训练一个小精灵
+            const crystalComp = this.findComponentInScene('Crystal') as any;
+            if (crystalComp && crystalComp.autoTrainWispIfPossible) {
+                this.scheduleOnce(() => {
+                    crystalComp.autoTrainWispIfPossible();
+                }, 0.2);
+            }
+
             // 开局在石墙网格顶行生成初始石墙
             // 注意：这里传入的是组件名 'TowerBuilder'，而不是节点路径
             const towerBuilder = this.findComponentInScene('TowerBuilder') as any;
@@ -2843,6 +3031,34 @@ export class GameManager extends Component {
     addGold(amount: number) {
         this.gold += amount;
         this.updateUI();
+    }
+
+    // 木材相关方法
+    getWood(): number {
+        return this.wood;
+    }
+
+    addWood(amount: number) {
+        if (amount === 0) {
+            return;
+        }
+        this.wood += amount;
+        if (this.wood < 0) {
+            this.wood = 0;
+        }
+        this.updateUI();
+    }
+
+    spendWood(amount: number): boolean {
+        if (amount <= 0) {
+            return true;
+        }
+        if (this.wood >= amount) {
+            this.wood -= amount;
+            this.updateUI();
+            return true;
+        }
+        return false;
     }
 
     // 经验值相关方法

@@ -64,10 +64,10 @@ export class GridBuildingSelectionPanel extends Component {
         this.panelNode.setPosition(0, 0, 0);
         
         const panelTransform = this.panelNode.addComponent(UITransform);
-        // 计算面板大小：4个格子，每个格子80x100，格子之间间隔10像素
-        // 2x2布局：宽度 = 80*2 + 10 = 170，高度 = 100*2 + 10 = 210
-        const cellWidth = 80;
-        const cellHeight = 100;
+        // 计算面板大小：4个格子，每个格子进一步放大（110x130），格子之间间隔10像素
+        // 2x2布局：宽度 = 110*2 + 10 = 230，高度 = 130*2 + 10 = 270
+        const cellWidth = 110;
+        const cellHeight = 130;
         const cellSpacing = 10;
         const panelWidth = cellWidth * 2 + cellSpacing;
         const panelHeight = cellHeight * 2 + cellSpacing;
@@ -104,27 +104,29 @@ export class GridBuildingSelectionPanel extends Component {
         optionNode.setPosition(x, y, 0);
         
         const optionTransform = optionNode.addComponent(UITransform);
-        optionTransform.setContentSize(80, 100);
+        // 与 createPanel 中的 cellWidth/cellHeight 保持一致，放大格子
+        optionTransform.setContentSize(110, 130);
         optionTransform.setAnchorPoint(0.5, 0.5); // 设置锚点为中心，确保位置计算正确
         
-        // 创建背景（每个格子有自己的背景）
+        // 创建背景（每个格子有自己的背景，完全不透明）
         const bgGraphics = optionNode.addComponent(Graphics);
-        bgGraphics.fillColor = new Color(60, 60, 60, 200); // 半透明背景
-        bgGraphics.roundRect(-40, -50, 80, 100, 5);
+        bgGraphics.fillColor = new Color(60, 60, 60, 255); // 不透明背景
+        bgGraphics.roundRect(-55, -65, 110, 130, 8);
         bgGraphics.fill();
-        bgGraphics.strokeColor = new Color(220, 220, 220, 200);
+        bgGraphics.strokeColor = new Color(220, 220, 220, 255);
         bgGraphics.lineWidth = 1.5;
-        bgGraphics.roundRect(-40, -50, 80, 100, 5);
+        bgGraphics.roundRect(-55, -65, 110, 130, 8);
         bgGraphics.stroke();
         
         // 创建图标（始终创建，稍后更新）
         const iconNode = new Node('Icon');
         iconNode.setParent(optionNode);
-        iconNode.setPosition(0, 20, 0);
+        iconNode.setPosition(0, 32, 0);
         iconNode.active = true; // 确保图标节点可见
         
         const iconTransform = iconNode.addComponent(UITransform);
-        iconTransform.setContentSize(30, 30); // 缩小图标大小以适配选择框
+        // 进一步增大图标尺寸，让图片在格子中的占比更高（接近格子宽度）
+        iconTransform.setContentSize(50, 50);
         
         const iconSprite = iconNode.addComponent(Sprite);
         iconSprite.enabled = true; // 确保Sprite组件启用
@@ -140,7 +142,7 @@ export class GridBuildingSelectionPanel extends Component {
         nameLabelNode.setPosition(0, -10, 0);
         
         const nameLabelTransform = nameLabelNode.addComponent(UITransform);
-        nameLabelTransform.setContentSize(80, 20);
+        nameLabelTransform.setContentSize(110, 24);
         
         const nameLabel = nameLabelNode.addComponent(Label);
         // 根据建筑类型设置名称
@@ -155,7 +157,7 @@ export class GridBuildingSelectionPanel extends Component {
             buildingName = '雷塔';
         }
         nameLabel.string = buildingName;
-        nameLabel.fontSize = 14;
+        nameLabel.fontSize = 16;
         nameLabel.color = Color.WHITE;
         nameLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         nameLabel.verticalAlign = Label.VerticalAlign.CENTER;
@@ -163,17 +165,38 @@ export class GridBuildingSelectionPanel extends Component {
         // 创建金币标签
         const costLabelNode = new Node('CostLabel');
         costLabelNode.setParent(optionNode);
-        costLabelNode.setPosition(0, -35, 0);
+        // 将金币和木材放在同一行，通过左右分布避免换行
+        costLabelNode.setPosition(-20, -38, 0);
         
         const costLabelTransform = costLabelNode.addComponent(UITransform);
-        costLabelTransform.setContentSize(80, 20);
+        costLabelTransform.setContentSize(70, 22);
         
         const costLabel = costLabelNode.addComponent(Label);
-        costLabel.string = '0'; // 稍后更新
-        costLabel.fontSize = 14;
+        // 金币消耗，稍后在 updateCostLabels 中更新具体数值
+        costLabel.string = '0';
+        // 字号调大 2 号
+        costLabel.fontSize = 16;
         costLabel.color = Color.YELLOW;
-        costLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        // 右对齐，靠近行中间，左边留出空间给绿色数字
+        costLabel.horizontalAlign = Label.HorizontalAlign.RIGHT;
         costLabel.verticalAlign = Label.VerticalAlign.CENTER;
+
+        // 创建木材标签（默认隐藏，仅对需要木材的塔显示）
+        const woodLabelNode = new Node('WoodCostLabel');
+        woodLabelNode.setParent(optionNode);
+        // 与金币在同一行，稍向右偏移，实现“20 +30”一行展示
+        woodLabelNode.setPosition(10, -38, 0);
+        const woodLabelTransform = woodLabelNode.addComponent(UITransform);
+        woodLabelTransform.setContentSize(60, 22);
+        const woodLabel = woodLabelNode.addComponent(Label);
+        woodLabel.string = ''; // 稍后更新
+        // 字号调大 2 号
+        woodLabel.fontSize = 15;
+        // 木材字体使用绿色
+        woodLabel.color = new Color(80, 200, 80, 255);
+        woodLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        woodLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        woodLabelNode.active = false; // 默认隐藏
         
         // 添加按钮组件
         const button = optionNode.addComponent(Button);
@@ -189,7 +212,7 @@ export class GridBuildingSelectionPanel extends Component {
     }
 
     /**
-     * 更新选项的金币显示和图标
+     * 更新选项的金币/木材显示和图标
      */
     private updateCostLabels() {
         if (!this.towerBuilder) {
@@ -197,15 +220,9 @@ export class GridBuildingSelectionPanel extends Component {
             return;
         }
         
-        // 更新石墙金币和图标
+        // 更新石墙金币和图标（石墙不消耗木材）
         const stoneWallCost = this.towerBuilder.getActualBuildCost('StoneWall');
-        const stoneWallCostLabel = this.stoneWallOption?.getChildByName('CostLabel')?.getComponent(Label);
-        if (stoneWallCostLabel) {
-            stoneWallCostLabel.string = stoneWallCost.toString();
-            console.info('[GridBuildingSelectionPanel] 石墙金币:', stoneWallCost);
-        } else {
-            console.warn('[GridBuildingSelectionPanel] 石墙金币标签未找到');
-        }
+        this.updateOptionCostDisplay(this.stoneWallOption, stoneWallCost, 0, 'StoneWall');
         
         // 更新石墙图标
         const stoneWallIconNode = this.stoneWallOption?.getChildByName('Icon');
@@ -218,8 +235,8 @@ export class GridBuildingSelectionPanel extends Component {
                     iconSprite.enabled = true;
                     iconSprite.type = Sprite.Type.SIMPLE;
                     iconSprite.sizeMode = Sprite.SizeMode.CUSTOM;
-                    // 确保图标大小适配
-                    iconTransform.setContentSize(30, 30);
+                    // 确保图标大小适配（与格子尺寸保持较大占比）
+                    iconTransform.setContentSize(50, 50);
                     console.info('[GridBuildingSelectionPanel] 石墙图标已设置');
                 } else {
                     console.warn('[GridBuildingSelectionPanel] 石墙图标未找到');
@@ -229,15 +246,10 @@ export class GridBuildingSelectionPanel extends Component {
             console.warn('[GridBuildingSelectionPanel] 石墙图标节点未找到');
         }
         
-        // 更新哨塔金币和图标
+        // 更新哨塔金币和图标（哨塔消耗木材）
         const watchTowerCost = this.towerBuilder.getActualBuildCost('WatchTower');
-        const watchTowerCostLabel = this.watchTowerOption?.getChildByName('CostLabel')?.getComponent(Label);
-        if (watchTowerCostLabel) {
-            watchTowerCostLabel.string = watchTowerCost.toString();
-            console.info('[GridBuildingSelectionPanel] 哨塔金币:', watchTowerCost);
-        } else {
-            console.warn('[GridBuildingSelectionPanel] 哨塔金币标签未找到');
-        }
+        const watchTowerWood = this.towerBuilder.watchTowerWoodCost || 0;
+        this.updateOptionCostDisplay(this.watchTowerOption, watchTowerCost, watchTowerWood, 'WatchTower');
         
         // 更新哨塔图标
         const watchTowerIconNode = this.watchTowerOption?.getChildByName('Icon');
@@ -250,7 +262,7 @@ export class GridBuildingSelectionPanel extends Component {
                     iconSprite.enabled = true;
                     iconSprite.type = Sprite.Type.SIMPLE;
                     iconSprite.sizeMode = Sprite.SizeMode.CUSTOM;
-                    iconTransform.setContentSize(30, 30);
+                    iconTransform.setContentSize(50, 50);
                     console.info('[GridBuildingSelectionPanel] 哨塔图标已设置');
                 } else {
                     console.warn('[GridBuildingSelectionPanel] 哨塔图标未找到');
@@ -262,13 +274,8 @@ export class GridBuildingSelectionPanel extends Component {
         
         // 更新冰塔金币和图标
         const iceTowerCost = this.towerBuilder.getActualBuildCost('IceTower', 20);
-        const iceTowerCostLabel = this.iceTowerOption?.getChildByName('CostLabel')?.getComponent(Label);
-        if (iceTowerCostLabel) {
-            iceTowerCostLabel.string = iceTowerCost.toString();
-            console.info('[GridBuildingSelectionPanel] 冰塔金币:', iceTowerCost);
-        } else {
-            console.warn('[GridBuildingSelectionPanel] 冰塔金币标签未找到');
-        }
+        const iceTowerWood = this.towerBuilder.iceTowerWoodCost || 0;
+        this.updateOptionCostDisplay(this.iceTowerOption, iceTowerCost, iceTowerWood, 'IceTower');
         
         const iceTowerIconNode = this.iceTowerOption?.getChildByName('Icon');
         if (iceTowerIconNode) {
@@ -280,7 +287,7 @@ export class GridBuildingSelectionPanel extends Component {
                     iconSprite.enabled = true;
                     iconSprite.type = Sprite.Type.SIMPLE;
                     iconSprite.sizeMode = Sprite.SizeMode.CUSTOM;
-                    iconTransform.setContentSize(30, 30);
+                    iconTransform.setContentSize(50, 50);
                     console.info('[GridBuildingSelectionPanel] 冰塔图标已设置');
                 } else {
                     console.warn('[GridBuildingSelectionPanel] 冰塔图标未找到');
@@ -292,13 +299,8 @@ export class GridBuildingSelectionPanel extends Component {
         
         // 更新雷塔金币和图标
         const thunderTowerCost = this.towerBuilder.getActualBuildCost('ThunderTower', 30);
-        const thunderTowerCostLabel = this.thunderTowerOption?.getChildByName('CostLabel')?.getComponent(Label);
-        if (thunderTowerCostLabel) {
-            thunderTowerCostLabel.string = thunderTowerCost.toString();
-            console.info('[GridBuildingSelectionPanel] 雷塔金币:', thunderTowerCost);
-        } else {
-            console.warn('[GridBuildingSelectionPanel] 雷塔金币标签未找到');
-        }
+        const thunderTowerWood = this.towerBuilder.thunderTowerWoodCost || 0;
+        this.updateOptionCostDisplay(this.thunderTowerOption, thunderTowerCost, thunderTowerWood, 'ThunderTower');
         
         const thunderTowerIconNode = this.thunderTowerOption?.getChildByName('Icon');
         if (thunderTowerIconNode) {
@@ -310,7 +312,7 @@ export class GridBuildingSelectionPanel extends Component {
                     iconSprite.enabled = true;
                     iconSprite.type = Sprite.Type.SIMPLE;
                     iconSprite.sizeMode = Sprite.SizeMode.CUSTOM;
-                    iconTransform.setContentSize(30, 30);
+                    iconTransform.setContentSize(50, 50);
                     console.info('[GridBuildingSelectionPanel] 雷塔图标已设置');
                 } else {
                     console.warn('[GridBuildingSelectionPanel] 雷塔图标未找到');
@@ -318,6 +320,73 @@ export class GridBuildingSelectionPanel extends Component {
             }
         } else {
             console.warn('[GridBuildingSelectionPanel] 雷塔图标节点未找到');
+        }
+    }
+
+    /**
+     * 更新单个选项的金币/木材显示
+     */
+    private updateOptionCostDisplay(optionNode: Node | null, goldCost: number, woodCost: number, typeName: string) {
+        if (!optionNode) {
+            console.warn('[GridBuildingSelectionPanel] 选项节点为空，无法更新成本显示:', typeName);
+            return;
+        }
+
+        const goldLabel = optionNode.getChildByName('CostLabel')?.getComponent(Label);
+        if (goldLabel) {
+            goldLabel.string = goldCost.toString();
+            console.info(`[GridBuildingSelectionPanel] ${typeName} 金币:`, goldCost);
+        } else {
+            console.warn(`[GridBuildingSelectionPanel] ${typeName} 金币标签未找到`);
+        }
+
+        const woodLabelNode = optionNode.getChildByName('WoodCostLabel');
+        let woodLabel: Label | null = null;
+        if (woodLabelNode) {
+            woodLabel = woodLabelNode.getComponent(Label);
+            if (woodLabel) {
+                if (woodCost > 0) {
+                    // 只显示增加的木材数值（去掉“木材”字样），例如 “+30”
+                    woodLabel.string = `+${woodCost}`;
+                    woodLabelNode.active = true;
+                } else {
+                    woodLabel.string = '';
+                    woodLabelNode.active = false;
+                }
+            }
+        }
+
+        // 将金币和木材视为一个整体，拼在一起后再居中对齐
+        const costLabelNodeRef = optionNode.getChildByName('CostLabel');
+        if (costLabelNodeRef && goldLabel) {
+            const goldFontSize = goldLabel.fontSize || 16;
+            const goldText = goldLabel.string || '';
+            const approxGoldWidth = goldText.length * goldFontSize * 0.6;
+
+            let totalWidth = approxGoldWidth;
+            let approxWoodWidth = 0;
+            const spacing = 6; // 金币和木材之间的间距
+
+            if (woodLabel && woodCost > 0 && woodLabelNode) {
+                const woodFontSize = woodLabel.fontSize || 15;
+                const woodText = woodLabel.string || '';
+                approxWoodWidth = woodText.length * woodFontSize * 0.6;
+                totalWidth = approxGoldWidth + spacing + approxWoodWidth;
+
+                // 整体居中：计算起始 x，使组合中心在 0
+                const startX = -totalWidth / 2;
+                const goldCenterX = startX + approxGoldWidth / 2;
+                const woodCenterX = startX + approxGoldWidth + spacing + approxWoodWidth / 2;
+
+                costLabelNodeRef.setPosition(goldCenterX, -38, 0);
+                woodLabelNode.setPosition(woodCenterX, -38, 0);
+            } else {
+                // 只有金币成本时，单独居中
+                costLabelNodeRef.setPosition(0, -38, 0);
+                if (woodLabelNode) {
+                    woodLabelNode.setPosition(10, -38, 0);
+                }
+            }
         }
     }
 

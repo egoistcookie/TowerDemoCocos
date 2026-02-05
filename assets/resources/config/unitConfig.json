@@ -51,7 +51,7 @@
     },
     "displayInfo": {
       "name": "小精灵",
-      "description": "能够治疗建筑物的小精灵，是维护基地的重要单位"
+      "description": "能够采集木材，需要移动到树林中。"
     },
     "displayStats": {
       "生命值": 30,
