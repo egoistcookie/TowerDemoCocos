@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, EventTarget, instantiate, EventTouch, Sprite, SpriteFrame, find, Graphics, UITransform, Color } from 'cc';
+import { _decorator, Component, Node, EventTarget, instantiate, EventTouch, Sprite, SpriteFrame, find, Graphics, UITransform, Color, Prefab, Vec3, resources } from 'cc';
 import { UnitSelectionManager } from '../UnitSelectionManager';
 import { UnitInfo } from '../UnitInfoPanel';
 import { GameState } from '../GameState';
@@ -33,6 +33,19 @@ export class Crystal extends Component {
     @property([SpriteFrame])
     levelSprites: SpriteFrame[] = []; // 每个等级的贴图数组（索引0对应1级，索引1对应2级...）
 
+    // 训练小精灵相关属性
+    @property(Prefab)
+    wispPrefab: Prefab = null!; // 小精灵预制体
+
+    @property
+    trainWispDuration: number = 3.0; // 训练小精灵时间（秒）
+
+    @property
+    trainWispCost: number = 5; // 训练小精灵费用（金币）
+
+    @property
+    wispSpawnOffset: number = 100; // 小精灵生成位置偏移（像素）
+
     private currentHealth: number = 100;
     private isDestroyed: boolean = false;
     private unitSelectionManager: UnitSelectionManager = null!; // 单位选择管理器
@@ -46,6 +59,13 @@ export class Crystal extends Component {
     private upgradeProgress: number = 0; // 升级进度（0-1）
     private upgradeProgressBar: Node = null!; // 升级进度条节点
     private upgradeProgressGraphics: Graphics = null!; // 升级进度条Graphics组件
+
+    // 训练小精灵相关
+    private isTrainingWisp: boolean = false; // 是否正在训练小精灵
+    private trainWispTimer: number = 0; // 训练小精灵计时器
+    private trainWispProgress: number = 0; // 训练小精灵进度（0-1）
+    private trainWispProgressBar: Node = null!; // 训练小精灵进度条节点
+    private trainWispProgressGraphics: Graphics = null!; // 训练小精灵进度条Graphics组件
 
     start() {
         this.currentHealth = this.maxHealth;
@@ -71,6 +91,14 @@ export class Crystal extends Component {
 
         // 创建升级进度条
         this.createUpgradeProgressBar();
+
+        // 创建训练小精灵进度条
+        this.createTrainWispProgressBar();
+
+        // 加载小精灵预制体（如果未设置）
+        if (!this.wispPrefab) {
+            this.loadWispPrefab();
+        }
 
         // 监听点击事件
         this.node.on(Node.EventType.TOUCH_END, this.onCrystalClick, this);
@@ -301,6 +329,18 @@ export class Crystal extends Component {
                 this.completeUpgrade();
             }
         }
+
+        // 训练小精灵逻辑
+        if (this.isTrainingWisp) {
+            this.trainWispTimer += deltaTime;
+            this.trainWispProgress = Math.min(1.0, this.trainWispTimer / this.trainWispDuration);
+            this.updateTrainWispProgressBar();
+
+            if (this.trainWispProgress >= 1.0) {
+                // 训练完成
+                this.completeTrainWisp();
+            }
+        }
     }
 
     /**
@@ -508,10 +548,182 @@ export class Crystal extends Component {
                 onUpgradeClick: this.level < this.maxLevel ? () => {
                     this.startUpgrade();
                 } : undefined,
-                upgradeCost: this.level < this.maxLevel ? upgradeCost : undefined // 传递升级费用用于显示
+                upgradeCost: this.level < this.maxLevel ? upgradeCost : undefined, // 传递升级费用用于显示
+                // 训练小精灵按钮
+                onTrainWispClick: () => {
+                    this.startTrainWisp();
+                },
+                trainWispCost: this.trainWispCost // 传递训练费用用于显示
             };
             this.unitSelectionManager.selectUnit(this.node, unitInfo);
         }
+    }
+
+    /**
+     * 加载小精灵预制体
+     */
+    loadWispPrefab() {
+        resources.load('prefabs/Wisp', Prefab, (err, prefab) => {
+            if (!err && prefab) {
+                this.wispPrefab = prefab;
+            } else {
+                console.warn('[Crystal] 加载小精灵预制体失败:', err);
+            }
+        });
+    }
+
+    /**
+     * 创建训练小精灵进度条
+     */
+    createTrainWispProgressBar() {
+        if (this.trainWispProgressBar) {
+            return;
+        }
+
+        this.trainWispProgressBar = new Node('TrainWispProgressBar');
+        this.trainWispProgressBar.setParent(this.node);
+        this.trainWispProgressBar.setPosition(0, -70, 0); // 位于升级进度条下方
+
+        const uiTransform = this.trainWispProgressBar.addComponent(UITransform);
+        uiTransform.setContentSize(60, 6);
+
+        this.trainWispProgressGraphics = this.trainWispProgressBar.addComponent(Graphics);
+        this.updateTrainWispProgressBar();
+    }
+
+    /**
+     * 更新训练小精灵进度条
+     */
+    updateTrainWispProgressBar() {
+        if (!this.trainWispProgressGraphics) {
+            return;
+        }
+
+        this.trainWispProgressGraphics.clear();
+        
+        if (this.isTrainingWisp) {
+            // 显示进度条
+            this.trainWispProgressBar.active = true;
+            
+            // 绘制进度条背景
+            this.trainWispProgressGraphics.fillColor = new Color(50, 50, 50, 200);
+            this.trainWispProgressGraphics.rect(-30, -3, 60, 6);
+            this.trainWispProgressGraphics.fill();
+
+            // 绘制进度条
+            const progressWidth = 60 * this.trainWispProgress;
+            this.trainWispProgressGraphics.fillColor = new Color(0, 150, 255, 255); // 蓝色
+            this.trainWispProgressGraphics.rect(-30, -3, progressWidth, 6);
+            this.trainWispProgressGraphics.fill();
+
+            // 绘制边框
+            this.trainWispProgressGraphics.strokeColor = new Color(255, 255, 255, 255);
+            this.trainWispProgressGraphics.lineWidth = 1;
+            this.trainWispProgressGraphics.rect(-30, -3, 60, 6);
+            this.trainWispProgressGraphics.stroke();
+        } else {
+            // 隐藏进度条
+            this.trainWispProgressBar.active = false;
+        }
+    }
+
+    /**
+     * 开始训练小精灵
+     */
+    startTrainWisp() {
+        // 检查是否正在训练
+        if (this.isTrainingWisp) {
+            GamePopup.showMessage('正在训练中');
+            return;
+        }
+
+        // 查找游戏管理器
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+
+        if (!this.gameManager) {
+            return;
+        }
+
+        // 检查金币是否足够
+        if (!this.gameManager.canAfford(this.trainWispCost)) {
+            GamePopup.showMessage('金币不足');
+            return;
+        }
+
+        // 检查小精灵预制体是否已加载
+        if (!this.wispPrefab) {
+            this.loadWispPrefab();
+            GamePopup.showMessage('小精灵预制体未加载');
+            return;
+        }
+
+        // 扣除金币
+        this.gameManager.spendGold(this.trainWispCost);
+
+        // 开始训练
+        this.isTrainingWisp = true;
+        this.trainWispTimer = 0;
+        this.trainWispProgress = 0;
+        this.updateTrainWispProgressBar();
+        
+        // 训练时取消被选中的状态
+        if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            this.unitSelectionManager.clearSelection();
+        }
+    }
+
+    /**
+     * 完成训练小精灵
+     */
+    completeTrainWisp() {
+        if (!this.wispPrefab) {
+            console.error('[Crystal] 小精灵预制体未加载');
+            this.isTrainingWisp = false;
+            this.trainWispTimer = 0;
+            this.trainWispProgress = 0;
+            this.updateTrainWispProgressBar();
+            return;
+        }
+
+        // 查找小精灵容器
+        let wispContainer = find('Canvas/Wisps');
+        if (!wispContainer) {
+            const canvas = find('Canvas');
+            if (canvas) {
+                wispContainer = new Node('Wisps');
+                wispContainer.setParent(canvas);
+            } else if (this.node.scene) {
+                wispContainer = new Node('Wisps');
+                wispContainer.setParent(this.node.scene);
+            }
+        }
+
+        if (!wispContainer) {
+            console.error('[Crystal] 无法创建小精灵容器');
+            this.isTrainingWisp = false;
+            this.trainWispTimer = 0;
+            this.trainWispProgress = 0;
+            this.updateTrainWispProgressBar();
+            return;
+        }
+
+        // 计算生成位置（水晶下方）
+        const crystalPos = this.node.worldPosition.clone();
+        const spawnPos = new Vec3(crystalPos.x, crystalPos.y - this.wispSpawnOffset, crystalPos.z);
+
+        // 创建小精灵
+        const wisp = instantiate(this.wispPrefab);
+        wisp.setParent(wispContainer);
+        wisp.setWorldPosition(spawnPos);
+        wisp.active = true;
+
+        // 重置训练状态
+        this.isTrainingWisp = false;
+        this.trainWispTimer = 0;
+        this.trainWispProgress = 0;
+        this.updateTrainWispProgressBar();
     }
 }
 

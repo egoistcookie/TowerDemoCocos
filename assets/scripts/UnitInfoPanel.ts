@@ -30,9 +30,12 @@ export interface UnitInfo {
     onSellClick?: () => void; // 回收按钮点击回调
     onRallyPointClick?: () => void; // 集结点设置按钮点击回调
     onDefendClick?: () => void; // 防御按钮点击回调
+    onTrainWispClick?: () => void; // 训练小精灵按钮点击回调
     // 升级相关
     upgradeCost?: number; // 升级费用（用于显示）
     maxLevel?: number; // 最高等级（用于判断是否满级）
+    // 训练小精灵相关
+    trainWispCost?: number; // 训练小精灵费用（用于显示）
     // 集结点相关
     rallyPoint?: Vec3 | null; // 集结点位置（用于显示）
     // 防御状态
@@ -810,6 +813,47 @@ export class UnitInfoPanel extends Component {
             if (costLabelNode) {
                 costLabelNode.active = false;
             }
+        }
+
+        // 设置训练小精灵按钮（位置：第二行第一列，索引3）
+        if (unitInfo.onTrainWispClick && this.buttonNodes[3]) {
+            const trainWispButton = this.buttonNodes[3];
+            trainWispButton.active = true;
+            
+            // 显示训练费用标签
+            const costLabelNode = trainWispButton.getChildByName('CostLabel');
+            if (costLabelNode) {
+                const costLabel = costLabelNode.getComponent(Label);
+                if (costLabel && unitInfo.trainWispCost !== undefined) {
+                    costLabel.string = `${unitInfo.trainWispCost}`;
+                    costLabelNode.active = true;
+                } else {
+                    costLabelNode.active = false;
+                }
+            }
+            
+            // 加载训练小精灵按钮贴图（使用一个合适的图标，如果没有可以用其他图标代替）
+            this.loadButtonSprite(3, 'uni.png', 'uni_down.png'); // 暂时使用集结点图标，后续可以替换
+            
+            // 设置点击事件，点击时切换贴图
+            trainWispButton.on(Node.EventType.TOUCH_START, () => {
+                const sprite = this.buttonSprites.get(3);
+                const downSprite = this.buttonDownSprites.get(3);
+                if (sprite && downSprite && sprite.node && sprite.node.isValid) {
+                    sprite.spriteFrame = downSprite;
+                }
+            });
+            
+            trainWispButton.on(Node.EventType.TOUCH_END, () => {
+                const sprite = this.buttonSprites.get(3);
+                const normalSprite = this.buttonNormalSprites.get(3);
+                if (sprite && normalSprite && sprite.node && sprite.node.isValid) {
+                    sprite.spriteFrame = normalSprite;
+                }
+                if (unitInfo.onTrainWispClick) {
+                    unitInfo.onTrainWispClick();
+                }
+            });
         }
 
         // 设置回收按钮（位置：右下，索引8）

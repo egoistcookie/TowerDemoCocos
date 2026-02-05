@@ -189,7 +189,7 @@ export class EnemySpawner extends Component {
         if (!EnemySpawner.orcPrefabLoaded) {
             pending++;
             this.loadSingleEnemyPrefabFromSubpackage(
-                ['Orc', 'orc'],
+                ['orc'],
                 (prefab) => {
                     if (prefab) {
                         EnemySpawner.sharedOrcPrefab = prefab;
@@ -238,6 +238,7 @@ export class EnemySpawner extends Component {
 
     /**
      * 从分包 prefabs_sub 懒加载一种敌人预制体（根据一组可能的资源名尝试）
+     * 如果从分包加载失败，会回退到使用 enemyPrefabs 数组中的预制体
      */
     private loadSingleEnemyPrefabFromSubpackage(
         tryNames: string[],
@@ -247,8 +248,16 @@ export class EnemySpawner extends Component {
 
         assetManager.loadBundle('prefabs_sub', (err, bundle) => {
             if (err || !bundle) {
-                console.error('[EnemySpawner] 加载分包 prefabs_sub 失败，使用主包中已有的敌人预制体:', err);
-                onLoaded(null);
+                console.warn('[EnemySpawner] 加载分包 prefabs_sub 失败，尝试从 enemyPrefabs 中查找:', err);
+                // 从分包加载失败，尝试从 enemyPrefabs 中查找
+                const fallbackPrefab = this.findPrefabInEnemyPrefabs(tryNames);
+                if (fallbackPrefab) {
+                    console.info('[EnemySpawner] 从 enemyPrefabs 中找到预制体:', fallbackPrefab.data.name);
+                    onLoaded(fallbackPrefab);
+                } else {
+                    console.error('[EnemySpawner] 从 enemyPrefabs 中也未找到预制体，候选名称:', tryNames);
+                    onLoaded(null);
+                }
                 return;
             }
 
@@ -256,8 +265,16 @@ export class EnemySpawner extends Component {
 
             const tryLoadByIndex = (index: number) => {
                 if (index >= tryNames.length) {
-                    console.error('[EnemySpawner] 从分包 prefabs_sub 加载敌人预制体失败，尝试的名称均未找到:', tryNames, lastError);
-                    onLoaded(null);
+                    console.warn('[EnemySpawner] 从分包 prefabs_sub 加载敌人预制体失败，尝试的名称均未找到:', tryNames, lastError);
+                    // 从分包加载失败，尝试从 enemyPrefabs 中查找
+                    const fallbackPrefab = this.findPrefabInEnemyPrefabs(tryNames);
+                    if (fallbackPrefab) {
+                        console.info('[EnemySpawner] 从 enemyPrefabs 中找到预制体作为回退:', fallbackPrefab.data.name);
+                        onLoaded(fallbackPrefab);
+                    } else {
+                        console.error('[EnemySpawner] 从 enemyPrefabs 中也未找到预制体，候选名称:', tryNames);
+                        onLoaded(null);
+                    }
                     return;
                 }
 
@@ -265,7 +282,12 @@ export class EnemySpawner extends Component {
                 bundle.load(name, Prefab, (err2, prefab) => {
                     if (err2 || !prefab) {
                         lastError = err2;
-                        console.warn('[EnemySpawner] 从分包 prefabs_sub 按名称加载敌人预制体失败，名称:', name, '错误:', err2);
+                        // 如果不是最后一个尝试的名称，只输出调试信息，不输出警告
+                        if (index < tryNames.length - 1) {
+                            console.info('[EnemySpawner] 从分包 prefabs_sub 按名称加载敌人预制体失败，名称:', name, '继续尝试下一个');
+                        } else {
+                            console.warn('[EnemySpawner] 从分包 prefabs_sub 按名称加载敌人预制体失败，名称:', name, '错误:', err2);
+                        }
                         tryLoadByIndex(index + 1);
                         return;
                     }
@@ -277,6 +299,85 @@ export class EnemySpawner extends Component {
 
             tryLoadByIndex(0);
         });
+    }
+
+    /**
+     * 从 enemyPrefabs 数组中查找匹配的预制体
+     * @param tryNames 尝试的名称列表
+     * @returns 找到的预制体，如果未找到返回 null
+     */
+    private findPrefabInEnemyPrefabs(tryNames: string[]): Prefab | null {
+        console.info('[EnemySpawner.findPrefabInEnemyPrefabs] 开始查找，候选名称:', tryNames, 'enemyPrefabs数量:', this.enemyPrefabs.length);
+        
+        for (const prefab of this.enemyPrefabs) {
+            if (!prefab) {
+                continue;
+            }
+            
+            // 检查两个可能的名称：prefab.name（资源名称）和 prefab.data.name（节点名称）
+            const resourceName = prefab.name || '';
+            const nodeName = (prefab.data && prefab.data.name) ? prefab.data.name : '';
+            
+            console.info('[EnemySpawner.findPrefabInEnemyPrefabs] 检查预制体 - 资源名称:', resourceName, '节点名称:', nodeName);
+            
+            // 检查是否匹配任何一个尝试的名称
+            for (const tryName of tryNames) {
+                const tryNameLower = tryName.toLowerCase();
+                
+                // 检查资源名称
+                if (resourceName) {
+                    const resourceNameLower = resourceName.toLowerCase();
+                    if (this.isNameMatch(resourceNameLower, tryNameLower)) {
+                        console.info('[EnemySpawner.findPrefabInEnemyPrefabs] 通过资源名称匹配成功:', resourceName, '->', tryName);
+                        return prefab;
+                    }
+                }
+                
+                // 检查节点名称
+                if (nodeName) {
+                    const nodeNameLower = nodeName.toLowerCase();
+                    if (this.isNameMatch(nodeNameLower, tryNameLower)) {
+                        console.info('[EnemySpawner.findPrefabInEnemyPrefabs] 通过节点名称匹配成功:', nodeName, '->', tryName);
+                        return prefab;
+                    }
+                }
+            }
+        }
+        
+        console.warn('[EnemySpawner.findPrefabInEnemyPrefabs] 未找到匹配的预制体，候选名称:', tryNames);
+        return null;
+    }
+    
+    /**
+     * 检查名称是否匹配
+     * @param prefabName 预制体名称（已转换为小写）
+     * @param tryName 尝试的名称（已转换为小写）
+     * @returns 是否匹配
+     */
+    private isNameMatch(prefabName: string, tryName: string): boolean {
+        // 精确匹配
+        if (prefabName === tryName) {
+            return true;
+        }
+        
+        // 模糊匹配：检查名称是否包含尝试的名称
+        // 例如：'Orc' 匹配 'Orc', 'OrcEnemy', 'EnemyOrc' 等
+        if (prefabName.includes(tryName) || tryName.includes(prefabName)) {
+            // 特殊处理：确保不会误匹配
+            // 例如：'Orc' 不应该匹配 'OrcWarrior'
+            if (tryName === 'orc') {
+                // 如果尝试的是 'Orc'，确保不匹配 'OrcWarrior', 'OrcWarlord' 等
+                if (!prefabName.includes('warrior') && 
+                    !prefabName.includes('warlord') && 
+                    !prefabName.includes('shaman')) {
+                    return true;
+                }
+            } else {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     /**
@@ -1000,47 +1101,49 @@ export class EnemySpawner extends Component {
             return false;
         }
         
-        this.currentEnemyConfig = this.currentWave.enemies[this.currentEnemyIndex];
-        // 获取新配置时重置计数
-        // 注意：这里总是重置，因为如果重新获取同一个配置，说明之前的生成已经完成
-        this.enemiesSpawnedCount = 0;
+        // 记录起始索引，避免无限循环
+        const startIndex = this.currentEnemyIndex;
+        let attempts = 0;
+        const maxAttempts = this.currentWave.enemies.length;
         
-        // 检查敌人预制体是否存在
-        const prefabName = this.currentEnemyConfig.prefabName;
-        const prefab = this.enemyPrefabMap.get(prefabName);
-        if (!prefab) {
-            console.warn(`[EnemySpawner.getCurrentEnemyConfig] 预制体不存在: ${prefabName}, 索引: ${this.currentEnemyIndex}`);
+        // 循环查找下一个存在的预制体
+        while (attempts < maxAttempts) {
+            this.currentEnemyConfig = this.currentWave.enemies[this.currentEnemyIndex];
+            // 获取新配置时重置计数
+            // 注意：这里总是重置，因为如果重新获取同一个配置，说明之前的生成已经完成
+            this.enemiesSpawnedCount = 0;
             
-            // 尝试获取下一个敌人配置
-            this.currentEnemyIndex++;
+            // 检查敌人预制体是否存在
+            const prefabName = this.currentEnemyConfig.prefabName;
+            const prefab = this.enemyPrefabMap.get(prefabName);
             
-            // 如果索引超出范围，检查是否所有配置的预制体都不存在
-            if (this.currentEnemyIndex >= this.currentWave.enemies.length) {
-                // 检查是否所有配置的预制体都不存在
-                let allPrefabsMissing = true;
-                for (let i = 0; i < this.currentWave.enemies.length; i++) {
-                    const enemyConfig = this.currentWave.enemies[i];
-                    const checkPrefab = this.enemyPrefabMap.get(enemyConfig.prefabName);
-                    if (checkPrefab) {
-                        allPrefabsMissing = false;
-                        break;
-                    }
-                }
-                if (allPrefabsMissing) {
-                    console.error(`[EnemySpawner.getCurrentEnemyConfig] 当前波次所有敌人配置的预制体都不存在`);
-                    return false;
-                } else {
-                    // 有预制体存在，但当前索引的预制体不存在，重置索引并重新尝试
-                    console.warn(`[EnemySpawner.getCurrentEnemyConfig] 当前索引的预制体不存在，但其他配置有预制体，重置索引重新尝试`);
-                    this.currentEnemyIndex = 0;
-                    return this.getCurrentEnemyConfig();
-                }
+            if (prefab) {
+                // 找到存在的预制体，返回成功
+                return true;
             }
             
-            return this.getCurrentEnemyConfig();
+            // 预制体不存在，记录警告并尝试下一个
+            console.warn(`[EnemySpawner.getCurrentEnemyConfig] 预制体不存在: ${prefabName}, 索引: ${this.currentEnemyIndex}`);
+            
+            // 尝试下一个索引
+            this.currentEnemyIndex++;
+            attempts++;
+            
+            // 如果索引超出范围，从头开始查找
+            if (this.currentEnemyIndex >= this.currentWave.enemies.length) {
+                this.currentEnemyIndex = 0;
+            }
+            
+            // 如果已经回到起始索引，说明所有配置的预制体都不存在
+            if (this.currentEnemyIndex === startIndex) {
+                console.error(`[EnemySpawner.getCurrentEnemyConfig] 当前波次所有敌人配置的预制体都不存在`);
+                return false;
+            }
         }
         
-        return true;
+        // 如果尝试了所有配置都没有找到存在的预制体，返回失败
+        console.error(`[EnemySpawner.getCurrentEnemyConfig] 无法找到存在的预制体，已尝试所有配置`);
+        return false;
     }
 
     /**
