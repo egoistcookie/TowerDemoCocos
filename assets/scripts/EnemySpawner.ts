@@ -5,6 +5,7 @@ import { Enemy } from './enemy/Enemy';
 import { OrcWarrior } from './enemy/OrcWarrior';
 import { OrcWarlord } from './enemy/OrcWarlord';
 import { TrollSpearman } from './enemy/TrollSpearman';
+import { Boss } from './enemy/Boss';
 import { EnemyPool } from './EnemyPool';
 import { UnitManager } from './UnitManager';
 const { ccclass, property } = _decorator;
@@ -97,13 +98,19 @@ export class EnemySpawner extends Component {
     // 敌人预制体映射表
     private enemyPrefabMap: Map<string, Prefab> = new Map();
 
-    // Orc / OrcWarrior / TrollSpearman 敌人预制体（从分包懒加载并注入），减少主包体积
+    // Orc / OrcWarrior / TrollSpearman / Dragon / OrcWarlord / OrcShaman 敌人预制体（从分包懒加载并注入），减少主包体积
     private static sharedOrcPrefab: Prefab | null = null; // 所有 EnemySpawner 实例共享
     private static sharedOrcWarriorPrefab: Prefab | null = null;
     private static sharedTrollSpearmanPrefab: Prefab | null = null;
+    private static sharedDragonPrefab: Prefab | null = null;
+    private static sharedOrcWarlordPrefab: Prefab | null = null;
+    private static sharedOrcShamanPrefab: Prefab | null = null;
     private static orcPrefabLoaded: boolean = false; // 全局标记：整个游戏过程中只加载一次
     private static orcWarriorPrefabLoaded: boolean = false;
     private static trollSpearmanPrefabLoaded: boolean = false;
+    private static dragonPrefabLoaded: boolean = false;
+    private static orcWarlordPrefabLoaded: boolean = false;
+    private static orcShamanPrefabLoaded: boolean = false;
     
     // 对象池引用
     private enemyPool: EnemyPool = null!;
@@ -157,12 +164,15 @@ export class EnemySpawner extends Component {
         // 初始化敌人预制体映射表（此时只包含主包里通过属性面板指定的敌人）
         this.initEnemyPrefabMap();
 
-        // 敌人预制体：从分包懒加载 Orc / OrcWarrior / TrollSpearman，全部尝试完成后再初始化对象池和波次配置
+        // 敌人预制体：从分包懒加载 Orc / OrcWarrior / TrollSpearman / Dragon / OrcWarlord / OrcShaman，全部尝试完成后再初始化对象池和波次配置
         this.loadAllEnemyPrefabsFromSubpackage(() => {
             // 将已经加载到内存中的敌人预制体注入当前 Spawner 的映射表
             this.injectOrcPrefabToMap();
             this.injectOrcWarriorPrefabToMap();
             this.injectTrollSpearmanPrefabToMap();
+            this.injectDragonPrefabToMap();
+            this.injectOrcWarlordPrefabToMap();
+            this.injectOrcShamanPrefabToMap();
 
             // 初始化对象池并加载关卡配置
             this.initEnemyPool();
@@ -171,7 +181,7 @@ export class EnemySpawner extends Component {
     }
 
     /**
-     * 从分包 prefabs_sub 懒加载所有需要的敌人预制体（Orc / OrcWarrior / TrollSpearman）
+     * 从分包 prefabs_sub 懒加载所有需要的敌人预制体（Orc / OrcWarrior / TrollSpearman / Dragon / OrcWarlord / OrcShaman）
      * 全局每种敌人只加载一次，多个 EnemySpawner 共享。
      */
     private loadAllEnemyPrefabsFromSubpackage(onComplete: () => void) {
@@ -230,7 +240,52 @@ export class EnemySpawner extends Component {
             );
         }
 
-        // 如果本次三种敌人都已经加载过了，直接回调
+        // 需要加载 Dragon
+        if (!EnemySpawner.dragonPrefabLoaded) {
+            pending++;
+            this.loadSingleEnemyPrefabFromSubpackage(
+                ['Dragon', 'dragon'],
+                (prefab) => {
+                    if (prefab) {
+                        EnemySpawner.sharedDragonPrefab = prefab;
+                        EnemySpawner.dragonPrefabLoaded = true;
+                    }
+                    doneOne();
+                }
+            );
+        }
+
+        // 需要加载 OrcWarlord
+        if (!EnemySpawner.orcWarlordPrefabLoaded) {
+            pending++;
+            this.loadSingleEnemyPrefabFromSubpackage(
+                ['OrcWarlord', 'orcwarlord', 'orc_warlord', 'Orc_Warlord'],
+                (prefab) => {
+                    if (prefab) {
+                        EnemySpawner.sharedOrcWarlordPrefab = prefab;
+                        EnemySpawner.orcWarlordPrefabLoaded = true;
+                    }
+                    doneOne();
+                }
+            );
+        }
+
+        // 需要加载 OrcShaman
+        if (!EnemySpawner.orcShamanPrefabLoaded) {
+            pending++;
+            this.loadSingleEnemyPrefabFromSubpackage(
+                ['OrcShaman', 'orcshaman', 'orc_shaman', 'Orc_Shaman'],
+                (prefab) => {
+                    if (prefab) {
+                        EnemySpawner.sharedOrcShamanPrefab = prefab;
+                        EnemySpawner.orcShamanPrefabLoaded = true;
+                    }
+                    doneOne();
+                }
+            );
+        }
+
+        // 如果本次所有敌人都已经加载过了，直接回调
         if (pending === 0) {
             onComplete();
         }
@@ -381,7 +436,7 @@ export class EnemySpawner extends Component {
     }
 
     /**
-     * 将已加载的 Orc / OrcWarrior / TrollSpearman 预制体注入当前 EnemySpawner 的映射表
+     * 将已加载的 Orc / OrcWarrior / TrollSpearman / Dragon / OrcWarlord / OrcShaman 预制体注入当前 EnemySpawner 的映射表
      */
     private injectOrcPrefabToMap() {
         if (EnemySpawner.sharedOrcPrefab) {
@@ -399,6 +454,24 @@ export class EnemySpawner extends Component {
     private injectTrollSpearmanPrefabToMap() {
         if (EnemySpawner.sharedTrollSpearmanPrefab) {
             this.enemyPrefabMap.set('TrollSpearman', EnemySpawner.sharedTrollSpearmanPrefab);
+        }
+    }
+
+    private injectDragonPrefabToMap() {
+        if (EnemySpawner.sharedDragonPrefab) {
+            this.enemyPrefabMap.set('Dragon', EnemySpawner.sharedDragonPrefab);
+        }
+    }
+
+    private injectOrcWarlordPrefabToMap() {
+        if (EnemySpawner.sharedOrcWarlordPrefab) {
+            this.enemyPrefabMap.set('OrcWarlord', EnemySpawner.sharedOrcWarlordPrefab);
+        }
+    }
+
+    private injectOrcShamanPrefabToMap() {
+        if (EnemySpawner.sharedOrcShamanPrefab) {
+            this.enemyPrefabMap.set('OrcShaman', EnemySpawner.sharedOrcShamanPrefab);
         }
     }
     
@@ -454,7 +527,9 @@ export class EnemySpawner extends Component {
             let prefabName = prefab.data.name;
             
             // 特殊处理，确保名称匹配
-            if (prefabName.toLowerCase().includes('orcshaman') || prefabName.toLowerCase().includes('shaman')) {
+            if (prefabName.toLowerCase().includes('dragon')) {
+                prefabName = 'Dragon';
+            } else if (prefabName.toLowerCase().includes('orcshaman') || prefabName.toLowerCase().includes('shaman')) {
                 prefabName = 'OrcShaman';
             } else if (prefabName.toLowerCase().includes('orcwarlord') || prefabName.toLowerCase().includes('warlord')) {
                 prefabName = 'OrcWarlord';
@@ -1195,8 +1270,8 @@ export class EnemySpawner extends Component {
         enemy.setParent(this.enemyContainer || this.node);
         enemy.setWorldPosition(spawnPos);
 
-        // 设置敌人的目标水晶
-        const enemyScript = enemy.getComponent(Enemy) as any || enemy.getComponent(OrcWarrior) as any || enemy.getComponent(OrcWarlord) as any || enemy.getComponent(TrollSpearman) as any;
+        // 设置敌人的目标水晶，支持所有敌人类型
+        const enemyScript = enemy.getComponent(Enemy) as any || enemy.getComponent(OrcWarrior) as any || enemy.getComponent(OrcWarlord) as any || enemy.getComponent(TrollSpearman) as any || enemy.getComponent(Boss) as any || enemy.getComponent('Boss') as any || enemy.getComponent('Dragon') as any;
         if (enemyScript) {
             // 设置prefabName（用于对象池回收）
             enemyScript.prefabName = this.testEnemyType;
@@ -1205,6 +1280,9 @@ export class EnemySpawner extends Component {
             if (enemyScript.loadRewardsFromConfig && typeof enemyScript.loadRewardsFromConfig === 'function') {
                 enemyScript.loadRewardsFromConfig();
             }
+            
+            // 根据关卡数强化敌人属性（在加载配置之后，确保使用原始值计算）
+            this.applyLevelBuff(enemyScript);
             
             if (this.targetCrystal) {
                 enemyScript.targetCrystal = this.targetCrystal;
@@ -1300,9 +1378,9 @@ export class EnemySpawner extends Component {
         enemy.setParent(this.enemyContainer || this.node);
         enemy.setWorldPosition(spawnPos);
 
-        // 设置敌人的目标水晶，支持Enemy、OrcWarrior、OrcWarlord、TrollSpearman和Dragon
+        // 设置敌人的目标水晶，支持Enemy、OrcWarrior、OrcWarlord、TrollSpearman、Dragon和Boss
         // 尝试获取不同类型的敌人组件
-        const enemyScript = enemy.getComponent(Enemy) as any || enemy.getComponent(OrcWarrior) as any || enemy.getComponent(OrcWarlord) as any || enemy.getComponent(TrollSpearman) as any || enemy.getComponent('Dragon') as any;
+        const enemyScript = enemy.getComponent(Enemy) as any || enemy.getComponent(OrcWarrior) as any || enemy.getComponent(OrcWarlord) as any || enemy.getComponent(TrollSpearman) as any || enemy.getComponent('Dragon') as any || enemy.getComponent(Boss) as any || enemy.getComponent('Boss') as any;
         if (enemyScript) {
             // 设置prefabName（用于对象池回收）
             enemyScript.prefabName = prefabName;
@@ -1311,6 +1389,9 @@ export class EnemySpawner extends Component {
             if (enemyScript.loadRewardsFromConfig && typeof enemyScript.loadRewardsFromConfig === 'function') {
                 enemyScript.loadRewardsFromConfig();
             }
+            
+            // 根据关卡数强化敌人属性（在加载配置之后，确保使用原始值计算）
+            this.applyLevelBuff(enemyScript);
             
             if (this.targetCrystal) {
                 enemyScript.targetCrystal = this.targetCrystal;
@@ -1352,6 +1433,68 @@ export class EnemySpawner extends Component {
         }
     }
     
+    /**
+     * 根据当前关卡计算敌人属性增幅倍数
+     * 第一关：1.0倍（无增幅）
+     * 第二关：1.0倍（无增幅）
+     * 第三关：1.1倍（10%增幅）
+     * 第四关：1.2倍（20%增幅）
+     * 以此类推：从第三关开始，1.0 + (currentLevel - 2) * 0.1
+     * @returns 增幅倍数
+     */
+    private getLevelMultiplier(): number {
+        if (this.currentLevel <= 2) {
+            return 1.0; // 第一关和第二关无增幅
+        }
+        return 1.0 + (this.currentLevel - 2) * 0.1; // 从第三关开始增幅
+    }
+
+    /**
+     * 根据关卡数强化敌人属性（生命值和攻击力）
+     * @param enemyScript 敌人脚本组件
+     */
+    private applyLevelBuff(enemyScript: any) {
+        if (!enemyScript) {
+            return;
+        }
+
+        const multiplier = this.getLevelMultiplier();
+        
+        // 如果已经是1.0倍（第一关），不需要调整
+        if (multiplier === 1.0) {
+            return;
+        }
+
+        // 获取原始值（如果已经保存过，使用保存的值；否则使用当前值作为原始值）
+        let originalMaxHealth = enemyScript._originalMaxHealth;
+        let originalAttackDamage = enemyScript._originalAttackDamage;
+        
+        // 如果还没有保存原始值，保存当前值作为原始值
+        if (originalMaxHealth === undefined) {
+            originalMaxHealth = enemyScript.maxHealth || 0;
+            enemyScript._originalMaxHealth = originalMaxHealth;
+        }
+        if (originalAttackDamage === undefined) {
+            originalAttackDamage = enemyScript.attackDamage || 0;
+            enemyScript._originalAttackDamage = originalAttackDamage;
+        }
+
+        // 应用增幅到生命值（基于原始值）
+        if (originalMaxHealth > 0) {
+            enemyScript.maxHealth = Math.floor(originalMaxHealth * multiplier);
+            // 如果敌人已经初始化，也需要更新当前生命值
+            if (enemyScript.currentHealth !== undefined) {
+                enemyScript.currentHealth = enemyScript.maxHealth;
+            }
+        }
+
+        // 应用增幅到攻击力（基于原始值）
+        if (originalAttackDamage > 0) {
+            enemyScript.attackDamage = Math.floor(originalAttackDamage * multiplier);
+        }
+
+    }
+
     /**
      * 检查胜利条件：场上是否还有存活的敌人
      * @returns 如果所有敌人都被消灭，返回true

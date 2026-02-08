@@ -2459,12 +2459,13 @@ export class Enemy extends Component {
             sprite.color = new Color(0, 255, 0, 150); // 绿色，半透明
         }
 
-        // 添加文字标签显示治疗量
+        // 添加文字标签显示治疗量（四舍五入保留个位数）
         const labelNode = new Node('HealLabel');
         labelNode.setParent(healEffectNode);
         labelNode.setPosition(0, 0, 0);
         const label = labelNode.addComponent(Label);
-        label.string = `+${amount}`;
+        const roundedAmount = Math.round(amount); // 四舍五入保留个位数
+        label.string = `+${roundedAmount}`;
         label.fontSize = 20;
         label.color = Color.GREEN;
         
