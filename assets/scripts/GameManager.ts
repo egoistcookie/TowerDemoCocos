@@ -14,6 +14,7 @@ import { DamageStatistics } from './DamageStatistics';
 import { ShamanTotem } from './ShamanTotem';
 import { WarAncientTree } from './role/WarAncientTree';
 import { ForestGridPanel } from './ForestGridPanel';
+import { SoundManager } from './SoundManager';
 const { ccclass, property } = _decorator;
 
 // 重新导出 GameState 以保持向后兼容
@@ -2832,6 +2833,15 @@ export class GameManager extends Component {
         if (currentTimeScale === 0) {
             director.getScheduler().setTimeScale(1);
             this.originalTimeScale = 1;
+        }
+        
+        // 无论游戏状态如何，只要开始游戏，都应该切换到游戏BGM（前提是玩家没有关闭BGM开关）
+        const soundManager = SoundManager.getInstance();
+        if (soundManager && soundManager.isBgmOn()) {
+            console.info('[GameManager] _startGameInternal() switching to game BGM (backMusic1)');
+            soundManager.playGameBgm();
+        } else {
+            console.info('[GameManager] _startGameInternal() BGM is disabled, skip playing game BGM');
         }
         
         if (this.gameState === GameState.Paused) {

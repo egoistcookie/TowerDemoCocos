@@ -1,4 +1,4 @@
-import { _decorator, Component, AudioSource, AudioClip, Node, instantiate, Prefab, find } from 'cc';
+import { _decorator, Component, AudioSource, AudioClip, Node, instantiate, Prefab, find, director } from 'cc';
 const { ccclass, property } = _decorator;
 
 /**
@@ -8,8 +8,8 @@ const { ccclass, property } = _decorator;
  */
 @ccclass('AudioManager')
 export class AudioManager extends Component {
-    // 单例实例
-    private static instance: AudioManager;
+    // 单例实例（仅在场景中创建一次，其余地方只获取）
+    private static instance: AudioManager | null = null;
     
     // 背景音乐音量
     @property
@@ -29,55 +29,102 @@ export class AudioManager extends Component {
     private readonly MAX_SFX_NODES: number = 10;
     
     /**
-     * 获取单例实例
+     * 获取单例实例（只在场景中查找，找不到则打印日志并返回 null）
      */
     public static get Instance(): AudioManager {
-        if (!this.instance) {
-            // 创建AudioManager节点和组件
-            const audioManagerNode = new Node('AudioManager');
-            this.instance = audioManagerNode.addComponent(AudioManager);
-            // 直接将节点添加到当前场景的根节点
-            // 注意：在Cocos Creator 3.x中，需要通过find函数获取场景根节点
-            const sceneRoot = find('/');
-            if (sceneRoot) {
-                sceneRoot.addChild(audioManagerNode);
-                // 激活节点，否则AudioSource组件无法正常工作
-                audioManagerNode.active = true;
-            } else {
+        // 如果已有有效实例，直接返回
+        if (this.instance && this.instance.node && this.instance.node.isValid) {
+            return this.instance;
+        }
+
+        // 尝试在当前场景中查找已有的 AudioManager 组件
+        const scene = director.getScene();
+        if (scene) {
+            const stack: Node[] = [...scene.children];
+            while (stack.length > 0) {
+                const node = stack.pop()!;
+                const comp = node.getComponent(AudioManager);
+                if (comp && comp.node && comp.node.isValid) {
+                    console.info('[AudioManager] Instance() found existing AudioManager on node', node.name);
+                    this.instance = comp;
+                    return comp;
+                }
+                stack.push(...node.children);
             }
         }
-        return this.instance;
+
+        // 再尝试常见路径的节点名称
+        const audioManagerNode = find('Canvas/AudioManager') || find('AudioManager');
+        if (audioManagerNode) {
+            const comp = audioManagerNode.getComponent(AudioManager);
+            if (comp && comp.node && comp.node.isValid) {
+                console.info('[AudioManager] Instance() found AudioManager on node', audioManagerNode.name);
+                this.instance = comp;
+                return comp;
+            }
+        }
+
+        console.warn('[AudioManager] Instance() no AudioManager found in scene. Please add one under Canvas.');
+        return null as any;
     }
     
     protected onLoad(): void {
-        // 确保只有一个实例
-        if (AudioManager.instance) {
+        // 确保只有一个 AudioManager 实例，销毁多余的
+        if (AudioManager.instance && AudioManager.instance !== this) {
+            console.warn('[AudioManager] Duplicate AudioManager on node', this.node.name, ', destroying this one');
             this.node.destroy();
             return;
         }
-        
         AudioManager.instance = this;
-        // 设置为常驻节点，避免场景切换时被销毁
-        this.node.scene.addChild(this.node);
+
+        // 如果当前节点还没有挂到场景上，则尝试挂到 Canvas 或场景根
+        if (!this.node.scene) {
+            const scene = director.getScene();
+            const root = find('Canvas') || scene;
+            if (root) {
+                root.addChild(this.node);
+            }
+        }
+
+        // 将 AudioManager 节点标记为常驻节点，防止在切换 / 重新加载场景时被销毁
+        if (!director.isPersistRootNode(this.node)) {
+            director.addPersistRootNode(this.node);
+            console.info('[AudioManager] onLoad() mark node as persist root');
+        }
         
         // 初始化音频管理器
         this.initAudioManager();
-        
     }
     
+    /**
+     * 确保背景音乐 AudioSource 已经创建并初始化
+     */
+    private ensureBgmAudioSource(): void {
+        // 如果组件的 node 无效，直接放弃，避免报错
+        if (!this.node || !this.node.isValid) {
+            console.warn('[AudioManager] ensureBgmAudioSource() aborted because node is invalid');
+            return;
+        }
+
+        if (!this.bgmAudioSource || !this.bgmAudioSource.node || !this.bgmAudioSource.node.isValid) {
+            this.bgmAudioSource = this.node.getComponent(AudioSource) || this.node.addComponent(AudioSource);
+        }
+
+        if (!this.bgmAudioSource) {
+            console.warn('[AudioManager] ensureBgmAudioSource() failed: bgmAudioSource is still null');
+            return;
+        }
+        // 确保关键属性正确
+        this.bgmAudioSource.loop = true;
+        this.bgmAudioSource.volume = this.bgmVolume;
+    }
+
     /**
      * 初始化音频管理器
      */
     private initAudioManager(): void {
-        // 创建背景音乐AudioSource组件
-        this.bgmAudioSource = this.node.getComponent(AudioSource);
-        if (!this.bgmAudioSource) {
-            this.bgmAudioSource = this.node.addComponent(AudioSource);
-        }
-        
-        // 设置背景音乐属性
-        this.bgmAudioSource.loop = true;
-        this.bgmAudioSource.volume = this.bgmVolume;
+        // 创建并初始化背景音乐AudioSource组件
+        this.ensureBgmAudioSource();
         
         // 初始化音效节点池
         this.initSFXNodes();
@@ -132,6 +179,7 @@ export class AudioManager extends Component {
         }
         
         // 设置背景音乐并播放
+        this.ensureBgmAudioSource();
         this.bgmAudioSource.clip = clip;
         this.bgmAudioSource.play();
     }
@@ -140,21 +188,30 @@ export class AudioManager extends Component {
      * 停止背景音乐
      */
     public stopBGM(): void {
-        this.bgmAudioSource.stop();
+        this.ensureBgmAudioSource();
+        if (this.bgmAudioSource) {
+            this.bgmAudioSource.stop();
+        }
     }
     
     /**
      * 暂停背景音乐
      */
     public pauseBGM(): void {
-        this.bgmAudioSource.pause();
+        this.ensureBgmAudioSource();
+        if (this.bgmAudioSource) {
+            this.bgmAudioSource.pause();
+        }
     }
     
     /**
      * 恢复背景音乐
      */
     public resumeBGM(): void {
-        this.bgmAudioSource.play();
+        this.ensureBgmAudioSource();
+        if (this.bgmAudioSource) {
+            this.bgmAudioSource.play();
+        }
     }
     
     /**
@@ -203,6 +260,7 @@ export class AudioManager extends Component {
      */
     public setBGMVolume(volume: number): void {
         this.bgmVolume = Math.max(0, Math.min(1, volume));
+        this.ensureBgmAudioSource();
         this.bgmAudioSource.volume = this.bgmVolume;
     }
     

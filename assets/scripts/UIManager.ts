@@ -1,9 +1,11 @@
-import { _decorator, Component, Node, Button, Label, find, director, UITransform, Color, Graphics, tween, Vec3, UIOpacity, Sprite, SpriteFrame, Prefab, instantiate, resources, assetManager } from 'cc';
+import { _decorator, Component, Node, Button, Label, find, director, UITransform, Color, Graphics, tween, Vec3, UIOpacity, Sprite, SpriteFrame, Prefab, instantiate, resources, assetManager, sys } from 'cc';
 import { GameManager as GameManagerClass } from './GameManager';
 import { CountdownPopup } from './CountdownPopup';
 // 导入TalentSystem，用于管理天赋系统和单位卡片
 import { TalentSystem } from './TalentSystem';
 import { PlayerDataManager } from './PlayerDataManager';
+import { SoundManager } from './SoundManager';
+import { AudioManager } from './AudioManager';
 
 const { ccclass, property } = _decorator;
 
@@ -71,11 +73,33 @@ export class UIManager extends Component {
         // 查找游戏管理器
         this.findGameManager();
         
+        // 确保全局音频控制器在初始化阶段只创建一次
+        this.initGlobalAudioManagers();
+        
         // 初始化玩家数据管理器
         this.playerDataManager = PlayerDataManager.getInstance();
         this.playerDataManager.loadData().then(() => {
-            // 数据加载完成后，更新下一关按钮状态
-            this.updateNextLevelButtonState();
+            // 根据已通过关卡，计算当前可进行的最大关卡：maxPassed + 1（不超过5）
+            if (this.playerDataManager && this.playerDataManager.getPassedLevels) {
+                const passed = this.playerDataManager.getPassedLevels();
+                if (passed && passed.length > 0) {
+                    const maxPassed = Math.max(...passed);
+                    this.currentLevel = Math.min(5, maxPassed + 1);
+                }
+            }
+            // 初始化关卡显示和下一关按钮状态
+            this.updateStartButtonText();
+
+            // 如果当前关卡大于1，确保分包背景资源已加载，并切换到对应关卡背景
+            if (this.currentLevel > 1) {
+                this.loadSubpackageResources()
+                    .then(() => {
+                        this.changeBackground(this.currentLevel);
+                    })
+                    .catch((err) => {
+                        console.warn('[UIManager.start] 加载分包背景资源失败，仍使用默认背景', err);
+                    });
+            }
         });
 
         // 检查并自动创建countdownPopup
@@ -99,6 +123,36 @@ export class UIManager extends Component {
         // 初始化重新开始按钮贴图
         if (this.restartButton && this.restartButton.node) {
             this.setupButtonSprite(this.restartButton.node, 'restart.png', 'restart_down.png');
+        }
+    }
+
+    /**
+     * 游戏初始化阶段，确保全局音频控制器（AudioManager / SoundManager）只创建一次
+     */
+    private initGlobalAudioManagers() {
+        const scene = director.getScene();
+        const root = find('Canvas') || scene;
+        if (!root) {
+            console.warn('[UIManager] initGlobalAudioManagers() cannot find Canvas or scene root');
+            return;
+        }
+
+        // 确保 AudioManager 存在
+        let audioMgr = AudioManager.Instance;
+        if (!audioMgr) {
+            const audioNode = new Node('AudioManager');
+            root.addChild(audioNode);
+            audioMgr = audioNode.addComponent(AudioManager);
+            console.info('[UIManager] initGlobalAudioManagers() created AudioManager under', root.name);
+        }
+
+        // 确保 SoundManager 存在
+        let soundMgr = SoundManager.getInstance();
+        if (!soundMgr) {
+            const soundNode = new Node('SoundManager');
+            root.addChild(soundNode);
+            soundMgr = soundNode.addComponent(SoundManager);
+            console.info('[UIManager] initGlobalAudioManagers() created SoundManager under', root.name);
         }
     }
     
@@ -464,25 +518,8 @@ export class UIManager extends Component {
             
             // 开关背景 - 美化样式
             const toggleBg = toggleContainer.addComponent(Graphics);
-            toggleBg.fillColor = new Color(80, 80, 80, 200); // 灰色背景
-            toggleBg.roundRect(-35, -20, 70, 40, 20);
-            toggleBg.fill();
-            // 添加边框
-            toggleBg.lineWidth = 1;
-            toggleBg.strokeColor = new Color(120, 120, 120, 255);
-            toggleBg.roundRect(-35, -20, 70, 40, 20);
-            toggleBg.stroke();
-            
             // 开关旋钮 - 美化样式
             const toggleKnob = toggleContainer.addComponent(Graphics);
-            toggleKnob.fillColor = new Color(200, 200, 200, 255); // 浅灰色旋钮
-            toggleKnob.circle(-15, 0, 15);
-            toggleKnob.fill();
-            // 添加旋钮边框
-            toggleKnob.lineWidth = 1;
-            toggleKnob.strokeColor = new Color(150, 150, 150, 255);
-            toggleKnob.circle(-15, 0, 15);
-            toggleKnob.stroke();
             
             // 设置UITransform，确保点击区域正确
             const toggleTransform = toggleContainer.addComponent(UITransform);
@@ -491,6 +528,163 @@ export class UIManager extends Component {
             
             // 添加Button组件
             toggleContainer.addComponent(Button);
+
+            // 如果是第一个设置项（背景音乐），根据当前开关状态初始化视觉效果
+            if (i === 0) {
+                const soundManager = SoundManager.getInstance();
+                // 优先从 SoundManager 读取状态，如果 SoundManager 不存在或状态未加载，则直接从 localStorage 读取
+                let isOn = true; // 默认值
+                if (soundManager) {
+                    isOn = soundManager.isBgmOn();
+                } else {
+                    // 如果 SoundManager 不存在，直接从 localStorage 读取
+                    try {
+                        const bgmStr = sys.localStorage.getItem('TowerDemo_BGM_Enabled');
+                        isOn = bgmStr === null ? true : bgmStr === '1';
+                    } catch (e) {
+                        // 读取失败，使用默认值 true
+                    }
+                }
+
+                const updateBgmToggleVisual = (on: boolean) => {
+                    toggleBg.clear();
+                    toggleKnob.clear();
+
+                    // 背景颜色：开启为绿色，关闭为灰色
+                    toggleBg.fillColor = on ? new Color(80, 180, 80, 220) : new Color(80, 80, 80, 200);
+                    toggleBg.roundRect(-35, -20, 70, 40, 20);
+                    toggleBg.fill();
+                    toggleBg.lineWidth = 1;
+                    toggleBg.strokeColor = new Color(120, 120, 120, 255);
+                    toggleBg.roundRect(-35, -20, 70, 40, 20);
+                    toggleBg.stroke();
+
+                    // 旋钮位置：开启在右侧，关闭在左侧
+                    const knobX = on ? 15 : -15;
+                    toggleKnob.fillColor = new Color(200, 200, 200, 255);
+                    toggleKnob.circle(knobX, 0, 15);
+                    toggleKnob.fill();
+                    toggleKnob.lineWidth = 1;
+                    toggleKnob.strokeColor = new Color(150, 150, 150, 255);
+                    toggleKnob.circle(knobX, 0, 15);
+                    toggleKnob.stroke();
+                };
+
+                // 初始化一次
+                updateBgmToggleVisual(isOn);
+
+                // 绑定点击事件（具体逻辑在后面绑定交互时补充）
+                // 这里先把函数挂在容器上，后面复用
+                (toggleContainer as any)._updateBgmToggleVisual = updateBgmToggleVisual;
+                (toggleContainer as any)._isOn = isOn;
+            }
+            // 如果是第二个设置项（音效），根据当前音效开关状态初始化视觉效果
+            else if (i === 1) {
+                const soundManager = SoundManager.getInstance();
+                // 优先从 SoundManager 读取状态，如果 SoundManager 不存在或状态未加载，则直接从 localStorage 读取
+                let isOn = true; // 默认值
+                if (soundManager) {
+                    isOn = soundManager.isEffectOn();
+                } else {
+                    // 如果 SoundManager 不存在，直接从 localStorage 读取
+                    try {
+                        const sfxStr = sys.localStorage.getItem('TowerDemo_SFX_Enabled');
+                        isOn = sfxStr === null ? true : sfxStr === '1';
+                    } catch (e) {
+                        // 读取失败，使用默认值 true
+                    }
+                }
+
+                const updateSfxToggleVisual = (on: boolean) => {
+                    toggleBg.clear();
+                    toggleKnob.clear();
+
+                    // 背景颜色：开启为绿色，关闭为灰色
+                    toggleBg.fillColor = on ? new Color(80, 180, 80, 220) : new Color(80, 80, 80, 200);
+                    toggleBg.roundRect(-35, -20, 70, 40, 20);
+                    toggleBg.fill();
+                    toggleBg.lineWidth = 1;
+                    toggleBg.strokeColor = new Color(120, 120, 120, 255);
+                    toggleBg.roundRect(-35, -20, 70, 40, 20);
+                    toggleBg.stroke();
+
+                    // 旋钮位置：开启在右侧，关闭在左侧
+                    const knobX = on ? 15 : -15;
+                    toggleKnob.fillColor = new Color(200, 200, 200, 255);
+                    toggleKnob.circle(knobX, 0, 15);
+                    toggleKnob.fill();
+                    toggleKnob.lineWidth = 1;
+                    toggleKnob.strokeColor = new Color(150, 150, 150, 255);
+                    toggleKnob.circle(knobX, 0, 15);
+                    toggleKnob.stroke();
+                };
+
+                // 初始化一次
+                updateSfxToggleVisual(isOn);
+
+                (toggleContainer as any)._updateSfxToggleVisual = updateSfxToggleVisual;
+                (toggleContainer as any)._isOn = isOn;
+            }
+        }
+
+        // 绑定设置项的交互逻辑：背景音乐开关键
+        const soundManager = SoundManager.getInstance();
+        if (soundManager) {
+            const bgmItem = settingsList.getChildByName('SettingItem0');
+            if (bgmItem) {
+                const bgmToggle = bgmItem.getChildByName('ToggleContainer0');
+                if (bgmToggle) {
+                    const bgmButton = bgmToggle.getComponent(Button);
+                    if (bgmButton) {
+                        bgmButton.node.on(Button.EventType.CLICK, () => {
+                            // 调用SoundManager切换背景音乐开关
+                            const enabled = soundManager.toggleBgm();
+
+                            // 更新视觉效果
+                            const containerAny = bgmToggle as any;
+                            if (containerAny._updateBgmToggleVisual) {
+                                containerAny._isOn = enabled;
+                                containerAny._updateBgmToggleVisual(enabled);
+                            }
+
+                            // 如果打开开关，根据当前是否在首页决定播放哪种背景音乐
+                            if (enabled) {
+                                // 底部三页签可见且游戏面板处于首页状态时，认为在首页，播放主菜单音乐
+                                const isHome = this.bottomSelectionNodeRef && this.bottomSelectionNodeRef.active;
+                                if (isHome) {
+                                    soundManager.playMenuBgm();
+                                } else {
+                                    soundManager.playGameBgm();
+                                }
+                            }
+                        }, this);
+                    }
+                }
+            }
+        }
+
+        // 绑定设置项的交互逻辑：音效开关键
+        if (soundManager) {
+            const sfxItem = settingsList.getChildByName('SettingItem1');
+            if (sfxItem) {
+                const sfxToggle = sfxItem.getChildByName('ToggleContainer1');
+                if (sfxToggle) {
+                    const sfxButton = sfxToggle.getComponent(Button);
+                    if (sfxButton) {
+                        sfxButton.node.on(Button.EventType.CLICK, () => {
+                            // 调用SoundManager切换音效开关
+                            const enabled = soundManager.toggleEffect();
+
+                            // 更新视觉效果
+                            const containerAny = sfxToggle as any;
+                            if (containerAny._updateSfxToggleVisual) {
+                                containerAny._isOn = enabled;
+                                containerAny._updateSfxToggleVisual(enabled);
+                            }
+                        }, this);
+                    }
+                }
+            }
         }
         
         // 4. 创建底部标签页按钮容器 - 位于画面最底部
@@ -551,9 +745,15 @@ export class UIManager extends Component {
         if (!this.backgroundNode) {
             this.backgroundNode = find('Canvas/Background');
         }
+
+        // 进入首页时播放主菜单背景音乐（backMusic.mp3，音量100%），前提是玩家开启了BGM
+        if (soundManager && soundManager.isBgmOn()) {
+            soundManager.playMenuBgm();
+        }
         
         // 绑定开始游戏事件
         startButtonComp.node.on(Button.EventType.CLICK, () => {
+            console.info('[UIManager] Start button clicked, preparing to start game');
             
             // 1. 直接隐藏底部三页签，不依赖GameManager
             bottomSelectionNode.active = false;
@@ -585,8 +785,10 @@ export class UIManager extends Component {
             // 4. 调用GameManager的startGame方法（递归查找以防节点命名/层级变化）
             const gmComp = this.findComponentInScene('GameManager') as any;
             if (gmComp && gmComp.startGame) {
+                console.info('[UIManager] GameManager found, calling startGame()');
                 gmComp.startGame();
             } else {
+                console.warn('[UIManager] GameManager not found or has no startGame()');
             }
         }, this);
         
@@ -1534,8 +1736,6 @@ export class UIManager extends Component {
      * 无需确认，直接退出游戏
      */
     onExitGameClick() {
-        // 返回首页时，更新下一关按钮状态
-        this.updateNextLevelButtonState();
         // 1. 使用已有的gameManager属性，如果不存在则查找
         if (!this.gameManager) {
             this.findGameManager();
@@ -1572,6 +1772,35 @@ export class UIManager extends Component {
         if (bottomSelectionNode) {
             bottomSelectionNode.active = true;
             
+            // 计算当前可进行的最大关卡：已通过关卡中的最大值，+1（不超过5）
+            let targetLevel = this.currentLevel;
+            if (this.playerDataManager && this.playerDataManager.getPassedLevels) {
+                const passed = this.playerDataManager.getPassedLevels();
+                if (passed && passed.length > 0) {
+                    const maxPassed = Math.max(...passed);
+                    // 如果已经是最后一关，则仍然停留在最后一关；否则显示下一关
+                    targetLevel = Math.min(5, maxPassed + 1);
+                }
+            }
+
+            // 更新当前关卡并刷新相关 UI（标签、下一关按钮状态、背景）
+            this.currentLevel = targetLevel;
+            this.updateStartButtonText();
+            this.updateNextLevelButtonState();
+
+            // 如果当前关卡大于1，确保分包背景资源已加载，再切换到对应背景
+            if (this.currentLevel > 1) {
+                this.loadSubpackageResources()
+                    .then(() => {
+                        this.changeBackground(this.currentLevel);
+                    })
+                    .catch((err) => {
+                        console.warn('[UIManager.onExitGameClick] 加载分包背景资源失败，仍使用当前背景', err);
+                    });
+            } else {
+                this.changeBackground(this.currentLevel);
+            }
+
             // 确保切换到游戏主体面板
             const gamePanel = bottomSelectionNode.getChildByName('GameMainPanel');
             const talentPanel = bottomSelectionNode.getChildByName('TalentPanel');
@@ -1586,6 +1815,18 @@ export class UIManager extends Component {
             }
             if (settingsPanel) {
                 settingsPanel.active = false;
+            }
+        }
+
+        // 5. 退出游戏后切回主菜单背景音乐（backMusic.mp3），前提是玩家开启了BGM
+        const soundManager = SoundManager.getInstance();
+        if (soundManager) {
+            // 先确保战斗音乐停止，再播放主菜单音乐
+            soundManager.stopGameBgm();
+            if (soundManager.isBgmOn()) {
+                soundManager.playMenuBgm();
+            } else {
+                console.info('[UIManager.onExitGameClick] BGM is disabled, skip playing menu BGM');
             }
         }
         
