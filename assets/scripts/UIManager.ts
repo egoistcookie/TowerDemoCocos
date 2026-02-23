@@ -124,6 +124,17 @@ export class UIManager extends Component {
         if (this.restartButton && this.restartButton.node) {
             this.setupButtonSprite(this.restartButton.node, 'restart.png', 'restart_down.png');
         }
+        
+        // 绑定开始游戏按钮事件（延迟绑定，确保按钮已创建）
+        this.scheduleOnce(() => {
+            this.bindStartGameButton();
+        }, 0.1);
+        
+        // 播放主菜单背景音乐（进入游戏首页时播放 backMusic.mp3）
+        const soundManager = SoundManager.getInstance();
+        if (soundManager && soundManager.isBgmOn()) {
+            soundManager.playMenuBgm();
+        }
     }
 
     /**
@@ -2261,5 +2272,73 @@ export class UIManager extends Component {
             return null;
         };
         return dfs(scene);
+    }
+    
+    /**
+     * 绑定开始游戏按钮事件
+     */
+    private bindStartGameButton() {
+        // 查找开始游戏按钮
+        let startButton = find('Canvas/BottomSelection/GameMainPanel/StartGameButton');
+        if (!startButton) {
+            console.warn('[UIManager] bindStartGameButton() 未找到开始游戏按钮');
+            return;
+        }
+        
+        this.startGameButtonNode = startButton;
+        
+        // 获取按钮组件
+        const buttonComp = startButton.getComponent(Button);
+        if (!buttonComp) {
+            console.warn('[UIManager] bindStartGameButton() 开始游戏按钮没有 Button 组件');
+            return;
+        }
+        
+        // 绑定点击事件
+        buttonComp.node.on(Button.EventType.CLICK, () => {
+            this.onStartGameClick();
+        }, this);
+        
+        console.info('[UIManager] bindStartGameButton() 开始游戏按钮事件已绑定');
+    }
+    
+    /**
+     * 开始游戏按钮点击事件
+     */
+    private onStartGameClick() {
+        console.info('[UIManager] onStartGameClick() 点击开始游戏按钮');
+        
+        // 查找 GameManager
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        
+        if (!this.gameManager) {
+            console.error('[UIManager] onStartGameClick() 未找到 GameManager');
+            return;
+        }
+        
+        // 切换背景音乐到游戏音乐（backMusic1.mp3）
+        const soundManager = SoundManager.getInstance();
+        if (soundManager && soundManager.isBgmOn()) {
+            console.info('[UIManager] onStartGameClick() 切换到游戏背景音乐');
+            soundManager.playGameBgm();
+        }
+        
+        // 调用 GameManager 的开始游戏方法
+        const gm = this.gameManager as any;
+        if (gm.startGameWithLevel) {
+            gm.startGameWithLevel(this.currentLevel);
+        } else if (gm.startGame) {
+            gm.startGame();
+        } else {
+            console.error('[UIManager] onStartGameClick() GameManager 没有 startGame 或 startGameWithLevel 方法');
+        }
+        
+        // 隐藏底部三页签
+        const bottomSelection = find('Canvas/BottomSelection');
+        if (bottomSelection) {
+            bottomSelection.active = false;
+        }
     }
 }

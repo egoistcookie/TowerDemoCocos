@@ -438,27 +438,6 @@ export class WatchTower extends Build {
     }
 
     /**
-     * 覆盖die：哨塔占用两个石墙网格，需要同时释放上方网格
-     */
-    protected die() {
-        // 先释放上方网格，再交给父类释放下方网格等通用逻辑
-        if (!this.gridPanel) {
-            this.findGridPanel();
-        }
-        const panel: any = this.gridPanel;
-        if (panel && this.gridX >= 0 && this.gridY >= 0) {
-            if (typeof panel.gridHeight === 'number' &&
-                this.gridY + 1 < panel.gridHeight &&
-                panel.releaseGrid && typeof panel.releaseGrid === 'function') {
-                panel.releaseGrid(this.gridX, this.gridY + 1);
-            }
-        }
-
-        // 调用父类实现（会释放下方网格，并处理其它通用逻辑）
-        super.die();
-    }
-
-    /**
      * 升级按钮点击事件（参考Role的升级机制）
      */
     protected onUpgradeClick(event?: EventTouch) {
