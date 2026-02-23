@@ -10,6 +10,7 @@ import { BuildingGridPanel } from '../BuildingGridPanel';
 import { UnitType } from '../UnitType';
 import { BuildingPool } from '../BuildingPool';
 import { DamageStatistics } from '../DamageStatistics';
+import { BuffManager } from '../BuffManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('Build')
@@ -96,6 +97,8 @@ export class Build extends Component {
      * 从对象池获取的建筑物会调用此方法，而不是start方法
      */
     onEnable() {
+        console.info(`[Build] onEnable 被调用，单位类型: ${this.constructor.name}`);
+        
         // 从对象池获取时，重新初始化状态
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
@@ -122,9 +125,14 @@ export class Build extends Component {
                 this.healthBar.setHealth(this.currentHealth);
             }
         }
+        
+        // 应用已保存的增益效果
+        this.applyBuffsFromManager();
     }
 
     protected start() {
+        console.info(`[Build] start 被调用，单位类型: ${this.constructor.name}`);
+        
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
 
@@ -148,6 +156,9 @@ export class Build extends Component {
 
         // 创建血条
         this.createHealthBar();
+        
+        // 应用已保存的增益效果（首次创建时）
+        this.applyBuffsFromManager();
     }
 
     protected findGameManager() {
@@ -1279,6 +1290,42 @@ export class Build extends Component {
         } catch (error) {
             // 忽略错误，避免影响游戏流程
             console.warn('[Build] 记录伤害统计失败:', error);
+        }
+    }
+    
+    /**
+     * 从增益管理器应用增益效果（新建造的建筑物会调用此方法）
+     */
+    protected applyBuffsFromManager() {
+        const buffManager = BuffManager.getInstance();
+        const unitId = this.constructor.name; // 获取类名作为单位ID
+        
+        console.info(`[Build] applyBuffsFromManager 被调用，单位ID: ${unitId}`);
+        
+        // 应用增益
+        buffManager.applyBuffsToUnit(this, unitId);
+        
+        // 应用增益后，强制更新血条显示
+        if (this.healthBar && this.healthBar.isValid) {
+            this.healthBar.setMaxHealth(this.maxHealth);
+            this.healthBar.setHealth(this.currentHealth);
+            console.info(`[Build] 更新血条显示: ${this.currentHealth}/${this.maxHealth}`);
+        }
+        
+        // 如果单位被选中，更新单位信息面板
+        if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            const updateInfo: any = {
+                currentHealth: this.currentHealth,
+                maxHealth: this.maxHealth
+            };
+            
+            // 只有防御塔才有攻击力属性
+            if ('attackDamage' in this) {
+                updateInfo.attackDamage = (this as any).attackDamage;
+            }
+            
+            this.unitSelectionManager.updateUnitInfo(updateInfo);
+            console.info(`[Build] 更新单位信息面板`);
         }
     }
 }

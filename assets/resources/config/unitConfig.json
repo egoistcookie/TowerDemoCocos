@@ -395,7 +395,7 @@
   "TrollSpearman": {
     "baseStats": {
       "maxHealth": 40,
-      "attackRange": 200,
+      "attackRange": 150,
       "attackDamage": 6,
       "attackInterval": 1.8,
       "moveSpeed": 55,

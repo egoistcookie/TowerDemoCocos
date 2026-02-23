@@ -1,4 +1,5 @@
 import { _decorator, Component, Node, Sprite, Label, Button, find, UITransform, Vec3, tween, Color, UIOpacity, Graphics, view, SpriteFrame } from 'cc';
+import { BuffManager } from './BuffManager';
 const { ccclass, property } = _decorator;
 
 /**
@@ -73,11 +74,11 @@ export class BuffCardPopup extends Component {
         
         // 初始隐藏
         if (this.container) {
-            console.info('[BuffCardPopup] start() 中设置 container.active = false，当前 active=', this.container.active);
-            console.info('[BuffCardPopup] start() 中检查 Graphics，bgGraphics.exists=', this.container.getComponent(Graphics)?.isValid);
-            console.info('[BuffCardPopup] start() 中检查 Graphics，bgGraphics.enabled=', this.container.getComponent(Graphics)?.enabled);
+            //console.info('[BuffCardPopup] start() 中设置 container.active = false，当前 active=', this.container.active);
+            //console.info('[BuffCardPopup] start() 中检查 Graphics，bgGraphics.exists=', this.container.getComponent(Graphics)?.isValid);
+            //console.info('[BuffCardPopup] start() 中检查 Graphics，bgGraphics.enabled=', this.container.getComponent(Graphics)?.enabled);
             this.container.active = false;
-            console.info('[BuffCardPopup] start() 中设置后 container.active=', this.container.active);
+            //console.info('[BuffCardPopup] start() 中设置后 container.active=', this.container.active);
         }
         
         // 绑定卡片点击事件
@@ -137,13 +138,13 @@ export class BuffCardPopup extends Component {
      * @param onClose 可选的回调函数，在卡片弹窗关闭时调用
      */
     show(cards: BuffCardData[], onClose?: () => void) {
-        console.info('[BuffCardPopup] show() 被调用，cards数量=', cards.length);
+        //console.info('[BuffCardPopup] show() 被调用，cards数量=', cards.length);
         if (!this.container) {
             console.error('[BuffCardPopup] container节点不存在');
             return;
         }
         
-        console.info('[BuffCardPopup] container节点存在，isValid=', this.container.isValid, 'active=', this.container.active);
+        //console.info('[BuffCardPopup] container节点存在，isValid=', this.container.isValid, 'active=', this.container.active);
         
         // 限制最多3张卡片
         this.cardData = cards.slice(0, 3);
@@ -155,7 +156,7 @@ export class BuffCardPopup extends Component {
             return;
         }
         
-        console.info('[BuffCardPopup] 卡片数据有效，数量=', this.cardData.length);
+        //console.info('[BuffCardPopup] 卡片数据有效，数量=', this.cardData.length);
         this.onCloseCallback = onClose || null;
         
         // 重置所有卡片状态（确保第二次显示时状态正确）
@@ -163,7 +164,7 @@ export class BuffCardPopup extends Component {
         
         // 暂停游戏
         if (this.gameManager) {
-            console.info('[BuffCardPopup] 暂停游戏');
+            //console.info('[BuffCardPopup] 暂停游戏');
             this.gameManager.pauseGame();
         } else {
             console.warn('[BuffCardPopup] gameManager不存在');
@@ -192,7 +193,7 @@ export class BuffCardPopup extends Component {
      * 强制重新绘制所有Graphics（参考BuildingGridPanel的做法）
      */
     private forceRedrawGraphics() {
-        console.info('[BuffCardPopup] forceRedrawGraphics() 被调用');
+        //console.info('[BuffCardPopup] forceRedrawGraphics() 被调用');
         
         // 重新绘制容器背景Graphics
         const bgGraphics = this.container.getComponent(Graphics);
@@ -204,7 +205,7 @@ export class BuffCardPopup extends Component {
             if (uiTransform) {
                 const popupWidth = uiTransform.width;
                 const popupHeight = uiTransform.height;
-                console.info('[BuffCardPopup] 绘制容器背景，尺寸=', popupWidth, 'x', popupHeight, '锚点=', uiTransform.anchorX, uiTransform.anchorY);
+                //console.info('[BuffCardPopup] 绘制容器背景，尺寸=', popupWidth, 'x', popupHeight, '锚点=', uiTransform.anchorX, uiTransform.anchorY);
                 // 使用更明显的颜色进行测试（红色背景，确保可见）
                 bgGraphics.fillColor = new Color(255, 0, 0, 255); // 红色，完全不透明
                 bgGraphics.roundRect(-popupWidth / 2, -popupHeight / 2, popupWidth, popupHeight, 15);
@@ -213,8 +214,8 @@ export class BuffCardPopup extends Component {
                 bgGraphics.lineWidth = 5; // 更粗的边框
                 bgGraphics.roundRect(-popupWidth / 2, -popupHeight / 2, popupWidth, popupHeight, 15);
                 bgGraphics.stroke();
-                console.info('[BuffCardPopup] Graphics绘制完成，fillColor=', bgGraphics.fillColor, 'strokeColor=', bgGraphics.strokeColor);
-                console.info('[BuffCardPopup] 容器背景Graphics已重新绘制，enabled=', bgGraphics.enabled, 'container.active=', this.container.active);
+                //console.info('[BuffCardPopup] Graphics绘制完成，fillColor=', bgGraphics.fillColor, 'strokeColor=', bgGraphics.strokeColor);
+                //console.info('[BuffCardPopup] 容器背景Graphics已重新绘制，enabled=', bgGraphics.enabled, 'container.active=', this.container.active);
             } else {
                 console.warn('[BuffCardPopup] 容器UITransform组件不存在！');
             }
@@ -244,7 +245,7 @@ export class BuffCardPopup extends Component {
                             cardBgGraphics.lineWidth = 2;
                             cardBgGraphics.roundRect(-cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, 10);
                             cardBgGraphics.stroke();
-                            console.info(`[BuffCardPopup] 卡片${index + 1}背景Graphics已重新绘制，enabled=`, cardBgGraphics.enabled);
+                            //console.info(`[BuffCardPopup] 卡片${index + 1}背景Graphics已重新绘制，enabled=`, cardBgGraphics.enabled);
                         }
                     } else {
                         console.warn(`[BuffCardPopup] 卡片${index + 1}背景Graphics组件不存在！`);
@@ -297,8 +298,8 @@ export class BuffCardPopup extends Component {
      * 更新卡片显示
      */
     private updateCards() {
-        console.info('[BuffCardPopup] updateCards() 被调用，cardData.length=', this.cardData.length);
-        console.info('[BuffCardPopup] card1存在=', !!this.card1, 'card2存在=', !!this.card2, 'card3存在=', !!this.card3);
+        //console.info('[BuffCardPopup] updateCards() 被调用，cardData.length=', this.cardData.length);
+        //console.info('[BuffCardPopup] card1存在=', !!this.card1, 'card2存在=', !!this.card2, 'card3存在=', !!this.card3);
         
         const cardCount = this.cardData.length;
         
@@ -307,7 +308,7 @@ export class BuffCardPopup extends Component {
             // 只有1张卡片，居中显示
             if (this.card1) {
                 this.card1.setPosition(0, 0, 0);
-                console.info('[BuffCardPopup] 1张卡片，居中显示，位置=', this.card1.position);
+                //console.info('[BuffCardPopup] 1张卡片，居中显示，位置=', this.card1.position);
             }
         } else if (cardCount === 2) {
             // 2张卡片，左右分布
@@ -319,20 +320,20 @@ export class BuffCardPopup extends Component {
                     const totalWidth = card1Transform.width + card2Transform.width + spacing;
                     this.card1.setPosition(-totalWidth / 2 + card1Transform.width / 2, 0, 0);
                     this.card2.setPosition(totalWidth / 2 - card2Transform.width / 2, 0, 0);
-                    console.info('[BuffCardPopup] 2张卡片，左右分布');
+                    //console.info('[BuffCardPopup] 2张卡片，左右分布');
                 }
             }
         } else if (cardCount === 3) {
             // 3张卡片，保持原有布局（已在创建时设置好位置）
-            console.info('[BuffCardPopup] 3张卡片，保持原有布局');
+            //console.info('[BuffCardPopup] 3张卡片，保持原有布局');
         }
         
         // 更新第一张卡片
         if (this.cardData.length > 0 && this.card1) {
-            console.info('[BuffCardPopup] 更新第一张卡片');
+            //console.info('[BuffCardPopup] 更新第一张卡片');
             this.updateCard(this.card1, this.card1Icon, this.card1Name, this.card1Description, this.cardData[0]);
             this.card1.active = true;
-            console.info('[BuffCardPopup] card1 active=', this.card1.active, 'position=', this.card1.position);
+            //console.info('[BuffCardPopup] card1 active=', this.card1.active, 'position=', this.card1.position);
         } else if (this.card1) {
             console.warn('[BuffCardPopup] 第一张卡片数据不存在，隐藏卡片');
             this.card1.active = false;
@@ -342,7 +343,7 @@ export class BuffCardPopup extends Component {
         
         // 更新第二张卡片
         if (this.cardData.length > 1 && this.card2) {
-            console.info('[BuffCardPopup] 更新第二张卡片');
+            //console.info('[BuffCardPopup] 更新第二张卡片');
             this.updateCard(this.card2, this.card2Icon, this.card2Name, this.card2Description, this.cardData[1]);
             this.card2.active = true;
         } else if (this.card2) {
@@ -354,7 +355,7 @@ export class BuffCardPopup extends Component {
         
         // 更新第三张卡片
         if (this.cardData.length > 2 && this.card3) {
-            console.info('[BuffCardPopup] 更新第三张卡片');
+            //console.info('[BuffCardPopup] 更新第三张卡片');
             this.updateCard(this.card3, this.card3Icon, this.card3Name, this.card3Description, this.cardData[2]);
             this.card3.active = true;
         } else if (this.card3) {
@@ -375,14 +376,14 @@ export class BuffCardPopup extends Component {
             icon.node.active = false; // 隐藏顶部图标
         }
         // 中间的单位图片（从预制体的 unitIcon 获取）
-        console.info(`[BuffCardPopup] updateCard: 单位=${data.unitName}, unitId=${data.unitId}, unitIcon存在=${!!data.unitIcon}, unitImageSprite存在=${!!unitImageSprite}, 稀有度=${data.rarity}`);
+        //console.info(`[BuffCardPopup] updateCard: 单位=${data.unitName}, unitId=${data.unitId}, unitIcon存在=${!!data.unitIcon}, unitImageSprite存在=${!!unitImageSprite}, 稀有度=${data.rarity}`);
         if (data.unitIcon && unitImageSprite) {
             // 确保图片节点是激活的
             if (!unitImageSprite.node.active) {
                 unitImageSprite.node.active = true;
             }
             unitImageSprite.spriteFrame = data.unitIcon;
-            console.info(`[BuffCardPopup] updateCard: 已设置单位图片，单位=${data.unitName}, spriteFrame=${!!unitImageSprite.spriteFrame}`);
+            //console.info(`[BuffCardPopup] updateCard: 已设置单位图片，单位=${data.unitName}, spriteFrame=${!!unitImageSprite.spriteFrame}`);
         } else if (unitImageSprite) {
             unitImageSprite.node.active = false;
             console.warn(`[BuffCardPopup] updateCard: 单位图片不存在，隐藏图片节点，单位=${data.unitName}`);
@@ -436,7 +437,7 @@ export class BuffCardPopup extends Component {
                 lineWidth = 2;
         }
         
-        console.info(`[BuffCardPopup] updateCardBorder: 卡片=${cardNode.name}, 稀有度=${rarity}, 边框颜色=(${borderColor.r}, ${borderColor.g}, ${borderColor.b}), 线宽=${lineWidth}`);
+        //console.info(`[BuffCardPopup] updateCardBorder: 卡片=${cardNode.name}, 稀有度=${rarity}, 边框颜色=(${borderColor.r}, ${borderColor.g}, ${borderColor.b}), 线宽=${lineWidth}`);
         
         // 清除旧的边框并重新绘制
         const uiTransform = cardBg.getComponent(UITransform);
@@ -458,7 +459,7 @@ export class BuffCardPopup extends Component {
             cardBgGraphics.roundRect(-cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, 10);
             cardBgGraphics.stroke();
             
-            console.info(`[BuffCardPopup] updateCardBorder: 边框已更新，实际颜色=(${cardBgGraphics.strokeColor.r}, ${cardBgGraphics.strokeColor.g}, ${cardBgGraphics.strokeColor.b})`);
+            //console.info(`[BuffCardPopup] updateCardBorder: 边框已更新，实际颜色=(${cardBgGraphics.strokeColor.r}, ${cardBgGraphics.strokeColor.g}, ${cardBgGraphics.strokeColor.b})`);
         } else {
             console.warn(`[BuffCardPopup] updateCardBorder: 找不到UITransform组件，卡片=${cardNode.name}`);
         }
@@ -489,16 +490,21 @@ export class BuffCardPopup extends Component {
             return;
         }
         
+        // 获取增益管理器
+        const buffManager = BuffManager.getInstance();
+        
         // 处理全局增益（人口、金币等）
         if (cardData.buffType === 'populationIncrease') {
             // 增加人口上限
             if (this.gameManager && this.gameManager.getMaxPopulation) {
                 const currentMaxPopulation = this.gameManager.getMaxPopulation();
                 this.gameManager.setMaxPopulation(currentMaxPopulation + cardData.buffValue);
-                console.info(`[BuffCardPopup] 人口上限增加 ${cardData.buffValue}，当前上限: ${currentMaxPopulation + cardData.buffValue}`);
+                //console.info(`[BuffCardPopup] 人口上限增加 ${cardData.buffValue}，当前上限: ${currentMaxPopulation + cardData.buffValue}`);
             } else {
                 console.error('[BuffCardPopup] GameManager 或 getMaxPopulation 方法不存在');
             }
+            // 保存到增益管理器
+            buffManager.addBuff('global', cardData.buffType, cardData.buffValue);
             return;
         }
         
@@ -506,10 +512,12 @@ export class BuffCardPopup extends Component {
             // 增加金币
             if (this.gameManager && this.gameManager.addGold) {
                 this.gameManager.addGold(cardData.buffValue);
-                console.info(`[BuffCardPopup] 获得 ${cardData.buffValue} 金币`);
+                //console.info(`[BuffCardPopup] 获得 ${cardData.buffValue} 金币`);
             } else {
                 console.error('[BuffCardPopup] GameManager 或 addGold 方法不存在');
             }
+            // 保存到增益管理器
+            buffManager.addBuff('global', cardData.buffType, cardData.buffValue);
             return;
         }
         
@@ -519,10 +527,13 @@ export class BuffCardPopup extends Component {
             return;
         }
         
+        // 保存增益到管理器（新单位生成时会自动应用）
+        buffManager.addBuff(cardData.unitId, cardData.buffType, cardData.buffValue);
+        
         // 获取所有已上场的该类型单位
         const units = this.getUnitsByType(cardData.unitId);
         
-        // 应用增益到所有单位
+        // 应用增益到所有已存在的单位
         for (const unit of units) {
             if (!unit || !unit.isValid || !unit.active) {
                 continue;
@@ -585,14 +596,14 @@ export class BuffCardPopup extends Component {
                 unitScript._buffAttackDamagePercent += cardData.buffValue;
                 const damageMultiplier = 1 + unitScript._buffAttackDamagePercent / 100;
                 unitScript.attackDamage = Math.floor(unitScript._originalAttackDamage * damageMultiplier);
-                console.info(`[BuffCardPopup] 应用攻击力增幅 ${cardData.buffValue}%，累积增幅 ${unitScript._buffAttackDamagePercent}%，最终攻击力: ${unitScript.attackDamage}`);
+                //console.info(`[BuffCardPopup] 应用攻击力增幅 ${cardData.buffValue}%，累积增幅 ${unitScript._buffAttackDamagePercent}%，最终攻击力: ${unitScript.attackDamage}`);
                 break;
             case 'attackSpeed':
                 // 攻击速度提升（减少攻击间隔，百分比叠加）
                 unitScript._buffAttackSpeedPercent += cardData.buffValue;
                 const speedMultiplier = 1 + unitScript._buffAttackSpeedPercent / 100;
                 unitScript.attackInterval = unitScript._originalAttackInterval / speedMultiplier;
-                console.info(`[BuffCardPopup] 应用攻击速度增幅 ${cardData.buffValue}%，累积增幅 ${unitScript._buffAttackSpeedPercent}%，最终攻击间隔: ${unitScript.attackInterval}`);
+                //console.info(`[BuffCardPopup] 应用攻击速度增幅 ${cardData.buffValue}%，累积增幅 ${unitScript._buffAttackSpeedPercent}%，最终攻击间隔: ${unitScript.attackInterval}`);
                 break;
             case 'maxHealth':
                 // 生命值提升（百分比叠加）
@@ -626,14 +637,14 @@ export class BuffCardPopup extends Component {
                     });
                 }
 
-                console.info(`[BuffCardPopup] 应用生命值增幅 ${cardData.buffValue}%，累积增幅 ${unitScript._buffMaxHealthPercent}%，最终生命上限: ${unitScript.maxHealth}`);
+                //console.info(`[BuffCardPopup] 应用生命值增幅 ${cardData.buffValue}%，累积增幅 ${unitScript._buffMaxHealthPercent}%，最终生命上限: ${unitScript.maxHealth}`);
                 break;
             case 'moveSpeed':
                 // 移动速度提升（百分比叠加）
                 unitScript._buffMoveSpeedPercent += cardData.buffValue;
                 const moveMultiplier = 1 + unitScript._buffMoveSpeedPercent / 100;
                 unitScript.moveSpeed = unitScript._originalMoveSpeed * moveMultiplier;
-                console.info(`[BuffCardPopup] 应用移动速度增幅 ${cardData.buffValue}%，累积增幅 ${unitScript._buffMoveSpeedPercent}%，最终移动速度: ${unitScript.moveSpeed}`);
+                //console.info(`[BuffCardPopup] 应用移动速度增幅 ${cardData.buffValue}%，累积增幅 ${unitScript._buffMoveSpeedPercent}%，最终移动速度: ${unitScript.moveSpeed}`);
                 break;
         }
     }

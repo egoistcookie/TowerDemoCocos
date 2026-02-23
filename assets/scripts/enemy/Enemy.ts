@@ -1369,236 +1369,33 @@ export class Enemy extends Component {
             this.stopAllAnimations();
         }
 
+        // 计算移动方向
         const direction = new Vec3();
         Vec3.subtract(direction, this.currentTarget.worldPosition, this.node.worldPosition);
-        // 性能优化：使用平方距离比较，避免开方运算
-        const distanceSq = direction.lengthSqr();
-        const attackRangeSq = this.attackRange * this.attackRange;
-        
-        // 检查目标是否是石墙、哨塔、冰塔或雷塔
-        const targetScript = this.currentTarget.getComponent('StoneWall') as any;
-        const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
-        const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
-        const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
-        const isTargetStoneWall = !!targetScript;
-        const isTargetWatchTower = !!watchTowerScript;
-        const isTargetIceTower = !!iceTowerScript;
-        const isTargetThunderTower = !!thunderTowerScript;
+        const distance = direction.length();
 
-        // 如果目标是石墙、哨塔、冰塔或雷塔，使用简化的移动逻辑：直接移动到攻击范围内
-        if (isTargetStoneWall || isTargetWatchTower || isTargetIceTower || isTargetThunderTower) {
-            // 检查是否已经在攻击范围内（使用平方距离）
-            if (distanceSq <= attackRangeSq) {
-                // 已经在攻击范围内，停止移动，让update()方法处理攻击
-                return;
-            }
-            
-            // 对于防御塔目标，需要检查路径上的石墙阻挡
-            if (isTargetWatchTower || isTargetIceTower || isTargetThunderTower) {
-                direction.normalize();
-                const moveStep = this.moveSpeed * deltaTime;
-                const currentPos = this.node.worldPosition.clone();
-                const newPos = new Vec3();
-                Vec3.scaleAndAdd(newPos, currentPos, direction, moveStep);
-                
-                // 检查移动路径上是否有石墙阻挡
-                const hasCollision = this.checkCollisionWithStoneWall(newPos);
-                
-                if (hasCollision) {
-                    // 路径被石墙阻挡，先攻击阻挡的石墙
-                    const blockingWall = this.getBlockingStoneWall(newPos);
-                    if (blockingWall) {
-                        this.currentTarget = blockingWall;
-                        return;
-                    }
-                    // 如果找不到阻挡的石墙，尝试绕路
-                    const detourPos = this.calculateDetourPosition(direction, deltaTime);
-                    if (detourPos) {
-                        const detourDirection = new Vec3();
-                        Vec3.subtract(detourDirection, detourPos, currentPos);
-                        const detourDistance = detourDirection.length();
-                        
-                        if (detourDistance > 0.1) {
-                            detourDirection.normalize();
-                            const moveDist = Math.min(this.moveSpeed * deltaTime, detourDistance);
-                            const smoothDetourPos = new Vec3();
-                            Vec3.scaleAndAdd(smoothDetourPos, currentPos, detourDirection, moveDist);
-                            const clampedPos = this.clampPositionToScreen(smoothDetourPos);
-                            this.node.setWorldPosition(clampedPos);
-                            this.flipDirection(detourDirection);
-                            this.playWalkAnimation();
-                        }
-                        return;
-                    } else {
-                        // 无法绕路，攻击最近的石墙
-                        const nearestWall = this.findNearestStoneWall();
-                        if (nearestWall) {
-                            this.currentTarget = nearestWall;
-                            return;
-                        }
-                        // 找不到石墙，停止移动
-                        return;
-                    }
-                }
-                
-                // 没有碰撞，正常移动
-                const clampedPos = this.clampPositionToScreen(newPos);
-                this.node.setWorldPosition(clampedPos);
-                this.flipDirection(direction);
-                this.playWalkAnimation();
-                return;
-            }
-            
-            // 对于石墙目标，保持原有逻辑（直接移动到攻击范围）
-            direction.normalize();
-            const moveStep = this.moveSpeed * deltaTime;
-            const currentPos = this.node.worldPosition.clone();
-            const newPos = new Vec3();
-            Vec3.scaleAndAdd(newPos, currentPos, direction, moveStep);
-            
-            // 性能优化：检查新位置到石墙或哨塔的距离（使用平方距离）
-            const newDx = newPos.x - this.currentTarget.worldPosition.x;
-            const newDy = newPos.y - this.currentTarget.worldPosition.y;
-            const newDistanceSq = newDx * newDx + newDy * newDy;
-
-            // 如果移动后距离小于等于攻击范围，允许移动到该位置（即使检测到碰撞）
-            if (newDistanceSq <= attackRangeSq) {
-                // 移动后会在攻击范围内，正常移动（忽略碰撞检测）
-                
-                const clampedPos = this.clampPositionToScreen(newPos);
-                
-                // 检查位置是否被限制（如果被限制，说明可能到达了屏幕边界）
-                const wasClamped = Math.abs(clampedPos.x - newPos.x) > 0.1 || Math.abs(clampedPos.y - newPos.y) > 0.1;
-                if (wasClamped) {
-                }
-                
-                this.node.setWorldPosition(clampedPos);
-                this.flipDirection(direction);
-                this.playWalkAnimation();
-            } else {
-                // 移动后距离仍然大于攻击范围，计算攻击范围边缘位置并移动到那里
-                const targetPos = this.currentTarget.worldPosition;
-                const attackRangePos = new Vec3();
-                // 从石墙或哨塔位置向敌人方向后退 attackRange 距离
-                Vec3.scaleAndAdd(attackRangePos, targetPos, direction, -this.attackRange);
-                
-                // 计算从当前位置到攻击范围边缘的移动方向
-                const moveToRangeDirection = new Vec3();
-                Vec3.subtract(moveToRangeDirection, attackRangePos, currentPos);
-                const moveToRangeDistance = moveToRangeDirection.length();
-
-                if (moveToRangeDistance > moveStep) {
-                    // 还需要移动，计算新位置
-                    moveToRangeDirection.normalize();
-                    Vec3.scaleAndAdd(newPos, currentPos, moveToRangeDirection, moveStep);
-                    
-                    // 检查新位置是否会被clampPositionToScreen限制
-                    const clampedPos = this.clampPositionToScreen(newPos);
-
-                    // 检查位置是否被限制（如果被限制，说明可能到达了屏幕边界）
-                    const wasClamped = Math.abs(clampedPos.x - newPos.x) > 0.1 || Math.abs(clampedPos.y - newPos.y) > 0.1;
-                    if (wasClamped) {
-                    }
-
-                    this.node.setWorldPosition(clampedPos);
-                    this.flipDirection(moveToRangeDirection);
-                    this.playWalkAnimation();
-                } else {
-                    // 已经到达攻击范围边缘，直接移动到该位置
-                    
-                    const clampedPos = this.clampPositionToScreen(attackRangePos);
-                    this.node.setWorldPosition(clampedPos);
-                    this.flipDirection(direction);
-                }
-            }
+        // 如果距离太近，停止移动
+        if (distance < 0.1) {
             return;
         }
-        
-        // 非石墙目标的移动逻辑（保持原有逻辑，使用平方距离）
-        const minDistanceSq = 0.01; // 0.1的平方
-        if (distanceSq > minDistanceSq) {
-            direction.normalize();
-            
-            // 应用敌人避让逻辑
-            const finalDirection = this.calculateEnemyAvoidanceDirection(this.node.worldPosition, direction, deltaTime);
-            
-            const newPos = new Vec3();
-            Vec3.scaleAndAdd(newPos, this.node.worldPosition, finalDirection, this.moveSpeed * deltaTime);
 
-            // 检查移动路径上是否有石墙阻挡
-            const hasCollision = this.checkCollisionWithStoneWall(newPos);
-            
-            if (hasCollision) {
-                // 检查碰撞的石墙是否是目标石墙
-                const blockingWall = this.getBlockingStoneWall(newPos);
-                const isTargetWall = blockingWall && blockingWall === this.currentTarget;
-                
-                if (isTargetWall) {
-                    // 碰撞的是目标石墙，说明已经到达，停止移动
-                    return;
-                } else {
-                    // 路径被其他石墙阻挡，先尝试局部绕路
-                    const detourPos = this.calculateDetourPosition(direction, deltaTime);
-                    if (detourPos) {
-                        // 找到绕路位置，平滑移动到该位置（避免闪现）
-                        const detourDirection = new Vec3();
-                        Vec3.subtract(detourDirection, detourPos, this.node.worldPosition);
-                        const detourDistance = detourDirection.length();
-                        
-                        if (detourDistance > 0.1) {
-                            detourDirection.normalize();
-                            // 计算平滑移动的距离，不超过移动速度
-                            const moveDist = Math.min(this.moveSpeed * deltaTime, detourDistance);
-                            const smoothDetourPos = new Vec3();
-                            Vec3.scaleAndAdd(smoothDetourPos, this.node.worldPosition, detourDirection, moveDist);
-                            const clampedPos = this.clampPositionToScreen(smoothDetourPos);
-                            this.node.setWorldPosition(clampedPos);
-                            
-                            // 根据移动方向翻转
-                            this.flipDirection(detourDirection);
-                            
-                            // 播放行走动画
-                            this.playWalkAnimation();
-                        }
-                        return;
-                    } else {
-                        // 全局路径可以绕行，继续尝试移动（可能只是局部阻挡）
-                        // 尝试一个小的偏移来绕过局部阻挡
-                        const smallOffset = new Vec3(-direction.y, direction.x, 0);
-                        smallOffset.normalize();
-                        smallOffset.multiplyScalar(30); // 30像素的小偏移
-                        const offsetPos = new Vec3();
-                        Vec3.add(offsetPos, newPos, smallOffset);
-                        if (!this.checkCollisionWithStoneWall(offsetPos)) {
-                            const clampedPos = this.clampPositionToScreen(offsetPos);
-                            this.node.setWorldPosition(clampedPos);
-                            this.flipDirection(direction);
-                            this.playWalkAnimation();
-                            return;
-                        }
-                        // 如果小偏移也不行，所有绕路尝试都失败，攻击最近的石墙
-                        const nearestWall = this.findNearestStoneWall();
-                        if (nearestWall) {
-                            this.currentTarget = nearestWall;
-                            return;
-                        }
-                        // 找不到石墙，停止移动
-                        return;
-                    }
-                }
-            } else {
-            }
-            
-            // 限制位置在屏幕范围内
-            const clampedPos = this.clampPositionToScreen(newPos);
-            this.node.setWorldPosition(clampedPos);
-            
-            // 根据移动方向翻转
-            this.flipDirection(direction);
-            
-            // 播放行走动画
-            this.playWalkAnimation();
-        }
+        // 归一化方向
+        direction.normalize();
+
+        // 计算新位置
+        const moveDistance = this.moveSpeed * deltaTime;
+        const newPos = new Vec3();
+        Vec3.scaleAndAdd(newPos, this.node.worldPosition, direction, moveDistance);
+
+        // 限制在屏幕范围内
+        const clampedPos = this.clampPositionToScreen(newPos);
+        this.node.setWorldPosition(clampedPos);
+
+        // 根据移动方向翻转
+        this.flipDirection(direction);
+
+        // 播放行走动画
+        this.playWalkAnimation();
     }
 
     private moveTowardsCrystal(deltaTime: number) {
@@ -2733,6 +2530,7 @@ export class Enemy extends Component {
         // 更新攻击计时器
         this.attackTimer += deltaTime;
 
+        // 步骤1：索敌 - 查找索敌范围内的目标
         // 正在播放攻击动画时，保持当前目标，仅检查其是否仍然有效
         if (this.isPlayingAttackAnimation) {
             if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
@@ -2740,19 +2538,12 @@ export class Enemy extends Component {
             }
         } else {
             // 不在攻击动画中，正常索敌
-            this.findTarget();
+            this.findTargetInRange();
         }
 
-        // 如果没有找到任何单位目标，且水晶存活，则以水晶为目标
-        if (!this.currentTarget && this.targetCrystal && this.targetCrystal.isValid) {
-            const crystalScript = this.targetCrystal.getComponent('Crystal') as any;
-            if (crystalScript && crystalScript.isAlive && crystalScript.isAlive()) {
-                this.currentTarget = this.targetCrystal;
-            }
-        }
-
-        // 有目标：根据距离决定攻击或前进（目标可能是塔 / 角色 / 建筑 / 石墙 / 水晶）
-        if (this.currentTarget) {
+        // 步骤2：根据是否有目标决定行动
+        if (this.currentTarget && this.currentTarget.isValid) {
+            // 有目标：计算距离
             const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
 
             if (this.isPlayingAttackAnimation) {
@@ -2761,7 +2552,7 @@ export class Enemy extends Component {
             } else if (distance <= this.attackRange) {
                 // 在攻击范围内，停止移动并尝试攻击
                 this.stopMoving();
-                if (this.attackTimer >= this.attackInterval && !this.isPlayingAttackAnimation) {
+                if (this.attackTimer >= this.attackInterval) {
                     this.attackTimer = 0;
                     this.attack();
                 }
@@ -2770,13 +2561,215 @@ export class Enemy extends Component {
                 this.moveTowardsTarget(deltaTime);
             }
         } else {
-            // 没有任何目标，保持待机动画
-            this.stopMoving();
+            // 没有目标：朝下方移动
+            this.moveDownwards(deltaTime);
         }
 
         // 更新动画
         this.updateAnimation(deltaTime);
         return true;
+    }
+
+    /**
+     * 在索敌范围内查找目标（所有单位一视同仁）
+     */
+    private findTargetInRange() {
+        // 动态索敌范围：在画面下方三分之一时扩大索敌范围
+        const screenHeight = view.getVisibleSize().height;
+        const isInLowerThird = this.node.worldPosition.y < screenHeight / 3;
+        const detectionRange = isInLowerThird ? 400 : 200; // 下方区域索敌范围扩大至400像素
+        const detectionRangeSq = detectionRange * detectionRange;
+        const myPos = this.node.worldPosition;
+
+        let nearestTarget: Node | null = null;
+        let minDistanceSq = Infinity;
+
+        // 获取所有可能的目标单位
+        const allTargets: Node[] = [];
+
+        // 1. 石墙
+        const stoneWallsNode = find('Canvas/StoneWalls');
+        if (stoneWallsNode) {
+            for (const wall of stoneWallsNode.children) {
+                if (wall && wall.active && wall.isValid) {
+                    const wallScript = wall.getComponent('StoneWall') as any;
+                    if (wallScript && wallScript.isAlive && wallScript.isAlive()) {
+                        allTargets.push(wall);
+                    }
+                }
+            }
+        }
+
+        // 2. 防御塔（哨塔、冰塔、雷塔）
+        const watchTowersNode = find('Canvas/WatchTowers');
+        if (watchTowersNode) {
+            for (const tower of watchTowersNode.children) {
+                if (tower && tower.active && tower.isValid) {
+                    const towerScript = tower.getComponent('WatchTower') as any;
+                    if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
+                        allTargets.push(tower);
+                    }
+                }
+            }
+        }
+
+        const iceTowersNode = find('Canvas/IceTowers');
+        if (iceTowersNode) {
+            for (const tower of iceTowersNode.children) {
+                if (tower && tower.active && tower.isValid) {
+                    const towerScript = tower.getComponent('IceTower') as any;
+                    if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
+                        allTargets.push(tower);
+                    }
+                }
+            }
+        }
+
+        const thunderTowersNode = find('Canvas/ThunderTowers');
+        if (thunderTowersNode) {
+            for (const tower of thunderTowersNode.children) {
+                if (tower && tower.active && tower.isValid) {
+                    const towerScript = tower.getComponent('ThunderTower') as any;
+                    if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
+                        allTargets.push(tower);
+                    }
+                }
+            }
+        }
+
+        // 3. 我方单位（弓箭手、女猎手、精灵剑士、牧师）
+        const towersNode = find('Canvas/Towers');
+        if (towersNode) {
+            for (const tower of towersNode.children) {
+                if (tower && tower.active && tower.isValid) {
+                    const arrowerScript = tower.getComponent('Arrower') as any;
+                    const priestScript = tower.getComponent('Priest') as any;
+                    if ((arrowerScript && arrowerScript.isAlive && arrowerScript.isAlive()) ||
+                        (priestScript && priestScript.isAlive && priestScript.isAlive())) {
+                        allTargets.push(tower);
+                    }
+                }
+            }
+        }
+
+        const huntersNode = find('Canvas/Hunters');
+        if (huntersNode) {
+            for (const hunter of huntersNode.children) {
+                if (hunter && hunter.active && hunter.isValid) {
+                    const hunterScript = hunter.getComponent('Hunter') as any;
+                    if (hunterScript && hunterScript.isAlive && hunterScript.isAlive()) {
+                        allTargets.push(hunter);
+                    }
+                }
+            }
+        }
+
+        const swordsmenNode = find('Canvas/ElfSwordsmans');
+        if (swordsmenNode) {
+            for (const swordsman of swordsmenNode.children) {
+                if (swordsman && swordsman.active && swordsman.isValid) {
+                    const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
+                    if (swordsmanScript && swordsmanScript.isAlive && swordsmanScript.isAlive()) {
+                        allTargets.push(swordsman);
+                    }
+                }
+            }
+        }
+
+        // 4. 建筑物（战争古树、猎手大厅、剑士小屋、教堂）
+        const treesNode = find('Canvas/WarAncientTrees');
+        if (treesNode) {
+            for (const tree of treesNode.children) {
+                if (tree && tree.active && tree.isValid) {
+                    const treeScript = tree.getComponent('WarAncientTree') as any;
+                    if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
+                        allTargets.push(tree);
+                    }
+                }
+            }
+        }
+
+        const hallsNode = find('Canvas/HunterHalls');
+        if (hallsNode) {
+            for (const hall of hallsNode.children) {
+                if (hall && hall.active && hall.isValid) {
+                    const hallScript = hall.getComponent('HunterHall') as any;
+                    if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
+                        allTargets.push(hall);
+                    }
+                }
+            }
+        }
+
+        const swordsmanHallsNode = find('Canvas/SwordsmanHalls');
+        if (swordsmanHallsNode) {
+            for (const hall of swordsmanHallsNode.children) {
+                if (hall && hall.active && hall.isValid) {
+                    const hallScript = hall.getComponent('SwordsmanHall') as any;
+                    if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
+                        allTargets.push(hall);
+                    }
+                }
+            }
+        }
+
+        const churchesNode = find('Canvas/Churches');
+        if (churchesNode) {
+            for (const church of churchesNode.children) {
+                if (church && church.active && church.isValid) {
+                    const churchScript = church.getComponent('Church') as any;
+                    if (churchScript && churchScript.isAlive && churchScript.isAlive()) {
+                        allTargets.push(church);
+                    }
+                }
+            }
+        }
+
+        // 5. 水晶
+        if (this.targetCrystal && this.targetCrystal.isValid) {
+            const crystalScript = this.targetCrystal.getComponent('Crystal') as any;
+            if (crystalScript && crystalScript.isAlive && crystalScript.isAlive()) {
+                allTargets.push(this.targetCrystal);
+            }
+        }
+
+        // 在所有目标中找到索敌范围内最近的目标
+        for (const target of allTargets) {
+            const dx = target.worldPosition.x - myPos.x;
+            const dy = target.worldPosition.y - myPos.y;
+            const distanceSq = dx * dx + dy * dy;
+
+            if (distanceSq <= detectionRangeSq && distanceSq < minDistanceSq) {
+                minDistanceSq = distanceSq;
+                nearestTarget = target;
+            }
+        }
+
+        // 设置目标
+        this.currentTarget = nearestTarget || null!;
+    }
+
+    /**
+     * 朝下方移动（没有目标时的默认行为）
+     */
+    private moveDownwards(deltaTime: number) {
+        if (this.isPlayingAttackAnimation) {
+            this.isPlayingAttackAnimation = false;
+            this.attackComplete = false;
+            this.stopAllAnimations();
+        }
+
+        const moveDistance = this.moveSpeed * deltaTime;
+        const direction = new Vec3(0, -1, 0); // 向下
+        const newPos = new Vec3();
+        Vec3.scaleAndAdd(newPos, this.node.worldPosition, direction, moveDistance);
+
+        // 限制在屏幕范围内
+        const clampedPos = this.clampPositionToScreen(newPos);
+        this.node.setWorldPosition(clampedPos);
+
+        // 播放行走动画
+        this.playWalkAnimation();
     }
     /**
      * 重置敌人状态（用于对象池回收）

@@ -15,6 +15,7 @@ import { ShamanTotem } from './ShamanTotem';
 import { WarAncientTree } from './role/WarAncientTree';
 import { ForestGridPanel } from './ForestGridPanel';
 import { SoundManager } from './SoundManager';
+import { BuffManager } from './BuffManager';
 const { ccclass, property } = _decorator;
 
 // 重新导出 GameState 以保持向后兼容
@@ -90,7 +91,7 @@ export class GameManager extends Component {
                 console.error('[GameManager] 加载人口增加卡片图标失败:', err);
             } else {
                 this.populationIcon = spriteFrame;
-                console.info('[GameManager] 人口增加卡片图标加载成功');
+                //console.info('[GameManager] 人口增加卡片图标加载成功');
             }
         });
         
@@ -101,7 +102,7 @@ export class GameManager extends Component {
                 console.error('[GameManager] 加载金币增加卡片图标失败:', err);
             } else {
                 this.goldIcon = spriteFrame;
-                console.info('[GameManager] 金币增加卡片图标加载成功');
+                //console.info('[GameManager] 金币增加卡片图标加载成功');
             }
         });
     }
@@ -373,10 +374,10 @@ export class GameManager extends Component {
         containerNode.setPosition(0, 0, 0);
         
         // 检查节点状态（在绘制 Graphics 之前）
-        console.info('[GameManager] UnitIntroPopup Graphics 创建前：containerNode.active=', containerNode.active);
-        console.info('[GameManager] UnitIntroPopup Graphics 创建前：containerNode.isValid=', containerNode.isValid);
-        console.info('[GameManager] UnitIntroPopup Graphics 创建前：containerNode.parent=', containerNode.parent?.name);
-        console.info('[GameManager] UnitIntroPopup Graphics 创建前：containerNode.parent.active=', containerNode.parent?.active);
+        //console.info('[GameManager] UnitIntroPopup Graphics 创建前：containerNode.active=', containerNode.active);
+        //console.info('[GameManager] UnitIntroPopup Graphics 创建前：containerNode.isValid=', containerNode.isValid);
+        //console.info('[GameManager] UnitIntroPopup Graphics 创建前：containerNode.parent=', containerNode.parent?.name);
+        //console.info('[GameManager] UnitIntroPopup Graphics 创建前：containerNode.parent.active=', containerNode.parent?.active);
         
         // 设置容器颜色和透明度
         const containerGraphics = containerNode.addComponent(Graphics);
@@ -386,7 +387,7 @@ export class GameManager extends Component {
         const cornerRadius = 15;
         
         // 绘制半透明黑色背景（圆角矩形）
-        console.info('[GameManager] UnitIntroPopup 开始绘制背景，containerNode.active=', containerNode.active);
+        //console.info('[GameManager] UnitIntroPopup 开始绘制背景，containerNode.active=', containerNode.active);
         containerGraphics.roundRect(-popupWidth / 2, -popupHeight / 2, popupWidth, popupHeight, cornerRadius);
         containerGraphics.fill();
         
@@ -396,8 +397,8 @@ export class GameManager extends Component {
         containerGraphics.roundRect(-popupWidth / 2, -popupHeight / 2, popupWidth, popupHeight, cornerRadius);
         containerGraphics.stroke();
         
-        console.info('[GameManager] UnitIntroPopup Graphics 绘制完成，containerNode.active=', containerNode.active);
-        console.info('[GameManager] UnitIntroPopup Graphics 绘制完成，containerGraphics.enabled=', containerGraphics.enabled);
+        //console.info('[GameManager] UnitIntroPopup Graphics 绘制完成，containerNode.active=', containerNode.active);
+        //console.info('[GameManager] UnitIntroPopup Graphics 绘制完成，containerGraphics.enabled=', containerGraphics.enabled);
         
         // 计算左右区域的宽度和位置（使用调整后的popupWidth）
         const halfWidth = popupWidth / 2;
@@ -1416,7 +1417,7 @@ export class GameManager extends Component {
     private lastGameResultState: GameState | null = null;
 
     endGame(state: GameState) {
-        console.info(`[GameManager.endGame] 游戏结束，状态: ${state === GameState.Victory ? 'Victory' : state === GameState.Defeat ? 'Defeat' : 'Other'}`);
+        //console.info(`[GameManager.endGame] 游戏结束，状态: ${state === GameState.Victory ? 'Victory' : state === GameState.Defeat ? 'Defeat' : 'Other'}`);
         this.gameState = state;
         
         // 游戏结束时，清理所有单位（敌人直接消失，塔停止移动）
@@ -1532,7 +1533,7 @@ export class GameManager extends Component {
                     const currentLevel = this.uiManager.getCurrentLevel();
                     if (this.playerDataManager && currentLevel) {
                         this.playerDataManager.passLevel(currentLevel);
-                        console.info(`[GameManager.showGameResultPanel] 关卡 ${currentLevel} 已标记为通过`);
+                        //console.info(`[GameManager.showGameResultPanel] 关卡 ${currentLevel} 已标记为通过`);
                     }
                 }
             } else if (state === GameState.Defeat) {
@@ -1563,7 +1564,7 @@ export class GameManager extends Component {
         // 显示弹窗
         if (this.gameOverDialog) {
             this.gameOverDialog.active = true;
-            console.info('[GameManager.showGameResultPanel] 游戏结算弹窗已显示');
+            //console.info('[GameManager.showGameResultPanel] 游戏结算弹窗已显示');
         } else {
             console.warn('[GameManager.showGameResultPanel] 游戏结算弹窗不存在！');
         }
@@ -1631,9 +1632,9 @@ export class GameManager extends Component {
         const topUnits = filteredUnits.slice(0, 3);
         
         // 调试日志：输出所有单位和过滤后的结果
-        console.info(`[GameManager] 贡献榜统计: 总单位数=${allUnits.length}, 有贡献的单位数=${filteredUnits.length}, 显示前${topUnits.length}名`);
+        //console.info(`[GameManager] 贡献榜统计: 总单位数=${allUnits.length}, 有贡献的单位数=${filteredUnits.length}, 显示前${topUnits.length}名`);
         topUnits.forEach((u, i) => {
-            console.info(`[GameManager] 第${i + 1}名: ${u.unitName}, 贡献值=${getContributionValue(u)}`);
+            //console.info(`[GameManager] 第${i + 1}名: ${u.unitName}, 贡献值=${getContributionValue(u)}`);
         });
         
         if (topUnits.length === 0) {
@@ -2505,6 +2506,10 @@ export class GameManager extends Component {
      * 重新开始一局时重置 GameManager 的局内状态（金币 / 时间 / 血量等）
      */
     resetGameStateForRestart() {
+        // 清除所有增益效果
+        const buffManager = BuffManager.getInstance();
+        buffManager.clearAllBuffs();
+        
         // 重置基础数值
         this.gameTime = 0;
         this.gold = 20;              // 初始金币固定为 20
@@ -2552,7 +2557,7 @@ export class GameManager extends Component {
         // 暂停游戏时间
         director.getScheduler().setTimeScale(0);
         
-        console.info(`[GameManager] pauseGame() 游戏已暂停，保存的 timeScale=${this.originalTimeScale}`);
+        //console.info(`[GameManager] pauseGame() 游戏已暂停，保存的 timeScale=${this.originalTimeScale}`);
         
     }
     
@@ -2568,7 +2573,7 @@ export class GameManager extends Component {
         director.getScheduler().setTimeScale(targetTimeScale);
         this.originalTimeScale = targetTimeScale; // 更新保存的值，确保下次暂停时能正确恢复
         
-        console.info(`[GameManager] resumeGame() 游戏已恢复，timeScale=${targetTimeScale}`);
+        //console.info(`[GameManager] resumeGame() 游戏已恢复，timeScale=${targetTimeScale}`);
         
         // 通知所有单位游戏已恢复，确保动画能够正确播放
         this.notifyGameResumed();
@@ -2690,7 +2695,7 @@ export class GameManager extends Component {
             }
 
             this.isLoadingPrefabsSub = true;
-            console.info('[GameManager] 开始加载分包 prefabs_sub');
+            //console.info('[GameManager] 开始加载分包 prefabs_sub');
 
             // 首次加载时显示全屏加载读条
             this.showLoadingOverlay();
@@ -2717,7 +2722,7 @@ export class GameManager extends Component {
                 this.updateLoadingProgress(0.2);
 
                 // 直接按名字加载分包中的几个建筑预制体（石墙、冰塔、雷塔、哨塔、战争古树、猎手大厅、剑士小屋、教堂）
-                console.info('[GameManager] 开始从分包 prefabs_sub 加载建筑预制体 StoneWall / IceTower / ThunderTower / WatchTower / WarAncientTree / HunterHall / SwordsmanHall / Church');
+                //console.info('[GameManager] 开始从分包 prefabs_sub 加载建筑预制体 StoneWall / IceTower / ThunderTower / WatchTower / WarAncientTree / HunterHall / SwordsmanHall / Church');
 
                 const loadPrefab = (name: string, stepIndex: number, totalSteps: number, onLoaded: (prefab: Prefab | null) => void) => {
                     bundle.load(name, Prefab, (err2, prefab) => {
@@ -2725,7 +2730,7 @@ export class GameManager extends Component {
                             console.error('[GameManager] 从分包 prefabs_sub 加载预制体失败:', name, err2);
                             onLoaded(null);
                         } else {
-                            console.info('[GameManager] 从分包 prefabs_sub 成功加载预制体:', name);
+                            //console.info('[GameManager] 从分包 prefabs_sub 成功加载预制体:', name);
                             onLoaded(prefab as Prefab);
                         }
 
@@ -2751,41 +2756,41 @@ export class GameManager extends Component {
                                                     const towerBuilder = this.findComponentInScene('TowerBuilder') as any;
                                                     if (towerBuilder) {
                                                         if (stoneWallPrefab && typeof towerBuilder.setStoneWallPrefab === 'function') {
-                                                            console.info('[GameManager] 将分包中的 StoneWall 预制体注入 TowerBuilder');
+                                                            //console.info('[GameManager] 将分包中的 StoneWall 预制体注入 TowerBuilder');
                                                             towerBuilder.setStoneWallPrefab(stoneWallPrefab);
                                                         }
                                                         if (iceTowerPrefab && typeof towerBuilder.setIceTowerPrefab === 'function') {
-                                                            console.info('[GameManager] 将分包中的 IceTower 预制体注入 TowerBuilder');
+                                                            //console.info('[GameManager] 将分包中的 IceTower 预制体注入 TowerBuilder');
                                                             towerBuilder.setIceTowerPrefab(iceTowerPrefab);
                                                         }
                                                         if (thunderTowerPrefab && typeof towerBuilder.setThunderTowerPrefab === 'function') {
-                                                            console.info('[GameManager] 将分包中的 ThunderTower 预制体注入 TowerBuilder');
+                                                            //console.info('[GameManager] 将分包中的 ThunderTower 预制体注入 TowerBuilder');
                                                             towerBuilder.setThunderTowerPrefab(thunderTowerPrefab);
                                                         }
                                                         if (watchTowerPrefab && typeof towerBuilder.setWatchTowerPrefab === 'function') {
-                                                            console.info('[GameManager] 将分包中的 WatchTower 预制体注入 TowerBuilder');
+                                                            //console.info('[GameManager] 将分包中的 WatchTower 预制体注入 TowerBuilder');
                                                             towerBuilder.setWatchTowerPrefab(watchTowerPrefab);
                                                         }
                                                         if (warAncientTreePrefab && typeof towerBuilder.setWarAncientTreePrefab === 'function') {
-                                                            console.info('[GameManager] 将分包中的 WarAncientTree 预制体注入 TowerBuilder');
+                                                            //console.info('[GameManager] 将分包中的 WarAncientTree 预制体注入 TowerBuilder');
                                                             towerBuilder.setWarAncientTreePrefab(warAncientTreePrefab);
                                                         }
                                                         if (hunterHallPrefab && typeof towerBuilder.setHunterHallPrefab === 'function') {
-                                                            console.info('[GameManager] 将分包中的 HunterHall 预制体注入 TowerBuilder');
+                                                            //console.info('[GameManager] 将分包中的 HunterHall 预制体注入 TowerBuilder');
                                                             towerBuilder.setHunterHallPrefab(hunterHallPrefab);
                                                         }
                                                         if (swordsmanHallPrefab && typeof towerBuilder.setSwordsmanHallPrefab === 'function') {
-                                                            console.info('[GameManager] 将分包中的 SwordsmanHall 预制体注入 TowerBuilder');
+                                                            //console.info('[GameManager] 将分包中的 SwordsmanHall 预制体注入 TowerBuilder');
                                                             towerBuilder.setSwordsmanHallPrefab(swordsmanHallPrefab);
                                                         }
                                                         if (churchPrefab && typeof towerBuilder.setChurchPrefab === 'function') {
-                                                            console.info('[GameManager] 将分包中的 Church 预制体注入 TowerBuilder');
+                                                            //console.info('[GameManager] 将分包中的 Church 预制体注入 TowerBuilder');
                                                             towerBuilder.setChurchPrefab(churchPrefab);
                                                         }
                                                         
                                                         // 所有预制体注入完成后，更新建筑类型列表
                                                         if (typeof towerBuilder.refreshBuildingTypes === 'function') {
-                                                            console.info('[GameManager] 刷新建筑类型列表');
+                                                            //console.info('[GameManager] 刷新建筑类型列表');
                                                             towerBuilder.refreshBuildingTypes();
                                                         }
                                                     } else {
@@ -2838,10 +2843,10 @@ export class GameManager extends Component {
         // 无论游戏状态如何，只要开始游戏，都应该切换到游戏BGM（前提是玩家没有关闭BGM开关）
         const soundManager = SoundManager.getInstance();
         if (soundManager && soundManager.isBgmOn()) {
-            console.info('[GameManager] _startGameInternal() switching to game BGM (backMusic1)');
+            //console.info('[GameManager] _startGameInternal() switching to game BGM (backMusic1)');
             soundManager.playGameBgm();
         } else {
-            console.info('[GameManager] _startGameInternal() BGM is disabled, skip playing game BGM');
+            //console.info('[GameManager] _startGameInternal() BGM is disabled, skip playing game BGM');
         }
         
         if (this.gameState === GameState.Paused) {
@@ -2872,12 +2877,12 @@ export class GameManager extends Component {
                     // 生成初始哨塔（在石墙网格中随机生成3个）
                     // 延迟执行，确保所有组件的start方法都已执行完毕，避免影响其他组件的初始化
                     if (towerBuilder.spawnInitialWatchTowers) {
-                        console.info('[GameManager] 开始生成初始哨塔');
+                        //console.info('[GameManager] 开始生成初始哨塔');
                         this.scheduleOnce(() => {
                             towerBuilder.spawnInitialWatchTowers(3);
                         }, 0.1); // 延迟0.1秒，确保所有组件初始化完成
                     } else {
-                        console.info('[GameManager] TowerBuilder没有spawnInitialWatchTowers方法');
+                        //console.info('[GameManager] TowerBuilder没有spawnInitialWatchTowers方法');
                     }
                 }, 0);
             }
@@ -3141,7 +3146,7 @@ export class GameManager extends Component {
                             
                             if (script) {
                                 unitTypes.add(unitType);
-                                console.info(`[GameManager] 找到已上场的单位类型: ${unitType}，容器: ${containerPath}`);
+                                //console.info(`[GameManager] 找到已上场的单位类型: ${unitType}，容器: ${containerPath}`);
                                 break; // 找到一个就够了
                             }
                         }
@@ -3153,7 +3158,7 @@ export class GameManager extends Component {
             }
         }
         
-        console.info(`[GameManager] 已上场的单位类型列表:`, Array.from(unitTypes));
+        //console.info(`[GameManager] 已上场的单位类型列表:`, Array.from(unitTypes));
         return Array.from(unitTypes);
     }
 
@@ -3162,7 +3167,7 @@ export class GameManager extends Component {
      */
     generateBuffCards(): BuffCardData[] {
         const activeUnitTypes = this.getActiveUnitTypes();
-        console.info(`[GameManager] generateBuffCards: 已上场的单位类型数量=${activeUnitTypes.length}`);
+        //console.info(`[GameManager] generateBuffCards: 已上场的单位类型数量=${activeUnitTypes.length}`);
         
         const cards: BuffCardData[] = [];
         const configManager = UnitConfigManager.getInstance();
@@ -3176,7 +3181,7 @@ export class GameManager extends Component {
         for (let cardCount = 0; cardCount < 3; cardCount++) {
             // 生成卡片稀有度
             const rarity = buffCardConfigManager.generateRarity();
-            console.info(`[GameManager] generateBuffCards: 卡片 ${cardCount + 1} 稀有度=${rarity}`);
+            //console.info(`[GameManager] generateBuffCards: 卡片 ${cardCount + 1} 稀有度=${rarity}`);
             
             // 决定是单位增益还是全局增益（20%概率生成全局增益）
             const isGlobalBuff = Math.random() < 0.2;
@@ -3277,11 +3282,11 @@ export class GameManager extends Component {
                 }
             }
             
-            console.info(`[GameManager] generateBuffCards: 生成卡片 ${cardCount + 1}`, cardData);
+            //console.info(`[GameManager] generateBuffCards: 生成卡片 ${cardCount + 1}`, cardData);
             cards.push(cardData);
         }
         
-        console.info(`[GameManager] generateBuffCards: 总共生成了 ${cards.length} 张卡片`);
+        //console.info(`[GameManager] generateBuffCards: 总共生成了 ${cards.length} 张卡片`);
         return cards;
     }
     
@@ -3306,7 +3311,7 @@ export class GameManager extends Component {
         // 从实际的预制体实例中获取 cardIcon
         let unitIcon: SpriteFrame | null = null;
         const unitInstance = this.findFirstUnitInstance(unitType);
-        console.info(`[GameManager] generateUnitBuffCard: 查找单位类型 ${unitType}，找到实例=${!!unitInstance}`);
+        //console.info(`[GameManager] generateUnitBuffCard: 查找单位类型 ${unitType}，找到实例=${!!unitInstance}`);
         if (unitInstance) {
             const unitScript = unitInstance.getComponent(unitType) as any ||
                              unitInstance.getComponent('Role') as any ||
@@ -3314,15 +3319,15 @@ export class GameManager extends Component {
             if (unitScript) {
                 if (unitScript.cardIcon) {
                     unitIcon = unitScript.cardIcon;
-                    console.info(`[GameManager] generateUnitBuffCard: 使用 cardIcon，单位类型=${unitType}`);
+                    //console.info(`[GameManager] generateUnitBuffCard: 使用 cardIcon，单位类型=${unitType}`);
                 } else if (unitScript.defaultSpriteFrame) {
                     unitIcon = unitScript.defaultSpriteFrame;
-                    console.info(`[GameManager] generateUnitBuffCard: 使用 defaultSpriteFrame，单位类型=${unitType}`);
+                    //console.info(`[GameManager] generateUnitBuffCard: 使用 defaultSpriteFrame，单位类型=${unitType}`);
                 } else if (unitScript.node) {
                     const spriteComponent = unitScript.node.getComponent(Sprite);
                     if (spriteComponent && spriteComponent.spriteFrame) {
                         unitIcon = spriteComponent.spriteFrame;
-                        console.info(`[GameManager] generateUnitBuffCard: 使用 Sprite.spriteFrame，单位类型=${unitType}`);
+                        //console.info(`[GameManager] generateUnitBuffCard: 使用 Sprite.spriteFrame，单位类型=${unitType}`);
                     }
                 }
             } else {
@@ -3432,19 +3437,19 @@ export class GameManager extends Component {
      * @param onClose 可选的回调函数，在卡片弹窗关闭时调用
      */
     showBuffCards(onClose?: () => void) {
-        console.info('[GameManager] showBuffCards 被调用');
+        //console.info('[GameManager] showBuffCards 被调用');
         // BuffCardPopup 应该在 onLoad() 中已经创建好了，这里不需要再创建
         if (!this.buffCardPopup) {
             console.error('[GameManager] BuffCardPopup不存在，应该在onLoad()中已创建');
             return;
         }
         
-        console.info('[GameManager] BuffCardPopup存在，开始生成卡片数据');
+        //console.info('[GameManager] BuffCardPopup存在，开始生成卡片数据');
         const cards = this.generateBuffCards();
         if (cards && cards.length > 0) {
-            console.info(`[GameManager] 生成了 ${cards.length} 张卡片`);
+            //console.info(`[GameManager] 生成了 ${cards.length} 张卡片`);
             if (cards.length > 0) {
-                console.info('[GameManager] 调用 BuffCardPopup.show()');
+                //console.info('[GameManager] 调用 BuffCardPopup.show()');
                 this.buffCardPopup.show(cards, onClose);
             } else {
                 console.warn('[GameManager] 没有可用的增益卡片生成，跳过显示。');
@@ -3490,16 +3495,16 @@ export class GameManager extends Component {
         // 确保容器在最上层（设置最高的siblingIndex）
         containerNode.setSiblingIndex(canvasNode.children.length);
         
-        console.info('[GameManager] BuffCardPopup容器创建完成，位置=', containerNode.position, 
-                    '尺寸=', popupWidth, 'x', popupHeight,
-                    '父节点=', canvasNode.name,
-                    'siblingIndex=', containerNode.getSiblingIndex());
+        //console.info('[GameManager] BuffCardPopup容器创建完成，位置=', containerNode.position, 
+                    // '尺寸=', popupWidth, 'x', popupHeight,
+                    // '父节点=', canvasNode.name,
+                    // 'siblingIndex=', containerNode.getSiblingIndex());
         
         // 检查节点状态（在绘制 Graphics 之前）
-        console.info('[GameManager] BuffCardPopup Graphics 创建前：containerNode.active=', containerNode.active);
-        console.info('[GameManager] BuffCardPopup Graphics 创建前：containerNode.isValid=', containerNode.isValid);
-        console.info('[GameManager] BuffCardPopup Graphics 创建前：containerNode.parent=', containerNode.parent?.name);
-        console.info('[GameManager] BuffCardPopup Graphics 创建前：containerNode.parent.active=', containerNode.parent?.active);
+        //console.info('[GameManager] BuffCardPopup Graphics 创建前：containerNode.active=', containerNode.active);
+        //console.info('[GameManager] BuffCardPopup Graphics 创建前：containerNode.isValid=', containerNode.isValid);
+        //console.info('[GameManager] BuffCardPopup Graphics 创建前：containerNode.parent=', containerNode.parent?.name);
+        //console.info('[GameManager] BuffCardPopup Graphics 创建前：containerNode.parent.active=', containerNode.parent?.active);
         
         // 容器背景完全透明（不绘制背景）
         // 如果需要边框，可以取消下面的注释
@@ -3509,7 +3514,7 @@ export class GameManager extends Component {
         // bgGraphics.roundRect(-popupWidth / 2, -popupHeight / 2, popupWidth, popupHeight, 15);
         // bgGraphics.stroke();
         
-        console.info('[GameManager] BuffCardPopup 容器创建完成，背景完全透明');
+        //console.info('[GameManager] BuffCardPopup 容器创建完成，背景完全透明');
         
         // 创建卡片容器
         const cardContainer = new Node('CardContainer');
@@ -3613,19 +3618,19 @@ export class GameManager extends Component {
         buffCardPopup.card3Button = card3.getChildByName('Button')?.getComponent(Button) || null;
         
         // 验证绑定
-        console.info('[GameManager] BuffCardPopup 属性绑定验证:');
-        console.info('  container:', !!buffCardPopup.container);
-        console.info('  cardContainer:', !!buffCardPopup.cardContainer);
-        console.info('  card1:', !!buffCardPopup.card1, 'card1Icon:', !!buffCardPopup.card1Icon, 'card1Name:', !!buffCardPopup.card1Name);
-        console.info('  card2:', !!buffCardPopup.card2, 'card2Icon:', !!buffCardPopup.card2Icon, 'card2Name:', !!buffCardPopup.card2Name);
-        console.info('  card3:', !!buffCardPopup.card3, 'card3Icon:', !!buffCardPopup.card3Icon, 'card3Name:', !!buffCardPopup.card3Name);
+        //console.info('[GameManager] BuffCardPopup 属性绑定验证:');
+        //console.info('  container:', !!buffCardPopup.container);
+        //console.info('  cardContainer:', !!buffCardPopup.cardContainer);
+        //console.info('  card1:', !!buffCardPopup.card1, 'card1Icon:', !!buffCardPopup.card1Icon, 'card1Name:', !!buffCardPopup.card1Name);
+        //console.info('  card2:', !!buffCardPopup.card2, 'card2Icon:', !!buffCardPopup.card2Icon, 'card2Name:', !!buffCardPopup.card2Name);
+        //console.info('  card3:', !!buffCardPopup.card3, 'card3Icon:', !!buffCardPopup.card3Icon, 'card3Name:', !!buffCardPopup.card3Name);
         
         // 不要在这里设置 active = false！
         // 参考 UnitIntroPopup 的做法：Graphics 在节点 active 时绘制，然后在 start() 中才设置为 inactive
         // 这样可以确保 Graphics 内容被正确保存
         // containerNode.active = false; // 注释掉，让 start() 方法来设置
         
-        console.info('[GameManager] BuffCardPopup UI已动态创建完成，containerNode.active=', containerNode.active);
+        //console.info('[GameManager] BuffCardPopup UI已动态创建完成，containerNode.active=', containerNode.active);
     }
 
     canAfford(amount: number): boolean {

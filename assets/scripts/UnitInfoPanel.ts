@@ -400,6 +400,8 @@ export class UnitInfoPanel extends Component {
      * 显示单位信息（单选）
      */
     showUnitInfo(unitInfo: UnitInfo) {
+        console.info(`[UnitInfoPanel] showUnitInfo 被调用: 单位=${unitInfo.name}, currentHealth=${unitInfo.currentHealth}, maxHealth=${unitInfo.maxHealth}, attackDamage=${unitInfo.attackDamage}, attackFrequency=${unitInfo.attackFrequency}`);
+        
         if (!this.panelNode) {
             this.initPanel();
         }

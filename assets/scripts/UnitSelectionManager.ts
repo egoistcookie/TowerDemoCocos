@@ -259,25 +259,38 @@ export class UnitSelectionManager extends Component {
             return null;
         }
 
+        console.info('[UnitSelectionManager] getUnitInfo: 开始获取单位信息，节点名称=', unitNode.name);
+
         // 首先尝试使用Role组件（所有单位都继承自Role）
         // 使用字符串 'Role' 避免循环引用（Role.ts 导入了 UnitSelectionManager）
         const roleScript = unitNode.getComponent('Role') as any;
+        console.info('[UnitSelectionManager] getUnitInfo: roleScript存在=', !!roleScript);
+        
         if (roleScript) {
             // 计算升级费用：1到2级是10金币，此后每次升级多10金币
             // 公式：10 + (level - 1) * 10
             const level = roleScript.level !== undefined ? roleScript.level : 1;
             const upgradeCost = level < 3 ? (10 + (level - 1) * 10) : undefined;
+            
+            const currentHealth = roleScript.currentHealth !== undefined ? roleScript.currentHealth : (roleScript.maxHealth || 0);
+            const maxHealth = roleScript.maxHealth || 0;
+            const attackDamage = roleScript.attackDamage !== undefined ? roleScript.attackDamage : 0;
+            const attackInterval = roleScript.attackInterval || 1;
+            const attackFrequency = attackInterval ? 1.0 / attackInterval : 0;
+            
+            console.info(`[UnitSelectionManager] getUnitInfo: 单位=${roleScript.unitName}, currentHealth=${currentHealth}, maxHealth=${maxHealth}, attackDamage=${attackDamage}, attackInterval=${attackInterval}, attackFrequency=${attackFrequency}`);
+            
             return {
                 name: roleScript.unitName || '单位',
                 level: level,
-                currentHealth: roleScript.currentHealth !== undefined ? roleScript.currentHealth : (roleScript.maxHealth || 0),
-                maxHealth: roleScript.maxHealth || 0,
-                attackDamage: roleScript.attackDamage !== undefined ? roleScript.attackDamage : 0,
+                currentHealth: currentHealth,
+                maxHealth: maxHealth,
+                attackDamage: attackDamage,
                 populationCost: 1,
                 icon: roleScript.cardIcon || roleScript.defaultSpriteFrame,
                 collisionRadius: roleScript.collisionRadius,
                 attackRange: roleScript.attackRange,
-                attackFrequency: roleScript.attackInterval ? 1.0 / roleScript.attackInterval : 0,
+                attackFrequency: attackFrequency,
                 moveSpeed: roleScript.moveSpeed,
                 isDefending: roleScript.isDefending !== undefined ? roleScript.isDefending : false,
                 upgradeCost: upgradeCost, // 传递升级费用用于显示
@@ -288,8 +301,10 @@ export class UnitSelectionManager extends Component {
         }
 
         // 备用方案：尝试从各种单位类型获取信息
+        console.info('[UnitSelectionManager] getUnitInfo: roleScript不存在，尝试备用方案');
         const arrowerScript = unitNode.getComponent('Arrower') as any;
         if (arrowerScript) {
+            console.info('[UnitSelectionManager] getUnitInfo: 使用Arrower组件，maxHealth=', arrowerScript.maxHealth);
             const level = arrowerScript.level || 1;
             const upgradeCost = level < 3 ? (10 + (level - 1) * 10) : undefined;
             return {

@@ -11,6 +11,7 @@ import { UnitType } from '../UnitType';
 import { UnitManager } from '../UnitManager';
 import { UnitPool } from '../UnitPool';
 import { DamageStatistics } from '../DamageStatistics';
+import { BuffManager } from '../BuffManager';
 // import { PerformanceMonitor } from './PerformanceMonitor';
 const { ccclass, property } = _decorator;
 
@@ -167,6 +168,8 @@ export class Role extends Component {
     private static readonly UNIT_COUNT_LOG_INTERVAL: number = 1.0; // 单位数量日志输出间隔（秒）
 
     start() {
+        console.info(`[Role] start 被调用，单位类型: ${this.constructor.name}`);
+        
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
         this.attackTimer = 0;
@@ -203,6 +206,9 @@ export class Role extends Component {
         
         // 监听点击事件
         this.node.on(Node.EventType.TOUCH_END, this.onTowerClick, this);
+        
+        // 应用已保存的增益效果（首次创建时）
+        this.applyBuffsFromManager();
     }
 
     /**
@@ -2636,6 +2642,8 @@ export class Role extends Component {
      * 从对象池获取的单位会调用此方法，而不是start方法
      */
     onEnable() {
+        console.info(`[Role] onEnable 被调用，单位类型: ${this.constructor.name}`);
+        
         // 从对象池获取时，重新初始化状态
         // 注意：sprite等组件引用在start中已经初始化，这里只需要重置状态
         if (this.sprite && this.defaultSpriteFrame) {
@@ -2683,6 +2691,12 @@ export class Role extends Component {
         // 重新创建血条（如果不存在）
         if (!this.healthBarNode || !this.healthBarNode.isValid) {
             this.createHealthBar();
+        } else {
+            // 如果血条已存在，先更新为当前值（应用增益前）
+            if (this.healthBar) {
+                this.healthBar.setMaxHealth(this.maxHealth);
+                this.healthBar.setHealth(this.currentHealth);
+            }
         }
         
         // 重新初始化对话框系统
@@ -2690,6 +2704,9 @@ export class Role extends Component {
         
         // 重新监听点击事件
         this.node.on(Node.EventType.TOUCH_END, this.onTowerClick, this);
+        
+        // 应用已保存的增益效果（会更新maxHealth和currentHealth，并再次更新血条）
+        this.applyBuffsFromManager();
     }
 
     getHealth(): number {
@@ -2723,6 +2740,8 @@ export class Role extends Component {
      * 显示单位信息面板（不显示头顶的选择面板）
      */
     showUnitInfoPanel() {
+        console.info(`[Role] showUnitInfoPanel 被调用，单位类型: ${this.constructor.name}, this.maxHealth=${this.maxHealth}, this.currentHealth=${this.currentHealth}`);
+        
         // 显示单位信息面板和范围
         if (!this.unitSelectionManager) {
             this.findUnitSelectionManager();
@@ -2739,6 +2758,8 @@ export class Role extends Component {
             const maxHealth = (this.maxHealth !== undefined && !isNaN(this.maxHealth) && this.maxHealth > 0) 
                 ? this.maxHealth 
                 : 0;
+            
+            console.info(`[Role] showUnitInfoPanel 构建 unitInfo: currentHealth=${currentHealth}, maxHealth=${maxHealth}`);
             
             const unitInfo: UnitInfo = {
                 name: this.unitName || '角色',
@@ -3318,6 +3339,40 @@ export class Role extends Component {
         } catch (error) {
             // 忽略错误，避免影响游戏流程
             console.warn('[Role] 记录伤害统计失败:', error);
+        }
+    }
+    
+    /**
+     * 从增益管理器应用增益效果（新训练的单位会调用此方法）
+     */
+    protected applyBuffsFromManager() {
+        const buffManager = BuffManager.getInstance();
+        const unitId = this.constructor.name; // 获取类名作为单位ID
+        
+        console.info(`[Role] applyBuffsFromManager 开始，单位ID: ${unitId}, 应用前 currentHealth=${this.currentHealth}, maxHealth=${this.maxHealth}`);
+        
+        // 应用增益
+        buffManager.applyBuffsToUnit(this, unitId);
+        
+        console.info(`[Role] applyBuffsFromManager 应用后，currentHealth=${this.currentHealth}, maxHealth=${this.maxHealth}`);
+        
+        // 应用增益后，强制更新血条显示
+        if (this.healthBar && this.healthBar.isValid) {
+            this.healthBar.setMaxHealth(this.maxHealth);
+            this.healthBar.setHealth(this.currentHealth);
+            console.info(`[Role] 更新血条显示: ${this.currentHealth}/${this.maxHealth}`);
+        }
+        
+        // 如果单位被选中，更新单位信息面板
+        if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            this.unitSelectionManager.updateUnitInfo({
+                attackDamage: this.attackDamage,
+                attackFrequency: 1.0 / this.attackInterval,
+                moveSpeed: this.moveSpeed,
+                currentHealth: this.currentHealth,
+                maxHealth: this.maxHealth
+            });
+            console.info(`[Role] 更新单位信息面板: 生命=${this.currentHealth}/${this.maxHealth}, 攻击频率=${(1.0 / this.attackInterval).toFixed(2)}, 移动速度=${this.moveSpeed}`);
         }
     }
 }
