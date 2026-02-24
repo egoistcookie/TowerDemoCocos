@@ -400,7 +400,7 @@ export class UnitInfoPanel extends Component {
      * 显示单位信息（单选）
      */
     showUnitInfo(unitInfo: UnitInfo) {
-        console.info(`[UnitInfoPanel] showUnitInfo 被调用: 单位=${unitInfo.name}, currentHealth=${unitInfo.currentHealth}, maxHealth=${unitInfo.maxHealth}, attackDamage=${unitInfo.attackDamage}, attackFrequency=${unitInfo.attackFrequency}`);
+       //console.info(`[UnitInfoPanel] showUnitInfo 被调用: 单位=${unitInfo.name}, currentHealth=${unitInfo.currentHealth}, maxHealth=${unitInfo.maxHealth}, attackDamage=${unitInfo.attackDamage}, attackFrequency=${unitInfo.attackFrequency}`);
         
         if (!this.panelNode) {
             this.initPanel();
@@ -575,7 +575,7 @@ export class UnitInfoPanel extends Component {
      */
     showMultipleUnitsInfo(firstUnitInfo: UnitInfo, selectedUnits: Node[]) {
         if (!this.panelNode) {
-            console.info('[UnitInfoPanel] showMultipleUnitsInfo: panelNode不存在，初始化面板');
+           //console.info('[UnitInfoPanel] showMultipleUnitsInfo: panelNode不存在，初始化面板');
             this.initPanel();
         }
 
@@ -1013,7 +1013,7 @@ export class UnitInfoPanel extends Component {
      */
     private batchUpgrade() {
         if (this.currentSelectedUnits.length === 0) {
-            console.info('[UnitInfoPanel] batchUpgrade: 没有选中的单位');
+           //console.info('[UnitInfoPanel] batchUpgrade: 没有选中的单位');
             return;
         }
 
@@ -1048,7 +1048,7 @@ export class UnitInfoPanel extends Component {
         
         for (const unitNode of unitsToUpgrade) {
             if (!unitNode || !unitNode.isValid || !unitNode.active) {
-                console.info('[UnitInfoPanel] batchUpgrade: 单位节点无效，跳过');
+               //console.info('[UnitInfoPanel] batchUpgrade: 单位节点无效，跳过');
                 continue;
             }
 
@@ -1064,12 +1064,12 @@ export class UnitInfoPanel extends Component {
             }
             
             if (!unitScript) {
-                console.info('[UnitInfoPanel] batchUpgrade: 无法获取单位脚本，单位名称 =', unitNode.name);
+               //console.info('[UnitInfoPanel] batchUpgrade: 无法获取单位脚本，单位名称 =', unitNode.name);
                 continue;
             }
             
             if (!unitScript.onUpgradeClick) {
-                console.info('[UnitInfoPanel] batchUpgrade: 单位没有onUpgradeClick方法，单位名称 =', unitNode.name);
+               //console.info('[UnitInfoPanel] batchUpgrade: 单位没有onUpgradeClick方法，单位名称 =', unitNode.name);
                 continue;
             }
 
@@ -1087,7 +1087,7 @@ export class UnitInfoPanel extends Component {
                 
                 // 检查金币是否足够
                 if (!gameManager.canAfford(upgradeCost)) {
-                    console.info('[UnitInfoPanel] batchUpgrade: 金币不足，跳过单位，单位名称 =', unitNode.name, '，升级费用 =', upgradeCost, '，当前金币 =', gameManager.gold);
+                   //console.info('[UnitInfoPanel] batchUpgrade: 金币不足，跳过单位，单位名称 =', unitNode.name, '，升级费用 =', upgradeCost, '，当前金币 =', gameManager.gold);
                     // 金币不足，跳过这个单位，继续下一个
                     continue;
                 }
@@ -1222,14 +1222,14 @@ export class UnitInfoPanel extends Component {
      */
     show() {
         if (!this.panelNode) {
-            console.info('[UnitInfoPanel] show: panelNode不存在，初始化面板');
+           //console.info('[UnitInfoPanel] show: panelNode不存在，初始化面板');
             this.initPanel();
         }
         if (this.panelNode) {
             this.panelNode.active = true;
-            console.info('[UnitInfoPanel] show: panelNode.active =', this.panelNode.active);
+           //console.info('[UnitInfoPanel] show: panelNode.active =', this.panelNode.active);
         } else {
-            console.info('[UnitInfoPanel] show: panelNode不存在，无法显示面板');
+           //console.info('[UnitInfoPanel] show: panelNode不存在，无法显示面板');
         }
     }
 

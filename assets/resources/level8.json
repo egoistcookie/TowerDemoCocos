@@ -1,340 +1,198 @@
 {
-  "id": 4,
-  "name": "关卡四",
-  "description": "进阶挑战 - 后半",
+  "id": 8,
+  "name": "关卡八",
+  "description": "高级挑战 - 后半",
   "waves": [
     {
       "id": 1,
       "name": "第一波",
-      "description": "敌人数量激增",
+      "description": "敌人数量暴增",
       "preWaveDelay": 3,
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 32,
-          "interval": 0.3
-        },
-        {
-          "prefabName": "OrcWarrior",
-          "count": 12,
-          "interval": 0.8
-        },
-        {
-          "prefabName": "OrcShaman",
-          "count": 4,
-          "interval": 1.7
+          "count": 62,
+          "interval": 0.18
         },
         {
           "prefabName": "TrollSpearman",
-          "count": 18,
-          "interval": 0.5
+          "count": 27,
+          "interval": 0.30
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 20,
+          "interval": 0.45
+        },
+        {
+          "prefabName": "OrcShaman",
+          "count": 5,
+          "interval": 1.1
         },
         {
           "prefabName": "Dragon",
-          "count": 3,
-          "interval": 1.5
+          "count": 4,
+          "interval": 1.0
         }
       ]
     },
     {
       "id": 2,
       "name": "第二波",
-      "description": "混合部队加强",
+      "description": "混合部队强化",
       "preWaveDelay": 3,
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 35,
-          "interval": 0.25
+          "count": 65,
+          "interval": 0.16
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 14,
-          "interval": 0.75
+          "count": 25,
+          "interval": 0.42
         },
         {
           "prefabName": "OrcShaman",
-          "count": 5,
-          "interval": 1.6
+          "count": 8,
+          "interval": 1.0
         },
         {
           "prefabName": "TrollSpearman",
-          "count": 19,
-          "interval": 0.45
+          "count": 28,
+          "interval": 0.28
         },
         {
           "prefabName": "Dragon",
-          "count": 3,
-          "interval": 1.4
+          "count": 4,
+          "interval": 0.9
         }
       ]
     },
     {
       "id": 3,
       "name": "第三波",
-      "description": "督军与萨满",
+      "description": "督军精英军团",
       "preWaveDelay": 4,
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 32,
-          "interval": 0.25
+          "count": 55,
+          "interval": 0.16
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 17,
-          "interval": 0.7
+          "count": 28,
+          "interval": 0.39
         },
         {
           "prefabName": "OrcWarlord",
-          "count": 3,
-          "interval": 1.9
+          "count": 4,
+          "interval": 1.1
         },
         {
           "prefabName": "OrcShaman",
-          "count": 5,
-          "interval": 1.5
+          "count": 8,
+          "interval": 1.0
         },
         {
           "prefabName": "TrollSpearman",
-          "count": 20,
-          "interval": 0.4
+          "count": 30,
+          "interval": 0.25
         },
         {
           "prefabName": "Dragon",
-          "count": 3,
-          "interval": 1.3
+          "count": 4,
+          "interval": 0.85
         }
       ]
     },
     {
       "id": 4,
       "name": "第四波",
-      "description": "敌人攻势猛烈",
+      "description": "敌人攻势凶猛",
       "preWaveDelay": 3,
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 38,
-          "interval": 0.2
+          "count": 70,
+          "interval": 0.13
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 16,
-          "interval": 0.7
+          "count": 26,
+          "interval": 0.37
         },
         {
           "prefabName": "OrcShaman",
-          "count": 6,
-          "interval": 1.4
+          "count": 9,
+          "interval": 0.9
         },
         {
           "prefabName": "TrollSpearman",
-          "count": 21,
-          "interval": 0.4
+          "count": 30,
+          "interval": 0.25
         },
         {
           "prefabName": "Dragon",
-          "count": 3,
-          "interval": 1.2
+          "count": 4,
+          "interval": 0.8
         }
       ]
     },
     {
       "id": 5,
       "name": "第五波",
-      "description": "混合编队加强",
+      "description": "混合编队最强",
       "preWaveDelay": 3,
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 40,
-          "interval": 0.2
+          "count": 75,
+          "interval": 0.13
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 18,
-          "interval": 0.65
-        },
-        {
-          "prefabName": "OrcShaman",
-          "count": 6,
-          "interval": 1.3
-        },
-        {
-          "prefabName": "TrollSpearman",
-          "count": 22,
+          "count": 30,
           "interval": 0.35
         },
         {
+          "prefabName": "OrcShaman",
+          "count": 9,
+          "interval": 0.85
+        },
+        {
+          "prefabName": "TrollSpearman",
+          "count": 33,
+          "interval": 0.23
+        },
+        {
           "prefabName": "Dragon",
-          "count": 4,
-          "interval": 1.1
+          "count": 6,
+          "interval": 0.7
         }
       ]
     },
     {
       "id": 6,
       "name": "第六波",
-      "description": "督军与萨满精英",
+      "description": "督军带领精锐",
       "preWaveDelay": 4,
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 36,
-          "interval": 0.15
+          "count": 65,
+          "interval": 0.11
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 20,
-          "interval": 0.6
+          "count": 33,
+          "interval": 0.33
         },
         {
           "prefabName": "OrcWarlord",
-          "count": 4,
-          "interval": 1.7
-        },
-        {
-          "prefabName": "OrcShaman",
-          "count": 7,
-          "interval": 1.2
-        },
-        {
-          "prefabName": "TrollSpearman",
-          "count": 23,
-          "interval": 0.35
-        },
-        {
-          "prefabName": "Dragon",
-          "count": 4,
-          "interval": 1.0
-        }
-      ]
-    },
-    {
-      "id": 7,
-      "name": "第七波",
-      "description": "敌人数量达到高峰",
-      "preWaveDelay": 3,
-      "enemies": [
-        {
-          "prefabName": "Orc",
-          "count": 44,
-          "interval": 0.15
-        },
-        {
-          "prefabName": "OrcWarrior",
-          "count": 17,
-          "interval": 0.65
-        },
-        {
-          "prefabName": "OrcShaman",
-          "count": 7,
-          "interval": 1.1
-        },
-        {
-          "prefabName": "TrollSpearman",
-          "count": 24,
-          "interval": 0.3
-        },
-        {
-          "prefabName": "Dragon",
-          "count": 4,
-          "interval": 0.9
-        }
-      ]
-    },
-    {
-      "id": 8,
-      "name": "第八波",
-      "description": "混合部队最强",
-      "preWaveDelay": 3,
-      "enemies": [
-        {
-          "prefabName": "Orc",
-          "count": 46,
-          "interval": 0.15
-        },
-        {
-          "prefabName": "OrcWarrior",
-          "count": 21,
-          "interval": 0.55
-        },
-        {
-          "prefabName": "OrcShaman",
-          "count": 8,
-          "interval": 1.0
-        },
-        {
-          "prefabName": "TrollSpearman",
-          "count": 25,
-          "interval": 0.3
-        },
-        {
-          "prefabName": "Dragon",
-          "count": 5,
-          "interval": 0.8
-        }
-      ]
-    },
-    {
-      "id": 9,
-      "name": "第九波",
-      "description": "督军与萨满大军",
-      "preWaveDelay": 4,
-      "enemies": [
-        {
-          "prefabName": "Orc",
-          "count": 42,
-          "interval": 0.15
-        },
-        {
-          "prefabName": "OrcWarrior",
-          "count": 22,
-          "interval": 0.5
-        },
-        {
-          "prefabName": "OrcWarlord",
-          "count": 4,
-          "interval": 1.5
-        },
-        {
-          "prefabName": "OrcShaman",
           "count": 8,
           "interval": 0.9
-        },
-        {
-          "prefabName": "TrollSpearman",
-          "count": 26,
-          "interval": 0.25
-        },
-        {
-          "prefabName": "Dragon",
-          "count": 5,
-          "interval": 0.7
-        }
-      ]
-    },
-    {
-      "id": 10,
-      "name": "第十波",
-      "description": "关卡最终波次",
-      "preWaveDelay": 4,
-      "enemies": [
-        {
-          "prefabName": "Orc",
-          "count": 50,
-          "interval": 0.1
-        },
-        {
-          "prefabName": "OrcWarrior",
-          "count": 25,
-          "interval": 0.45
-        },
-        {
-          "prefabName": "OrcWarlord",
-          "count": 5,
-          "interval": 1.3
         },
         {
           "prefabName": "OrcShaman",
@@ -343,13 +201,155 @@
         },
         {
           "prefabName": "TrollSpearman",
-          "count": 28,
-          "interval": 0.25
+          "count": 35,
+          "interval": 0.20
         },
         {
           "prefabName": "Dragon",
-          "count": 6,
+          "count": 5,
+          "interval": 0.65
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "第七波",
+      "description": "敌人数量巅峰",
+      "preWaveDelay": 3,
+      "enemies": [
+        {
+          "prefabName": "Orc",
+          "count": 82,
+          "interval": 0.11
+        },
+        {
+          "prefabName": "TrollSpearman",
+          "count": 35,
+          "interval": 0.20
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 28,
+          "interval": 0.35
+        },
+        {
+          "prefabName": "OrcShaman",
+          "count": 10,
+          "interval": 0.7
+        },
+        {
+          "prefabName": "Dragon",
+          "count": 5,
           "interval": 0.6
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "第八波",
+      "description": "混合部队极限",
+      "preWaveDelay": 3,
+      "enemies": [
+        {
+          "prefabName": "Orc",
+          "count": 85,
+          "interval": 0.10
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 35,
+          "interval": 0.30
+        },
+        {
+          "prefabName": "OrcShaman",
+          "count": 11,
+          "interval": 0.65
+        },
+        {
+          "prefabName": "TrollSpearman",
+          "count": 36,
+          "interval": 0.18
+        },
+        {
+          "prefabName": "Dragon",
+          "count": 8,
+          "interval": 0.5
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "第九波",
+      "description": "督军大军来袭",
+      "preWaveDelay": 4,
+      "enemies": [
+        {
+          "prefabName": "Orc",
+          "count": 75,
+          "interval": 0.10
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 39,
+          "interval": 0.28
+        },
+        {
+          "prefabName": "OrcWarlord",
+          "count": 8,
+          "interval": 0.8
+        },
+        {
+          "prefabName": "OrcShaman",
+          "count": 11,
+          "interval": 0.6
+        },
+        {
+          "prefabName": "TrollSpearman",
+          "count": 39,
+          "interval": 0.17
+        },
+        {
+          "prefabName": "Dragon",
+          "count": 8,
+          "interval": 0.45
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "第十波",
+      "description": "关卡最终挑战",
+      "preWaveDelay": 4,
+      "enemies": [
+        {
+          "prefabName": "Orc",
+          "count": 90,
+          "interval": 0.07
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 43,
+          "interval": 0.25
+        },
+        {
+          "prefabName": "OrcWarlord",
+          "count": 9,
+          "interval": 0.7
+        },
+        {
+          "prefabName": "OrcShaman",
+          "count": 13,
+          "interval": 0.5
+        },
+        {
+          "prefabName": "TrollSpearman",
+          "count": 43,
+          "interval": 0.13
+        },
+        {
+          "prefabName": "Dragon",
+          "count": 9,
+          "interval": 0.4
         }
       ]
     }

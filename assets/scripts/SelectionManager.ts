@@ -148,14 +148,14 @@ export class SelectionManager extends Component {
     onTouchStart(event: EventTouch) {
         // 优先检查是否在建造模式下（如果是，完全不处理，让建造系统处理）
         const buildingMode = this.isBuildingMode();
-        console.info('[SelectionManager] onTouchStart: buildingMode =', buildingMode);
+       //console.info('[SelectionManager] onTouchStart: buildingMode =', buildingMode);
         
         // 检查是否正在拖拽建筑物（通过TowerBuilder）
         const isDraggingBuilding = this.isDraggingBuilding();
-        console.info('[SelectionManager] onTouchStart: isDraggingBuilding =', isDraggingBuilding);
+       //console.info('[SelectionManager] onTouchStart: isDraggingBuilding =', isDraggingBuilding);
         
         if (buildingMode || isDraggingBuilding) {
-            console.info('[SelectionManager] onTouchStart: 在建造模式或拖拽建筑物，不处理多选');
+           //console.info('[SelectionManager] onTouchStart: 在建造模式或拖拽建筑物，不处理多选');
             // 如果正在选择，清除选择状态
             if (this.isSelecting) {
                 this.isSelecting = false;
@@ -167,7 +167,7 @@ export class SelectionManager extends Component {
             return; // 建造模式或拖拽建筑物时，不处理多选
         }
         
-        console.info('[SelectionManager] onTouchStart: 不在建造模式，可以处理多选');
+       //console.info('[SelectionManager] onTouchStart: 不在建造模式，可以处理多选');
 
         // 检查是否点击在UI元素上（如按钮、选择面板等）
         const targetNode = event.target as Node;
@@ -1180,11 +1180,11 @@ export class SelectionManager extends Component {
      * 显示多选信息面板
      */
     private showMultiSelectionInfo() {
-        console.info('[SelectionManager] showMultiSelectionInfo: 开始显示多选信息面板');
+       //console.info('[SelectionManager] showMultiSelectionInfo: 开始显示多选信息面板');
         const allNodes = this.getAllSelectedUnitNodes();
-        console.info('[SelectionManager] showMultiSelectionInfo: 选中的单位数量 =', allNodes.length);
+       //console.info('[SelectionManager] showMultiSelectionInfo: 选中的单位数量 =', allNodes.length);
         if (allNodes.length === 0) {
-            console.info('[SelectionManager] showMultiSelectionInfo: 没有选中的单位，返回');
+           //console.info('[SelectionManager] showMultiSelectionInfo: 没有选中的单位，返回');
             return;
         }
 
@@ -1195,20 +1195,20 @@ export class SelectionManager extends Component {
             unitSelectionManagerNode = find('UnitSelectionManager');
         }
         if (!unitSelectionManagerNode) {
-            console.info('[SelectionManager] showMultiSelectionInfo: 找不到UnitSelectionManager节点');
+           //console.info('[SelectionManager] showMultiSelectionInfo: 找不到UnitSelectionManager节点');
             return;
         }
-        console.info('[SelectionManager] showMultiSelectionInfo: 找到UnitSelectionManager节点');
+       //console.info('[SelectionManager] showMultiSelectionInfo: 找到UnitSelectionManager节点');
         const unitSelectionManager = unitSelectionManagerNode.getComponent('UnitSelectionManager') as any;
         if (!unitSelectionManager) {
-            console.info('[SelectionManager] showMultiSelectionInfo: UnitSelectionManager节点没有组件');
+           //console.info('[SelectionManager] showMultiSelectionInfo: UnitSelectionManager节点没有组件');
             return;
         }
-        console.info('[SelectionManager] showMultiSelectionInfo: 找到UnitSelectionManager组件，调用selectMultipleUnits');
+       //console.info('[SelectionManager] showMultiSelectionInfo: 找到UnitSelectionManager组件，调用selectMultipleUnits');
 
         // 显示多选信息（使用第一个单位的信息）
         unitSelectionManager.selectMultipleUnits(allNodes);
-        console.info('[SelectionManager] showMultiSelectionInfo: selectMultipleUnits调用完成');
+       //console.info('[SelectionManager] showMultiSelectionInfo: selectMultipleUnits调用完成');
     }
 
     /**
@@ -1421,10 +1421,10 @@ export class SelectionManager extends Component {
                 return towerBuilder.getIsBuildingMode() === true;
             }
             
-            console.info('[SelectionManager] isBuildingMode: 无法检查建造模式，返回false');
+           //console.info('[SelectionManager] isBuildingMode: 无法检查建造模式，返回false');
             return false;
         } catch (error) {
-            console.info('[SelectionManager] isBuildingMode: 检查时发生错误，返回false', error);
+           //console.info('[SelectionManager] isBuildingMode: 检查时发生错误，返回false', error);
             return false;
         }
     }

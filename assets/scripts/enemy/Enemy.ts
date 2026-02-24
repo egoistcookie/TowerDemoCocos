@@ -1376,26 +1376,26 @@ export class Enemy extends Component {
 
         // 如果距离太近，停止移动
         if (distance < 0.1) {
-            return;
-        }
-
+                return;
+            }
+            
         // 归一化方向
-        direction.normalize();
+                direction.normalize();
 
         // 计算新位置
         const moveDistance = this.moveSpeed * deltaTime;
-        const newPos = new Vec3();
+            const newPos = new Vec3();
         Vec3.scaleAndAdd(newPos, this.node.worldPosition, direction, moveDistance);
 
         // 限制在屏幕范围内
-        const clampedPos = this.clampPositionToScreen(newPos);
-        this.node.setWorldPosition(clampedPos);
-
-        // 根据移动方向翻转
-        this.flipDirection(direction);
-
-        // 播放行走动画
-        this.playWalkAnimation();
+                const clampedPos = this.clampPositionToScreen(newPos);
+                            this.node.setWorldPosition(clampedPos);
+                            
+                            // 根据移动方向翻转
+            this.flipDirection(direction);
+            
+            // 播放行走动画
+            this.playWalkAnimation();
     }
 
     private moveTowardsCrystal(deltaTime: number) {

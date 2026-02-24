@@ -299,7 +299,7 @@ export class EnemySpawner extends Component {
         tryNames: string[],
         onLoaded: (prefab: Prefab | null) => void
     ) {
-        console.info('[EnemySpawner] 开始从分包 prefabs_sub 懒加载敌人预制体，候选名称列表:', tryNames);
+       //console.info('[EnemySpawner] 开始从分包 prefabs_sub 懒加载敌人预制体，候选名称列表:', tryNames);
 
         assetManager.loadBundle('prefabs_sub', (err, bundle) => {
             if (err || !bundle) {
@@ -307,7 +307,7 @@ export class EnemySpawner extends Component {
                 // 从分包加载失败，尝试从 enemyPrefabs 中查找
                 const fallbackPrefab = this.findPrefabInEnemyPrefabs(tryNames);
                 if (fallbackPrefab) {
-                    console.info('[EnemySpawner] 从 enemyPrefabs 中找到预制体:', fallbackPrefab.data.name);
+                   //console.info('[EnemySpawner] 从 enemyPrefabs 中找到预制体:', fallbackPrefab.data.name);
                     onLoaded(fallbackPrefab);
                 } else {
                     console.error('[EnemySpawner] 从 enemyPrefabs 中也未找到预制体，候选名称:', tryNames);
@@ -324,7 +324,7 @@ export class EnemySpawner extends Component {
                     // 从分包加载失败，尝试从 enemyPrefabs 中查找
                     const fallbackPrefab = this.findPrefabInEnemyPrefabs(tryNames);
                     if (fallbackPrefab) {
-                        console.info('[EnemySpawner] 从 enemyPrefabs 中找到预制体作为回退:', fallbackPrefab.data.name);
+                       //console.info('[EnemySpawner] 从 enemyPrefabs 中找到预制体作为回退:', fallbackPrefab.data.name);
                         onLoaded(fallbackPrefab);
                     } else {
                         console.error('[EnemySpawner] 从 enemyPrefabs 中也未找到预制体，候选名称:', tryNames);
@@ -339,7 +339,7 @@ export class EnemySpawner extends Component {
                         lastError = err2;
                         // 如果不是最后一个尝试的名称，只输出调试信息，不输出警告
                         if (index < tryNames.length - 1) {
-                            console.info('[EnemySpawner] 从分包 prefabs_sub 按名称加载敌人预制体失败，名称:', name, '继续尝试下一个');
+                           //console.info('[EnemySpawner] 从分包 prefabs_sub 按名称加载敌人预制体失败，名称:', name, '继续尝试下一个');
                         } else {
                             console.warn('[EnemySpawner] 从分包 prefabs_sub 按名称加载敌人预制体失败，名称:', name, '错误:', err2);
                         }
@@ -347,7 +347,7 @@ export class EnemySpawner extends Component {
                         return;
                     }
 
-                    console.info('[EnemySpawner] 从分包 prefabs_sub 成功加载敌人预制体，名称:', name);
+                   //console.info('[EnemySpawner] 从分包 prefabs_sub 成功加载敌人预制体，名称:', name);
                     onLoaded(prefab as Prefab);
                 });
             };
@@ -362,7 +362,7 @@ export class EnemySpawner extends Component {
      * @returns 找到的预制体，如果未找到返回 null
      */
     private findPrefabInEnemyPrefabs(tryNames: string[]): Prefab | null {
-        console.info('[EnemySpawner.findPrefabInEnemyPrefabs] 开始查找，候选名称:', tryNames, 'enemyPrefabs数量:', this.enemyPrefabs.length);
+       //console.info('[EnemySpawner.findPrefabInEnemyPrefabs] 开始查找，候选名称:', tryNames, 'enemyPrefabs数量:', this.enemyPrefabs.length);
         
         for (const prefab of this.enemyPrefabs) {
             if (!prefab) {
@@ -373,7 +373,7 @@ export class EnemySpawner extends Component {
             const resourceName = prefab.name || '';
             const nodeName = (prefab.data && prefab.data.name) ? prefab.data.name : '';
             
-            console.info('[EnemySpawner.findPrefabInEnemyPrefabs] 检查预制体 - 资源名称:', resourceName, '节点名称:', nodeName);
+           //console.info('[EnemySpawner.findPrefabInEnemyPrefabs] 检查预制体 - 资源名称:', resourceName, '节点名称:', nodeName);
             
             // 检查是否匹配任何一个尝试的名称
             for (const tryName of tryNames) {
@@ -383,7 +383,7 @@ export class EnemySpawner extends Component {
                 if (resourceName) {
                     const resourceNameLower = resourceName.toLowerCase();
                     if (this.isNameMatch(resourceNameLower, tryNameLower)) {
-                        console.info('[EnemySpawner.findPrefabInEnemyPrefabs] 通过资源名称匹配成功:', resourceName, '->', tryName);
+                       //console.info('[EnemySpawner.findPrefabInEnemyPrefabs] 通过资源名称匹配成功:', resourceName, '->', tryName);
                         return prefab;
                     }
                 }
@@ -392,7 +392,7 @@ export class EnemySpawner extends Component {
                 if (nodeName) {
                     const nodeNameLower = nodeName.toLowerCase();
                     if (this.isNameMatch(nodeNameLower, tryNameLower)) {
-                        console.info('[EnemySpawner.findPrefabInEnemyPrefabs] 通过节点名称匹配成功:', nodeName, '->', tryName);
+                       //console.info('[EnemySpawner.findPrefabInEnemyPrefabs] 通过节点名称匹配成功:', nodeName, '->', tryName);
                         return prefab;
                     }
                 }
@@ -652,7 +652,7 @@ export class EnemySpawner extends Component {
      * 设置当前关卡（会重新加载对应关卡的配置文件）
      */
     setLevel(level: number) {
-        if (level >= 1 && level <= 5 && level !== this.currentLevel) {
+        if (level >= 1 && level <= 10 && level !== this.currentLevel) {
             this.currentLevel = level;
             this.currentLevelConfig = null;
             this.isConfigLoaded = false;
@@ -733,7 +733,7 @@ export class EnemySpawner extends Component {
             if (this.victoryCheckTimer >= this.VICTORY_CHECK_INTERVAL) {
                 this.victoryCheckTimer = 0;
                 if (this.checkVictoryCondition()) {
-                    console.info('[EnemySpawner] 胜利条件满足，调用endGame');
+                   //console.info('[EnemySpawner] 胜利条件满足，调用endGame');
                     this.gameManager.endGame(GameState.Victory);
                     // 防止重复调用
                     this.isLastWaveCompleted = false;
@@ -856,7 +856,7 @@ export class EnemySpawner extends Component {
             
             // 如果索引超出范围，说明所有配置都已完成
             if (this.currentWave && this.currentWave.enemies && this.currentEnemyIndex >= this.currentWave.enemies.length) {
-                console.info(`[EnemySpawner.updateWave] 所有敌人配置已完成（索引超出范围），调用endCurrentWave，currentWaveIndex: ${this.currentWaveIndex}, currentEnemyIndex: ${this.currentEnemyIndex}, enemies.length: ${this.currentWave.enemies.length}`);
+               //console.info(`[EnemySpawner.updateWave] 所有敌人配置已完成（索引超出范围），调用endCurrentWave，currentWaveIndex: ${this.currentWaveIndex}, currentEnemyIndex: ${this.currentEnemyIndex}, enemies.length: ${this.currentWave.enemies.length}`);
                 this.endCurrentWave();
                 return;
             }
@@ -894,7 +894,7 @@ export class EnemySpawner extends Component {
                     this.currentEnemyConfig = null;
                     return;
                 }
-                console.info(`[EnemySpawner.updateWave] 当前波次所有敌人配置已完成，调用endCurrentWave，currentWaveIndex: ${this.currentWaveIndex}, currentEnemyIndex: ${this.currentEnemyIndex}, enemiesSpawnedCount: ${this.enemiesSpawnedCount}`);
+               //console.info(`[EnemySpawner.updateWave] 当前波次所有敌人配置已完成，调用endCurrentWave，currentWaveIndex: ${this.currentWaveIndex}, currentEnemyIndex: ${this.currentEnemyIndex}, enemiesSpawnedCount: ${this.enemiesSpawnedCount}`);
                 this.endCurrentWave();
                 return;
             }
@@ -919,11 +919,11 @@ export class EnemySpawner extends Component {
      * 开始下一波
      */
     private startNextWave() {
-        console.info(`[EnemySpawner] startNextWave() 被调用，currentWaveIndex=${this.currentWaveIndex}`);
+       //console.info(`[EnemySpawner] startNextWave() 被调用，currentWaveIndex=${this.currentWaveIndex}`);
         // 检查游戏状态，只有在游戏进行中时才显示波次提示
         if (this.gameManager) {
             const gameState = this.gameManager.getGameState();
-            console.info(`[EnemySpawner] startNextWave() 游戏状态=${gameState}`);
+           //console.info(`[EnemySpawner] startNextWave() 游戏状态=${gameState}`);
             if (gameState !== GameState.Playing) {
                 // 只更新波次状态，不显示UI提示
                 console.warn(`[EnemySpawner] startNextWave() 游戏状态不是Playing，只更新波次索引`);
@@ -946,7 +946,7 @@ export class EnemySpawner extends Component {
         
         const totalWaves = this.currentLevelConfig.waves.length;
         if (this.currentWaveIndex >= totalWaves - 1) {
-            console.info(`[EnemySpawner] startNextWave() 已经是最后一波，currentWaveIndex=${this.currentWaveIndex}, totalWaves=${totalWaves}，设置isLastWaveCompleted=true并返回`);
+           //console.info(`[EnemySpawner] startNextWave() 已经是最后一波，currentWaveIndex=${this.currentWaveIndex}, totalWaves=${totalWaves}，设置isLastWaveCompleted=true并返回`);
             // 标记最后一波已完成，防止重复调用
             this.isLastWaveCompleted = true;
             // 确保波次状态正确
@@ -956,7 +956,7 @@ export class EnemySpawner extends Component {
         
         // 增加波次索引
         this.currentWaveIndex++;
-        console.info(`[EnemySpawner] startNextWave() 增加波次索引到 ${this.currentWaveIndex}`);
+       //console.info(`[EnemySpawner] startNextWave() 增加波次索引到 ${this.currentWaveIndex}`);
         
         // 检查索引是否有效
         if (this.currentWaveIndex < 0 || this.currentWaveIndex >= totalWaves) {
@@ -965,7 +965,7 @@ export class EnemySpawner extends Component {
         }
         
         this.currentWave = this.currentLevelConfig.waves[this.currentWaveIndex];
-        console.info(`[EnemySpawner] startNextWave() 开始第 ${this.currentWaveIndex + 1} 波，波次名称=${this.currentWave?.name}`);
+       //console.info(`[EnemySpawner] startNextWave() 开始第 ${this.currentWaveIndex + 1} 波，波次名称=${this.currentWave?.name}`);
         
         // 重置波次状态
         this.isWaveActive = true;
@@ -975,7 +975,7 @@ export class EnemySpawner extends Component {
         this.enemySpawnTimer = 0;
         this.currentEnemyConfig = null;
         
-        console.info(`[EnemySpawner] startNextWave() 重置波次状态，isWaveActive=${this.isWaveActive}`);
+       //console.info(`[EnemySpawner] startNextWave() 重置波次状态，isWaveActive=${this.isWaveActive}`);
         
         // 输出波次信息
         
@@ -998,7 +998,7 @@ export class EnemySpawner extends Component {
         const isLastWave = totalWaves > 0 && (this.currentWaveIndex + 1) >= totalWaves;
         
         if (isLastWave) {
-            console.info(`[EnemySpawner] endCurrentWave() 最后一波完成，currentWaveIndex=${this.currentWaveIndex}, totalWaves=${totalWaves}，设置isLastWaveCompleted=true`);
+           //console.info(`[EnemySpawner] endCurrentWave() 最后一波完成，currentWaveIndex=${this.currentWaveIndex}, totalWaves=${totalWaves}，设置isLastWaveCompleted=true`);
             this.isLastWaveCompleted = true;
         }
         
@@ -1011,7 +1011,7 @@ export class EnemySpawner extends Component {
         // 使用 currentLevelConfig 而不是 waveConfig
         if (isSpecialWave) {
             
-            console.info(`[EnemySpawner] 第 ${this.currentWaveIndex + 1} 波完成，停止刷怪1分钟，显示倒计时弹窗`);
+           //console.info(`[EnemySpawner] 第 ${this.currentWaveIndex + 1} 波完成，停止刷怪1分钟，显示倒计时弹窗`);
             
             // 设置倒计时激活标志
             this.isCountdownActive = true;
@@ -1032,21 +1032,21 @@ export class EnemySpawner extends Component {
                 // 临时隐藏倒计时弹窗（如果存在）
                 // 使用 temporaryHide() 方法，只隐藏节点，不停止倒计时逻辑
                 if (this.uiManager && this.uiManager.countdownPopup) {
-                    console.info(`[EnemySpawner] 准备临时隐藏倒计时弹窗，countdownPopup存在=${!!this.uiManager.countdownPopup}, isCountdownActive=${this.isCountdownActive}`);
+                   //console.info(`[EnemySpawner] 准备临时隐藏倒计时弹窗，countdownPopup存在=${!!this.uiManager.countdownPopup}, isCountdownActive=${this.isCountdownActive}`);
                     this.uiManager.countdownPopup.temporaryHide();
-                    console.info(`[EnemySpawner] 显示增益卡片前，临时隐藏倒计时弹窗（倒计时继续运行）`);
+                   //console.info(`[EnemySpawner] 显示增益卡片前，临时隐藏倒计时弹窗（倒计时继续运行）`);
                 } else {
                     console.warn(`[EnemySpawner] 无法临时隐藏倒计时弹窗：uiManager=${!!this.uiManager}, countdownPopup=${!!(this.uiManager && this.uiManager.countdownPopup)}`);
                 }
                 
                 // 显示增益卡片，卡片关闭后恢复倒计时
                 this.gameManager.showBuffCards(() => {
-                    console.info(`[EnemySpawner] 增益卡片关闭回调，isCountdownActive=${this.isCountdownActive}, uiManager=${!!this.uiManager}, countdownPopup=${!!(this.uiManager && this.uiManager.countdownPopup)}`);
+                   //console.info(`[EnemySpawner] 增益卡片关闭回调，isCountdownActive=${this.isCountdownActive}, uiManager=${!!this.uiManager}, countdownPopup=${!!(this.uiManager && this.uiManager.countdownPopup)}`);
                     // 卡片关闭后，如果倒计时仍然激活，恢复显示倒计时
                     if (this.isCountdownActive && this.uiManager && this.uiManager.countdownPopup) {
                         // 使用 temporaryShow() 方法恢复显示，倒计时逻辑应该还在运行
                         this.uiManager.countdownPopup.temporaryShow();
-                        console.info(`[EnemySpawner] 增益卡片关闭，恢复倒计时弹窗显示`);
+                       //console.info(`[EnemySpawner] 增益卡片关闭，恢复倒计时弹窗显示`);
                     } else {
                         console.warn(`[EnemySpawner] 增益卡片关闭后未恢复倒计时：isCountdownActive=${this.isCountdownActive}, uiManager=${!!this.uiManager}, countdownPopup=${!!(this.uiManager && this.uiManager.countdownPopup)}`);
                     }
@@ -1062,7 +1062,7 @@ export class EnemySpawner extends Component {
             // 启动一个自动继续的定时器，确保即使没有弹窗也能继续游戏
             this.countdownAutoContinueTimer = this.scheduleOnce(() => {
                 if (this.isCountdownActive) {
-                    console.info(`[EnemySpawner] 倒计时1分钟完成，自动继续下一波`);
+                   //console.info(`[EnemySpawner] 倒计时1分钟完成，自动继续下一波`);
                     this.continueToNextWaves();
                 }
                 this.countdownAutoContinueTimer = null;
@@ -1096,7 +1096,7 @@ export class EnemySpawner extends Component {
      * 手动关闭倒计时回调
      */
     private onCountdownManualClose() {
-        console.info(`[EnemySpawner] onCountdownManualClose() 被调用，currentWaveIndex=${this.currentWaveIndex}`);
+       //console.info(`[EnemySpawner] onCountdownManualClose() 被调用，currentWaveIndex=${this.currentWaveIndex}`);
         this.continueToNextWaves();
     }
     
@@ -1104,14 +1104,14 @@ export class EnemySpawner extends Component {
      * 继续生成下一波（点击倒计时弹窗后触发，继续下5波）
      */
     private continueToNextWaves() {
-        console.info(`[EnemySpawner] continueToNextWaves() 被调用，currentWaveIndex=${this.currentWaveIndex}, isCountdownActive=${this.isCountdownActive}`);
+       //console.info(`[EnemySpawner] continueToNextWaves() 被调用，currentWaveIndex=${this.currentWaveIndex}, isCountdownActive=${this.isCountdownActive}`);
         
         // 取消倒计时激活标志
         this.isCountdownActive = false;
         
         // 取消60秒自动继续定时器（如果存在）
         if (this.countdownAutoContinueTimer) {
-            console.info(`[EnemySpawner] continueToNextWaves() 取消60秒自动继续定时器`);
+           //console.info(`[EnemySpawner] continueToNextWaves() 取消60秒自动继续定时器`);
             this.unschedule(this.countdownAutoContinueTimer);
             this.countdownAutoContinueTimer = null;
         }
@@ -1119,9 +1119,9 @@ export class EnemySpawner extends Component {
         // 确保游戏已恢复（增益卡片可能暂停了游戏）
         if (this.gameManager) {
             const gameState = this.gameManager.getGameState();
-            console.info(`[EnemySpawner] continueToNextWaves() 当前游戏状态=${gameState}`);
+           //console.info(`[EnemySpawner] continueToNextWaves() 当前游戏状态=${gameState}`);
             if (gameState !== GameState.Playing) {
-                console.info(`[EnemySpawner] continueToNextWaves() 游戏未在运行状态，恢复游戏`);
+               //console.info(`[EnemySpawner] continueToNextWaves() 游戏未在运行状态，恢复游戏`);
                 this.gameManager.resumeGame();
             }
         }
@@ -1136,7 +1136,7 @@ export class EnemySpawner extends Component {
             // 如果用户点击，isCountdownActive 已经被设置为 false，但 onPopupClick() 已经调用了 hide()
             // 所以这里只需要检查弹窗是否仍然激活
             if (this.uiManager && this.uiManager.countdownPopup && this.uiManager.countdownPopup.node.active) {
-                console.info(`[EnemySpawner] continueToNextWaves() 延迟隐藏倒计时弹窗（自动完成或用户已点击）`);
+               //console.info(`[EnemySpawner] continueToNextWaves() 延迟隐藏倒计时弹窗（自动完成或用户已点击）`);
                 this.uiManager.hideCountdownPopup();
             }
         }, 0.1);
@@ -1144,13 +1144,13 @@ export class EnemySpawner extends Component {
         // 如果还有下一波，开始下一波
         if (this.currentLevelConfig && this.currentLevelConfig.waves) {
             const totalWaves = this.currentLevelConfig.waves.length;
-            console.info(`[EnemySpawner] continueToNextWaves() 检查波次，currentWaveIndex=${this.currentWaveIndex}, totalWaves=${totalWaves}, 条件=${this.currentWaveIndex < totalWaves - 1}`);
+           //console.info(`[EnemySpawner] continueToNextWaves() 检查波次，currentWaveIndex=${this.currentWaveIndex}, totalWaves=${totalWaves}, 条件=${this.currentWaveIndex < totalWaves - 1}`);
             if (this.currentWaveIndex < totalWaves - 1) {
-                console.info(`[EnemySpawner] 继续下一波，currentWaveIndex: ${this.currentWaveIndex}, 总波数: ${totalWaves}`);
+               //console.info(`[EnemySpawner] 继续下一波，currentWaveIndex: ${this.currentWaveIndex}, 总波数: ${totalWaves}`);
                 // 调用 startNextWave 开始下一波
                 this.startNextWave();
             } else {
-                console.info(`[EnemySpawner] 没有更多波次了，currentWaveIndex: ${this.currentWaveIndex}, 总波数: ${totalWaves}`);
+               //console.info(`[EnemySpawner] 没有更多波次了，currentWaveIndex: ${this.currentWaveIndex}, 总波数: ${totalWaves}`);
             }
         } else {
             console.warn(`[EnemySpawner] continueToNextWaves() currentLevelConfig或waves不存在`);
@@ -1327,7 +1327,7 @@ export class EnemySpawner extends Component {
         }
 
         if (currentEnemyCount >= this.maxEnemiesOnScreen) {
-            console.info(`[EnemySpawner.spawnEnemy] 当前敌人数量 ${currentEnemyCount} 已达到上限 ${this.maxEnemiesOnScreen}，暂停本次刷怪`);
+           //console.info(`[EnemySpawner.spawnEnemy] 当前敌人数量 ${currentEnemyCount} 已达到上限 ${this.maxEnemiesOnScreen}，暂停本次刷怪`);
             return;
         }
 
@@ -1415,7 +1415,7 @@ export class EnemySpawner extends Component {
             // 检查是否所有配置都已完成
             if (this.currentWave && this.currentEnemyIndex + 1 >= this.currentWave.enemies.length) {
                 // 所有配置都已完成，结束当前波次
-                console.info(`[EnemySpawner.spawnEnemy] 所有敌人配置已完成，准备结束波次。currentEnemyIndex: ${this.currentEnemyIndex}, enemies.length: ${this.currentWave.enemies.length}`);
+               //console.info(`[EnemySpawner.spawnEnemy] 所有敌人配置已完成，准备结束波次。currentEnemyIndex: ${this.currentEnemyIndex}, enemies.length: ${this.currentWave.enemies.length}`);
                 this.currentEnemyIndex++;
                 this.currentEnemyConfig = null;
                 this.enemiesSpawnedCount = 0;
@@ -1503,7 +1503,7 @@ export class EnemySpawner extends Component {
         const enemiesNode = find('Canvas/Enemies');
         if (!enemiesNode || !enemiesNode.isValid) {
             // 如果Enemies节点不存在，认为没有敌人
-            console.info('[EnemySpawner.checkVictoryCondition] Enemies节点不存在，返回true');
+           //console.info('[EnemySpawner.checkVictoryCondition] Enemies节点不存在，返回true');
             return true;
         }
         
@@ -1540,12 +1540,12 @@ export class EnemySpawner extends Component {
         }
         
         if (aliveCount > 0) {
-            console.info(`[EnemySpawner.checkVictoryCondition] 还有 ${aliveCount} 个存活的敌人`);
+           //console.info(`[EnemySpawner.checkVictoryCondition] 还有 ${aliveCount} 个存活的敌人`);
             return false;
         }
         
         // 所有敌人都被消灭
-        console.info('[EnemySpawner.checkVictoryCondition] 所有敌人都被消灭，返回true');
+       //console.info('[EnemySpawner.checkVictoryCondition] 所有敌人都被消灭，返回true');
         return true;
     }
     

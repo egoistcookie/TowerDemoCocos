@@ -734,7 +734,7 @@ export class TowerBuilder extends Component {
                 this.stoneWallGridPanel = stoneWallGridPanelNode;
             }
         } else {
-            console.info('[TowerBuilder] findStoneWallGridPanel: 找不到Canvas/StoneWallGridPanel节点');
+           //console.info('[TowerBuilder] findStoneWallGridPanel: 找不到Canvas/StoneWallGridPanel节点');
         }
     }
 
@@ -1966,21 +1966,21 @@ export class TowerBuilder extends Component {
      * 不生成在最上层网格（y=9）
      */
     spawnInitialWatchTowers(count: number = 3) {
-        console.info('[TowerBuilder] spawnInitialWatchTowers: 开始生成初始哨塔，数量=', count);
+       //console.info('[TowerBuilder] spawnInitialWatchTowers: 开始生成初始哨塔，数量=', count);
         if (this.initialWatchTowersPlaced) {
-            console.info('[TowerBuilder] spawnInitialWatchTowers: 哨塔已生成，跳过');
+           //console.info('[TowerBuilder] spawnInitialWatchTowers: 哨塔已生成，跳过');
             return;
         }
         if (!this.stoneWallGridPanelComponent) {
-            console.info('[TowerBuilder] spawnInitialWatchTowers: 查找石墙网格面板');
+           //console.info('[TowerBuilder] spawnInitialWatchTowers: 查找石墙网格面板');
             this.findStoneWallGridPanel();
         }
         const panel = this.stoneWallGridPanelComponent;
         if (!panel) {
-            console.info('[TowerBuilder] spawnInitialWatchTowers: 找不到石墙网格面板');
+           //console.info('[TowerBuilder] spawnInitialWatchTowers: 找不到石墙网格面板');
             return;
         }
-        console.info('[TowerBuilder] spawnInitialWatchTowers: 找到石墙网格面板，gridWidth=', panel.gridWidth, 'gridHeight=', panel.gridHeight);
+       //console.info('[TowerBuilder] spawnInitialWatchTowers: 找到石墙网格面板，gridWidth=', panel.gridWidth, 'gridHeight=', panel.gridHeight);
 
         // 排除最上层（y=9），在其他行中随机选择
         // 哨塔占据两个网格高度，所以还需要排除倒数第二层（y=8），因为y=8时y+1=9会超出范围
@@ -1988,7 +1988,7 @@ export class TowerBuilder extends Component {
         for (let y = 0; y < panel.gridHeight - 2; y++) { // 排除最上层（y=9）和倒数第二层（y=8）
             availableYs.push(y);
         }
-        console.info('[TowerBuilder] spawnInitialWatchTowers: 可用y坐标范围=', availableYs);
+       //console.info('[TowerBuilder] spawnInitialWatchTowers: 可用y坐标范围=', availableYs);
 
         // 生成所有可能的x坐标
         const availableXs: number[] = [];
@@ -2011,7 +2011,7 @@ export class TowerBuilder extends Component {
         const placedPositions: { x: number; y: number }[] = [];
         let placed = 0;
         const minXDistance = 3; // x坐标最小间距
-        console.info('[TowerBuilder] spawnInitialWatchTowers: 开始尝试放置哨塔，最小x间距=', minXDistance);
+       //console.info('[TowerBuilder] spawnInitialWatchTowers: 开始尝试放置哨塔，最小x间距=', minXDistance);
 
         // 尝试放置哨塔
         for (const y of availableYs) {
@@ -2037,10 +2037,10 @@ export class TowerBuilder extends Component {
                 if (canPlace) {
                     const worldPos = panel.gridToWorld(x, y);
                     if (!worldPos) {
-                        console.info('[TowerBuilder] spawnInitialWatchTowers: 格子(', x, ',', y, ')无法转换为世界坐标，跳过');
+                       //console.info('[TowerBuilder] spawnInitialWatchTowers: 格子(', x, ',', y, ')无法转换为世界坐标，跳过');
                         continue;
                     }
-                    console.info('[TowerBuilder] spawnInitialWatchTowers: 在格子(', x, ',', y, ')生成哨塔，世界坐标=', worldPos);
+                   //console.info('[TowerBuilder] spawnInitialWatchTowers: 在格子(', x, ',', y, ')生成哨塔，世界坐标=', worldPos);
                     // 使用buildWatchTower方法建造哨塔（skipCost=true，不消耗金币）
                     this.buildWatchTower(worldPos, true);
                     
@@ -2051,7 +2051,7 @@ export class TowerBuilder extends Component {
             }
         }
 
-        console.info('[TowerBuilder] spawnInitialWatchTowers: 完成，共生成', placed, '个哨塔');
+       //console.info('[TowerBuilder] spawnInitialWatchTowers: 完成，共生成', placed, '个哨塔');
         this.initialWatchTowersPlaced = true;
     }
 
@@ -2160,14 +2160,14 @@ export class TowerBuilder extends Component {
                         // 占用两个网格：grid.y（选中的网格，下方）和 grid.y + 1（上方网格）
                         const occupy1 = this.stoneWallGridPanelComponent.occupyGrid(grid.x, grid.y, tower);
                         const occupy2 = this.stoneWallGridPanelComponent.occupyGrid(grid.x, grid.y + 1, tower);
-                        console.info('[TowerBuilder] buildIceTower 占用网格:', grid.x, grid.y, '结果:', occupy1, '上方网格:', grid.x, grid.y + 1, '结果:', occupy2);
+                       //console.info('[TowerBuilder] buildIceTower 占用网格:', grid.x, grid.y, '结果:', occupy1, '上方网格:', grid.x, grid.y + 1, '结果:', occupy2);
                         if (occupy1 && occupy2) {
                             towerScript.gridX = grid.x;
                             towerScript.gridY = grid.y; // 使用下方网格的坐标（与哨塔一致）
-                            console.info('[TowerBuilder] buildIceTower 成功占用两个网格，gridX:', towerScript.gridX, 'gridY:', towerScript.gridY, '(占用网格:', grid.x, grid.y, '和', grid.x, grid.y + 1, ')');
+                           //console.info('[TowerBuilder] buildIceTower 成功占用两个网格，gridX:', towerScript.gridX, 'gridY:', towerScript.gridY, '(占用网格:', grid.x, grid.y, '和', grid.x, grid.y + 1, ')');
                             // 调整位置，使其居中在两个网格之间（参考哨塔的做法）
                             const gridPos = this.stoneWallGridPanelComponent.gridToWorld(grid.x, grid.y);
-                            console.info('[TowerBuilder] buildIceTower 网格位置:', gridPos);
+                           //console.info('[TowerBuilder] buildIceTower 网格位置:', gridPos);
                             if (gridPos) {
                                 // 向上偏移50像素（一个网格），使其居中在两个网格之间
                                 const adjustedPos = new Vec3(gridPos.x, gridPos.y + 100, gridPos.z);
@@ -2219,7 +2219,7 @@ export class TowerBuilder extends Component {
                 // gridY 是下方网格的坐标（选中的），上方网格是 gridY + 1
                 const isOccupied1 = this.stoneWallGridPanelComponent.isGridOccupied(towerScript.gridX, towerScript.gridY);
                 const isOccupied2 = this.stoneWallGridPanelComponent.isGridOccupied(towerScript.gridX, towerScript.gridY + 1);
-                console.info('[TowerBuilder] buildIceTower 验证网格占用 - 下方网格:', towerScript.gridX, towerScript.gridY, '占用:', isOccupied1, '上方网格:', towerScript.gridX, towerScript.gridY + 1, '占用:', isOccupied2);
+               //console.info('[TowerBuilder] buildIceTower 验证网格占用 - 下方网格:', towerScript.gridX, towerScript.gridY, '占用:', isOccupied1, '上方网格:', towerScript.gridX, towerScript.gridY + 1, '占用:', isOccupied2);
             }
             
             if (this.gameManager) {
@@ -2334,11 +2334,11 @@ export class TowerBuilder extends Component {
                         // 占用两个网格：grid.y（选中的网格，下方）和 grid.y + 1（上方网格）
                         const occupy1 = this.stoneWallGridPanelComponent.occupyGrid(grid.x, grid.y, tower);
                         const occupy2 = this.stoneWallGridPanelComponent.occupyGrid(grid.x, grid.y + 1, tower);
-                        console.info('[TowerBuilder] buildThunderTower 占用网格:', grid.x, grid.y, '结果:', occupy1, '上方网格:', grid.x, grid.y + 1, '结果:', occupy2);
+                       //console.info('[TowerBuilder] buildThunderTower 占用网格:', grid.x, grid.y, '结果:', occupy1, '上方网格:', grid.x, grid.y + 1, '结果:', occupy2);
                         if (occupy1 && occupy2) {
                             towerScript.gridX = grid.x;
                             towerScript.gridY = grid.y; // 使用下方网格的坐标（与哨塔一致）
-                            console.info('[TowerBuilder] buildThunderTower 成功占用两个网格，gridX:', towerScript.gridX, 'gridY:', towerScript.gridY, '(占用网格:', grid.x, grid.y, '和', grid.x, grid.y + 1, ')');
+                           //console.info('[TowerBuilder] buildThunderTower 成功占用两个网格，gridX:', towerScript.gridX, 'gridY:', towerScript.gridY, '(占用网格:', grid.x, grid.y, '和', grid.x, grid.y + 1, ')');
                             // 调整位置，使其居中在两个网格之间（参考哨塔的做法）
                             const gridPos = this.stoneWallGridPanelComponent.gridToWorld(grid.x, grid.y);
                             if (gridPos) {

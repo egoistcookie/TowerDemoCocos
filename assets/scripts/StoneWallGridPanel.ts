@@ -239,7 +239,7 @@ export class StoneWallGridPanel extends Component {
         
         // 显示选择面板
         if (this.selectionPanel) {
-            console.info('[StoneWallGridPanel] 显示选择面板，网格坐标:', grid.x, grid.y, '世界坐标:', gridCenter);
+           //console.info('[StoneWallGridPanel] 显示选择面板，网格坐标:', grid.x, grid.y, '世界坐标:', gridCenter);
             this.selectionPanel.show(grid.x, grid.y, gridCenter);
         } else {
             console.warn('[StoneWallGridPanel] 选择面板未初始化');

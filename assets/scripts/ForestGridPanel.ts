@@ -271,7 +271,7 @@ export class ForestGridPanel extends Component {
                     return;
                 }
 
-                console.info('[ForestGridPanel] 从分包 prefabs_sub 成功加载 Tree 预制体');
+               //console.info('[ForestGridPanel] 从分包 prefabs_sub 成功加载 Tree 预制体');
                 ForestGridPanel.sharedTreePrefab = prefab as Prefab;
                 ForestGridPanel.treePrefabLoaded = true;
 

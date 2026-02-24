@@ -6,6 +6,7 @@ import { TalentSystem } from './TalentSystem';
 import { PlayerDataManager } from './PlayerDataManager';
 import { SoundManager } from './SoundManager';
 import { AudioManager } from './AudioManager';
+import { BuffManager } from './BuffManager';
 
 const { ccclass, property } = _decorator;
 
@@ -60,7 +61,7 @@ export class UIManager extends Component {
     private currentLevelLabel: Label = null!; // 当前关卡显示标签
 
     private activePage: 'game' | 'talent' | 'settings' = 'game';
-    private currentLevel: number = 1; // 当前选择的关卡（1-5）
+    private currentLevel: number = 1; // 当前选择的关卡（1-10）
 
     // 分包资源相关
     private isSubpackageLoaded: boolean = false; // 是否已加载分包资源
@@ -79,12 +80,12 @@ export class UIManager extends Component {
         // 初始化玩家数据管理器
         this.playerDataManager = PlayerDataManager.getInstance();
         this.playerDataManager.loadData().then(() => {
-            // 根据已通过关卡，计算当前可进行的最大关卡：maxPassed + 1（不超过5）
+            // 根据已通过关卡，计算当前可进行的最大关卡：maxPassed + 1（不超过10）
             if (this.playerDataManager && this.playerDataManager.getPassedLevels) {
                 const passed = this.playerDataManager.getPassedLevels();
                 if (passed && passed.length > 0) {
                     const maxPassed = Math.max(...passed);
-                    this.currentLevel = Math.min(5, maxPassed + 1);
+                    this.currentLevel = Math.min(10, maxPassed + 1);
                 }
             }
             // 初始化关卡显示和下一关按钮状态
@@ -154,7 +155,7 @@ export class UIManager extends Component {
             const audioNode = new Node('AudioManager');
             root.addChild(audioNode);
             audioMgr = audioNode.addComponent(AudioManager);
-            console.info('[UIManager] initGlobalAudioManagers() created AudioManager under', root.name);
+           //console.info('[UIManager] initGlobalAudioManagers() created AudioManager under', root.name);
         }
 
         // 确保 SoundManager 存在
@@ -163,7 +164,7 @@ export class UIManager extends Component {
             const soundNode = new Node('SoundManager');
             root.addChild(soundNode);
             soundMgr = soundNode.addComponent(SoundManager);
-            console.info('[UIManager] initGlobalAudioManagers() created SoundManager under', root.name);
+           //console.info('[UIManager] initGlobalAudioManagers() created SoundManager under', root.name);
         }
     }
     
@@ -764,7 +765,7 @@ export class UIManager extends Component {
         
         // 绑定开始游戏事件
         startButtonComp.node.on(Button.EventType.CLICK, () => {
-            console.info('[UIManager] Start button clicked, preparing to start game');
+           //console.info('[UIManager] Start button clicked, preparing to start game');
             
             // 1. 直接隐藏底部三页签，不依赖GameManager
             bottomSelectionNode.active = false;
@@ -796,7 +797,7 @@ export class UIManager extends Component {
             // 4. 调用GameManager的startGame方法（递归查找以防节点命名/层级变化）
             const gmComp = this.findComponentInScene('GameManager') as any;
             if (gmComp && gmComp.startGame) {
-                console.info('[UIManager] GameManager found, calling startGame()');
+               //console.info('[UIManager] GameManager found, calling startGame()');
                 gmComp.startGame();
             } else {
                 console.warn('[UIManager] GameManager not found or has no startGame()');
@@ -1300,6 +1301,11 @@ export class UIManager extends Component {
             // 清理所有单位（包括敌人、我方单位和建筑物）
             this.gameManager.cleanupAllUnitsForReset();
             
+            // 清除上一关的所有卡片增幅
+            const buffManager = BuffManager.getInstance();
+            buffManager.clearAllBuffs();
+            console.log('[UIManager] 重新开始游戏，已清除所有卡片增幅');
+            
             // 关闭结算弹窗
             if (this.gameManager.gameOverPanel) {
                 this.gameManager.gameOverPanel.active = false;
@@ -1489,16 +1495,16 @@ export class UIManager extends Component {
      * @param onManualClose 手动关闭回调
      */
     showCountdownPopup(onComplete: () => void, onManualClose: () => void) {
-        console.info(`[UIManager] showCountdownPopup() 被调用`);
+       //console.info(`[UIManager] showCountdownPopup() 被调用`);
         this.onCountdownComplete = onComplete;
         this.onCountdownManualClose = onManualClose;
         
         // 确保CountdownPopup存在
         this.autoCreateCountdownPopup();
-        console.info(`[UIManager] showCountdownPopup() countdownPopup存在=${!!this.countdownPopup}`);
+       //console.info(`[UIManager] showCountdownPopup() countdownPopup存在=${!!this.countdownPopup}`);
         
         if (this.countdownPopup) {
-            console.info(`[UIManager] showCountdownPopup() 调用 countdownPopup.show()`);
+           //console.info(`[UIManager] showCountdownPopup() 调用 countdownPopup.show()`);
             this.countdownPopup.show(
                 this.onCountdownCompleteHandler.bind(this),
                 this.onCountdownManualCloseHandler.bind(this)
@@ -1763,6 +1769,11 @@ export class UIManager extends Component {
         }
         
         // 3. 如果结算面板已显示，则真正退出游戏
+        // 清除上一关的所有卡片增幅
+        const buffManager = BuffManager.getInstance();
+        buffManager.clearAllBuffs();
+        console.log('[UIManager] 退出游戏，已清除所有卡片增幅');
+        
         // 在退出前结算经验值（虽然已经在showGameResultPanel中结算了，但这里确保保存）
         if (this.gameManager) {
             // 直接调用结算方法
@@ -1783,14 +1794,14 @@ export class UIManager extends Component {
         if (bottomSelectionNode) {
             bottomSelectionNode.active = true;
             
-            // 计算当前可进行的最大关卡：已通过关卡中的最大值，+1（不超过5）
+            // 计算当前可进行的最大关卡：已通过关卡中的最大值，+1（不超过10）
             let targetLevel = this.currentLevel;
             if (this.playerDataManager && this.playerDataManager.getPassedLevels) {
                 const passed = this.playerDataManager.getPassedLevels();
                 if (passed && passed.length > 0) {
                     const maxPassed = Math.max(...passed);
                     // 如果已经是最后一关，则仍然停留在最后一关；否则显示下一关
-                    targetLevel = Math.min(5, maxPassed + 1);
+                    targetLevel = Math.min(10, maxPassed + 1);
                 }
             }
 
@@ -1837,7 +1848,7 @@ export class UIManager extends Component {
             if (soundManager.isBgmOn()) {
                 soundManager.playMenuBgm();
             } else {
-                console.info('[UIManager.onExitGameClick] BGM is disabled, skip playing menu BGM');
+               //console.info('[UIManager.onExitGameClick] BGM is disabled, skip playing menu BGM');
             }
         }
         
@@ -1906,8 +1917,8 @@ export class UIManager extends Component {
                 this.otherBundle = bundle;
                 console.log('[UIManager] 成功加载 other bundle');
 
-                // 加载所有关卡背景图片（background2.png 到 background5.png）
-                const backgroundFiles = ['background2', 'background3', 'background4', 'background5'];
+                // 加载所有关卡背景图片（background2.png 到 background10.png）
+                const backgroundFiles = ['background2', 'background3', 'background4', 'background5', 'background6', 'background7', 'background8', 'background9', 'background10'];
                 const loadPromises: Promise<void>[] = [];
 
                 backgroundFiles.forEach((fileName, index) => {
@@ -2016,7 +2027,7 @@ export class UIManager extends Component {
      * 选择下一个关卡
      */
     selectNextLevel() {
-        if (this.currentLevel < 5) {
+        if (this.currentLevel < 10) {
             const nextLevel = this.currentLevel + 1;
             
             // 规则：只有“通过当前关卡”，才能选择“下一关”
@@ -2024,7 +2035,7 @@ export class UIManager extends Component {
             if (this.playerDataManager) {
                 const isCurrentLevelPassed = this.playerDataManager.isLevelPassed(this.currentLevel);
                 if (!isCurrentLevelPassed) {
-                    console.info(`[UIManager.selectNextLevel] 当前关卡 ${this.currentLevel} 未通过，无法切换到关卡 ${nextLevel}`);
+                   //console.info(`[UIManager.selectNextLevel] 当前关卡 ${this.currentLevel} 未通过，无法切换到关卡 ${nextLevel}`);
                     return;
                 }
             }
@@ -2081,7 +2092,7 @@ export class UIManager extends Component {
         const nextLevel = this.currentLevel + 1;
         
         // 如果已经是最后一关，禁用按钮
-        if (nextLevel > 5) {
+        if (nextLevel > 10) {
             const button = this.levelSelectRightButton.getComponent(Button);
             if (button) {
                 button.interactable = false;
@@ -2116,7 +2127,7 @@ export class UIManager extends Component {
         const button = this.levelSelectRightButton.getComponent(Button);
         if (button) {
             button.interactable = canGoToNextLevel;
-            console.info(`[UIManager.updateNextLevelButtonState] 下一关按钮状态更新，当前关卡: ${this.currentLevel}, 下一关: ${nextLevel}, 当前关卡已通过: ${canGoToNextLevel}, 可切换: ${canGoToNextLevel}`);
+           //console.info(`[UIManager.updateNextLevelButtonState] 下一关按钮状态更新，当前关卡: ${this.currentLevel}, 下一关: ${nextLevel}, 当前关卡已通过: ${canGoToNextLevel}, 可切换: ${canGoToNextLevel}`);
         }
         
         // 设置按钮透明度（置灰效果）
@@ -2299,14 +2310,14 @@ export class UIManager extends Component {
             this.onStartGameClick();
         }, this);
         
-        console.info('[UIManager] bindStartGameButton() 开始游戏按钮事件已绑定');
+       //console.info('[UIManager] bindStartGameButton() 开始游戏按钮事件已绑定');
     }
     
     /**
      * 开始游戏按钮点击事件
      */
     private onStartGameClick() {
-        console.info('[UIManager] onStartGameClick() 点击开始游戏按钮');
+       //console.info('[UIManager] onStartGameClick() 点击开始游戏按钮');
         
         // 查找 GameManager
         if (!this.gameManager) {
@@ -2318,10 +2329,15 @@ export class UIManager extends Component {
             return;
         }
         
+        // 清除上一关的所有卡片增幅
+        const buffManager = BuffManager.getInstance();
+        buffManager.clearAllBuffs();
+        console.log('[UIManager] 已清除上一关的所有卡片增幅');
+        
         // 切换背景音乐到游戏音乐（backMusic1.mp3）
         const soundManager = SoundManager.getInstance();
         if (soundManager && soundManager.isBgmOn()) {
-            console.info('[UIManager] onStartGameClick() 切换到游戏背景音乐');
+           //console.info('[UIManager] onStartGameClick() 切换到游戏背景音乐');
             soundManager.playGameBgm();
         }
         

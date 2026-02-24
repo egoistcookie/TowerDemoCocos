@@ -45,7 +45,7 @@ export class AudioManager extends Component {
                 const node = stack.pop()!;
                 const comp = node.getComponent(AudioManager);
                 if (comp && comp.node && comp.node.isValid) {
-                    console.info('[AudioManager] Instance() found existing AudioManager on node', node.name);
+                   //console.info('[AudioManager] Instance() found existing AudioManager on node', node.name);
                     this.instance = comp;
                     return comp;
                 }
@@ -58,7 +58,7 @@ export class AudioManager extends Component {
         if (audioManagerNode) {
             const comp = audioManagerNode.getComponent(AudioManager);
             if (comp && comp.node && comp.node.isValid) {
-                console.info('[AudioManager] Instance() found AudioManager on node', audioManagerNode.name);
+               //console.info('[AudioManager] Instance() found AudioManager on node', audioManagerNode.name);
                 this.instance = comp;
                 return comp;
             }
@@ -89,7 +89,7 @@ export class AudioManager extends Component {
         // 将 AudioManager 节点标记为常驻节点，防止在切换 / 重新加载场景时被销毁
         if (!director.isPersistRootNode(this.node)) {
             director.addPersistRootNode(this.node);
-            console.info('[AudioManager] onLoad() mark node as persist root');
+           //console.info('[AudioManager] onLoad() mark node as persist root');
         }
         
         // 初始化音频管理器

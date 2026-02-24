@@ -38,12 +38,12 @@ export class SoundManager extends Component {
         // 将 SoundManager 节点标记为常驻节点，防止在切换 / 重新加载场景时被销毁
         if (!director.isPersistRootNode(this.node)) {
             director.addPersistRootNode(this.node);
-            console.info('[SoundManager] onLoad() mark node as persist root');
+           //console.info('[SoundManager] onLoad() mark node as persist root');
         }
 
         // 立即加载音效设置，确保状态在 onLoad() 阶段就正确（避免 start() 执行前被调用时返回默认值）
         this.loadSoundSettings();
-        console.info('[SoundManager] onLoad() sound settings loaded, isBgmEnabled =', this.isBgmEnabled, 'isEffectEnabled =', this.isEffectEnabled);
+       //console.info('[SoundManager] onLoad() sound settings loaded, isBgmEnabled =', this.isBgmEnabled, 'isEffectEnabled =', this.isEffectEnabled);
 
         // 监听游戏切到后台/返回前台事件，自动暂停/恢复背景音乐
         game.on(Game.EVENT_HIDE, this.onGameHide, this);
@@ -65,7 +65,7 @@ export class SoundManager extends Component {
     }
     
     start() {
-        console.info('[SoundManager] start() called');
+       //console.info('[SoundManager] start() called');
         // 注意：loadSoundSettings() 已在 onLoad() 中调用，这里不再重复调用
         // 但如果需要，可以再次确保状态正确（双重保险）
         // this.loadSoundSettings();
@@ -79,7 +79,7 @@ export class SoundManager extends Component {
             const sfxStr = sys.localStorage.getItem('TowerDemo_SFX_Enabled');
             this.isBgmEnabled = bgmStr === null ? true : bgmStr === '1';
             this.isEffectEnabled = sfxStr === null ? true : sfxStr === '1';
-            console.info('[SoundManager] loadSoundSettings() from localStorage, isBgmEnabled =', this.isBgmEnabled, 'isEffectEnabled =', this.isEffectEnabled);
+           //console.info('[SoundManager] loadSoundSettings() from localStorage, isBgmEnabled =', this.isBgmEnabled, 'isEffectEnabled =', this.isEffectEnabled);
         } catch (e) {
             // 回退到默认值
             this.isBgmEnabled = true;
@@ -115,7 +115,7 @@ export class SoundManager extends Component {
      * 游戏切到后台时回调：如果当前背景音乐是开启状态，则先记录状态并暂停
      */
     private onGameHide() {
-        console.info('[SoundManager] onGameHide() called');
+       //console.info('[SoundManager] onGameHide() called');
         this.wasBgmEnabledBeforeHide = this.isBgmEnabled;
         if (this.isBgmEnabled) {
             const audioMgr = AudioManager.Instance;
@@ -128,7 +128,7 @@ export class SoundManager extends Component {
      * 这里仅在 BGM 开关仍为开启时恢复播放
      */
     private onGameShow() {
-        console.info('[SoundManager] onGameShow() called, wasBgmEnabledBeforeHide =', this.wasBgmEnabledBeforeHide, 'isBgmEnabled =', this.isBgmEnabled);
+       //console.info('[SoundManager] onGameShow() called, wasBgmEnabledBeforeHide =', this.wasBgmEnabledBeforeHide, 'isBgmEnabled =', this.isBgmEnabled);
         if (this.wasBgmEnabledBeforeHide && this.isBgmEnabled) {
             const audioMgr = AudioManager.Instance;
             audioMgr.resumeBGM();
@@ -137,14 +137,14 @@ export class SoundManager extends Component {
     
     // 切换背景音乐开关（由设置里的背景音乐开关键调用）
     toggleBgm() {
-        console.info('[SoundManager] toggleBgm() called, current isBgmEnabled =', this.isBgmEnabled);
+       //console.info('[SoundManager] toggleBgm() called, current isBgmEnabled =', this.isBgmEnabled);
         this.isBgmEnabled = !this.isBgmEnabled;
         this.saveSoundSettings();
-        console.info('[SoundManager] toggleBgm() new isBgmEnabled =', this.isBgmEnabled);
+       //console.info('[SoundManager] toggleBgm() new isBgmEnabled =', this.isBgmEnabled);
         
         // 关闭时立刻停止并静音背景音乐（双保险）
         if (!this.isBgmEnabled) {
-            console.info('[SoundManager] BGM turned OFF, calling stopGameBgm()');
+           //console.info('[SoundManager] BGM turned OFF, calling stopGameBgm()');
             this.stopGameBgm();
             this.stopLocalAudioSources();
             // 将背景音乐音量设为0，防止某些平台上 stop 后残留声音
@@ -152,7 +152,7 @@ export class SoundManager extends Component {
             audioMgr.setBGMVolume(0);
         } else {
             // 开启时不主动决定播放哪一首，由调用方根据当前处于首页/战斗阶段决定调用 playMenuBgm 或 playGameBgm
-            console.info('[SoundManager] BGM turned ON, waiting for context (menu/game) to decide which track to play');
+           //console.info('[SoundManager] BGM turned ON, waiting for context (menu/game) to decide which track to play');
         }
         
         return this.isBgmEnabled;
@@ -160,10 +160,10 @@ export class SoundManager extends Component {
     
     // 切换音效开关
     toggleEffect() {
-        console.info('[SoundManager] toggleEffect() called, current isEffectEnabled =', this.isEffectEnabled);
+       //console.info('[SoundManager] toggleEffect() called, current isEffectEnabled =', this.isEffectEnabled);
         this.isEffectEnabled = !this.isEffectEnabled;
         this.saveSoundSettings();
-        console.info('[SoundManager] toggleEffect() new isEffectEnabled =', this.isEffectEnabled);
+       //console.info('[SoundManager] toggleEffect() new isEffectEnabled =', this.isEffectEnabled);
 
         // 同步到 AudioManager：使用音量控制所有音效节点
         const audioMgr = AudioManager.Instance;
@@ -200,7 +200,7 @@ export class SoundManager extends Component {
      */
     private loadMenuBgm(onLoaded?: () => void) {
         if (this.menuBgmClip) {
-            console.info('[SoundManager] loadMenuBgm() clip already loaded');
+           //console.info('[SoundManager] loadMenuBgm() clip already loaded');
             if (onLoaded) {
                 onLoaded();
             }
@@ -208,11 +208,11 @@ export class SoundManager extends Component {
         }
 
         if (this.isMenuBgmLoading) {
-            console.info('[SoundManager] loadMenuBgm() already loading, skip duplicate request');
+           //console.info('[SoundManager] loadMenuBgm() already loading, skip duplicate request');
             return;
         }
 
-        console.info('[SoundManager] loadMenuBgm() start loading resources/sounds/backMusic');
+       //console.info('[SoundManager] loadMenuBgm() start loading resources/sounds/backMusic');
         this.isMenuBgmLoading = true;
         resources.load('sounds/backMusic', AudioClip, (err, clip) => {
             this.isMenuBgmLoading = false;
@@ -221,7 +221,7 @@ export class SoundManager extends Component {
                 return;
             }
             this.menuBgmClip = clip;
-            console.info('[SoundManager] loadMenuBgm() success, clip loaded');
+           //console.info('[SoundManager] loadMenuBgm() success, clip loaded');
             if (onLoaded) {
                 onLoaded();
             }
@@ -232,9 +232,9 @@ export class SoundManager extends Component {
      * 在首页时调用：播放并循环主菜单背景音乐（音量 100%）
      */
     playMenuBgm() {
-        console.info('[SoundManager] playMenuBgm() called, isBgmEnabled =', this.isBgmEnabled);
+       //console.info('[SoundManager] playMenuBgm() called, isBgmEnabled =', this.isBgmEnabled);
         if (!this.isBgmEnabled) {
-            console.info('[SoundManager] playMenuBgm() aborted because BGM is disabled');
+           //console.info('[SoundManager] playMenuBgm() aborted because BGM is disabled');
             return;
         }
 
@@ -251,7 +251,7 @@ export class SoundManager extends Component {
                 console.warn('[SoundManager] playMenuBgm() doPlay() called but menuBgmClip is null');
                 return;
             }
-            console.info('[SoundManager] playMenuBgm() doPlay() play MENU BGM now, volume = 1.0');
+           //console.info('[SoundManager] playMenuBgm() doPlay() play MENU BGM now, volume = 1.0');
             // 先强制停止当前背景音乐，避免任何残留
             audioMgr.stopBGM();
             audioMgr.setBGMVolume(1.0);
@@ -259,13 +259,13 @@ export class SoundManager extends Component {
         };
 
         if (this.menuBgmClip) {
-            console.info('[SoundManager] playMenuBgm() use cached clip');
+           //console.info('[SoundManager] playMenuBgm() use cached clip');
             doPlay();
         } else {
-            console.info('[SoundManager] playMenuBgm() no clip yet, call loadMenuBgm()');
+           //console.info('[SoundManager] playMenuBgm() no clip yet, call loadMenuBgm()');
             this.loadMenuBgm(() => {
                 if (this.isBgmEnabled) {
-                    console.info('[SoundManager] playMenuBgm() load complete & BGM enabled, call doPlay()');
+                   //console.info('[SoundManager] playMenuBgm() load complete & BGM enabled, call doPlay()');
                     doPlay();
                 }
             });
@@ -277,7 +277,7 @@ export class SoundManager extends Component {
      */
     private loadGameBgm(onLoaded?: () => void) {
         if (this.gameBgmClip) {
-            console.info('[SoundManager] loadGameBgm() clip already loaded');
+           //console.info('[SoundManager] loadGameBgm() clip already loaded');
             if (onLoaded) {
                 onLoaded();
             }
@@ -286,11 +286,11 @@ export class SoundManager extends Component {
 
         if (this.isGameBgmLoading) {
             // 正在加载中，简单地等待回调
-            console.info('[SoundManager] loadGameBgm() already loading, skip duplicate request');
+           //console.info('[SoundManager] loadGameBgm() already loading, skip duplicate request');
             return;
         }
 
-        console.info('[SoundManager] loadGameBgm() start loading resources/sounds/backMusic1');
+       //console.info('[SoundManager] loadGameBgm() start loading resources/sounds/backMusic1');
         this.isGameBgmLoading = true;
         resources.load('sounds/backMusic1', AudioClip, (err, clip) => {
             this.isGameBgmLoading = false;
@@ -299,7 +299,7 @@ export class SoundManager extends Component {
                 return;
             }
             this.gameBgmClip = clip;
-            console.info('[SoundManager] loadGameBgm() success, clip loaded');
+           //console.info('[SoundManager] loadGameBgm() success, clip loaded');
             if (onLoaded) {
                 onLoaded();
             }
@@ -311,9 +311,9 @@ export class SoundManager extends Component {
      * 音量固定为 30%
      */
     playGameBgm() {
-        console.info('[SoundManager] playGameBgm() called, isBgmEnabled =', this.isBgmEnabled);
+       //console.info('[SoundManager] playGameBgm() called, isBgmEnabled =', this.isBgmEnabled);
         if (!this.isBgmEnabled) {
-            console.info('[SoundManager] playGameBgm() aborted because BGM is disabled');
+           //console.info('[SoundManager] playGameBgm() aborted because BGM is disabled');
             return;
         }
 
@@ -331,7 +331,7 @@ export class SoundManager extends Component {
                 return;
             }
             // 设置背景音乐音量为 30%
-            console.info('[SoundManager] doPlay() play BGM now, volume = 0.3');
+           //console.info('[SoundManager] doPlay() play BGM now, volume = 0.3');
             // 先强制停止当前背景音乐，避免菜单 BGM 残留
             audioMgr.stopBGM();
             audioMgr.setBGMVolume(0.3);
@@ -339,13 +339,13 @@ export class SoundManager extends Component {
         };
 
         if (this.gameBgmClip) {
-            console.info('[SoundManager] playGameBgm() use cached clip');
+           //console.info('[SoundManager] playGameBgm() use cached clip');
             doPlay();
         } else {
-            console.info('[SoundManager] playGameBgm() no clip yet, call loadGameBgm()');
+           //console.info('[SoundManager] playGameBgm() no clip yet, call loadGameBgm()');
             this.loadGameBgm(() => {
                 if (this.isBgmEnabled) {
-                    console.info('[SoundManager] playGameBgm() load complete & BGM enabled, call doPlay()');
+                   //console.info('[SoundManager] playGameBgm() load complete & BGM enabled, call doPlay()');
                     doPlay();
                 }
             });
@@ -356,7 +356,7 @@ export class SoundManager extends Component {
      * 在退出游戏时调用：停止背景音乐播放
      */
     stopGameBgm() {
-        console.info('[SoundManager] stopGameBgm() called');
+       //console.info('[SoundManager] stopGameBgm() called');
         const audioMgr = AudioManager.Instance;
         audioMgr.stopBGM();
     }
@@ -376,7 +376,7 @@ export class SoundManager extends Component {
                 const node = stack.pop()!;
                 const comp = node.getComponent(SoundManager);
                 if (comp) {
-                    console.info('[SoundManager] getInstance() found existing SoundManager component in scene on node', node.name);
+                   //console.info('[SoundManager] getInstance() found existing SoundManager component in scene on node', node.name);
                     this.instance = comp;
                     return comp;
                 }
@@ -389,7 +389,7 @@ export class SoundManager extends Component {
         if (soundManagerNode) {
             const comp = soundManagerNode.getComponent(SoundManager);
             if (comp && comp.node && comp.node.isValid) {
-                console.info('[SoundManager] getInstance() found SoundManager on node', soundManagerNode.name);
+               //console.info('[SoundManager] getInstance() found SoundManager on node', soundManagerNode.name);
                 this.instance = comp;
                 return comp;
             }

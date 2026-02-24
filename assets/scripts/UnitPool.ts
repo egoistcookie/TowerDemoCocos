@@ -60,9 +60,9 @@ export class UnitPool extends Component {
         if (!this.pools.has(prefabName)) {
             this.pools.set(prefabName, []);
             this.activeCount.set(prefabName, 0);
-            console.info(`[UnitPool] 注册预制体: ${prefabName}, 创建新池`);
+           //console.info(`[UnitPool] 注册预制体: ${prefabName}, 创建新池`);
         } else {
-            console.info(`[UnitPool] 注册预制体: ${prefabName}, 池已存在`);
+           //console.info(`[UnitPool] 注册预制体: ${prefabName}, 池已存在`);
         }
         
         // 预创建一些对象
@@ -91,7 +91,7 @@ export class UnitPool extends Component {
         }
         
         if (pool.length > initialCount) {
-            console.info(`[UnitPool] 预热 ${prefabName}: 创建了 ${pool.length - initialCount} 个对象, 池大小: ${pool.length}`);
+           //console.info(`[UnitPool] 预热 ${prefabName}: 创建了 ${pool.length - initialCount} 个对象, 池大小: ${pool.length}`);
         }
     }
     
@@ -144,7 +144,7 @@ export class UnitPool extends Component {
      */
     release(unit: Node | null, prefabName?: string): void {
         if (!unit || !unit.isValid) {
-            console.info(`[UnitPool] 释放对象失败: 对象无效`);
+           //console.info(`[UnitPool] 释放对象失败: 对象无效`);
             return;
         }
         
@@ -175,7 +175,7 @@ export class UnitPool extends Component {
                     }
                     if (!prefabName) {
                         // 如果所有池都满了，直接销毁
-                        console.info(`[UnitPool] 释放对象失败: 无法推断类型且所有池已满, 销毁对象: ${unit.name}`);
+                       //console.info(`[UnitPool] 释放对象失败: 无法推断类型且所有池已满, 销毁对象: ${unit.name}`);
                         unit.destroy();
                         return;
                     }
@@ -186,7 +186,7 @@ export class UnitPool extends Component {
         const pool = this.pools.get(prefabName);
         if (!pool) {
             // 如果找不到对应的池，直接销毁
-            console.info(`[UnitPool] 释放对象失败: 未找到 ${prefabName} 的池, 销毁对象: ${unit.name}`);
+           //console.info(`[UnitPool] 释放对象失败: 未找到 ${prefabName} 的池, 销毁对象: ${unit.name}`);
             unit.destroy();
             return;
         }
@@ -208,7 +208,7 @@ export class UnitPool extends Component {
             
         } else {
             // 池已满，直接销毁
-            console.info(`[UnitPool] 释放 ${prefabName}: 池已满(${pool.length}/${this.MAX_POOL_SIZE}), 销毁对象: ${unit.name}`);
+           //console.info(`[UnitPool] 释放 ${prefabName}: 池已满(${pool.length}/${this.MAX_POOL_SIZE}), 销毁对象: ${unit.name}`);
             unit.destroy();
         }
     }
@@ -235,7 +235,7 @@ export class UnitPool extends Component {
         this.pools.clear();
         this.activeCount.clear();
         
-        console.info(`[UnitPool] 清空所有对象池: 销毁了 ${totalDestroyed} 个对象, 池类型: [${poolNames.join(', ')}]`);
+       //console.info(`[UnitPool] 清空所有对象池: 销毁了 ${totalDestroyed} 个对象, 池类型: [${poolNames.join(', ')}]`);
     }
     
     /**

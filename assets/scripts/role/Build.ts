@@ -11,6 +11,7 @@ import { UnitType } from '../UnitType';
 import { BuildingPool } from '../BuildingPool';
 import { DamageStatistics } from '../DamageStatistics';
 import { BuffManager } from '../BuffManager';
+import { TalentEffectManager } from '../TalentEffectManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('Build')
@@ -97,7 +98,7 @@ export class Build extends Component {
      * 从对象池获取的建筑物会调用此方法，而不是start方法
      */
     onEnable() {
-        console.info(`[Build] onEnable 被调用，单位类型: ${this.constructor.name}`);
+       //console.info(`[Build] onEnable 被调用，单位类型: ${this.constructor.name}`);
         
         // 从对象池获取时，重新初始化状态
         this.currentHealth = this.maxHealth;
@@ -126,12 +127,15 @@ export class Build extends Component {
             }
         }
         
+        // 应用天赋增幅（必须在应用卡片增幅之前）
+        this.applyTalentEnhancements();
+        
         // 应用已保存的增益效果
         this.applyBuffsFromManager();
     }
 
     protected start() {
-        console.info(`[Build] start 被调用，单位类型: ${this.constructor.name}`);
+       //console.info(`[Build] start 被调用，单位类型: ${this.constructor.name}`);
         
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
@@ -157,8 +161,26 @@ export class Build extends Component {
         // 创建血条
         this.createHealthBar();
         
+        // 应用天赋增幅（必须在应用卡片增幅之前）
+        this.applyTalentEnhancements();
+        
         // 应用已保存的增益效果（首次创建时）
         this.applyBuffsFromManager();
+    }
+    
+    /**
+     * 应用天赋增幅到建筑物
+     * 注意：必须在 applyBuffsFromManager 之前调用
+     */
+    protected applyTalentEnhancements() {
+        const talentEffectManager = TalentEffectManager.getInstance();
+        const unitId = this.constructor.name;
+        
+        // 应用单位卡片强化
+        talentEffectManager.applyUnitEnhancements(unitId, this);
+        
+        // 应用公共天赋增幅
+        talentEffectManager.applyTalentEffects(this);
     }
 
     protected findGameManager() {
@@ -1282,7 +1304,7 @@ export class Build extends Component {
                 unitName = unitTypeNameMap.get(unitType) || unitType;
             }
             
-            // console.info('[Build] 记录伤害统计',
+            ////console.info('[Build] 记录伤害统计',
             //     'unitType =', unitType,
             //     'unitName =', unitName,
             //     'damage =', damage);
@@ -1300,7 +1322,7 @@ export class Build extends Component {
         const buffManager = BuffManager.getInstance();
         const unitId = this.constructor.name; // 获取类名作为单位ID
         
-        console.info(`[Build] applyBuffsFromManager 被调用，单位ID: ${unitId}`);
+       //console.info(`[Build] applyBuffsFromManager 被调用，单位ID: ${unitId}`);
         
         // 应用增益
         buffManager.applyBuffsToUnit(this, unitId);
@@ -1309,7 +1331,7 @@ export class Build extends Component {
         if (this.healthBar && this.healthBar.isValid) {
             this.healthBar.setMaxHealth(this.maxHealth);
             this.healthBar.setHealth(this.currentHealth);
-            console.info(`[Build] 更新血条显示: ${this.currentHealth}/${this.maxHealth}`);
+           //console.info(`[Build] 更新血条显示: ${this.currentHealth}/${this.maxHealth}`);
         }
         
         // 如果单位被选中，更新单位信息面板
@@ -1325,7 +1347,7 @@ export class Build extends Component {
             }
             
             this.unitSelectionManager.updateUnitInfo(updateInfo);
-            console.info(`[Build] 更新单位信息面板`);
+           //console.info(`[Build] 更新单位信息面板`);
         }
     }
 }

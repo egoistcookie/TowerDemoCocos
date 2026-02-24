@@ -851,14 +851,20 @@ export class TalentSystem extends Component {
             const buttonTextLabel = buttonTextNode.addComponent(Label);
             const currentValue = currentEnhancement?.enhancements?.[option.key as keyof typeof currentEnhancement.enhancements] || 0;
             
+            // 计算单位当前总等级
+            const unitLevel = this.getUnitLevel(unit.id);
+            
+            // 计算本次强化需要的天赋点（基于单位等级）
+            const requiredPoints = unitLevel + 1;
+            
             // 构建显示文本
             let displayText = '';
             if (option.key === 'buildCost') {
                 // 建造成本显示特殊格式
                 const currentCostReduction = currentValue || 0;
-                displayText = `${option.name} ${option.value > 0 ? '+' : ''}${option.value}${option.unit} (当前: ${currentCostReduction > 0 ? '+' : ''}${currentCostReduction}${option.unit}) [消耗1天赋点]`;
+                displayText = `${option.name} ${option.value > 0 ? '+' : ''}${option.value}${option.unit} (当前: ${currentCostReduction > 0 ? '+' : ''}${currentCostReduction}${option.unit}) [消耗${requiredPoints}天赋点]`;
             } else {
-                displayText = `${option.name} +${option.value}${option.unit} (当前: +${currentValue}${option.unit}) [消耗1天赋点]`;
+                displayText = `${option.name} +${option.value}${option.unit} (当前: +${currentValue}${option.unit}) [消耗${requiredPoints}天赋点]`;
             }
             
             buttonTextLabel.string = displayText;
@@ -887,12 +893,6 @@ export class TalentSystem extends Component {
             return;
         }
         
-        const currentTalentPoints = this.playerDataManager.getTalentPoints();
-        if (currentTalentPoints < 1) {
-            // 显示提示：天赋点不足
-            return;
-        }
-        
         // 获取当前强化数据
         let enhancement = this.playerDataManager.getUnitEnhancement(unitId);
         if (!enhancement) {
@@ -900,6 +900,20 @@ export class TalentSystem extends Component {
                 unitId: unitId,
                 enhancements: {}
             };
+        }
+        
+        // 计算单位当前总等级（所有属性强化次数之和）
+        const currentUnitLevel = this.getUnitLevel(unitId);
+        
+        // 计算本次强化需要的天赋点：当前等级 + 1
+        // 例如：等级0时强化消耗1点，等级5时强化消耗6点
+        const requiredPoints = currentUnitLevel + 1;
+        
+        const currentTalentPoints = this.playerDataManager.getTalentPoints();
+        if (currentTalentPoints < requiredPoints) {
+            // 显示提示：天赋点不足
+            console.warn(`[TalentSystem] 天赋点不足，需要 ${requiredPoints} 点，当前只有 ${currentTalentPoints} 点`);
+            return;
         }
         
         // 更新强化值
@@ -910,8 +924,10 @@ export class TalentSystem extends Component {
         this.playerDataManager.setUnitEnhancement(unitId, enhancement);
         
         // 消耗天赋点
-        this.playerDataManager.useTalentPoint(1);
+        this.playerDataManager.useTalentPoint(requiredPoints);
         this.talentPoints = this.playerDataManager.getTalentPoints();
+        
+        console.log(`[TalentSystem] 强化 ${unitId} 的 ${propertyKey}，单位等级 ${currentUnitLevel}，消耗 ${requiredPoints} 天赋点，剩余 ${this.talentPoints} 点`);
         
         // 更新天赋点显示
         this.updateTalentPointsDisplay();
@@ -1015,10 +1031,10 @@ export class TalentSystem extends Component {
             return;
         }
         
-        // 更新等级显示
+        // 更新等级显示（使用强化次数，而不是消耗的天赋点数）
         const levelLabel = levelNode.getComponent(Label);
         if (levelLabel) {
-            const unitLevel = this.getUnitTalentPointsUsed(unitId);
+            const unitLevel = this.getUnitLevel(unitId);
             levelLabel.string = `等级: ${unitLevel}`;
         }
     }
@@ -1744,11 +1760,11 @@ export class TalentSystem extends Component {
     }
     
     /**
-     * 获取单位使用的天赋点数（等级）
+     * 获取单位的总等级（所有属性强化次数之和）
      * @param unitId 单位ID
-     * @returns 该单位使用的天赋点数
+     * @returns 单位的总等级
      */
-    getUnitTalentPointsUsed(unitId: string): number {
+    getUnitLevel(unitId: string): number {
         if (!this.playerDataManager) {
             return 0;
         }
@@ -1759,35 +1775,56 @@ export class TalentSystem extends Component {
         }
         
         const enhancements = enhancement.enhancements;
-        let talentPointsUsed = 0;
+        let totalLevel = 0;
         
-        // 计算各属性使用的天赋点数
-        // 攻击力：1点 = 1天赋点
+        // 计算各属性的强化次数
+        // 攻击力：1点 = 1次强化
         if (enhancements.attackDamage) {
-            talentPointsUsed += Math.floor(enhancements.attackDamage / 1);
+            totalLevel += Math.floor(enhancements.attackDamage / 1);
         }
         
-        // 攻击速度：5% = 1天赋点
+        // 攻击速度：5% = 1次强化
         if (enhancements.attackSpeed) {
-            talentPointsUsed += Math.floor(enhancements.attackSpeed / 5);
+            totalLevel += Math.floor(enhancements.attackSpeed / 5);
         }
         
-        // 生命值：2点 = 1天赋点
+        // 生命值：2点 = 1次强化
         if (enhancements.maxHealth) {
-            talentPointsUsed += Math.floor(enhancements.maxHealth / 2);
+            totalLevel += Math.floor(enhancements.maxHealth / 2);
         }
         
-        // 移动速度：5点 = 1天赋点
+        // 移动速度：5点 = 1次强化
         if (enhancements.moveSpeed) {
-            talentPointsUsed += Math.floor(enhancements.moveSpeed / 5);
+            totalLevel += Math.floor(enhancements.moveSpeed / 5);
         }
         
-        // 建造成本：1点 = 1天赋点（负数表示减少）
+        // 建造成本：1点 = 1次强化（负数表示减少）
         if (enhancements.buildCost) {
-            talentPointsUsed += Math.abs(Math.floor(enhancements.buildCost / 1));
+            totalLevel += Math.abs(Math.floor(enhancements.buildCost / 1));
         }
         
-        return talentPointsUsed;
+        return totalLevel;
+    }
+    
+    /**
+     * 获取单位使用的天赋点数（等级）
+     * @param unitId 单位ID
+     * @returns 该单位使用的天赋点数
+     */
+    getUnitTalentPointsUsed(unitId: string): number {
+        if (!this.playerDataManager) {
+            return 0;
+        }
+        
+        // 获取单位总等级
+        const unitLevel = this.getUnitLevel(unitId);
+        
+        // 计算总消耗的天赋点数（递增消耗）
+        // 第1次强化消耗1点，第2次消耗2点，第3次消耗3点...第n次消耗n点
+        // 总消耗 = 1 + 2 + 3 + ... + n = n * (n + 1) / 2
+        const totalUsed = unitLevel * (unitLevel + 1) / 2;
+        
+        return totalUsed;
     }
     
     /**
@@ -1810,22 +1847,16 @@ export class TalentSystem extends Component {
             }
         }
         
-        // 计算单位强化使用的天赋点
+        // 计算单位强化使用的天赋点（基于单位等级递增消耗）
         const unitEnhancements = this.playerDataManager.getPlayerData().unitEnhancements || {};
         for (const unitId in unitEnhancements) {
             if (unitEnhancements.hasOwnProperty(unitId)) {
-                const enhancement = unitEnhancements[unitId];
-                if (enhancement && enhancement.enhancements) {
-                    // 每个强化项消耗1天赋点，计算强化项数量
-                    const enhancements = enhancement.enhancements;
-                    let enhancementCount = 0;
-                    if (enhancements.attackDamage) enhancementCount += Math.floor(enhancements.attackDamage / 1); // 1点攻击力=1天赋点
-                    if (enhancements.attackSpeed) enhancementCount += Math.floor(enhancements.attackSpeed / 5);
-                    if (enhancements.maxHealth) enhancementCount += Math.floor(enhancements.maxHealth / 2); // 2点生命值=1天赋点
-                    if (enhancements.moveSpeed) enhancementCount += Math.floor(enhancements.moveSpeed / 5);
-                    if (enhancements.buildCost) enhancementCount += Math.abs(Math.floor(enhancements.buildCost / 1));
-                    totalUsedPoints += enhancementCount;
-                }
+                // 获取单位总等级
+                const unitLevel = this.getUnitLevel(unitId);
+                
+                // 计算总消耗：1 + 2 + 3 + ... + n = n * (n + 1) / 2
+                const unitTotalUsed = unitLevel * (unitLevel + 1) / 2;
+                totalUsedPoints += unitTotalUsed;
             }
         }
         
@@ -1853,6 +1884,8 @@ export class TalentSystem extends Component {
         const currentTalentPoints = this.playerDataManager.getTalentPoints();
         this.playerDataManager.setTalentPoints(currentTalentPoints + totalUsedPoints);
         this.talentPoints = this.playerDataManager.getTalentPoints();
+        
+        console.log(`[TalentSystem] 重置所有天赋，恢复 ${totalUsedPoints} 天赋点，当前天赋点: ${this.talentPoints}`);
         
         // 更新显示
         this.updateTalentPointsDisplay();

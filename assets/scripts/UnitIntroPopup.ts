@@ -38,11 +38,11 @@ export class UnitIntroPopup extends Component {
         
         // 初始隐藏
         if (this.container) {
-            console.info('[UnitIntroPopup] start() 中设置 container.active = false，当前 active=', this.container.active);
-            console.info('[UnitIntroPopup] start() 中检查 Graphics，containerGraphics.exists=', this.container.getComponent(Graphics)?.isValid);
-            console.info('[UnitIntroPopup] start() 中检查 Graphics，containerGraphics.enabled=', this.container.getComponent(Graphics)?.enabled);
+           //console.info('[UnitIntroPopup] start() 中设置 container.active = false，当前 active=', this.container.active);
+           //console.info('[UnitIntroPopup] start() 中检查 Graphics，containerGraphics.exists=', this.container.getComponent(Graphics)?.isValid);
+           //console.info('[UnitIntroPopup] start() 中检查 Graphics，containerGraphics.enabled=', this.container.getComponent(Graphics)?.enabled);
             this.container.active = false;
-            console.info('[UnitIntroPopup] start() 中设置后 container.active=', this.container.active);
+           //console.info('[UnitIntroPopup] start() 中设置后 container.active=', this.container.active);
         }
         
         // 绑定关闭事件

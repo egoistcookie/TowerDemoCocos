@@ -76,7 +76,7 @@ export class BuffCardConfigManager {
 
                 this.config = jsonAsset.json as BuffCardConfig;
                 this.isLoaded = true;
-                console.info('[BuffCardConfigManager] 配置文件加载成功');
+               //console.info('[BuffCardConfigManager] 配置文件加载成功');
                 resolve();
             });
         });
@@ -114,7 +114,7 @@ export class BuffCardConfigManager {
         }
         
         // 调试日志：输出概率计算详情
-        console.info(`[BuffCardConfigManager] generateRarity: rand=${rand.toFixed(4)}, R=${probs.R}, SR=${probs.SR}, SSR=${1 - probs.R - probs.SR}, 结果=${rarity}`);
+       //console.info(`[BuffCardConfigManager] generateRarity: rand=${rand.toFixed(4)}, R=${probs.R}, SR=${probs.SR}, SSR=${1 - probs.R - probs.SR}, 结果=${rarity}`);
         
         return rarity;
     }

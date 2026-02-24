@@ -51,7 +51,7 @@ export class BuffManager {
         // 全局增益
         if (buffType === 'populationIncrease' || buffType === 'goldReward' || buffType === 'goldIncrease') {
             this.globalBuffs.push(buffData);
-            console.info(`[BuffManager] 添加全局增益: ${buffType} +${buffValue}`);
+           //console.info(`[BuffManager] 添加全局增益: ${buffType} +${buffValue}`);
             return;
         }
         
@@ -63,7 +63,7 @@ export class BuffManager {
         const buffs = this.appliedBuffs.get(unitId)!;
         buffs.push(buffData);
         
-        console.info(`[BuffManager] 添加单位增益: ${unitId} ${buffType} +${buffValue}%`);
+       //console.info(`[BuffManager] 添加单位增益: ${unitId} ${buffType} +${buffValue}%`);
     }
     
     /**
@@ -87,28 +87,29 @@ export class BuffManager {
         const buffs = this.getBuffsForUnit(unitId);
         
         if (buffs.length === 0) {
-            console.info(`[BuffManager] 单位 ${unitId} 没有已保存的增益`);
+           //console.info(`[BuffManager] 单位 ${unitId} 没有已保存的增益`);
             return;
         }
         
-        console.info(`[BuffManager] 应用 ${buffs.length} 个增益到新单位: ${unitId}`);
+       //console.info(`[BuffManager] 应用 ${buffs.length} 个增益到新单位: ${unitId}`);
         
-        // 保存原始属性（如果还没有保存）
+        // 保存当前属性作为基准（此时已经应用了天赋增幅）
+        // 注意：这里保存的是天赋增幅后的属性值，卡片增幅将基于这个值计算
         if (!unitScript._originalAttackDamage) {
             unitScript._originalAttackDamage = unitScript.attackDamage || 0;
-            console.info(`[BuffManager] 保存原始攻击力: ${unitScript._originalAttackDamage}`);
+           //console.info(`[BuffManager] 保存基准攻击力（已含天赋增幅）: ${unitScript._originalAttackDamage}`);
         }
         if (!unitScript._originalAttackInterval) {
             unitScript._originalAttackInterval = unitScript.attackInterval || 1;
-            console.info(`[BuffManager] 保存原始攻击间隔: ${unitScript._originalAttackInterval}`);
+           //console.info(`[BuffManager] 保存基准攻击间隔（已含天赋增幅）: ${unitScript._originalAttackInterval}`);
         }
         if (!unitScript._originalMaxHealth) {
             unitScript._originalMaxHealth = unitScript.maxHealth || 0;
-            console.info(`[BuffManager] 保存原始生命值: ${unitScript._originalMaxHealth}`);
+           //console.info(`[BuffManager] 保存基准生命值（已含天赋增幅）: ${unitScript._originalMaxHealth}`);
         }
         if (!unitScript._originalMoveSpeed) {
             unitScript._originalMoveSpeed = unitScript.moveSpeed || 0;
-            console.info(`[BuffManager] 保存原始移动速度: ${unitScript._originalMoveSpeed}`);
+           //console.info(`[BuffManager] 保存基准移动速度（已含天赋增幅）: ${unitScript._originalMoveSpeed}`);
         }
         
         // 初始化累积增幅百分比为0（新单位）
@@ -133,7 +134,7 @@ export class BuffManager {
                 unitScript._buffAttackDamagePercent += buff.buffValue;
                 const damageMultiplier = 1 + unitScript._buffAttackDamagePercent / 100;
                 unitScript.attackDamage = Math.floor(unitScript._originalAttackDamage * damageMultiplier);
-                console.info(`[BuffManager] 应用攻击力增幅 ${buff.buffValue}%，累积增幅 ${unitScript._buffAttackDamagePercent}%，最终攻击力: ${unitScript.attackDamage}`);
+               //console.info(`[BuffManager] 应用攻击力增幅 ${buff.buffValue}%，累积增幅 ${unitScript._buffAttackDamagePercent}%，最终攻击力: ${unitScript.attackDamage}`);
                 break;
                 
             case 'attackSpeed':
@@ -141,7 +142,7 @@ export class BuffManager {
                 unitScript._buffAttackSpeedPercent += buff.buffValue;
                 const speedMultiplier = 1 + unitScript._buffAttackSpeedPercent / 100;
                 unitScript.attackInterval = unitScript._originalAttackInterval / speedMultiplier;
-                console.info(`[BuffManager] 应用攻击速度增幅 ${buff.buffValue}%，累积增幅 ${unitScript._buffAttackSpeedPercent}%，最终攻击间隔: ${unitScript.attackInterval}`);
+               //console.info(`[BuffManager] 应用攻击速度增幅 ${buff.buffValue}%，累积增幅 ${unitScript._buffAttackSpeedPercent}%，最终攻击间隔: ${unitScript.attackInterval}`);
                 break;
                 
             case 'maxHealth':
@@ -168,7 +169,7 @@ export class BuffManager {
                     unitScript.healthBar.setHealth(unitScript.currentHealth);
                 }
                 
-                console.info(`[BuffManager] 应用生命值增幅 ${buff.buffValue}%，累积增幅 ${unitScript._buffMaxHealthPercent}%，最终生命上限: ${unitScript.maxHealth}，当前生命: ${unitScript.currentHealth}`);
+               //console.info(`[BuffManager] 应用生命值增幅 ${buff.buffValue}%，累积增幅 ${unitScript._buffMaxHealthPercent}%，最终生命上限: ${unitScript.maxHealth}，当前生命: ${unitScript.currentHealth}`);
                 break;
                 
             case 'moveSpeed':
@@ -176,7 +177,7 @@ export class BuffManager {
                 unitScript._buffMoveSpeedPercent += buff.buffValue;
                 const moveMultiplier = 1 + unitScript._buffMoveSpeedPercent / 100;
                 unitScript.moveSpeed = Math.round(unitScript._originalMoveSpeed * moveMultiplier * 100) / 100;
-                console.info(`[BuffManager] 应用移动速度增幅 ${buff.buffValue}%，累积增幅 ${unitScript._buffMoveSpeedPercent}%，最终移动速度: ${unitScript.moveSpeed}`);
+               //console.info(`[BuffManager] 应用移动速度增幅 ${buff.buffValue}%，累积增幅 ${unitScript._buffMoveSpeedPercent}%，最终移动速度: ${unitScript.moveSpeed}`);
                 break;
         }
     }
@@ -187,7 +188,7 @@ export class BuffManager {
     public clearAllBuffs() {
         this.appliedBuffs.clear();
         this.globalBuffs = [];
-        console.info('[BuffManager] 清除所有增益');
+       //console.info('[BuffManager] 清除所有增益');
     }
     
     /**

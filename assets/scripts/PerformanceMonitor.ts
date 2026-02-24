@@ -59,12 +59,12 @@ export class PerformanceMonitor {
         
         // 如果超过阈值，输出警告日志
         if (duration > logThreshold && logThreshold > 0) {
-            console.info(`[PerformanceMonitor] 慢方法警告: ${methodName} 耗时 ${duration.toFixed(2)}ms`);
+           //console.info(`[PerformanceMonitor] 慢方法警告: ${methodName} 耗时 ${duration.toFixed(2)}ms`);
         }
         
         // 如果超过慢方法阈值，输出警告
         if (duration > this.SLOW_METHOD_THRESHOLD) {
-            console.info(`[PerformanceMonitor] ⚠️ 慢方法检测: ${methodName} 耗时 ${duration.toFixed(2)}ms (阈值: ${this.SLOW_METHOD_THRESHOLD}ms)`);
+           //console.info(`[PerformanceMonitor] ⚠️ 慢方法检测: ${methodName} 耗时 ${duration.toFixed(2)}ms (阈值: ${this.SLOW_METHOD_THRESHOLD}ms)`);
         }
     }
 
@@ -122,7 +122,7 @@ export class PerformanceMonitor {
      * 输出统计信息
      */
     static logStatistics(): void {
-        console.info('========== 性能统计信息 ==========');
+       //console.info('========== 性能统计信息 ==========');
         
         // 按平均耗时排序
         const methodStats: Array<{ name: string; avg: number; max: number; min: number; count: number }> = [];
@@ -144,14 +144,14 @@ export class PerformanceMonitor {
         
         // 输出前20个最耗时的方法
         const topMethods = methodStats.slice(0, 20);
-        console.info(`[PerformanceMonitor] 最耗时的方法（前20个）:`);
+       //console.info(`[PerformanceMonitor] 最耗时的方法（前20个）:`);
         topMethods.forEach((stat, index) => {
             const isSlow = stat.avg > this.SLOW_METHOD_THRESHOLD;
             const prefix = isSlow ? '⚠️' : '  ';
-            console.info(`${prefix} ${index + 1}. ${stat.name}: 平均 ${stat.avg.toFixed(2)}ms, 最大 ${stat.max.toFixed(2)}ms, 最小 ${stat.min.toFixed(2)}ms, 调用 ${stat.count} 次`);
+           //console.info(`${prefix} ${index + 1}. ${stat.name}: 平均 ${stat.avg.toFixed(2)}ms, 最大 ${stat.max.toFixed(2)}ms, 最小 ${stat.min.toFixed(2)}ms, 调用 ${stat.count} 次`);
         });
         
-        console.info('================================');
+       //console.info('================================');
     }
 
     /**

@@ -105,10 +105,10 @@ export class UnitManager extends Component {
                     this.enemies.push(node);
                 }
             }
-            // console.info(`[UnitManager.updateUnitLists] Enemies节点有 ${allChildren.length} 个子节点，其中 ${this.enemies.length} 个有效且激活`);
+            ////console.info(`[UnitManager.updateUnitLists] Enemies节点有 ${allChildren.length} 个子节点，其中 ${this.enemies.length} 个有效且激活`);
         } else {
             this.enemies = [];
-            // console.info(`[UnitManager.updateUnitLists] Enemies节点不存在或无效，敌人列表为空`);
+            ////console.info(`[UnitManager.updateUnitLists] Enemies节点不存在或无效，敌人列表为空`);
         }
         
         // 更新防御塔列表
@@ -389,7 +389,7 @@ export class UnitManager extends Component {
             result.push(enemy);
         }
         
-        // console.info(`[UnitManager.getEnemiesInRange] 返回 ${result.length} 个符合条件的敌人`);
+        ////console.info(`[UnitManager.getEnemiesInRange] 返回 ${result.length} 个符合条件的敌人`);
         return result;
     }
     

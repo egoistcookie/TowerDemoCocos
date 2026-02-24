@@ -51,7 +51,7 @@ export class DamageStatistics {
         this.isRecording = true;
         this.gameStartTime = Date.now();
         this.damageMap.clear();
-        // console.info('[DamageStatistics] 开始记录伤害统计');
+        ////console.info('[DamageStatistics] 开始记录伤害统计');
     }
     
     /**
@@ -59,7 +59,7 @@ export class DamageStatistics {
      */
     public stopRecording() {
         this.isRecording = false;
-        // console.info('[DamageStatistics] 停止记录伤害统计');
+        ////console.info('[DamageStatistics] 停止记录伤害统计');
     }
     
     /**
@@ -116,7 +116,7 @@ export class DamageStatistics {
             data.dps = data.totalDamage; // 如果时间太短，直接使用总伤害
         }
 
-        // console.info('[DamageStatistics] recordDamage',
+        ////console.info('[DamageStatistics] recordDamage',
         //     'unitType =', unitType,
         //     'unitName =', unitName,
         //     'key =', key,
@@ -157,7 +157,7 @@ export class DamageStatistics {
         data.damageTaken = (data.damageTaken || 0) + damage;
         data.endTime = Date.now();
 
-        // console.info('[DamageStatistics] recordDamageTaken',
+        ////console.info('[DamageStatistics] recordDamageTaken',
         //     'unitType =', unitType,
         //     'unitName =', unitName,
         //     'key =', key,
@@ -195,7 +195,7 @@ export class DamageStatistics {
         data.healAmount = (data.healAmount || 0) + heal;
         data.endTime = Date.now();
 
-        // console.info('[DamageStatistics] recordHeal',
+        ////console.info('[DamageStatistics] recordHeal',
         //     'unitType =', unitType,
         //     'unitName =', unitName,
         //     'key =', key,
@@ -223,7 +223,7 @@ export class DamageStatistics {
         allData.sort((a, b) => b.dps - a.dps);
         
         const topList = allData.slice(0, topN);
-        // console.info('[DamageStatistics] getTopDPSUnits topN =', topN,
+        ////console.info('[DamageStatistics] getTopDPSUnits topN =', topN,
         //     'allCount =', allData.length,
         //     'topList =', topList.map(d => ({
         //         unitType: d.unitType,
@@ -245,7 +245,7 @@ export class DamageStatistics {
         allData.sort((a, b) => b.totalDamage - a.totalDamage);
         
         const topList = allData.slice(0, topN);
-        // console.info('[DamageStatistics] getTopDamageUnits topN =', topN,
+        ////console.info('[DamageStatistics] getTopDamageUnits topN =', topN,
         //     'allCount =', allData.length,
         //     'topList =', topList.map(d => ({
         //         unitType: d.unitType,

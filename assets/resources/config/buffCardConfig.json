@@ -69,6 +69,6 @@
   "unitTypeCategories": {
     "tower": ["WatchTower", "IceTower", "ThunderTower"],
     "role": ["Arrower", "Hunter", "ElfSwordsman", "Priest"],
-    "building": ["WarAncientTree"]
+    "building": ["WarAncientTree", "HunterHall", "SwordsmanHall", "Church", "MoonWell"]
   }
 }
