@@ -309,6 +309,17 @@ export class UnitManager extends Component {
     }
     
     /**
+     * 获取所有防御塔（包括哨塔、冰塔、雷塔）
+     */
+    getDefenseTowers(): Node[] {
+        return [
+            ...this.watchTowers,
+            ...this.iceTowers,
+            ...this.thunderTowers
+        ].filter(node => node && node.isValid && node.active);
+    }
+    
+    /**
      * 获取所有石墙（已缓存）
      */
     getStoneWalls(): Node[] {

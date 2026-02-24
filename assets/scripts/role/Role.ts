@@ -166,6 +166,16 @@ export class Role extends Component {
     // 性能监控相关属性
     private static unitCountLogTimer: number = 0; // 单位数量日志输出计时器（静态，所有Role实例共享）
     private static readonly UNIT_COUNT_LOG_INTERVAL: number = 1.0; // 单位数量日志输出间隔（秒）
+    
+    // 节点缓存（性能优化：避免每帧 find()）
+    private static cachedCrystalNode: Node | null = null;
+    private static cachedTowersNode: Node | null = null;
+    private static cachedHuntersNode: Node | null = null;
+    private static cachedElfSwordsmansNode: Node | null = null;
+    private static cachedEnemiesNode: Node | null = null;
+    private static cacheInitialized: boolean = false;
+    private static recursiveFindWarningCount: number = 0; // 递归查找警告计数
+    private static cachedGameManagerWarned: boolean = false; // GameManager 警告标志
 
     start() {
         console.info(`[Role] start 被调用，单位类型: ${this.constructor.name}`);
@@ -198,6 +208,9 @@ export class Role extends Component {
         // 查找单位选择管理器
         this.findUnitSelectionManager();
         
+        // 初始化节点缓存（只在第一个单位创建时执行一次）
+        this.initializeNodeCache();
+        
         // 创建血条
         this.createHealthBar();
         
@@ -210,13 +223,43 @@ export class Role extends Component {
         // 应用已保存的增益效果（首次创建时）
         this.applyBuffsFromManager();
     }
+    
+    /**
+     * 初始化节点缓存（静态方法，只执行一次）
+     * 性能优化：避免每帧调用 find()
+     */
+    private initializeNodeCache() {
+        if (Role.cacheInitialized) {
+            return;
+        }
+        
+        console.warn('[Role性能优化] 开始初始化节点缓存...');
+        
+        // 缓存常用节点
+        Role.cachedCrystalNode = find('Crystal');
+        Role.cachedTowersNode = find('Canvas/Towers');
+        Role.cachedHuntersNode = find('Canvas/Hunters');
+        Role.cachedElfSwordsmansNode = find('Canvas/ElfSwordsmans');
+        Role.cachedEnemiesNode = find('Canvas/Enemies');
+        
+        Role.cacheInitialized = true;
+        
+        console.warn('[Role性能优化] 节点缓存初始化完成:', {
+            crystal: !!Role.cachedCrystalNode,
+            towers: !!Role.cachedTowersNode,
+            hunters: !!Role.cachedHuntersNode,
+            elfSwordsmans: !!Role.cachedElfSwordsmansNode,
+            enemies: !!Role.cachedEnemiesNode
+        });
+    }
 
     /**
      * 查找单位选择管理器
+     * 优化：只在 start 时调用一次
      */
     findUnitSelectionManager() {
         // 方法1: 通过节点名称查找
-        let managerNode = find('UnitSelectionManager');
+        let managerNode = find('Canvas/UnitSelectionManager');
         if (managerNode) {
             this.unitSelectionManager = managerNode.getComponent(UnitSelectionManager);
             if (this.unitSelectionManager) {
@@ -224,20 +267,8 @@ export class Role extends Component {
             }
         }
         
-        // 方法2: 从场景根节点递归查找UnitSelectionManager组件
-        const scene = this.node.scene;
-        if (scene) {
-            const findInScene = (node: Node, componentType: any): any => {
-                const comp = node.getComponent(componentType);
-                if (comp) return comp;
-                for (const child of node.children) {
-                    const found = findInScene(child, componentType);
-                    if (found) return found;
-                }
-                return null;
-            };
-            this.unitSelectionManager = findInScene(scene, UnitSelectionManager);
-        }
+        // 如果找不到，记录警告但不递归查找
+        console.warn('[Role性能优化] 未找到 UnitSelectionManager 节点');
     }
 
     initAttackAnimation() {
@@ -471,31 +502,24 @@ export class Role extends Component {
     }
 
     findGameManager() {
-        // 方法1: 通过节点名称查找
+        // 方法1: 通过节点名称查找（尝试多个可能的路径）
         let gmNode = find('GameManager');
+        if (!gmNode) {
+            gmNode = find('Canvas/GameManager');
+        }
+        
         if (gmNode) {
             this.gameManager = gmNode.getComponent(GameManager);
             if (this.gameManager) {
+                console.log('[Role性能优化] 成功找到 GameManager');
                 return;
             }
         }
         
-        // 方法2: 从场景根节点递归查找GameManager组件
-        const scene = this.node.scene;
-        if (scene) {
-            const findInScene = (node: Node, componentType: any): any => {
-                const comp = node.getComponent(componentType);
-                if (comp) return comp;
-                for (const child of node.children) {
-                    const found = findInScene(child, componentType);
-                    if (found) return found;
-                }
-                return null;
-            };
-            this.gameManager = findInScene(scene, GameManager);
-            if (this.gameManager) {
-                return;
-            }
+        // 如果找不到，记录警告但不递归查找（只在第一次警告）
+        if (!Role.cachedGameManagerWarned) {
+            console.warn('[Role性能优化] 未找到 GameManager 节点，请确保 GameManager 在场景中');
+            Role.cachedGameManagerWarned = true;
         }
     }
 
@@ -526,21 +550,30 @@ export class Role extends Component {
                 const hunters = this.unitManager.getHunters();
                 const elfSwordsmans = this.unitManager.getElfSwordsmans();
                 roleCount = towers.length + hunters.length + elfSwordsmans.length;
+                
+                console.log(`[Role性能优化] 单位数量统计 - 敌人: ${enemyCount}, 我方: ${roleCount}, 使用UnitManager: 是`);
             } else {
-                // 降级方案：直接查找节点
-                const enemiesNode = find('Canvas/Enemies');
+                // 降级方案：使用缓存节点（避免 find() 调用）
+                console.warn('[Role性能优化] UnitManager未初始化，使用缓存节点统计');
+                const enemiesNode = Role.cachedEnemiesNode;
                 if (enemiesNode) {
                     enemyCount = enemiesNode.children.filter(node => node && node.isValid && node.active).length;
                 }
                 
-                const towersNode = find('Canvas/Towers');
-                const huntersNode = find('Canvas/Hunters');
-                const elfSwordsmansNode = find('Canvas/ElfSwordsmans');
+                const towersNode = Role.cachedTowersNode;
+                const huntersNode = Role.cachedHuntersNode;
+                const elfSwordsmansNode = Role.cachedElfSwordsmansNode;
                 if (towersNode) roleCount += towersNode.children.filter(node => node && node.isValid && node.active).length;
                 if (huntersNode) roleCount += huntersNode.children.filter(node => node && node.isValid && node.active).length;
                 if (elfSwordsmansNode) roleCount += elfSwordsmansNode.children.filter(node => node && node.isValid && node.active).length;
+                
+                console.log(`[Role性能优化] 单位数量统计 - 敌人: ${enemyCount}, 我方: ${roleCount}, 使用缓存节点: 是`);
             }
             
+            // 输出递归查找警告计数
+            if (Role.recursiveFindWarningCount > 0) {
+                console.error(`[Role性能优化] ⚠️ 检测到 ${Role.recursiveFindWarningCount} 次递归查找警告！`);
+            }
         }
 
         // 更新对话框系统（在游戏状态检查之前，确保对话框能正常显示）
@@ -896,10 +929,12 @@ export class Role extends Component {
                 includeOnlyAlive
             );
         } else {
-            // 降级方案：如果没有UnitManager，从对象池容器直接获取（不再使用递归查找）
-            const enemiesNode = find('Canvas/Enemies');
+            // 降级方案：使用缓存的节点（避免 find() 调用）
+            console.warn('[Role性能优化] UnitManager未初始化，使用缓存节点降级方案');
+            const enemiesNode = Role.cachedEnemiesNode;
             
             if (!enemiesNode) {
+                console.error('[Role性能优化] 缓存的敌人节点不存在！');
                 return [];
             }
             
@@ -1192,57 +1227,28 @@ export class Role extends Component {
      * 检查位置是否有碰撞
      * @param position 要检查的位置
      * @returns 如果有碰撞返回true
+     * 性能优化：使用缓存节点和 UnitManager，避免 find() 和递归查找
      */
     checkCollisionAtPosition(position: Vec3): boolean {
-        // 检查与水晶的碰撞
-        const crystal = find('Crystal');
-        if (!crystal) {
-            // 尝试递归查找
-            const findNodeRecursive = (node: Node, name: string): Node | null => {
-                if (node.name === name) {
-                    return node;
-                }
-                for (const child of node.children) {
-                    const found = findNodeRecursive(child, name);
-                    if (found) return found;
-                }
-                return null;
-            };
-            const scene = this.node.scene;
-            if (scene) {
-                const foundCrystal = findNodeRecursive(scene, 'Crystal');
-                if (foundCrystal && foundCrystal.isValid && foundCrystal.active) {
-                    const crystalDistance = Vec3.distance(position, foundCrystal.worldPosition);
-                    const crystalRadius = 50;
-                    const minDistance = this.collisionRadius + crystalRadius;
-                    if (crystalDistance < minDistance) {
-                        return true;
-                    }
-                }
-            }
-        } else if (crystal && crystal.isValid && crystal.active) {
+        // 检查与水晶的碰撞 - 使用缓存节点
+        const crystal = Role.cachedCrystalNode;
+        if (crystal && crystal.isValid && crystal.active) {
             const crystalDistance = Vec3.distance(position, crystal.worldPosition);
-            const crystalRadius = 50; // 增大水晶半径，确保不会太近
+            const crystalRadius = 50;
             const minDistance = this.collisionRadius + crystalRadius;
             if (crystalDistance < minDistance) {
                 return true;
             }
         }
 
-        // 检查与其他弓箭手的碰撞
-        const towersNode = find('Canvas/Towers');
-        
-        if (towersNode) {
-            const towers = towersNode.children || [];
-            let towerCount = 0;
+        // 检查与其他弓箭手的碰撞 - 优先使用 UnitManager
+        if (this.unitManager) {
+            const towers = this.unitManager.getTowers();
             for (const tower of towers) {
                 if (tower && tower.isValid && tower.active && tower !== this.node) {
-                    towerCount++;
                     const towerDistance = Vec3.distance(position, tower.worldPosition);
-                    // 获取另一个角色的碰撞半径（如果有）
                     const otherTowerScript = tower.getComponent('Role') as any;
                     if (!otherTowerScript) {
-                        // 也尝试获取Arrower（向后兼容）
                         const arrowerScript = tower.getComponent('Arrower') as any;
                         if (arrowerScript) {
                             const otherRadius = arrowerScript.collisionRadius ? arrowerScript.collisionRadius : this.collisionRadius;
@@ -1253,113 +1259,137 @@ export class Role extends Component {
                         }
                         continue;
                     }
-                    const otherRadius = otherTowerScript && otherTowerScript.collisionRadius ? otherTowerScript.collisionRadius : this.collisionRadius;
-                    const minDistance = (this.collisionRadius + otherRadius) * 1.2; // 增加20%的安全距离
-                    
-                    // 调试：当距离较近时总是输出日志（降低阈值，确保能检测到）
-                    if (towerDistance < 200) { // 使用固定值200像素，确保能检测到
-                    }
+                    const otherRadius = otherTowerScript.collisionRadius ? otherTowerScript.collisionRadius : this.collisionRadius;
+                    const minDistance = (this.collisionRadius + otherRadius) * 1.2;
                     
                     if (towerDistance < minDistance) {
                         return true;
                     }
                 }
             }
-            
-            // 调试：如果没有找到其他弓箭手
-            if (towerCount === 0 && Math.random() < 0.016) {
-            }
         } else {
-            // 调试：如果找不到Towers节点（降低警告频率，避免刷屏）
-            if (this.collisionCheckCount % 100 === 0) {
+            // 降级方案：使用缓存节点
+            console.warn('[Role性能优化] checkCollisionAtPosition: UnitManager未初始化，使用缓存节点');
+            const towersNode = Role.cachedTowersNode;
+        
+            if (towersNode) {
+                const towers = towersNode.children || [];
+                for (const tower of towers) {
+                    if (tower && tower.isValid && tower.active && tower !== this.node) {
+                        const towerDistance = Vec3.distance(position, tower.worldPosition);
+                        const otherTowerScript = tower.getComponent('Role') as any;
+                        if (!otherTowerScript) {
+                            const arrowerScript = tower.getComponent('Arrower') as any;
+                            if (arrowerScript) {
+                                const otherRadius = arrowerScript.collisionRadius ? arrowerScript.collisionRadius : this.collisionRadius;
+                                const minDistance = (this.collisionRadius + otherRadius) * 1.2;
+                                if (towerDistance < minDistance) {
+                                    return true;
+                                }
+                            }
+                            continue;
+                        }
+                        const otherRadius = otherTowerScript.collisionRadius ? otherTowerScript.collisionRadius : this.collisionRadius;
+                        const minDistance = (this.collisionRadius + otherRadius) * 1.2;
+                        
+                        if (towerDistance < minDistance) {
+                            return true;
+                        }
+                    }
+                }
             }
         }
 
-        // 检查与精灵剑士的碰撞
-        let swordsmenNode = find('ElfSwordsmans');
-        // 如果直接查找失败，尝试递归查找
-        if (!swordsmenNode) {
-            const findNodeRecursive = (node: Node, name: string): Node | null => {
-                if (node.name === name) {
-                    return node;
-                }
-                for (const child of node.children) {
-                    const found = findNodeRecursive(child, name);
-                    if (found) return found;
-                }
-                return null;
-            };
-            const scene = this.node.scene;
-            if (scene) {
-                swordsmenNode = findNodeRecursive(scene, 'ElfSwordsmans');
-            }
-        }
-        
-        if (swordsmenNode) {
-            const swordsmen = swordsmenNode.children || [];
+        // 检查与精灵剑士的碰撞 - 优先使用 UnitManager
+        if (this.unitManager) {
+            const swordsmen = this.unitManager.getElfSwordsmans();
             for (const swordsman of swordsmen) {
                 if (swordsman && swordsman.isValid && swordsman.active && swordsman !== this.node) {
                     const swordsmanDistance = Vec3.distance(position, swordsman.worldPosition);
-                    // 获取另一个角色的碰撞半径
                     const otherSwordsmanScript = swordsman.getComponent('Role') as any;
                     if (!otherSwordsmanScript) {
                         continue;
                     }
-                    const otherRadius = otherSwordsmanScript && otherSwordsmanScript.collisionRadius ? otherSwordsmanScript.collisionRadius : this.collisionRadius;
-                    const minDistance = (this.collisionRadius + otherRadius) * 1.2; // 增加20%的安全距离
+                    const otherRadius = otherSwordsmanScript.collisionRadius ? otherSwordsmanScript.collisionRadius : this.collisionRadius;
+                    const minDistance = (this.collisionRadius + otherRadius) * 1.2;
                     
                     if (swordsmanDistance < minDistance) {
                         return true;
                     }
                 }
             }
-        }
-
-        // 检查与女猎手的碰撞
-        let huntersNode = find('Hunters');
-        if (!huntersNode) {
-            const findNodeRecursive = (node: Node, name: string): Node | null => {
-                if (node.name === name) {
-                    return node;
+        } else {
+            // 降级方案：使用缓存节点（避免递归查找）
+            const swordsmenNode = Role.cachedElfSwordsmansNode;
+            
+            if (swordsmenNode) {
+                const swordsmen = swordsmenNode.children || [];
+                for (const swordsman of swordsmen) {
+                    if (swordsman && swordsman.isValid && swordsman.active && swordsman !== this.node) {
+                        const swordsmanDistance = Vec3.distance(position, swordsman.worldPosition);
+                        const otherSwordsmanScript = swordsman.getComponent('Role') as any;
+                        if (!otherSwordsmanScript) {
+                            continue;
+                        }
+                        const otherRadius = otherSwordsmanScript.collisionRadius ? otherSwordsmanScript.collisionRadius : this.collisionRadius;
+                        const minDistance = (this.collisionRadius + otherRadius) * 1.2;
+                        
+                        if (swordsmanDistance < minDistance) {
+                            return true;
+                        }
+                    }
                 }
-                for (const child of node.children) {
-                    const found = findNodeRecursive(child, name);
-                    if (found) return found;
-                }
-                return null;
-            };
-            const scene = this.node.scene;
-            if (scene) {
-                huntersNode = findNodeRecursive(scene, 'Hunters');
             }
         }
-        
-        if (huntersNode) {
-            const hunters = huntersNode.children || [];
+
+        // 检查与女猎手的碰撞 - 优先使用 UnitManager
+        if (this.unitManager) {
+            const hunters = this.unitManager.getHunters();
             for (const hunter of hunters) {
                 if (hunter && hunter.isValid && hunter.active && hunter !== this.node) {
                     const hunterDistance = Vec3.distance(position, hunter.worldPosition);
-                    // 获取另一个角色的碰撞半径
                     const otherHunterScript = hunter.getComponent('Role') as any;
                     if (!otherHunterScript) {
                         continue;
                     }
-                    const otherRadius = otherHunterScript && otherHunterScript.collisionRadius ? otherHunterScript.collisionRadius : this.collisionRadius;
-                    const minDistance = (this.collisionRadius + otherRadius) * 1.2; // 增加20%的安全距离
+                    const otherRadius = otherHunterScript.collisionRadius ? otherHunterScript.collisionRadius : this.collisionRadius;
+                    const minDistance = (this.collisionRadius + otherRadius) * 1.2;
                     
                     if (hunterDistance < minDistance) {
                         return true;
                     }
                 }
             }
+        } else {
+            // 降级方案：使用缓存节点（避免递归查找）
+            const huntersNode = Role.cachedHuntersNode;
+            
+            if (huntersNode) {
+                const hunters = huntersNode.children || [];
+                for (const hunter of hunters) {
+                    if (hunter && hunter.isValid && hunter.active && hunter !== this.node) {
+                        const hunterDistance = Vec3.distance(position, hunter.worldPosition);
+                        const otherHunterScript = hunter.getComponent('Role') as any;
+                        if (!otherHunterScript) {
+                            continue;
+                        }
+                        const otherRadius = otherHunterScript.collisionRadius ? otherHunterScript.collisionRadius : this.collisionRadius;
+                        const minDistance = (this.collisionRadius + otherRadius) * 1.2;
+                        
+                        if (hunterDistance < minDistance) {
+                            return true;
+                        }
+                    }
+                }
+            }
         }
 
-        // 检查与敌人的碰撞 - 使用公共敌人获取函数
+        // 检查与敌人的碰撞 - 使用公共敌人获取函数（已优化，使用 UnitManager）
         const enemies = this.getEnemies(true);
         for (const enemy of enemies) {
             if (enemy && enemy.isValid && enemy.active) {
                 const enemyDistance = Vec3.distance(position, enemy.worldPosition);
-                const enemyRadius = 30; // 增大敌人半径
+                const enemyRadius = 30;
                 const minDistance = this.collisionRadius + enemyRadius;
                 if (enemyDistance < minDistance) {
                     return true;
@@ -1367,29 +1397,16 @@ export class Role extends Component {
             }
         }
 
-        // 检查与石墙的碰撞
-        const findAllStoneWalls = (node: Node): Node[] => {
-            const walls: Node[] = [];
-            const wallScript = node.getComponent('StoneWall') as any;
-            if (wallScript && node.active && node.isValid) {
-                walls.push(node);
-            }
-            for (const child of node.children) {
-                walls.push(...findAllStoneWalls(child));
-            }
-            return walls;
-        };
-
-        const scene = this.node.scene;
-        if (scene) {
-            const allStoneWalls = findAllStoneWalls(scene);
-            for (const wall of allStoneWalls) {
+        // 检查与石墙的碰撞 - 使用 UnitManager（避免递归查找）
+        if (this.unitManager) {
+            const walls = this.unitManager.getStoneWalls();
+            for (const wall of walls) {
                 if (!wall || !wall.active || !wall.isValid) continue;
                 const wallScript = wall.getComponent('StoneWall') as any;
                 if (!wallScript || !wallScript.isAlive || !wallScript.isAlive()) continue;
                 
                 const wallPos = wall.worldPosition;
-                const wallRadius = wallScript.collisionRadius ?? 25; // 使用预制体设置的值，如果没有设置则默认为25
+                const wallRadius = wallScript.collisionRadius ?? 25;
                 const distanceToWall = Vec3.distance(position, wallPos);
                 const minDistance = this.collisionRadius + wallRadius;
                 
@@ -1397,26 +1414,18 @@ export class Role extends Component {
                     return true;
                 }
             }
+        } else {
+            // 降级方案：记录警告，避免递归查找
+            if (Role.recursiveFindWarningCount < 5) {
+                console.error('[Role性能优化] 检测到石墙碰撞检测但 UnitManager 未初始化！跳过石墙碰撞检测。');
+                Role.recursiveFindWarningCount++;
+            }
         }
 
-        // 检查与防御塔的碰撞（包括哨塔、冰塔、雷塔）
-        const findAllTowers = (node: Node): Node[] => {
-            const towers: Node[] = [];
-            const watchTowerScript = node.getComponent('WatchTower') as any;
-            const iceTowerScript = node.getComponent('IceTower') as any;
-            const thunderTowerScript = node.getComponent('ThunderTower') as any;
-            if ((watchTowerScript || iceTowerScript || thunderTowerScript) && node.active && node.isValid) {
-                towers.push(node);
-            }
-            for (const child of node.children) {
-                towers.push(...findAllTowers(child));
-            }
-            return towers;
-        };
-
-        if (scene) {
-            const allTowers = findAllTowers(scene);
-            for (const tower of allTowers) {
+        // 检查与防御塔的碰撞 - 使用 UnitManager（避免递归查找）
+        if (this.unitManager) {
+            const towers = this.unitManager.getDefenseTowers();
+            for (const tower of towers) {
                 if (!tower || !tower.active || !tower.isValid) continue;
                 const watchTowerScript = tower.getComponent('WatchTower') as any;
                 const iceTowerScript = tower.getComponent('IceTower') as any;
@@ -1425,15 +1434,20 @@ export class Role extends Component {
                 if (!towerScript || !towerScript.isAlive || !towerScript.isAlive()) continue;
                 
                 const towerPos = tower.worldPosition;
-                // 防御塔只有下半部分有碰撞效果，所以碰撞半径缩小到原来的60%
                 const baseRadius = towerScript.collisionRadius ?? 50;
-                const towerRadius = baseRadius * 0.6; // 缩小到60%，模拟只有下半部分有碰撞
+                const towerRadius = baseRadius * 0.6;
                 const distanceToTower = Vec3.distance(position, towerPos);
                 const minDistance = this.collisionRadius + towerRadius;
                 
                 if (distanceToTower < minDistance) {
                     return true;
                 }
+            }
+        } else {
+            // 降级方案：记录警告，避免递归查找
+            if (Role.recursiveFindWarningCount < 5) {
+                console.error('[Role性能优化] 检测到防御塔碰撞检测但 UnitManager 未初始化！跳过防御塔碰撞检测。');
+                Role.recursiveFindWarningCount++;
             }
         }
 
@@ -1556,81 +1570,48 @@ export class Role extends Component {
      * 计算推开方向（当当前位置有碰撞时使用）
      * @param currentPos 当前位置
      * @returns 推开方向
+     * 性能优化：使用缓存节点和 UnitManager
      */
     calculatePushAwayDirection(currentPos: Vec3): Vec3 {
         const pushForce = new Vec3(0, 0, 0);
         let obstacleCount = 0;
         let maxPushStrength = 0;
 
-        // 检查水晶
-        const crystal = find('Crystal');
+        // 检查水晶 - 使用缓存节点
+        const crystal = Role.cachedCrystalNode;
         if (crystal && crystal.isValid && crystal.active) {
             const crystalPos = crystal.worldPosition;
             const distance = Vec3.distance(currentPos, crystalPos);
             const crystalRadius = 50;
             const minDistance = this.collisionRadius + crystalRadius;
             if (distance < minDistance && distance > 0.1) {
-                    const pushDir = new Vec3();
-                    Vec3.subtract(pushDir, currentPos, crystalPos);
-                    pushDir.normalize();
-                    // 增强推力，确保能推开
-                    const strength = Math.max(1.0, (minDistance - distance) / minDistance * 2.0);
-                    Vec3.scaleAndAdd(pushForce, pushForce, pushDir, strength);
-                    maxPushStrength = Math.max(maxPushStrength, strength);
-                    obstacleCount++;
-                }
+                const pushDir = new Vec3();
+                Vec3.subtract(pushDir, currentPos, crystalPos);
+                pushDir.normalize();
+                const strength = Math.max(1.0, (minDistance - distance) / minDistance * 2.0);
+                Vec3.scaleAndAdd(pushForce, pushForce, pushDir, strength);
+                maxPushStrength = Math.max(maxPushStrength, strength);
+                obstacleCount++;
+            }
         }
 
-        // 检查其他弓箭手
-        const towersNode = find('Towers');
-        if (towersNode) {
-            const towers = towersNode.children || [];
+        // 检查其他弓箭手 - 使用 UnitManager
+        if (this.unitManager) {
+            const towers = this.unitManager.getTowers();
             for (const tower of towers) {
                 if (tower && tower.isValid && tower.active && tower !== this.node) {
                     const towerPos = tower.worldPosition;
                     const distance = Vec3.distance(currentPos, towerPos);
-                    // 获取另一个弓箭手的碰撞半径
                     let otherTowerScript = tower.getComponent('Role') as any;
                     if (!otherTowerScript) {
-                        // 向后兼容，尝试获取Arrower
                         otherTowerScript = tower.getComponent('Arrower') as any;
                     }
                     const otherRadius = otherTowerScript && otherTowerScript.collisionRadius ? otherTowerScript.collisionRadius : this.collisionRadius;
                     const minDistance = (this.collisionRadius + otherRadius) * 1.2;
                     if (distance < minDistance && distance > 0.1) {
-                    const pushDir = new Vec3();
-                    Vec3.subtract(pushDir, currentPos, towerPos);
-                    pushDir.normalize();
-                    // 增强推力，重叠越多推力越大
-                    const strength = Math.max(2.0, (minDistance - distance) / minDistance * 3.0);
-                    Vec3.scaleAndAdd(pushForce, pushForce, pushDir, strength);
-                    maxPushStrength = Math.max(maxPushStrength, strength);
-                    obstacleCount++;
-                }
-                }
-            }
-        }
-
-        // 检查女猎手
-        const huntersNode = find('Hunters');
-        if (huntersNode) {
-            const hunters = huntersNode.children || [];
-            for (const hunter of hunters) {
-                if (hunter && hunter.isValid && hunter.active && hunter !== this.node) {
-                    const hunterPos = hunter.worldPosition;
-                    const distance = Vec3.distance(currentPos, hunterPos);
-                    // 获取另一个女猎手的碰撞半径
-                    const otherHunterScript = hunter.getComponent('Role') as any;
-                    if (!otherHunterScript) {
-                        continue;
-                    }
-                    const otherRadius = otherHunterScript && otherHunterScript.collisionRadius ? otherHunterScript.collisionRadius : this.collisionRadius;
-                    const minDistance = (this.collisionRadius + otherRadius) * 1.2;
-                    if (distance < minDistance && distance > 0.1) {
                         const pushDir = new Vec3();
-                        Vec3.subtract(pushDir, currentPos, hunterPos);
+                        Vec3.subtract(pushDir, currentPos, towerPos);
                         pushDir.normalize();
-                        // 增强推力，重叠越多推力越大
                         const strength = Math.max(2.0, (minDistance - distance) / minDistance * 3.0);
                         Vec3.scaleAndAdd(pushForce, pushForce, pushDir, strength);
                         maxPushStrength = Math.max(maxPushStrength, strength);
@@ -1640,7 +1621,33 @@ export class Role extends Component {
             }
         }
 
-        // 检查敌人 - 使用公共敌人获取函数
+        // 检查女猎手 - 使用 UnitManager
+        if (this.unitManager) {
+            const hunters = this.unitManager.getHunters();
+            for (const hunter of hunters) {
+                if (hunter && hunter.isValid && hunter.active && hunter !== this.node) {
+                    const hunterPos = hunter.worldPosition;
+                    const distance = Vec3.distance(currentPos, hunterPos);
+                    const otherHunterScript = hunter.getComponent('Role') as any;
+                    if (!otherHunterScript) {
+                        continue;
+                    }
+                    const otherRadius = otherHunterScript.collisionRadius ? otherHunterScript.collisionRadius : this.collisionRadius;
+                    const minDistance = (this.collisionRadius + otherRadius) * 1.2;
+                    if (distance < minDistance && distance > 0.1) {
+                        const pushDir = new Vec3();
+                        Vec3.subtract(pushDir, currentPos, hunterPos);
+                        pushDir.normalize();
+                        const strength = Math.max(2.0, (minDistance - distance) / minDistance * 3.0);
+                        Vec3.scaleAndAdd(pushForce, pushForce, pushDir, strength);
+                        maxPushStrength = Math.max(maxPushStrength, strength);
+                        obstacleCount++;
+                    }
+                }
+            }
+        }
+
+        // 检查敌人 - 使用公共敌人获取函数（已优化）
         const enemies = this.getEnemies(true, this.collisionRadius * 2);
         for (const enemy of enemies) {
             if (enemy && enemy.isValid && enemy.active) {
@@ -1662,7 +1669,6 @@ export class Role extends Component {
 
         if (obstacleCount > 0 && pushForce.length() > 0.1) {
             pushForce.normalize();
-            // 根据推力强度调整最终推力
             const finalPushForce = new Vec3();
             Vec3.multiplyScalar(finalPushForce, pushForce, Math.min(maxPushStrength, 2.0));
             return finalPushForce;
@@ -1670,6 +1676,7 @@ export class Role extends Component {
 
         return new Vec3(0, 0, 0);
     }
+           
 
     /**
      * 计算避障方向
@@ -1677,6 +1684,7 @@ export class Role extends Component {
      * @param desiredDirection 期望移动方向
      * @param deltaTime 时间增量
      * @returns 调整后的移动方向
+     * 性能优化：使用缓存节点和 UnitManager
      */
     calculateAvoidanceDirection(currentPos: Vec3, desiredDirection: Vec3, deltaTime: number): Vec3 {
         const avoidanceForce = new Vec3(0, 0, 0);
@@ -1684,10 +1692,10 @@ export class Role extends Component {
         let maxStrength = 0;
 
         // 检测附近的障碍物并计算避障力
-        const detectionRange = this.collisionRadius * 4; // 增大检测范围
+        const detectionRange = this.collisionRadius * 4;
 
-        // 检查水晶
-        const crystal = find('Crystal');
+        // 检查水晶 - 使用缓存节点
+        const crystal = Role.cachedCrystalNode;
         if (crystal && crystal.isValid && crystal.active) {
             const crystalPos = crystal.worldPosition;
             const distance = Vec3.distance(currentPos, crystalPos);
@@ -1697,11 +1705,9 @@ export class Role extends Component {
                 const avoidDir = new Vec3();
                 Vec3.subtract(avoidDir, currentPos, crystalPos);
                 avoidDir.normalize();
-                // 距离越近，避障力越强
                 let strength = 1 - (distance / detectionRange);
-                // 如果已经在碰撞范围内，大幅增强避障力
                 if (distance < minDistance) {
-                    strength = 2.0; // 强制避障
+                    strength = 2.0;
                 }
                 Vec3.scaleAndAdd(avoidanceForce, avoidanceForce, avoidDir, strength);
                 maxStrength = Math.max(maxStrength, strength);
@@ -1709,18 +1715,15 @@ export class Role extends Component {
             }
         }
 
-        // 检查其他弓箭手
-        const towersNode = find('Towers');
-        if (towersNode) {
-            const towers = towersNode.children || [];
+        // 检查其他弓箭手 - 使用 UnitManager
+        if (this.unitManager) {
+            const towers = this.unitManager.getTowers();
             for (const tower of towers) {
                 if (tower && tower.isValid && tower.active && tower !== this.node) {
                     const towerPos = tower.worldPosition;
                     const distance = Vec3.distance(currentPos, towerPos);
-                    // 获取另一个弓箭手的碰撞半径
                     let otherTowerScript = tower.getComponent('Role') as any;
                     if (!otherTowerScript) {
-                        // 向后兼容，尝试获取Arrower
                         otherTowerScript = tower.getComponent('Arrower') as any;
                     }
                     const otherRadius = otherTowerScript && otherTowerScript.collisionRadius ? otherTowerScript.collisionRadius : this.collisionRadius;
@@ -1731,7 +1734,7 @@ export class Role extends Component {
                         avoidDir.normalize();
                         let strength = 1 - (distance / detectionRange);
                         if (distance < minDistance) {
-                            strength = 3.0; // 大幅增强避障力
+                            strength = 3.0;
                         }
                         Vec3.scaleAndAdd(avoidanceForce, avoidanceForce, avoidDir, strength);
                         maxStrength = Math.max(maxStrength, strength);
@@ -1741,20 +1744,18 @@ export class Role extends Component {
             }
         }
 
-        // 检查女猎手
-        const huntersNode = find('Hunters');
-        if (huntersNode) {
-            const hunters = huntersNode.children || [];
+        // 检查女猎手 - 使用 UnitManager
+        if (this.unitManager) {
+            const hunters = this.unitManager.getHunters();
             for (const hunter of hunters) {
                 if (hunter && hunter.isValid && hunter.active && hunter !== this.node) {
                     const hunterPos = hunter.worldPosition;
                     const distance = Vec3.distance(currentPos, hunterPos);
-                    // 获取另一个女猎手的碰撞半径
                     const otherHunterScript = hunter.getComponent('Role') as any;
                     if (!otherHunterScript) {
                         continue;
                     }
-                    const otherRadius = otherHunterScript && otherHunterScript.collisionRadius ? otherHunterScript.collisionRadius : this.collisionRadius;
+                    const otherRadius = otherHunterScript.collisionRadius ? otherHunterScript.collisionRadius : this.collisionRadius;
                     const minDistance = (this.collisionRadius + otherRadius) * 1.2;
                     if (distance < detectionRange && distance > 0.1) {
                         const avoidDir = new Vec3();
@@ -2717,7 +2718,7 @@ export class Role extends Component {
         return !this.isDestroyed && this.currentHealth > 0;
     }
 
-    onTowerClick(event: EventTouch) {
+    protected onTowerClick(event: EventTouch) {
         // 如果游戏已结束，不显示信息面板
         if (this.gameManager && this.gameManager.getGameState() !== GameState.Playing) {
             return;

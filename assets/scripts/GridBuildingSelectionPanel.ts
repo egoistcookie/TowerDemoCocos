@@ -237,7 +237,7 @@ export class GridBuildingSelectionPanel extends Component {
                     iconSprite.sizeMode = Sprite.SizeMode.CUSTOM;
                     // 确保图标大小适配（与格子尺寸保持较大占比）
                     iconTransform.setContentSize(50, 50);
-                    console.info('[GridBuildingSelectionPanel] 石墙图标已设置');
+                    //console.info('[GridBuildingSelectionPanel] 石墙图标已设置');
                 } else {
                     console.warn('[GridBuildingSelectionPanel] 石墙图标未找到');
                 }
@@ -263,7 +263,7 @@ export class GridBuildingSelectionPanel extends Component {
                     iconSprite.type = Sprite.Type.SIMPLE;
                     iconSprite.sizeMode = Sprite.SizeMode.CUSTOM;
                     iconTransform.setContentSize(50, 50);
-                    console.info('[GridBuildingSelectionPanel] 哨塔图标已设置');
+                    //console.info('[GridBuildingSelectionPanel] 哨塔图标已设置');
                 } else {
                     console.warn('[GridBuildingSelectionPanel] 哨塔图标未找到');
                 }
@@ -288,7 +288,7 @@ export class GridBuildingSelectionPanel extends Component {
                     iconSprite.type = Sprite.Type.SIMPLE;
                     iconSprite.sizeMode = Sprite.SizeMode.CUSTOM;
                     iconTransform.setContentSize(50, 50);
-                    console.info('[GridBuildingSelectionPanel] 冰塔图标已设置');
+                    //console.info('[GridBuildingSelectionPanel] 冰塔图标已设置');
                 } else {
                     console.warn('[GridBuildingSelectionPanel] 冰塔图标未找到');
                 }
@@ -313,7 +313,7 @@ export class GridBuildingSelectionPanel extends Component {
                     iconSprite.type = Sprite.Type.SIMPLE;
                     iconSprite.sizeMode = Sprite.SizeMode.CUSTOM;
                     iconTransform.setContentSize(50, 50);
-                    console.info('[GridBuildingSelectionPanel] 雷塔图标已设置');
+                    //console.info('[GridBuildingSelectionPanel] 雷塔图标已设置');
                 } else {
                     console.warn('[GridBuildingSelectionPanel] 雷塔图标未找到');
                 }
@@ -335,7 +335,7 @@ export class GridBuildingSelectionPanel extends Component {
         const goldLabel = optionNode.getChildByName('CostLabel')?.getComponent(Label);
         if (goldLabel) {
             goldLabel.string = goldCost.toString();
-            console.info(`[GridBuildingSelectionPanel] ${typeName} 金币:`, goldCost);
+            //console.info(`[GridBuildingSelectionPanel] ${typeName} 金币:`, goldCost);
         } else {
             console.warn(`[GridBuildingSelectionPanel] ${typeName} 金币标签未找到`);
         }
@@ -394,7 +394,7 @@ export class GridBuildingSelectionPanel extends Component {
      * 选项点击事件
      */
     private onOptionClick(buildingType: string) {
-        console.info('[GridBuildingSelectionPanel] 选项点击:', buildingType);
+        //console.info('[GridBuildingSelectionPanel] 选项点击:', buildingType);
         
         if (!this.currentGridPos) {
             console.warn('[GridBuildingSelectionPanel] 当前网格位置为空');
@@ -423,7 +423,7 @@ export class GridBuildingSelectionPanel extends Component {
             cost = this.towerBuilder.getActualBuildCost('ThunderTower', 30);
         }
         
-        console.info('[GridBuildingSelectionPanel] 建造成本:', cost, '建筑类型:', buildingType);
+        //console.info('[GridBuildingSelectionPanel] 建造成本:', cost, '建筑类型:', buildingType);
         
         // 查找GameManager检查金币
         const gameManagerNode = find('Canvas/GameManager');
@@ -474,19 +474,19 @@ export class GridBuildingSelectionPanel extends Component {
         }
         
         // 建造建筑
-        console.info('[GridBuildingSelectionPanel] 开始建造，位置:', this.currentGridPos.worldPos);
+        //console.info('[GridBuildingSelectionPanel] 开始建造，位置:', this.currentGridPos.worldPos);
         if (buildingType === 'StoneWall') {
             this.towerBuilder.buildStoneWall(this.currentGridPos.worldPos);
-            console.info('[GridBuildingSelectionPanel] 石墙建造调用完成');
+            //console.info('[GridBuildingSelectionPanel] 石墙建造调用完成');
         } else if (buildingType === 'WatchTower') {
             this.towerBuilder.buildWatchTower(this.currentGridPos.worldPos);
-            console.info('[GridBuildingSelectionPanel] 哨塔建造调用完成');
+            //console.info('[GridBuildingSelectionPanel] 哨塔建造调用完成');
         } else if (buildingType === 'IceTower') {
             this.towerBuilder.buildIceTower(this.currentGridPos.worldPos);
-            console.info('[GridBuildingSelectionPanel] 冰塔建造调用完成');
+            //console.info('[GridBuildingSelectionPanel] 冰塔建造调用完成');
         } else if (buildingType === 'ThunderTower') {
             this.towerBuilder.buildThunderTower(this.currentGridPos.worldPos);
-            console.info('[GridBuildingSelectionPanel] 雷塔建造调用完成');
+            //console.info('[GridBuildingSelectionPanel] 雷塔建造调用完成');
         }
         
         // 关闭面板

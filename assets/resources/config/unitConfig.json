@@ -2,7 +2,7 @@
   "Arrower": {
     "baseStats": {
       "maxHealth": 50,
-      "attackRange": 200,
+      "attackRange": 220,
       "attackDamage": 10,
       "attackInterval": 1.0,
       "buildCost": 5,
