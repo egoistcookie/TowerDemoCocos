@@ -87,29 +87,33 @@ export class BuffManager {
         const buffs = this.getBuffsForUnit(unitId);
         
         if (buffs.length === 0) {
-           //console.info(`[BuffManager] 单位 ${unitId} 没有已保存的增益`);
+            console.info(`[BuffManager] 单位 ${unitId} 没有已保存的增益`);
             return;
         }
         
-       //console.info(`[BuffManager] 应用 ${buffs.length} 个增益到新单位: ${unitId}`);
+        console.info(`[BuffManager] 应用 ${buffs.length} 个增益到新单位: ${unitId}`);
         
         // 保存当前属性作为基准（此时已经应用了天赋增幅）
         // 注意：这里保存的是天赋增幅后的属性值，卡片增幅将基于这个值计算
         if (!unitScript._originalAttackDamage) {
             unitScript._originalAttackDamage = unitScript.attackDamage || 0;
-           //console.info(`[BuffManager] 保存基准攻击力（已含天赋增幅）: ${unitScript._originalAttackDamage}`);
+            console.info(`[BuffManager] 保存基准攻击力（已含天赋增幅）: ${unitScript._originalAttackDamage}`);
+        } else {
+            console.info(`[BuffManager] 已有基准攻击力缓存: ${unitScript._originalAttackDamage}，当前攻击力: ${unitScript.attackDamage}`);
         }
         if (!unitScript._originalAttackInterval) {
             unitScript._originalAttackInterval = unitScript.attackInterval || 1;
-           //console.info(`[BuffManager] 保存基准攻击间隔（已含天赋增幅）: ${unitScript._originalAttackInterval}`);
+            console.info(`[BuffManager] 保存基准攻击间隔（已含天赋增幅）: ${unitScript._originalAttackInterval}`);
         }
         if (!unitScript._originalMaxHealth) {
             unitScript._originalMaxHealth = unitScript.maxHealth || 0;
-           //console.info(`[BuffManager] 保存基准生命值（已含天赋增幅）: ${unitScript._originalMaxHealth}`);
+            console.info(`[BuffManager] 保存基准生命值（已含天赋增幅）: ${unitScript._originalMaxHealth}`);
+        } else {
+            console.info(`[BuffManager] 已有基准生命值缓存: ${unitScript._originalMaxHealth}，当前生命值: ${unitScript.maxHealth}`);
         }
         if (!unitScript._originalMoveSpeed) {
             unitScript._originalMoveSpeed = unitScript.moveSpeed || 0;
-           //console.info(`[BuffManager] 保存基准移动速度（已含天赋增幅）: ${unitScript._originalMoveSpeed}`);
+            console.info(`[BuffManager] 保存基准移动速度（已含天赋增幅）: ${unitScript._originalMoveSpeed}`);
         }
         
         // 初始化累积增幅百分比为0（新单位）

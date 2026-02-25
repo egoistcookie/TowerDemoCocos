@@ -854,8 +854,12 @@ export class TalentSystem extends Component {
             // 计算单位当前总等级
             const unitLevel = this.getUnitLevel(unit.id);
             
-            // 计算本次强化需要的天赋点（基于单位等级）
-            const requiredPoints = unitLevel + 1;
+            // 根据单位等级计算本次强化需要的天赋点
+            // 1-5级：每次消耗1点
+            // 6-10级：每次消耗2点
+            // 11-15级：每次消耗3点
+            // 以此类推
+            const requiredPoints = Math.floor(unitLevel / 5) + 1;
             
             // 构建显示文本
             let displayText = '';
@@ -905,9 +909,12 @@ export class TalentSystem extends Component {
         // 计算单位当前总等级（所有属性强化次数之和）
         const currentUnitLevel = this.getUnitLevel(unitId);
         
-        // 计算本次强化需要的天赋点：当前等级 + 1
-        // 例如：等级0时强化消耗1点，等级5时强化消耗6点
-        const requiredPoints = currentUnitLevel + 1;
+        // 根据单位等级计算本次强化需要的天赋点
+        // 1-5级：每次消耗1点
+        // 6-10级：每次消耗2点
+        // 11-15级：每次消耗3点
+        // 以此类推
+        const requiredPoints = Math.floor(currentUnitLevel / 5) + 1;
         
         const currentTalentPoints = this.playerDataManager.getTalentPoints();
         if (currentTalentPoints < requiredPoints) {
@@ -923,11 +930,11 @@ export class TalentSystem extends Component {
         // 保存强化数据
         this.playerDataManager.setUnitEnhancement(unitId, enhancement);
         
-        // 消耗天赋点
+        // 消耗天赋点（只消耗天赋点，不减少玩家等级）
         this.playerDataManager.useTalentPoint(requiredPoints);
         this.talentPoints = this.playerDataManager.getTalentPoints();
         
-        console.log(`[TalentSystem] 强化 ${unitId} 的 ${propertyKey}，单位等级 ${currentUnitLevel}，消耗 ${requiredPoints} 天赋点，剩余 ${this.talentPoints} 点`);
+        console.log(`[TalentSystem] 强化 ${unitId} 的 ${propertyKey}，单位等级 ${currentUnitLevel} -> ${currentUnitLevel + 1}，消耗 ${requiredPoints} 天赋点，剩余 ${this.talentPoints} 点`);
         
         // 更新天赋点显示
         this.updateTalentPointsDisplay();
@@ -1807,24 +1814,17 @@ export class TalentSystem extends Component {
     }
     
     /**
-     * 获取单位使用的天赋点数（等级）
+     * 获取单位使用的天赋点数（显示用）
      * @param unitId 单位ID
-     * @returns 该单位使用的天赋点数
+     * @returns 该单位的等级（强化次数）
      */
     getUnitTalentPointsUsed(unitId: string): number {
         if (!this.playerDataManager) {
             return 0;
         }
         
-        // 获取单位总等级
-        const unitLevel = this.getUnitLevel(unitId);
-        
-        // 计算总消耗的天赋点数（递增消耗）
-        // 第1次强化消耗1点，第2次消耗2点，第3次消耗3点...第n次消耗n点
-        // 总消耗 = 1 + 2 + 3 + ... + n = n * (n + 1) / 2
-        const totalUsed = unitLevel * (unitLevel + 1) / 2;
-        
-        return totalUsed;
+        // 直接返回单位等级（强化次数），而不是消耗的天赋点数
+        return this.getUnitLevel(unitId);
     }
     
     /**
@@ -1847,15 +1847,23 @@ export class TalentSystem extends Component {
             }
         }
         
-        // 计算单位强化使用的天赋点（基于单位等级递增消耗）
+        // 计算单位强化使用的天赋点（分段递增消耗）
         const unitEnhancements = this.playerDataManager.getPlayerData().unitEnhancements || {};
         for (const unitId in unitEnhancements) {
             if (unitEnhancements.hasOwnProperty(unitId)) {
                 // 获取单位总等级
                 const unitLevel = this.getUnitLevel(unitId);
                 
-                // 计算总消耗：1 + 2 + 3 + ... + n = n * (n + 1) / 2
-                const unitTotalUsed = unitLevel * (unitLevel + 1) / 2;
+                // 计算总消耗（分段递增）
+                // 1-5级：每次消耗1点
+                // 6-10级：每次消耗2点
+                // 11-15级：每次消耗3点
+                // 以此类推
+                let unitTotalUsed = 0;
+                for (let i = 0; i < unitLevel; i++) {
+                    const pointsForThisLevel = Math.floor(i / 5) + 1;
+                    unitTotalUsed += pointsForThisLevel;
+                }
                 totalUsedPoints += unitTotalUsed;
             }
         }

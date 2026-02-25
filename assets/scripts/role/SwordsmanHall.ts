@@ -257,9 +257,33 @@ export class SwordsmanHall extends Build {
             swordsman = instantiate(this.swordsmanPrefab);
         }
         
+        // 重要：先禁用节点，避免在 setParent 时触发 onEnable
+        swordsman.active = false;
+        
         swordsman.setParent(this.swordsmanContainer);
         swordsman.setWorldPosition(spawnPos);
+
+        // 设置ElfSwordsman的建造成本（如果需要）
+        const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
+        if (swordsmanScript) {
+            // 设置prefabName（用于对象池回收）
+            if (swordsmanScript.prefabName === undefined || swordsmanScript.prefabName === '') {
+                swordsmanScript.prefabName = 'ElfSwordsman';
+            }
+            
+            // 检查单位是否首次出现
+            if (this.gameManager) {
+                const unitType = swordsmanScript.unitType || 'ElfSwordsman';
+                this.gameManager.checkUnitFirstAppearance(unitType, swordsmanScript);
+            }
+        }
+        
+        // 现在激活节点，只触发一次 onEnable()
         swordsman.active = true;
+        
+        if (swordsmanScript) {
+            console.info(`[SwordsmanHall] 生产剑士，最终攻击力=${swordsmanScript.attackDamage}, 生命值=${swordsmanScript.maxHealth}`);
+        }
 
         // 添加到生产的ElfSwordsman列表
         this.producedSwordsmen.push(swordsman);
@@ -286,29 +310,8 @@ export class SwordsmanHall extends Build {
             );
         }
 
-        // 设置ElfSwordsman的建造成本（如果需要）
-        const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
+        // 让ElfSwordsman移动到目标位置
         if (swordsmanScript) {
-            // 设置prefabName（用于对象池回收）
-            if (swordsmanScript.prefabName === undefined || swordsmanScript.prefabName === '') {
-                swordsmanScript.prefabName = 'ElfSwordsman';
-            }
-            // 应用配置
-            const configManager = UnitConfigManager.getInstance();
-            if (configManager.isConfigLoaded()) {
-                configManager.applyConfigToUnit('ElfSwordsman', swordsmanScript);
-            }
-            
-            // 应用单位卡片强化
-            const talentEffectManager = TalentEffectManager.getInstance();
-            talentEffectManager.applyUnitEnhancements('ElfSwordsman', swordsmanScript);
-            
-            // 应用公共天赋增幅
-            talentEffectManager.applyTalentEffects(swordsmanScript);
-            
-            swordsmanScript.buildCost = 0; // 由剑士小屋生产的ElfSwordsman建造成本为0
-            
-            // 让ElfSwordsman移动到目标位置（先设置移动目标，再显示单位介绍）
             // 使用schedule在下一帧开始移动，确保ElfSwordsman已完全初始化
             this.scheduleOnce(() => {
                 if (swordsman && swordsman.isValid && swordsmanScript) {
@@ -341,12 +344,6 @@ export class SwordsmanHall extends Build {
                     }
                 }
             }, 0.05);
-            
-            // 检查单位是否首次出现（在设置移动目标后显示单位介绍）
-            if (this.gameManager) {
-                const unitType = swordsmanScript.unitType || 'ElfSwordsman';
-                this.gameManager.checkUnitFirstAppearance(unitType, swordsmanScript);
-            }
         }
 
         

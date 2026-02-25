@@ -159,6 +159,15 @@ export class Role extends Component {
     protected tempVec3_2: Vec3 = new Vec3();
     protected tempVec3_3: Vec3 = new Vec3();
     
+    // 防止 onEnable 重复应用增幅
+    private _enhancementsApplied: boolean = false;
+    
+    // 保存初始属性值（用于对象池回收时恢复）
+    private _initialMaxHealth: number = 0;
+    private _initialAttackDamage: number = 0;
+    private _initialAttackInterval: number = 0;
+    private _initialMoveSpeed: number = 0;
+    
     // 智能避让系统：防止抽搐式移动
     protected cachedAvoidDirection: Vec3 = new Vec3(); // 缓存的避让方向
     protected avoidDirectionTimer: number = 0; // 避让方向持续时间
@@ -201,6 +210,31 @@ export class Role extends Component {
 
     start() {
        //console.info(`[Role] start 被调用，单位类型: ${this.constructor.name}`);
+        
+        // 保存初始属性值（用于对象池回收时恢复）
+        // 注意：从配置文件中读取基础值，而不是当前值（当前值可能已被配置管理器修改）
+        if (this._initialMaxHealth === 0) {
+            // 只在第一次保存
+            const configManager = UnitConfigManager.getInstance();
+            const unitId = this.constructor.name;
+            const config = configManager.getUnitConfig(unitId);
+            
+            if (config && config.baseStats) {
+                // 从配置文件读取基础值
+                this._initialMaxHealth = config.baseStats.maxHealth || this.maxHealth;
+                this._initialAttackDamage = config.baseStats.attackDamage || this.attackDamage;
+                this._initialAttackInterval = config.baseStats.attackInterval || this.attackInterval;
+                this._initialMoveSpeed = config.baseStats.moveSpeed || this.moveSpeed;
+                console.info(`[Role.start] ${unitId} 从配置读取初始值：攻击力=${this._initialAttackDamage}, 生命值=${this._initialMaxHealth}`);
+            } else {
+                // 如果配置不存在，使用当前值
+                this._initialMaxHealth = this.maxHealth;
+                this._initialAttackDamage = this.attackDamage;
+                this._initialAttackInterval = this.attackInterval;
+                this._initialMoveSpeed = this.moveSpeed;
+                console.info(`[Role.start] ${unitId} 从当前值保存初始值：攻击力=${this._initialAttackDamage}, 生命值=${this._initialMaxHealth}`);
+            }
+        }
         
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
@@ -250,11 +284,8 @@ export class Role extends Component {
         // 监听点击事件
         this.node.on(Node.EventType.TOUCH_END, this.onTowerClick, this);
         
-        // 应用天赋增幅（必须在应用卡片增幅之前）
-        this.applyTalentEnhancements();
-        
-        // 应用已保存的增益效果（首次创建时）
-        this.applyBuffsFromManager();
+        // 注意：不在 start() 中应用增幅，统一在 onEnable() 中处理
+        // 这样可以确保首次创建和对象池复用时的行为一致
     }
     
     /**
@@ -2789,6 +2820,17 @@ export class Role extends Component {
      * 重置单位状态（用于对象池回收）
      */
     private resetRoleState() {
+        console.info(`[Role.resetRoleState] ${this.constructor.name} 重置前：攻击力=${this.attackDamage}, 生命值=${this.maxHealth}`);
+        console.info(`[Role.resetRoleState] ${this.constructor.name} 初始值：攻击力=${this._initialAttackDamage}, 生命值=${this._initialMaxHealth}`);
+        
+        // 恢复初始属性值（移除所有增幅效果）
+        this.maxHealth = this._initialMaxHealth;
+        this.attackDamage = this._initialAttackDamage;
+        this.attackInterval = this._initialAttackInterval;
+        this.moveSpeed = this._initialMoveSpeed;
+        
+        console.info(`[Role.resetRoleState] ${this.constructor.name} 重置后：攻击力=${this.attackDamage}, 生命值=${this.maxHealth}`);
+        
         // 重置所有状态变量
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
@@ -2931,8 +2973,46 @@ export class Role extends Component {
         // 重新监听点击事件
         this.node.on(Node.EventType.TOUCH_END, this.onTowerClick, this);
         
+        const unitId = this.constructor.name;
+        
+        // 防止重复应用增幅：如果已经应用过，直接返回
+        if (this._enhancementsApplied) {
+            console.info(`[Role.onEnable] ${unitId} 增幅已应用，跳过重复调用`);
+            return;
+        }
+        
+        console.info(`[Role.onEnable] ${unitId} 开始应用增幅，当前攻击力=${this.attackDamage}, 生命值=${this.maxHealth}`);
+        
+        // 清除BuffManager保存的基准值缓存（对象池复用时必须清除）
+        const hadCache = !!(this as any)._originalAttackDamage;
+        (this as any)._originalAttackDamage = undefined;
+        (this as any)._originalAttackInterval = undefined;
+        (this as any)._originalMaxHealth = undefined;
+        (this as any)._originalMoveSpeed = undefined;
+        (this as any)._buffAttackDamagePercent = undefined;
+        (this as any)._buffAttackIntervalPercent = undefined;
+        (this as any)._buffMaxHealthPercent = undefined;
+        (this as any)._buffMoveSpeedPercent = undefined;
+        console.info(`[Role.onEnable] ${unitId} 清除缓存完成，hadCache=${hadCache}`);
+        
+        // 应用天赋增幅（必须在应用卡片增幅之前）
+        this.applyTalentEnhancements();
+        console.info(`[Role.onEnable] ${unitId} 天赋增幅后，攻击力=${this.attackDamage}, 生命值=${this.maxHealth}`);
+        
         // 应用已保存的增益效果（会更新maxHealth和currentHealth，并再次更新血条）
         this.applyBuffsFromManager();
+        console.info(`[Role.onEnable] ${unitId} 卡片增幅后，攻击力=${this.attackDamage}, 生命值=${this.maxHealth}`);
+        
+        // 标记增幅已应用
+        this._enhancementsApplied = true;
+    }
+
+    /**
+     * 节点禁用时调用（回收到对象池时）
+     * 注意：不在这里重置 _enhancementsApplied，因为在生产过程中可能会多次触发 onDisable/onEnable
+     */
+    protected onDisable() {
+        // 什么都不做，让对象池的 release 方法来重置标志
     }
 
     getHealth(): number {

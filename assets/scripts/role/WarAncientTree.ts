@@ -544,10 +544,12 @@ export class WarAncientTree extends Build {
             tower = instantiate(this.towerPrefab);
         }
         
+        // 重要：先禁用节点，避免在 setParent 时触发 onEnable
+        tower.active = false;
+        
         tower.setParent(this.towerContainer);
         tower.setWorldPosition(spawnPos);
-        tower.active = true;
-
+        
         // 设置Tower的建造成本（如果需要）（使用字符串避免循环依赖）
         const towerScript = tower.getComponent('Arrower' as any) as any;
         if (towerScript) {
@@ -555,27 +557,19 @@ export class WarAncientTree extends Build {
             if (towerScript.prefabName === undefined || towerScript.prefabName === '') {
                 towerScript.prefabName = 'Arrower';
             }
-            // 先应用配置（排除 buildCost，因为需要在实例化时动态设置）
-            const configManager = UnitConfigManager.getInstance();
-            if (configManager.isConfigLoaded()) {
-                configManager.applyConfigToUnit('Arrower', towerScript, ['buildCost']);
-            }
-            
-            // 应用单位卡片强化
-            const talentEffectManager = TalentEffectManager.getInstance();
-            talentEffectManager.applyUnitEnhancements('Arrower', towerScript);
-            
-            // 应用公共天赋增幅
-            talentEffectManager.applyTalentEffects(towerScript);
-            
-            // 然后设置建造成本（由战争古树生产的Arrower建造成本为0）
-            towerScript.buildCost = 0;
             
             // 检查单位是否首次出现
             if (this.gameManager) {
                 const unitType = towerScript.unitType || 'Arrower';
                 this.gameManager.checkUnitFirstAppearance(unitType, towerScript);
             }
+        }
+        
+        // 现在激活节点，只触发一次 onEnable()
+        tower.active = true;
+        
+        if (towerScript) {
+            console.info(`[WarAncientTree] 生产弓箭手，最终攻击力=${towerScript.attackDamage}, 生命值=${towerScript.maxHealth}`);
         }
 
         // 添加到生产的Tower列表

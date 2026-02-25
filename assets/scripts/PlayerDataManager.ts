@@ -22,6 +22,7 @@ export interface UnitEnhancement {
 interface PlayerData {
     experience: number;
     talentPoints: number;
+    playerLevel: number;  // 玩家等级（Lv.x），只增不减
     talentLevels?: Record<string, number>;  // 天赋ID -> 等级
     unitEnhancements?: Record<string, UnitEnhancement>;  // 单位ID -> 强化数据
     passedLevels?: number[];  // 已通过的关卡列表（关卡号）
@@ -35,6 +36,7 @@ export class PlayerDataManager {
     private playerData: PlayerData = {
         experience: 0,
         talentPoints: 0,
+        playerLevel: 1,  // 玩家等级从1级开始
         talentLevels: {},
         unitEnhancements: {},
         passedLevels: [1],  // 默认第一关已通过（解锁）
@@ -78,6 +80,7 @@ export class PlayerDataManager {
                     this.playerData = {
                         experience: 0,
                         talentPoints: 5,
+                        playerLevel: 1,
                         talentLevels: {},
                         unitEnhancements: {},
                         passedLevels: [1],  // 默认第一关已通过
@@ -100,6 +103,13 @@ export class PlayerDataManager {
                     if (this.playerData.lastStaminaRecoverTime === undefined) {
                         this.playerData.lastStaminaRecoverTime = Date.now();
                     }
+                    
+                    // 兼容性处理：如果 playerLevel 不存在或为默认值1，则根据已消耗的天赋点计算正确的等级
+                    if (!this.playerData.playerLevel || this.playerData.playerLevel === 1) {
+                        this.playerData.playerLevel = this.calculatePlayerLevelFromData();
+                        console.log(`[PlayerDataManager] 兼容性处理：计算玩家等级为 ${this.playerData.playerLevel}`);
+                    }
+                    
                     this.isLoaded = true;
                     resolve();
                     return;
@@ -115,6 +125,7 @@ export class PlayerDataManager {
                     this.playerData = {
                         experience: 0,
                         talentPoints: 0,
+                        playerLevel: 1,
                         talentLevels: {},
                         unitEnhancements: {},
                         passedLevels: [1],  // 默认第一关已通过
@@ -136,6 +147,7 @@ export class PlayerDataManager {
                         this.playerData = { 
                             experience: 0,
                             talentPoints: 5,
+                            playerLevel: 1,
                             talentLevels: {},
                             unitEnhancements: {},
                             stamina: 50,
@@ -160,6 +172,7 @@ export class PlayerDataManager {
                         this.playerData = {
                             experience: 0,
                             talentPoints: 5,
+                            playerLevel: 1,
                             talentLevels: {},
                             unitEnhancements: {},
                             stamina: 50,
@@ -171,12 +184,19 @@ export class PlayerDataManager {
                     this.playerData = {
                         experience: 0,
                         talentPoints: 5,
+                        playerLevel: 1,
                         talentLevels: {},
                         unitEnhancements: {},
                         stamina: 50,
                         lastStaminaRecoverTime: Date.now(),
                         ...configData
                     };
+                }
+
+                // 兼容性处理：如果 playerLevel 不存在或为默认值1，则根据已消耗的天赋点计算正确的等级
+                if (!this.playerData.playerLevel || this.playerData.playerLevel === 1) {
+                    this.playerData.playerLevel = this.calculatePlayerLevelFromData();
+                    console.log(`[PlayerDataManager] 兼容性处理：计算玩家等级为 ${this.playerData.playerLevel}`);
                 }
 
                 this.isLoaded = true;
@@ -214,6 +234,31 @@ export class PlayerDataManager {
     }
 
     /**
+     * 获取玩家等级
+     */
+    public getPlayerLevel(): number {
+        return this.playerData.playerLevel || 1;
+    }
+
+    /**
+     * 设置玩家等级（只能增加，不能减少）
+     */
+    public setPlayerLevel(level: number): void {
+        if (level > this.playerData.playerLevel) {
+            this.playerData.playerLevel = level;
+            this.saveData();
+        }
+    }
+
+    /**
+     * 增加玩家等级
+     */
+    public increasePlayerLevel(amount: number = 1): void {
+        this.playerData.playerLevel = (this.playerData.playerLevel || 1) + amount;
+        this.saveData();
+    }
+
+    /**
      * 添加经验值
      * @param amount 要添加的经验值
      * @returns 返回转换后的天赋点数量
@@ -226,6 +271,9 @@ export class PlayerDataManager {
         if (talentPointsGained > 0) {
             this.playerData.talentPoints += talentPointsGained;
             this.playerData.experience = this.playerData.experience % 100;
+            
+            // 玩家等级也增加（每获得1个天赋点，玩家等级+1）
+            this.playerData.playerLevel = (this.playerData.playerLevel || 1) + talentPointsGained;
         }
         
         this.saveData();
@@ -363,6 +411,7 @@ export class PlayerDataManager {
         this.playerData = {
             experience: 0,
             talentPoints: 0,
+            playerLevel: 1,
             talentLevels: {},
             unitEnhancements: {},
             passedLevels: [1],  // 默认第一关已通过
@@ -460,6 +509,81 @@ export class PlayerDataManager {
     public hasEnoughStamina(amount: number): boolean {
         this.updateStaminaRecovery();
         return (this.playerData.stamina || 50) >= amount;
+    }
+
+    /**
+     * 根据已有数据计算玩家等级（用于兼容性处理）
+     * 玩家等级 = 当前天赋点 + 已消耗的天赋点
+     * @returns 计算出的玩家等级
+     */
+    private calculatePlayerLevelFromData(): number {
+        let totalLevel = 1; // 初始等级为1
+        
+        // 1. 当前未使用的天赋点
+        const currentTalentPoints = this.playerData.talentPoints || 0;
+        totalLevel += currentTalentPoints;
+        
+        // 2. 计算天赋升级消耗的天赋点
+        if (this.playerData.talentLevels) {
+            for (const talentId in this.playerData.talentLevels) {
+                if (this.playerData.talentLevels.hasOwnProperty(talentId)) {
+                    const talentLevel = this.playerData.talentLevels[talentId];
+                    // 假设每级天赋消耗1点（根据实际情况调整）
+                    totalLevel += talentLevel * 1;
+                }
+            }
+        }
+        
+        // 3. 计算单位强化消耗的天赋点（分段递增）
+        if (this.playerData.unitEnhancements) {
+            for (const unitId in this.playerData.unitEnhancements) {
+                if (this.playerData.unitEnhancements.hasOwnProperty(unitId)) {
+                    const enhancement = this.playerData.unitEnhancements[unitId];
+                    if (enhancement && enhancement.enhancements) {
+                        // 计算该单位的总强化次数
+                        let unitEnhancementCount = 0;
+                        const enhancements = enhancement.enhancements;
+                        
+                        // 攻击力：1点 = 1次强化
+                        if (enhancements.attackDamage) {
+                            unitEnhancementCount += Math.floor(enhancements.attackDamage / 1);
+                        }
+                        
+                        // 攻击速度：5% = 1次强化
+                        if (enhancements.attackSpeed) {
+                            unitEnhancementCount += Math.floor(enhancements.attackSpeed / 5);
+                        }
+                        
+                        // 生命值：2点 = 1次强化
+                        if (enhancements.maxHealth) {
+                            unitEnhancementCount += Math.floor(enhancements.maxHealth / 2);
+                        }
+                        
+                        // 移动速度：5点 = 1次强化
+                        if (enhancements.moveSpeed) {
+                            unitEnhancementCount += Math.floor(enhancements.moveSpeed / 5);
+                        }
+                        
+                        // 建造成本：1点 = 1次强化
+                        if (enhancements.buildCost) {
+                            unitEnhancementCount += Math.abs(Math.floor(enhancements.buildCost / 1));
+                        }
+                        
+                        // 根据强化次数计算消耗的天赋点（分段递增）
+                        // 1-5级：每次消耗1点
+                        // 6-10级：每次消耗2点
+                        // 11-15级：每次消耗3点
+                        // 以此类推
+                        for (let i = 0; i < unitEnhancementCount; i++) {
+                            const pointsForThisLevel = Math.floor(i / 5) + 1;
+                            totalLevel += pointsForThisLevel;
+                        }
+                    }
+                }
+            }
+        }
+        
+        return totalLevel;
     }
 }
 

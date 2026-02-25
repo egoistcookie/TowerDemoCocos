@@ -198,6 +198,12 @@ export class UnitPool extends Component {
         unit.active = false;
         unit.setParent(this.poolContainer); // 移回对象池容器节点
         
+        // 重置增幅标志，以便下次复用时可以重新应用增幅
+        const roleScript = unit.getComponent('Role') as any;
+        if (roleScript) {
+            roleScript._enhancementsApplied = false;
+        }
+        
         // 如果池未满，放回池中
         if (pool.length < this.MAX_POOL_SIZE) {
             pool.push(unit);

@@ -245,9 +245,11 @@ export class Church extends Build {
             priest = instantiate(this.priestPrefab);
         }
         
+        // 重要：先禁用节点，避免在 setParent 时触发 onEnable
+        priest.active = false;
+        
         priest.setParent(this.priestContainer);
         priest.setWorldPosition(spawnPos);
-        priest.active = true;
 
         const priestScript = priest.getComponent(Priest) as Priest | null;
         if (priestScript) {
@@ -255,25 +257,18 @@ export class Church extends Build {
             if (priestScript.prefabName === undefined || priestScript.prefabName === '') {
                 priestScript.prefabName = 'Priest';
             }
-            const configManager = UnitConfigManager.getInstance();
-            if (configManager.isConfigLoaded()) {
-                // 排除 buildCost，由教堂脚本控制
-                (configManager as any).applyConfigToUnit?.('Priest', priestScript, ['buildCost']);
-            }
             
-            // 应用单位卡片强化
-            const talentEffectManager = TalentEffectManager.getInstance();
-            talentEffectManager.applyUnitEnhancements('Priest', priestScript);
-            
-            // 应用公共天赋增幅
-            talentEffectManager.applyTalentEffects(priestScript);
-            
-            priestScript.buildCost = 0;
-
             if (this.gameManager) {
                 const unitType = (priestScript as any).unitType || 'Priest';
                 this.gameManager.checkUnitFirstAppearance(unitType, priestScript);
             }
+        }
+        
+        // 现在激活节点，只触发一次 onEnable()
+        priest.active = true;
+        
+        if (priestScript) {
+            console.info(`[Church] 生产牧师，最终攻击力=${(priestScript as any).attackDamage}, 生命值=${(priestScript as any).maxHealth}`);
         }
 
         this.producedPriests.push(priest);

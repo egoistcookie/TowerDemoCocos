@@ -282,9 +282,33 @@ export class HunterHall extends Build {
             hunter = instantiate(this.hunterPrefab);
         }
         
+        // 重要：先禁用节点，避免在 setParent 时触发 onEnable
+        hunter.active = false;
+        
         hunter.setParent(this.hunterContainer);
         hunter.setWorldPosition(spawnPos);
+
+        // 设置Hunter的建造成本（如果需要）
+        const hunterScript = hunter.getComponent('Hunter') as any;
+        if (hunterScript) {
+            // 设置prefabName（用于对象池回收）
+            if (hunterScript.prefabName === undefined || hunterScript.prefabName === '') {
+                hunterScript.prefabName = 'Hunter';
+            }
+            
+            // 检查单位是否首次出现
+            if (this.gameManager) {
+                const unitType = hunterScript.unitType || 'Hunter';
+                this.gameManager.checkUnitFirstAppearance(unitType, hunterScript);
+            }
+        }
+        
+        // 现在激活节点，只触发一次 onEnable()
         hunter.active = true;
+        
+        if (hunterScript) {
+            console.info(`[HunterHall] 生产猎手，最终攻击力=${hunterScript.attackDamage}, 生命值=${hunterScript.maxHealth}`);
+        }
 
         // 添加到生产的Hunter列表
         this.producedHunters.push(hunter);
@@ -311,29 +335,8 @@ export class HunterHall extends Build {
             );
         }
 
-        // 设置Hunter的建造成本（如果需要）
-        const hunterScript = hunter.getComponent('Hunter') as any;
+        // 让Hunter移动到目标位置
         if (hunterScript) {
-            // 设置prefabName（用于对象池回收）
-            if (hunterScript.prefabName === undefined || hunterScript.prefabName === '') {
-                hunterScript.prefabName = 'Hunter';
-            }
-            // 应用配置
-            const configManager = UnitConfigManager.getInstance();
-            if (configManager.isConfigLoaded()) {
-                configManager.applyConfigToUnit('Hunter', hunterScript);
-            }
-            
-            // 应用单位卡片强化
-            const talentEffectManager = TalentEffectManager.getInstance();
-            talentEffectManager.applyUnitEnhancements('Hunter', hunterScript);
-            
-            // 应用公共天赋增幅
-            talentEffectManager.applyTalentEffects(hunterScript);
-            
-            hunterScript.buildCost = 0; // 由猎手大厅生产的Hunter建造成本为0
-            
-            // 让Hunter移动到目标位置（先设置移动目标，再显示单位介绍）
             // 使用schedule在下一帧开始移动，确保Hunter已完全初始化
             this.scheduleOnce(() => {
                 if (hunter && hunter.isValid && hunterScript) {
@@ -366,12 +369,6 @@ export class HunterHall extends Build {
                     }
                 }
             }, 0.05);
-            
-            // 检查单位是否首次出现（在设置移动目标后显示单位介绍）
-            if (this.gameManager) {
-                const unitType = hunterScript.unitType || 'Hunter';
-                this.gameManager.checkUnitFirstAppearance(unitType, hunterScript);
-            }
         }
 
         

@@ -1358,8 +1358,8 @@ export class GameManager extends Component {
 
         // 注意：playerDataManager 可能还没加载完；先展示默认值，等数据可用后再刷新
 
-        const talentPoints = this.playerDataManager ? this.playerDataManager.getTalentPoints() : 1;
-        const level = Math.max(1, talentPoints); // 将天赋点概念直接视为等级
+        const playerLevel = this.playerDataManager ? this.playerDataManager.getPlayerLevel() : 1;
+        const level = Math.max(1, playerLevel); // 使用独立的玩家等级
         const currentExp = this.playerDataManager ? this.playerDataManager.getExperience() : 0; // 0-99
         const ratio = Math.max(0, Math.min(1, currentExp / 100));
 
@@ -1452,13 +1452,13 @@ export class GameManager extends Component {
         if (this.playerDataManager) {
             if (this.currentGameExp > 0) {
                 // 结算前的等级和经验（用于做升级进度动画）
-                prevLevel = this.playerDataManager.getTalentPoints();
+                prevLevel = this.playerDataManager.getPlayerLevel();
                 prevExp = this.playerDataManager.getExperience(); // 0-99
 
                 // 保存本次获得的经验值（用于显示）
                 expGainedThisGame = this.currentGameExp;
                 levelsGained = this.playerDataManager.addExperience(this.currentGameExp);
-                currentLevel = this.playerDataManager.getTalentPoints();
+                currentLevel = this.playerDataManager.getPlayerLevel();
                 currentExp = this.playerDataManager.getExperience();
                 const remainingExp = this.playerDataManager.getRemainingExpForNextLevel();
                 
@@ -1475,7 +1475,7 @@ export class GameManager extends Component {
             } else {
                 // 即使没有获得经验值，也要保存数据
                 this.playerDataManager.saveData();
-                currentLevel = this.playerDataManager.getTalentPoints();
+                currentLevel = this.playerDataManager.getPlayerLevel();
                 currentExp = this.playerDataManager.getExperience();
                 const remainingExp = this.playerDataManager.getRemainingExpForNextLevel();
                 prevLevel = Math.max(1, currentLevel);
