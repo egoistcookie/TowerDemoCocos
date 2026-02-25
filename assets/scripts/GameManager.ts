@@ -2420,10 +2420,13 @@ export class GameManager extends Component {
         const scene = director.getScene();
         if (!scene) return;
 
+        console.log('[GameManager] 开始清理所有单位...');
+
         // 清理所有敌人
         const enemiesNode = find('Canvas/Enemies');
         if (enemiesNode) {
             const enemies = enemiesNode.children.slice();
+            console.log(`[GameManager] 清理 ${enemies.length} 个敌人`);
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid) {
                     enemy.destroy();
@@ -2432,17 +2435,21 @@ export class GameManager extends Component {
         }
 
         // 清理所有我方单位
-        // 注意：Priests和Towers共用Canvas/Towers容器
+        // 注意：Priests和Towers共用Canvas/Towers容器，Wisps在Canvas/Wisps容器
         const unitContainers = [
-            'Canvas/Towers',  // 包含Towers和Priests
-            'Canvas/Hunters',
-            'Canvas/Swordsmen'
+            'Canvas/Towers',     // 包含Towers和Priests
+            'Canvas/Hunters',    // 猎手
+            'Canvas/Swordsmen',  // 剑士
+            'Canvas/Wisps'       // 小精灵（重要：必须清理）
         ];
 
         for (const containerPath of unitContainers) {
             const containerNode = find(containerPath);
             if (containerNode) {
                 const units = containerNode.children.slice();
+                if (units.length > 0) {
+                    console.log(`[GameManager] 清理 ${containerPath}: ${units.length} 个单位`);
+                }
                 for (const unit of units) {
                     if (unit && unit.isValid) {
                         const roleScript = unit.getComponent('Role') as any;
@@ -2472,11 +2479,28 @@ export class GameManager extends Component {
             const containerNode = find(containerPath);
             if (containerNode) {
                 const buildings = containerNode.children.slice();
+                if (buildings.length > 0) {
+                    console.log(`[GameManager] 清理 ${containerPath}: ${buildings.length} 个建筑`);
+                }
                 for (const building of buildings) {
                     if (building && building.isValid) {
+                        // 在销毁建筑前，先清理建筑内部的trainedUnits数组
                         const buildScript = building.getComponent('Build') as any;
-                        if (buildScript && buildScript.destroyBuild) {
-                            buildScript.destroyBuild();
+                        if (buildScript) {
+                            // 清理战争古树的producedTowers数组
+                            if (buildScript.producedTowers && Array.isArray(buildScript.producedTowers)) {
+                                buildScript.producedTowers = [];
+                            }
+                            // 清理其他建筑的trainedUnits数组
+                            if (buildScript.trainedUnits && Array.isArray(buildScript.trainedUnits)) {
+                                buildScript.trainedUnits = [];
+                            }
+                            // 调用销毁方法
+                            if (buildScript.destroyBuild) {
+                                buildScript.destroyBuild();
+                            } else {
+                                building.destroy();
+                            }
                         } else {
                             building.destroy();
                         }
@@ -2487,6 +2511,9 @@ export class GameManager extends Component {
 
         // 清理所有萨满图腾（如果还有残留，强制销毁）
         const totems = scene.getComponentsInChildren(ShamanTotem);
+        if (totems.length > 0) {
+            console.log(`[GameManager] 清理 ${totems.length} 个萨满图腾`);
+        }
         for (const totem of totems) {
             if (totem && totem.node && totem.node.isValid) {
                 totem.node.destroy();
@@ -2495,20 +2522,41 @@ export class GameManager extends Component {
 
         // 兜底：如果场景中还有战争古树实例，强制销毁，避免等级状态残留
         const warAncientTrees = scene.getComponentsInChildren(WarAncientTree);
+        if (warAncientTrees.length > 0) {
+            console.log(`[GameManager] 兜底清理 ${warAncientTrees.length} 个战争古树`);
+        }
         for (const tree of warAncientTrees) {
             if (tree && tree.node && tree.node.isValid) {
                 tree.node.destroy();
             }
         }
+
+        console.log('[GameManager] 所有单位清理完成');
     }
 
     /**
      * 重新开始一局时重置 GameManager 的局内状态（金币 / 时间 / 血量等）
      */
     resetGameStateForRestart() {
+        console.log('[GameManager] 开始重置游戏状态...');
+        
         // 清除所有增益效果
         const buffManager = BuffManager.getInstance();
         buffManager.clearAllBuffs();
+        
+        // 清空建筑物对象池，避免残留状态导致错误
+        const buildingPool = BuildingPool.getInstance();
+        if (buildingPool) {
+            buildingPool.clearAllPools();
+            console.log('[GameManager] 已清空建筑物对象池');
+        }
+        
+        // 清空单位对象池
+        const unitPool = UnitPool.getInstance();
+        if (unitPool) {
+            unitPool.clearAllPools();
+            console.log('[GameManager] 已清空单位对象池');
+        }
         
         // 重置基础数值
         this.gameTime = 0;
@@ -2537,6 +2585,8 @@ export class GameManager extends Component {
 
         // 更新一次 UI（血量 / 金币 / 时间等）
         this.updateUI();
+        
+        console.log('[GameManager] 游戏状态重置完成');
     }
 
     getGameState(): GameState {

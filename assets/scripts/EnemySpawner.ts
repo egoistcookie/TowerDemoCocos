@@ -1553,6 +1553,8 @@ export class EnemySpawner extends Component {
      * 重置波次系统
      */
     reset() {
+        console.log(`[EnemySpawner] 重置波次系统，当前关卡: ${this.currentLevel}`);
+        
         this.currentWaveIndex = -1;
         this.isWaveActive = false;
         this.preWaveDelayTimer = 0;
@@ -1565,9 +1567,29 @@ export class EnemySpawner extends Component {
         this.testEnemySpawned = false; // 重置测试模式标志
         this.isLastWaveCompleted = false; // 重置最后一波完成标志
         this.victoryCheckTimer = 0; // 重置胜利检查计时器
+        this.isCountdownActive = false; // 重置倒计时状态
         
-        // 重新初始化敌人预制体映射表
+        // 清除倒计时自动继续定时器
+        if (this.countdownAutoContinueTimer) {
+            clearTimeout(this.countdownAutoContinueTimer);
+            this.countdownAutoContinueTimer = null;
+        }
+        
+        // 重新初始化敌人预制体映射表（只清空并重新添加主包预制体）
         this.initEnemyPrefabMap();
+        
+        // 重要：重新注入从分包加载的预制体（这些预制体已经在内存中，不需要重新加载）
+        this.injectOrcPrefabToMap();
+        this.injectOrcWarriorPrefabToMap();
+        this.injectTrollSpearmanPrefabToMap();
+        this.injectDragonPrefabToMap();
+        this.injectOrcWarlordPrefabToMap();
+        this.injectOrcShamanPrefabToMap();
+        
+        console.log(`[EnemySpawner] 预制体映射表重置完成，当前预制体数量: ${this.enemyPrefabMap.size}`);
+        // 输出所有预制体名称，便于调试
+        const prefabNames = Array.from(this.enemyPrefabMap.keys());
+        console.log(`[EnemySpawner] 可用预制体: ${prefabNames.join(', ')}`);
         
         // 重新初始化对象池（清空并重新注册）
         if (this.enemyPool) {
@@ -1576,12 +1598,16 @@ export class EnemySpawner extends Component {
             for (const [prefabName, prefab] of this.enemyPrefabMap.entries()) {
                 this.enemyPool.registerPrefab(prefabName, prefab);
             }
+            console.log(`[EnemySpawner] 对象池重置完成`);
         } else {
             this.initEnemyPool();
         }
         
-        // 更新当前关卡配置
-        this.updateCurrentLevel();
+        // 重新加载当前关卡配置（确保配置正确）
+        console.log(`[EnemySpawner] 重新加载关卡 ${this.currentLevel} 的配置`);
+        this.isConfigLoaded = false;
+        this.currentLevelConfig = null;
+        this.loadLevelConfig(this.currentLevel);
     }
     
     /**

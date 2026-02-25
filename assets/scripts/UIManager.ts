@@ -1362,6 +1362,18 @@ export class UIManager extends Component {
                 gmAny.resetGameStateForRestart();
             }
 
+            // 重置敌人波次系统（在重置GameManager之后立即重置）
+            const enemySpawner = this.findComponentInScene('EnemySpawner') as any;
+            if (enemySpawner) {
+                // 先设置关卡，再重置
+                if (enemySpawner.setLevel) {
+                    enemySpawner.setLevel(this.currentLevel);
+                }
+                if (enemySpawner.reset) {
+                    enemySpawner.reset();
+                }
+            }
+
             // 隐藏所有游戏元素
             const gameNodes = [
                 'Canvas/Crystal',
@@ -1380,61 +1392,27 @@ export class UIManager extends Component {
             // 延迟一小段时间后自动开始游戏
             this.scheduleOnce(() => {
                 // 直接执行开始游戏的逻辑
-                // 1. 重置游戏状态为Ready（确保状态正确）
+                // 1. 确保游戏状态为Ready
                 if (this.gameManager) {
-                    // 使用类型断言访问gameState属性
                     const gm = this.gameManager as any;
                     if (gm.gameState !== undefined) {
                         // GameState.Ready = 0
                         gm.gameState = 0;
                     }
                     
-                    // 重置游戏时间
-                    if (gm.gameTime !== undefined) {
-                        gm.gameTime = 600; // 10分钟
+                    // 确保金币、时间等已正确重置（resetGameStateForRestart已经设置过）
+                    // 这里再次确认，防止被其他代码覆盖
+                    if (gm.gold !== undefined && gm.gold !== 20) {
+                        console.warn(`[UIManager] 金币未正确重置为20，当前值: ${gm.gold}，强制重置`);
+                        gm.gold = 20;
                     }
                     
-                    // 重置金币
-                    if (gm.gold !== undefined) {
-                        gm.gold = 10;
+                    if (gm.gameTime !== undefined && gm.gameTime !== 0) {
+                        console.warn(`[UIManager] 游戏时间未正确重置为0，当前值: ${gm.gameTime}，强制重置`);
+                        gm.gameTime = 0;
                     }
                     
-                    // 重置人口
-                    if (gm.population !== undefined) {
-                        gm.population = 0;
-                    }
-                    if (gm.maxPopulation !== undefined) {
-                        gm.maxPopulation = 10;
-                    }
-                    
-                    // 重置本局经验值
-                    if (gm.currentGameExp !== undefined) {
-                        gm.currentGameExp = 0;
-                    }
-                    
-                    // 重置水晶状态
-                    if (gm.crystalScript) {
-                        const crystal = gm.crystalScript as any;
-                        if (crystal.currentHealth !== undefined && crystal.maxHealth !== undefined) {
-                            crystal.currentHealth = crystal.maxHealth;
-                        }
-                        // 重置水晶的isDestroyed状态
-                        if (crystal.isDestroyed !== undefined) {
-                            crystal.isDestroyed = false;
-                        }
-                        // 确保水晶节点是激活的
-                        if (crystal.node && crystal.node.isValid) {
-                            crystal.node.active = true;
-                        }
-                    }
-                    
-                    // 重置敌人波次系统
-                    const enemySpawner = this.findComponentInScene('EnemySpawner') as any;
-                    if (enemySpawner && enemySpawner.reset) {
-                        enemySpawner.reset();
-                    }
-                    
-                    // 更新UI
+                    // 更新UI，确保显示正确的初始值
                     if (gm.updateUI) {
                         gm.updateUI();
                     }
@@ -1460,7 +1438,7 @@ export class UIManager extends Component {
                     crystal.active = true;
                 }
                 
-                // 4. 设置当前关卡到EnemySpawner
+                // 4. 再次确认EnemySpawner已设置正确的关卡
                 const enemySpawner = this.findComponentInScene('EnemySpawner') as any;
                 if (enemySpawner && enemySpawner.setLevel) {
                     enemySpawner.setLevel(this.currentLevel);

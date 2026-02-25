@@ -115,7 +115,38 @@ export class BuildingPool extends Component {
         // 尝试从池中获取
         if (pool.length > 0) {
             building = pool.pop()!;
-            source = '池中获取';
+            
+            // 验证节点是否有效
+            if (!building || !building.isValid) {
+                console.warn(`[BuildingPool] 从池中获取的节点无效，创建新对象: ${prefabName}`);
+                building = instantiate(prefab);
+                source = '新建对象（池中对象无效）';
+            } else {
+                source = '池中获取';
+                
+                // 重要：清理节点状态，避免残留数据导致错误
+                // 重置位置、旋转、缩放
+                building.setPosition(0, 0, 0);
+                building.setRotationFromEuler(0, 0, 0);
+                building.setScale(1, 1, 1);
+                
+                // 清理建筑物脚本的状态
+                const buildScript = building.getComponent('Build') as any;
+                if (buildScript) {
+                    // 清理 producedTowers 数组（战争古树）
+                    if (buildScript.producedTowers !== undefined) {
+                        buildScript.producedTowers = [];
+                    }
+                    // 清理 trainedUnits 数组（其他建筑）
+                    if (buildScript.trainedUnits !== undefined) {
+                        buildScript.trainedUnits = [];
+                    }
+                    // 重置累计生产数量
+                    if (buildScript.totalProducedCount !== undefined) {
+                        buildScript.totalProducedCount = 0;
+                    }
+                }
+            }
         } else {
             // 池为空，创建新对象
             building = instantiate(prefab);
