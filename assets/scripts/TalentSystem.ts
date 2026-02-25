@@ -796,13 +796,14 @@ export class TalentSystem extends Component {
         let enhancementOptions: Array<{ key: string, name: string, value: number, unit: string }> = [];
         
         if (unit.unitType === 'BUILDING') {
-            // 建筑物：除弓箭手小屋外，只能强化生命值和建造成本
+            // 建筑物
             if (unit.id === 'WarAncientTree') {
-                // 弓箭手小屋：可以强化所有属性（除了护甲和移动速度）
+                // 弓箭手小屋：攻击力 / 攻击速度 / 生命值 / 建造成本
                 enhancementOptions = [
                     { key: 'attackDamage', name: '攻击力', value: 1, unit: '' },
                     { key: 'attackSpeed', name: '攻击速度', value: 5, unit: '%' },
-                    { key: 'maxHealth', name: '生命值', value: 2, unit: '' }
+                    { key: 'maxHealth', name: '生命值', value: 2, unit: '' },
+                    { key: 'buildCost', name: '建造成本', value: -1, unit: '金币' } // 负数表示减少建造成本
                 ];
             } else {
                 // 其他建筑物：只能强化生命值和建造成本
@@ -1157,17 +1158,17 @@ export class TalentSystem extends Component {
         // 注意：这些 UUID 来自当前工程中对应 prefab 的 .meta 文件，
         // 如果以后重新导入资源或拷贝到新工程导致 UUID 变化，需要同步更新这里。
         const prefabUuidMap: Record<string, string> = {
-            // 单位
-            'Arrower': '8bdda83a-523b-4c37-b133-ca536dea6db7',
-            'Hunter': 'b00334be-f9db-4b26-b0f8-e423f003c5e0',
-            'ElfSwordsman': '2d142a24-2d18-40d2-9705-80bf1bcb064f',
-            'Priest': '51b4adac-82bc-4144-bd0d-f56cb32bbeb6',
+            // 单位（根据当前工程 prefab .meta 文件更新）
+            'Arrower': 'bcbcc8da-eb3d-4ad2-a55a-b0a0cb5da998',
+            'Hunter': '989ff20a-2de2-44bb-9590-29df03813990',
+            'ElfSwordsman': '2f39c6d5-5dcc-4f99-b0e8-8137ca283667',
+            'Priest': 'f3983aea-26d4-452d-8336-0e29fd2ec477',
             // 建筑 / 防御
-            'WarAncientTree': 'd07009f1-b9c5-488e-b536-8153bcdbb019',
-            'HunterHall': '4b494a80-3076-4f45-9b41-ed270c7805cd',
-            'SwordsmanHall': 'ad0881d7-f2a0-431c-ae1b-8e1b822e3624',
-            'Church': '6039a843-4ca7-4e89-b3eb-8e16a2a035f2',
-            'StoneWall': '1ddb08cb-8262-4873-92d7-d07b00c531fe',
+            'WarAncientTree': 'be50baf7-2a47-44a1-85e1-8116927ef58e',
+            'HunterHall': '84fcb7a8-0a07-41ce-b1b3-19821780e361',
+            'SwordsmanHall': '42935d61-4a45-4323-aa06-5518bd9b5b8d',
+            'Church': 'ca650a85-5921-4179-9dc2-e6357f29e73c',
+            'StoneWall': 'a7405231-7385-4e8a-9fb9-633c4577e610',
         };
         
         // 1. 优先使用 TalentSystem 的 arrowerPrefab 属性（如果配置了）

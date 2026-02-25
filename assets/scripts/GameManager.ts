@@ -156,6 +156,9 @@ export class GameManager extends Component {
      * @param levelsGained 本局提升的等级数
      * @param expGained 本局获得的经验值
      */
+    // 是否在结算界面中展示“经验/等级”区域（经验文字 + 等级进度条）
+    private showExpSectionInGameOver: boolean = false;
+
     private createOrUpdateGameOverLevelBar(
         prevLevel: number,
         prevExp: number,
@@ -1434,6 +1437,10 @@ export class GameManager extends Component {
     showGameResultPanel(state: GameState | null = null) {
         // 记录本次结果状态（null 表示主动退出）
         this.lastGameResultState = state;
+        // 默认不展示经验/等级区域，后续根据本局是否获得经验来决定
+        this.showExpSectionInGameOver = false;
+
+        console.info(`[GameManager.showGameResultPanel] start, state=${state}, currentGameExp=${this.currentGameExp}`);
         
         // 消耗体力（每局游戏无论输赢都消耗5点体力）
         if (this.playerDataManager) {
@@ -1463,14 +1470,26 @@ export class GameManager extends Component {
                 const remainingExp = this.playerDataManager.getRemainingExpForNextLevel();
                 
                 // 在游戏结束面板显示经验和等级概览
+                // 本局获得了经验值：展示“经验/等级”区域
+                this.showExpSectionInGameOver = true;
                 if (this.expLabel) {
                     let expText = `本次获得经验值: +${expGainedThisGame}`;
                     expText += `\n当前等级: Lv.${Math.max(1, currentLevel)}`;
                     expText += `\n当前经验值: ${currentExp} / 100 (下一级还需 ${remainingExp})`;
                     this.expLabel.string = expText;
+                    if (this.expLabel.node) {
+                        this.expLabel.node.active = true;
+                    }
                 } else {
                     // 如果expLabel未设置，尝试在gameOverPanel中创建
                     this.createExpLabelIfNeeded(expGainedThisGame, 0);
+                    if (this.expLabel && this.expLabel.node) {
+                        let expText = `本次获得经验值: +${expGainedThisGame}`;
+                        expText += `\n当前等级: Lv.${Math.max(1, currentLevel)}`;
+                        expText += `\n当前经验值: ${currentExp} / 100 (下一级还需 ${remainingExp})`;
+                        this.expLabel.string = expText;
+                        this.expLabel.node.active = true;
+                    }
                 }
             } else {
                 // 即使没有获得经验值，也要保存数据
@@ -1480,11 +1499,18 @@ export class GameManager extends Component {
                 const remainingExp = this.playerDataManager.getRemainingExpForNextLevel();
                 prevLevel = Math.max(1, currentLevel);
                 prevExp = currentExp;
-                if (this.expLabel) {
-                    this.expLabel.string = `本次获得经验值: +0\n当前等级: Lv.${Math.max(1, currentLevel)}\n当前经验值: ${currentExp} / 100 (下一级还需 ${remainingExp})`;
-                } else {
-                    this.createExpLabelIfNeeded(0, 0);
+
+                // 本局没有获得经验值：不在结算弹窗中展示详细经验/等级信息，最多只保留一行“本次获得经验值：+0”或直接隐藏
+                // 为了避免信息干扰，这里选择隐藏经验标签
+                if (this.expLabel && this.expLabel.node) {
+                    this.expLabel.node.active = false;
                 }
+
+                // 同时不展示等级进度条
+                if (this.gameOverLevelBarBg && this.gameOverLevelBarBg.isValid) {
+                    this.gameOverLevelBarBg.active = false;
+                }
+                this.showExpSectionInGameOver = false;
             }
         }
         
@@ -1496,20 +1522,14 @@ export class GameManager extends Component {
         this.createGameOverDialog();
         
         // 创建 / 更新结算页等级进度条，并播放从0到当前进度的动画（必须在createGameOverDialog之后）
-        if (this.playerDataManager) {
-            if (this.currentGameExp > 0) {
-                this.createOrUpdateGameOverLevelBar(prevLevel, prevExp, currentLevel, currentExp, levelsGained, expGainedThisGame);
-            } else {
-                // 经验没有增加时，仍然显示当前进度条（但不播放动画）
-                this.createOrUpdateGameOverLevelBar(
-                    prevLevel,
-                    prevExp,
-                    currentLevel,
-                    currentExp,
-                    0,
-                    0
-                );
+        // 只有在本局实际获得经验时才展示等级进度条，否则完全隐藏，避免干扰贡献榜布局
+        if (this.playerDataManager && this.currentGameExp > 0) {
+            this.createOrUpdateGameOverLevelBar(prevLevel, prevExp, currentLevel, currentExp, levelsGained, expGainedThisGame);
+            if (this.gameOverLevelBarBg && this.gameOverLevelBarBg.isValid) {
+                this.gameOverLevelBarBg.active = true;
             }
+        } else if (this.gameOverLevelBarBg && this.gameOverLevelBarBg.isValid) {
+            this.gameOverLevelBarBg.active = false;
         }
         
         // 初始化退出游戏按钮（查找场景中的ReturnButton）
@@ -1549,7 +1569,7 @@ export class GameManager extends Component {
         const damageStats = DamageStatistics.getInstance();
         damageStats.stopRecording();
         
-        // 创建伤害统计图表
+        // 创建/更新伤害统计图表
         this.createDamageStatsPanel();
         
         // 确保UI元素已移动到弹窗中
@@ -1574,27 +1594,59 @@ export class GameManager extends Component {
     }
     
     /**
-     * 创建伤害统计图表面板
+     * 清理游戏结束弹窗中的动态UI元素（防止重复创建导致排版错乱）
+     * 注意：不销毁面板节点本身，只清空其子节点，这样可以保证位置/尺寸等始终一致。
+     */
+    private cleanupGameOverDynamicUI() {
+        if (!this.gameOverDialog) {
+            return;
+        }
+        
+        // 仅清空伤害统计面板的子节点，保留面板节点和其 UITransform
+        const statsPanel = this.gameOverDialog.getChildByName('DamageStatsPanel');
+        if (statsPanel && statsPanel.isValid) {
+            const children = [...statsPanel.children];
+            for (const child of children) {
+                if (child && child.isValid) {
+                    child.destroy();
+                }
+            }
+            console.info('[GameManager.cleanupGameOverDynamicUI] cleared DamageStatsPanel children');
+        }
+        
+        // 「关卡奖励」分界线节点不再销毁，始终复用，以保证其 Y 坐标一致
+        // 等级进度条同样复用（在 createOrUpdateGameOverLevelBar 中控制）
+    }
+    
+    /**
+     * 创建伤害统计图表面板（可重复调用，内部自动复用同一个面板节点）
      */
     private createDamageStatsPanel() {
         if (!this.gameOverDialog) {
             return;
         }
         
-        // 检查是否已存在伤害统计面板
+        // 清理旧的动态UI元素（防止重复创建导致排版错乱），但保留面板节点本身
+        this.cleanupGameOverDynamicUI();
+        
+        // 创建或复用伤害统计面板
         let statsPanel = this.gameOverDialog.getChildByName('DamageStatsPanel');
-        if (statsPanel) {
-            statsPanel.destroy();
+        let isNewPanel = false;
+        if (!statsPanel) {
+            statsPanel = new Node('DamageStatsPanel');
+            statsPanel.setParent(this.gameOverDialog);
+            isNewPanel = true;
         }
         
-        // 创建伤害统计面板
-        statsPanel = new Node('DamageStatsPanel');
-        statsPanel.setParent(this.gameOverDialog);
-        
-        // 添加UITransform组件（调整尺寸：高度增加以容纳3条数据）
-        const statsTransform = statsPanel.addComponent(UITransform);
+        // 添加或获取 UITransform 组件（调整尺寸：高度增加以容纳3条数据）
+        let statsTransform = statsPanel.getComponent(UITransform);
+        if (!statsTransform) {
+            statsTransform = statsPanel.addComponent(UITransform);
+        }
         const panelHeight = Math.max(150, 25 + 3 * (28 + 6) + 20); // 动态计算高度：标题(25) + 3条数据 + 底部间距(20)
         statsTransform.setContentSize(380, panelHeight);
+
+        console.info(`[GameManager.createDamageStatsPanel] ${isNewPanel ? 'create' : 'reuse'} panel, height=${panelHeight}`);
         
         // 创建背景
         const statsBg = new Node('StatsBackground');
@@ -2141,7 +2193,6 @@ export class GameManager extends Component {
         // 所有元素相对于弹窗中心定位（弹窗中心为0,0）
         const spacing = 20;           // 通用元素间距
         const buttonSpacing = 30;     // 按钮与经验值标签之间的间距
-        const statsToExpSpacing = 50; // DPS 面板与经验值区域之间的额外间距，避免重叠
         let currentY = 250;           // 从弹窗中心上方开始（结果标签位置，因为面板高度增加了）
         
         // 结果标签位置（最上方）
@@ -2152,53 +2203,87 @@ export class GameManager extends Component {
             currentY = currentY - labelHeight / 2 - spacing;
         }
         
-        // 伤害统计图表位置（在结果标签下方）
+        // 伤害统计图表位置（使用固定Y坐标，与是否获得经验无关）
         const damageStatsNode = this.gameOverDialog.getChildByName('DamageStatsPanel');
         if (damageStatsNode) {
             const statsTransform = damageStatsNode.getComponent(UITransform);
-            // 为防止某些情况下 UITransform 高度被意外改成 0，增加一个下限，避免与“关卡奖励”分割线重叠
+            // 为防止某些情况下 UITransform 高度被意外改成 0，增加一个下限
             const statsHeight = statsTransform ? Math.max(150, statsTransform.height) : 150;
-            damageStatsNode.setPosition(0, currentY - statsHeight / 2, 0);
-            currentY = currentY - statsHeight - statsToExpSpacing; // DPS 面板整体高度 + 额外间距
+        }
+        
+        // 「关卡奖励」分界线位置（固定Y，与是否获得经验、本局数据无关）
+        let rewardTitleNode = this.gameOverDialog.getChildByName('RewardTitle');
+        if (!rewardTitleNode) {
+            rewardTitleNode = new Node('RewardTitle');
+            rewardTitleNode.setParent(this.gameOverDialog);
 
-            // 在 DPS 排行面板与经验值标签之间添加「关卡奖励」分界线
-            let rewardTitleNode = this.gameOverDialog.getChildByName('RewardTitle');
-            if (!rewardTitleNode) {
-                rewardTitleNode = new Node('RewardTitle');
-                rewardTitleNode.setParent(this.gameOverDialog);
+            const rewardLabel = rewardTitleNode.addComponent(Label);
+            rewardLabel.string = '———— 关卡奖励 ————';
+            rewardLabel.fontSize = 24;
+            rewardLabel.color = new Color(255, 215, 0, 255);
+            rewardLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            rewardLabel.verticalAlign = Label.VerticalAlign.CENTER;
 
-                const rewardLabel = rewardTitleNode.addComponent(Label);
+            const rewardTransform = rewardTitleNode.addComponent(UITransform);
+            rewardTransform.setContentSize(400, 30);
+        } else {
+            const rewardLabel = rewardTitleNode.getComponent(Label);
+            if (rewardLabel) {
                 rewardLabel.string = '———— 关卡奖励 ————';
                 rewardLabel.fontSize = 24;
-                // 使用较为显眼的金色
                 rewardLabel.color = new Color(255, 215, 0, 255);
                 rewardLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
                 rewardLabel.verticalAlign = Label.VerticalAlign.CENTER;
+            }
+        }
 
-                const rewardTransform = rewardTitleNode.addComponent(UITransform);
-                rewardTransform.setContentSize(400, 30);
-            } else {
-                const rewardLabel = rewardTitleNode.getComponent(Label);
-                if (rewardLabel) {
-                    rewardLabel.color = new Color(255, 215, 0, 255);
-                }
+        // 固定坐标：贡献榜中心在 y = 125，分界线在 y = 0（可根据美术需要再微调）
+        if (damageStatsNode) {
+            const statsTransform2 = damageStatsNode.getComponent(UITransform);
+            const statsHeight2 = statsTransform2 ? Math.max(150, statsTransform2.height) : 150;
+            const fixedStatsCenterY = 125;
+            damageStatsNode.setPosition(0, fixedStatsCenterY, 0);
+            console.info(`[GameManager.layoutGameOverUI] set DamageStatsPanel y=${fixedStatsCenterY}, height=${statsHeight2}`);
+        }
+        rewardTitleNode.setPosition(0, 0, 0);
+        console.info('[GameManager.layoutGameOverUI] set RewardTitle y=0');
+
+        // 从分界线下方的一个固定位置开始布局经验区域和按钮，保证与经验无关
+        currentY = -40;
+        
+        // 经验区域布局（经验文字 + 等级进度条），使用固定坐标，避免出现文字重叠
+        // 1）当有经验时：经验文字整体稍微向下，等级+进度条整体稍微向上，形成清晰的上下分区
+        // 2）当无经验时：仅按一个固定高度预留空间，保证按钮位置稳定
+        const defaultExpAreaHeight = 80; // 经验区域的“标准高度”
+        if (this.showExpSectionInGameOver && this.expLabel && this.expLabel.node && this.expLabel.node.active) {
+            // 经验说明文字字体大小与进度条上方的等级文字保持一致（20）
+            this.expLabel.fontSize = 20;
+
+            // 固定经验文字和进度条的Y坐标（根据你的要求微调）：
+            //  - 进度条整体下移 10 像素
+            //  - 经验文字整体下移 20 像素
+            const fixedLevelBarY = -60;   // 原 -50，下移 10
+            const fixedExpTextY = -135;   // 原 -105，下移 20
+
+            // 摆放经验文字
+            this.expLabel.node.setPosition(0, fixedExpTextY, 0);
+
+            // 如果存在等级进度条，则摆放在略高的位置
+            if (this.gameOverLevelBarBg && this.gameOverLevelBarBg.isValid && this.gameOverLevelBarBg.active) {
+                this.gameOverLevelBarBg.setPosition(0, fixedLevelBarY, 0);
             }
 
-            rewardTitleNode.setPosition(0, currentY, 0);
-            // 分界线下方再留出一点空间给经验值文本
-            currentY = currentY - 40;
+            // 经验区域整体高度近似：从进度条顶部到经验文字底部，这里取一个略大于 defaultExpAreaHeight 的固定值
+            const expAreaTotalHeight = 110; // 经验区域实际高度（进度条 + 文字）
+            // 经验区域底部Y（用于摆放按钮）：略低于经验文字
+            const expAreaBottomY = fixedExpTextY - expAreaTotalHeight / 2;
+            currentY = expAreaBottomY - buttonSpacing;
+        } else {
+            // 不显示经验标签时，也按默认高度预留空间，保证按钮位置稳定
+            currentY = currentY - defaultExpAreaHeight / 2 - buttonSpacing;
         }
         
-        // 经验值标签位置（在伤害统计图表下方）
-        if (this.expLabel && this.expLabel.node) {
-            this.expLabel.fontSize = 24;
-            const expLabelTransform = this.expLabel.node.getComponent(UITransform);
-            const expLabelHeight = expLabelTransform ? Math.max(60, expLabelTransform.height) : 80;
-            this.expLabel.node.setPosition(0, currentY - expLabelHeight / 2, 0);
-            currentY = currentY - expLabelHeight / 2 - buttonSpacing; // 使用更大的间距
-        }
-        
-        // 退出游戏按钮与重新开始按钮在同一行并排显示（整体稍微下移约 50 像素）
+        // 退出游戏按钮与重新开始按钮在同一行并排显示（整体稍微下移约 40 像素）
         const restartButtonTransform = restartButtonNode.getComponent(UITransform);
         const restartButtonHeight = restartButtonTransform ? restartButtonTransform.height : 50;
 
@@ -2212,8 +2297,7 @@ export class GameManager extends Component {
         }
 
         const rowHeight = Math.max(restartButtonHeight, exitButtonHeight);
-        // 在原基础上整体向下移动 50 像素
-        const buttonY = currentY - rowHeight / 2 - 50;
+        const buttonY = currentY - rowHeight / 2 + 10;
 
         // 左侧：退出按钮
         if (exitButtonNode) {
