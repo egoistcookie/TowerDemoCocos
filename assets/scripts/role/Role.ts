@@ -13,6 +13,7 @@ import { UnitPool } from '../UnitPool';
 import { DamageStatistics } from '../DamageStatistics';
 import { BuffManager } from '../BuffManager';
 import { TalentEffectManager } from '../TalentEffectManager';
+import { UnitConfigManager } from '../UnitConfigManager';
 // import { PerformanceMonitor } from './PerformanceMonitor';
 const { ccclass, property } = _decorator;
 
@@ -209,7 +210,7 @@ export class Role extends Component {
     private static cachedGameManagerWarned: boolean = false; // GameManager 警告标志
 
     start() {
-       //console.info(`[Role] start 被调用，单位类型: ${this.constructor.name}`);
+       console.info(`[Role] start 被调用，单位类型: ${this.constructor.name}`);
         
         // 保存初始属性值（用于对象池回收时恢复）
         // 注意：从配置文件中读取基础值，而不是当前值（当前值可能已被配置管理器修改）
