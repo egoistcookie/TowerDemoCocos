@@ -1316,11 +1316,23 @@ export class Build extends Component {
     }
     
     /**
+     * 获取用于配置 / 天赋 / 卡片增幅的单位ID
+     * 优先使用 prefabName（在建造时显式设置，不会被代码压缩影响）
+     * 回退到 constructor.name 以兼容旧数据
+     */
+    protected getUnitIdForEnhancement(): string {
+        if (this.prefabName && this.prefabName.trim() !== '') {
+            return this.prefabName;
+        }
+        return this.constructor.name;
+    }
+
+    /**
      * 从增益管理器应用增益效果（新建造的建筑物会调用此方法）
      */
     protected applyBuffsFromManager() {
         const buffManager = BuffManager.getInstance();
-        const unitId = this.constructor.name; // 获取类名作为单位ID
+        const unitId = this.getUnitIdForEnhancement(); // 使用稳定的单位ID
         
        //console.info(`[Build] applyBuffsFromManager 被调用，单位ID: ${unitId}`);
         

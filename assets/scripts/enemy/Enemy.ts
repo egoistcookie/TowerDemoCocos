@@ -30,7 +30,7 @@ export class Enemy extends Component {
     attackRange: number = 0; // 增加攻击范围，确保大于石墙碰撞半径(40) + 敌人半径(20) = 60
 
     @property
-    collisionRadius: number = 20; // 碰撞半径（像素），默认20，子类可以重写
+    collisionRadius: number = 5; // 敌人之间的碰撞半径（像素），统一固定为 5
 
     @property({
         tooltip: "韧性（0-1）：1秒内遭受此百分比血量损失才会触发僵直。0表示没有抗性（受到攻击就会播放受击动画），1表示最大抗性（需要100%血量损失才触发僵直）"
@@ -1380,12 +1380,26 @@ export class Enemy extends Component {
             }
             
         // 归一化方向
-                direction.normalize();
+        direction.normalize();
 
         // 计算新位置
         const moveDistance = this.moveSpeed * deltaTime;
-            const newPos = new Vec3();
+        const newPos = new Vec3();
         Vec3.scaleAndAdd(newPos, this.node.worldPosition, direction, moveDistance);
+
+        // 敌人之间碰撞体积检测与避让
+        const willCollide = this.checkCollisionWithEnemy(newPos);
+        if (willCollide) {
+            const currentPos = this.node.worldPosition;
+            const avoidanceDir = this.calculateEnemyAvoidanceDirection(currentPos, direction, deltaTime);
+            const avoidanceWeight = 0.3;
+            const finalDir = new Vec3();
+            Vec3.lerp(finalDir, direction, avoidanceDir, avoidanceWeight);
+            finalDir.normalize();
+            Vec3.scaleAndAdd(newPos, currentPos, finalDir, moveDistance);
+            // 使用最终方向更新翻转方向
+            direction.set(finalDir);
+        }
 
         // 限制在屏幕范围内
                 const clampedPos = this.clampPositionToScreen(newPos);
@@ -2764,6 +2778,18 @@ export class Enemy extends Component {
         const newPos = new Vec3();
         Vec3.scaleAndAdd(newPos, this.node.worldPosition, direction, moveDistance);
 
+        // 敌人之间碰撞体积检测与避让
+        const willCollide = this.checkCollisionWithEnemy(newPos);
+        if (willCollide) {
+            const currentPos = this.node.worldPosition;
+            const avoidanceDir = this.calculateEnemyAvoidanceDirection(currentPos, direction, deltaTime);
+            const avoidanceWeight = 0.3;
+            const finalDir = new Vec3();
+            Vec3.lerp(finalDir, direction, avoidanceDir, avoidanceWeight);
+            finalDir.normalize();
+            Vec3.scaleAndAdd(newPos, currentPos, finalDir, moveDistance);
+        }
+
         // 限制在屏幕范围内
         const clampedPos = this.clampPositionToScreen(newPos);
         this.node.setWorldPosition(clampedPos);
@@ -3339,7 +3365,7 @@ export class Enemy extends Component {
             const enemyDistance = Vec3.distance(position, enemyPos);
             
             // 获取敌人的碰撞半径（如果有collisionRadius属性）
-            const otherRadius = enemyScript.collisionRadius || 20;
+            const otherRadius = enemyScript.collisionRadius || 5;
             const minDistance = this.collisionRadius + otherRadius;
 
             if (enemyDistance < minDistance && enemyDistance > 0.1) {
@@ -3362,7 +3388,7 @@ export class Enemy extends Component {
         let obstacleCount = 0;
         let maxStrength = 0;
 
-        // 检测范围：碰撞半径的4倍
+        // 检测范围：碰撞半径的4倍（敌人之间统一使用较小的碰撞半径）
         const detectionRange = this.collisionRadius * 4;
 
         const findNodeRecursive = (node: Node, name: string): Node | null => {
@@ -3413,7 +3439,7 @@ export class Enemy extends Component {
             const distance = Vec3.distance(currentPos, enemyPos);
             
             // 获取敌人的碰撞半径
-            const otherRadius = enemyScript.collisionRadius || 20;
+            const otherRadius = enemyScript.collisionRadius || 5;
             const minDistance = this.collisionRadius + otherRadius;
 
             if (distance < detectionRange && distance > 0.1) {

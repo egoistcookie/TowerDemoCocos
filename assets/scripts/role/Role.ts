@@ -209,6 +209,18 @@ export class Role extends Component {
     private static recursiveFindWarningCount: number = 0; // 递归查找警告计数
     private static cachedGameManagerWarned: boolean = false; // GameManager 警告标志
 
+    /**
+     * 获取用于配置 / 天赋 / 卡片增幅的单位ID
+     * 优先使用 prefabName（在建造/生产时显式设置，不会被代码压缩影响）
+     * 回退到 constructor.name 以兼容旧数据
+     */
+    protected getUnitIdForEnhancement(): string {
+        if (this.prefabName && this.prefabName.trim() !== '') {
+            return this.prefabName;
+        }
+        return this.constructor.name;
+    }
+
     start() {
        console.info(`[Role] start 被调用，单位类型: ${this.constructor.name}`);
         
@@ -217,7 +229,7 @@ export class Role extends Component {
         if (this._initialMaxHealth === 0) {
             // 只在第一次保存
             const configManager = UnitConfigManager.getInstance();
-            const unitId = this.constructor.name;
+            const unitId = this.getUnitIdForEnhancement();
             const config = configManager.getUnitConfig(unitId);
             
             if (config && config.baseStats) {
@@ -295,7 +307,7 @@ export class Role extends Component {
      */
     protected applyTalentEnhancements() {
         const talentEffectManager = TalentEffectManager.getInstance();
-        const unitId = this.constructor.name;
+        const unitId = this.getUnitIdForEnhancement();
         
         // 应用单位卡片强化
         talentEffectManager.applyUnitEnhancements(unitId, this);
@@ -2974,7 +2986,7 @@ export class Role extends Component {
         // 重新监听点击事件
         this.node.on(Node.EventType.TOUCH_END, this.onTowerClick, this);
         
-        const unitId = this.constructor.name;
+        const unitId = this.getUnitIdForEnhancement();
         
         // 防止重复应用增幅：如果已经应用过，直接返回
         if (this._enhancementsApplied) {
@@ -3684,7 +3696,7 @@ export class Role extends Component {
      */
     protected applyBuffsFromManager() {
         const buffManager = BuffManager.getInstance();
-        const unitId = this.constructor.name; // 获取类名作为单位ID
+        const unitId = this.getUnitIdForEnhancement(); // 使用稳定的单位ID（优先 prefabName）
         
        //console.info(`[Role] applyBuffsFromManager 开始，单位ID: ${unitId}, 应用前 currentHealth=${this.currentHealth}, maxHealth=${this.maxHealth}`);
         
