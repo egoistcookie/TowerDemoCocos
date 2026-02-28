@@ -51,7 +51,7 @@
     },
     "displayInfo": {
       "name": "小精灵",
-      "description": "能够采集木材，需要移动到树林中。"
+      "description": "进可修复建筑，退可采集木材。"
     },
     "displayStats": {
       "生命值": 30,

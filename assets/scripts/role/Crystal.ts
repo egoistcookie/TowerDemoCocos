@@ -428,8 +428,8 @@ export class Crystal extends Component {
         // 更新贴图
         this.updateLevelSprite();
 
-        // 升级完成后，自动训练一个小精灵
-        this.autoTrainWispIfPossible();
+        // 升级完成后，自动训练2个小精灵
+        this.autoTrainMultipleWisps(2);
 
         // 重置升级状态
         this.isUpgrading = false;
@@ -446,7 +446,7 @@ export class Crystal extends Component {
     }
 
     /**
-     * 在游戏开始和每次升级后自动训练小精灵
+     * 在游戏开始时自动训练3个小精灵（2+1）
      */
     autoTrainWispIfPossible() {
         // 查找游戏管理器，确保已进入游戏中状态
@@ -476,8 +476,28 @@ export class Crystal extends Component {
             return;
         }
 
-        // 直接开始一次训练（不消耗金币）
+        // 初始训练2个小精灵
+        this.autoTrainMultipleWisps(2);
+    }
+    
+    /**
+     * 自动训练多个小精灵
+     * @param count 训练数量
+     */
+    autoTrainMultipleWisps(count: number) {
+        if (count <= 0) {
+            return;
+        }
+        
+        // 训练第一个
         this.startTrainWisp();
+        
+        // 如果需要训练多个，延迟训练后续的
+        if (count > 1) {
+            this.scheduleOnce(() => {
+                this.autoTrainMultipleWisps(count - 1);
+            }, this.trainWispDuration + 0.1); // 等待当前训练完成后再训练下一个
+        }
     }
 
     /**

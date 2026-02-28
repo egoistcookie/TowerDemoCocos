@@ -311,7 +311,7 @@ export class UIManager extends Component {
         leftArrowButton.setParent(levelSelectArea);
         leftArrowButton.setPosition(-150, 0, 0);
         const leftArrowTransform = leftArrowButton.addComponent(UITransform);
-        leftArrowTransform.setContentSize(60, 60);
+        leftArrowTransform.setContentSize(100, 100);
         leftArrowTransform.setAnchorPoint(0.5, 0.5);
         
         const leftArrowButtonComp = leftArrowButton.addComponent(Button);
@@ -329,7 +329,7 @@ export class UIManager extends Component {
         rightArrowButton.setParent(levelSelectArea);
         rightArrowButton.setPosition(150, 0, 0);
         const rightArrowTransform = rightArrowButton.addComponent(UITransform);
-        rightArrowTransform.setContentSize(60, 60);
+        rightArrowTransform.setContentSize(100, 100);
         rightArrowTransform.setAnchorPoint(0.5, 0.5);
         
         const rightArrowButtonComp = rightArrowButton.addComponent(Button);
@@ -352,7 +352,7 @@ export class UIManager extends Component {
         
         // 添加按钮变换组件
         const startButtonTransform = startButton.addComponent(UITransform);
-        startButtonTransform.setContentSize(300, 80); // 增大按钮尺寸，确保可见
+        startButtonTransform.setContentSize(100, 100); // 增大按钮尺寸，确保可见
         startButtonTransform.setAnchorPoint(0.5, 0.5);
         
         // 添加Button组件
@@ -741,7 +741,7 @@ export class UIManager extends Component {
         // 按钮容器的锚点为(0.5, 0)，所以它的底部边缘在自身Y坐标0处
         // 因此，按钮容器的Y坐标应该设置为：-canvasHeight/2 + tabAreaHeight/2
         // 这样按钮容器的底部边缘就与底部选区容器的底部边缘对齐了
-        const buttonContainerY = -canvasHeight / 2 + tabAreaHeight / 2;
+        const buttonContainerY = -canvasHeight / 2 + tabAreaHeight / 2 - 30;
         buttonContainer.setPosition(0, buttonContainerY, 0);
         
         // 确保容器可见
@@ -837,6 +837,11 @@ export class UIManager extends Component {
      * @param pressedPath 按下状态的贴图路径（相对于textures/icon）
      */
     private setupButtonSprite(buttonNode: Node, normalPath: string, pressedPath: string) {
+        // 保存当前的 UITransform 尺寸
+        const uiTransform = buttonNode.getComponent(UITransform);
+        const originalWidth = uiTransform ? uiTransform.width : 200;
+        const originalHeight = uiTransform ? uiTransform.height : 80;
+        
         // 移除现有的Graphics组件（如果存在）
         const graphics = buttonNode.getComponent(Graphics);
         if (graphics) {
@@ -854,6 +859,9 @@ export class UIManager extends Component {
         if (!sprite) {
             sprite = buttonNode.addComponent(Sprite);
         }
+        
+        // 设置 Sprite 的 sizeMode 为 CUSTOM，防止自动调整节点尺寸
+        sprite.sizeMode = Sprite.SizeMode.CUSTOM;
         
         // 获取或添加Button组件，并设置过渡模式
         let button = buttonNode.getComponent(Button);
@@ -877,6 +885,12 @@ export class UIManager extends Component {
                 sprite.spriteFrame = spriteFrame;
                 // 设置Button的normalSprite
                 button.normalSprite = spriteFrame;
+                
+                // 恢复原始尺寸
+                const transform = buttonNode.getComponent(UITransform);
+                if (transform) {
+                    transform.setContentSize(originalWidth, originalHeight);
+                }
             }
         });
         
@@ -910,7 +924,7 @@ export class UIManager extends Component {
         
         // 添加UITransform - 增大按钮尺寸，适应新的三页签区高度
         const uiTransform = buttonNode.addComponent(UITransform);
-        uiTransform.setContentSize(200, 80); // 增大按钮尺寸，从150x40变为200x80
+        uiTransform.setContentSize(250, 120); // 增大按钮尺寸50%，从200x80变为300x120
         uiTransform.setAnchorPoint(0.5, 0.5);
         
         // 根据按钮文本映射到对应的贴图文件名

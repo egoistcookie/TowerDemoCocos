@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec2, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, EventTouch, Sprite, SpriteFrame } from 'cc';
+import { _decorator, Component, Node, Vec2, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, EventTouch, Sprite, SpriteFrame, resources } from 'cc';
 import { GameManager, GameState } from '../GameManager';
 import { HealthBar } from '../HealthBar';
 import { DamageNumber } from '../DamageNumber';
@@ -7,6 +7,7 @@ import { UnitInfo } from '../UnitInfoPanel';
 import { GamePopup } from '../GamePopup';
 import { Role } from './Role';
 import { ForestGridPanel } from '../ForestGridPanel';
+import { UnitType } from '../UnitType';
 const { ccclass, property } = _decorator;
 
 @ccclass('Wisp')
@@ -18,24 +19,42 @@ export class Wisp extends Role {
     healAmount: number = 2; // 每次治疗恢复的血量
 
     @property
-    healInterval: number = 1.0; // 治疗间隔（秒）
+    healInterval: number = 0.5; // 治疗间隔（秒），改为每0.5秒维修一次
 
     @property
     attachOffset: Vec3 = new Vec3(0, 30, 0); // 依附在建筑物上的偏移位置
+    
+    @property
+    repairRange: number = 20; // 维修范围（必须在20以内才能维修）
+    
+    @property
+    searchRange: number = 200; // 搜索范围（自动寻找200范围内的建筑物）
+    
+    @property({ type: [SpriteFrame] })
+    repairAnimationFrames: SpriteFrame[] = []; // 维修动画帧数组
+    
+    @property
+    repairAnimationDuration: number = 1.0; // 维修动画时长（秒），调慢一半
     
     // 依附相关
     private attachedBuilding: Node = null!; // 依附的建筑物
     private isAttached: boolean = false; // 是否已依附
     private healTimer: number = 0; // 治疗计时器
+    
+    // 维修相关
+    private repairTarget: Node = null!; // 当前维修目标（防御塔或石墙）
+    private isRepairing: boolean = false; // 是否正在维修
+    private manualControlActive: boolean = false; // 手动控制激活标志
+    private isPlayingRepairAnimation: boolean = false; // 是否正在播放维修动画
 
     // 树林隐蔽效果相关
     private isInForestArea: boolean = false;
     private originalSpriteColor: Color | null = null;
     
-    // 单位类型标识（用于首次出现时的单位介绍框）
-    unitType: string = 'Wisp';
-    
     start() {
+        // 设置单位类型为CHARACTER
+        this.unitType = UnitType.CHARACTER;
+        
         // 调用父类初始化（血量、血条、选择、对话等）
         super.start();
 
@@ -47,6 +66,12 @@ export class Wisp extends Role {
         this.isAttached = false;
         this.attachedBuilding = null!;
         this.healTimer = 0;
+        
+        // 初始化维修状态
+        this.isRepairing = false;
+        this.repairTarget = null!;
+        this.manualControlActive = false;
+        this.isPlayingRepairAnimation = false;
 
         // 设置默认名称（如果未在编辑器中配置）
         if (!this.unitName || this.unitName === '') {
@@ -59,14 +84,27 @@ export class Wisp extends Role {
             this.sprite.trim = true;
             this.originalSpriteColor = this.sprite.color.clone();
         }
+        
+        // 如果伤害数字预制体未设置，尝试加载
+        if (!this.damageNumberPrefab) {
+            this.loadDamageNumberPrefab();
+        }
+    }
+    
+    /**
+     * 加载伤害数字预制体
+     */
+    private loadDamageNumberPrefab() {
+        resources.load('prefabs/DamageNumber', Prefab, (err, prefab) => {
+            if (!err && prefab) {
+                this.damageNumberPrefab = prefab;
+            } else {
+                console.warn('[Wisp] Failed to load DamageNumber prefab:', err);
+            }
+        });
     }
 
     onDestroy() {
-        // 如果依附在建筑物上，通知建筑物移除小精灵
-        if (this.isAttached && this.attachedBuilding && this.attachedBuilding.isValid) {
-            this.detachFromBuilding();
-        }
-
         // 减少人口
         if (this.gameManager) {
             this.gameManager.removePopulation(1);
@@ -74,33 +112,416 @@ export class Wisp extends Role {
     }
 
     update(deltaTime: number) {
-        // 先让父类处理移动、选中、碰撞等通用逻辑
-        super.update(deltaTime);
-
         if (this.isDestroyed) {
             return;
         }
 
-        // 如果依附在建筑物上，更新位置并治疗
-        if (this.isAttached && this.attachedBuilding && this.attachedBuilding.isValid) {
-            // 更新位置（跟随建筑物）
-            const buildingPos = this.attachedBuilding.worldPosition.clone();
-            const attachPos = buildingPos.add(this.attachOffset);
-            this.node.setWorldPosition(attachPos);
-
-            // 治疗建筑物
-            this.healTimer += deltaTime;
-            if (this.healTimer >= this.healInterval) {
-                this.healTimer = 0;
-                this.healBuilding();
+        // 在调用父类update之前，检查并保存手动控制状态
+        const wasManuallyControlled = this.isManuallyControlled || this.manualMoveTarget != null;
+        
+        if (wasManuallyControlled) {
+            if (!this.manualControlActive) {
+                console.log('[Wisp] ===== MANUAL CONTROL ACTIVATED =====');
+                console.log('[Wisp] isManuallyControlled:', this.isManuallyControlled);
+                console.log('[Wisp] manualMoveTarget:', this.manualMoveTarget);
+                this.manualControlActive = true;
+                this.repairTarget = null!;
+                this.isRepairing = false;
             }
-        } else {
-            // 未依附时，静止时检查是否与建筑物重叠，从而自动依附
-            this.checkBuildingOverlap();
+        }
+
+        // 调用父类处理移动、选中、碰撞等通用逻辑
+        super.update(deltaTime);
+
+        // 在父类update之后，再次检查手动控制状态
+        // 如果之前是手动控制，但现在标志被清空了，保持manualControlActive为true
+        const isStillManuallyControlled = this.isManuallyControlled || this.manualMoveTarget != null;
+        
+        if (!isStillManuallyControlled && this.manualControlActive) {
+            // 父类可能已经完成了移动，现在可以停用手动控制
+            console.log('[Wisp] ===== MANUAL CONTROL DEACTIVATED =====');
+            this.manualControlActive = false;
+        }
+
+        // 移除依附功能，只保留维修功能
+        if (!this.manualControlActive) {
+            // 只有在非手动控制状态下才执行维修逻辑
+            this.updateRepairLogic(deltaTime);
         }
 
         // 更新树林隐蔽效果
         this.updateForestStealthState();
+    }
+    
+    /**
+     * 更新维修逻辑
+     */
+    private updateRepairLogic(deltaTime: number) {
+        // 如果正在手动控制移动，不执行维修逻辑（手动控制优先级最高）
+        if (this.isManuallyControlled || this.manualMoveTarget) {
+            this.repairTarget = null!;
+            this.isRepairing = false;
+            return;
+        }
+        
+        // 更新维修计时器
+        this.healTimer += deltaTime;
+
+        // 查找需要维修的目标
+        if (!this.repairTarget || !this.repairTarget.isValid || !this.repairTarget.active) {
+            this.findRepairTarget();
+        }
+
+        // 如果有维修目标
+        if (this.repairTarget) {
+            const distance = Vec3.distance(this.node.worldPosition, this.repairTarget.worldPosition);
+            
+            // 如果在维修范围内
+            if (distance <= this.repairRange) {
+                // 不要设置 isMoving = false，让父类的移动逻辑继续工作
+                this.isRepairing = true;
+                
+                // 执行维修
+                if (this.healTimer >= this.healInterval) {
+                    this.healTimer = 0;
+                    this.repairBuilding();
+                }
+            } else if (distance <= this.searchRange) {
+                // 如果在搜索范围内但不在维修范围内，移动到目标附近
+                this.isRepairing = true;
+                this.moveToRepairTarget(this.repairTarget, deltaTime);
+            } else {
+                // 目标超出搜索范围，清除目标
+                this.repairTarget = null!;
+                this.isRepairing = false;
+            }
+        } else {
+            this.isRepairing = false;
+        }
+    }
+    
+    /**
+     * 查找需要维修的目标（防御塔或石墙）
+     */
+    private findRepairTarget() {
+        const containers = [
+            'Canvas/Towers',
+            'Canvas/WarAncientTrees',
+            'Canvas/HunterHalls',
+            'Canvas/StoneWalls',
+            'Canvas/WatchTowers',
+            'Canvas/IceTowers',
+            'Canvas/ThunderTowers',
+            'Canvas/SwordsmanHalls',
+            'Canvas/Churches'
+        ];
+
+        let nearestTarget: Node = null!;
+        let minDistance = Infinity;
+
+        for (const containerPath of containers) {
+            const container = this.findNodeByPath(containerPath);
+            if (!container) continue;
+
+            for (const building of container.children) {
+                if (!building || !building.active || !building.isValid) continue;
+
+                // 获取建筑物脚本
+                const buildingScript = this.getBuildingScript(building);
+                if (!buildingScript) continue;
+
+                // 检查建筑物是否存活
+                if (buildingScript.isAlive && !buildingScript.isAlive()) continue;
+
+                // 检查是否需要维修（生命值未满）
+                const currentHealth = buildingScript.currentHealth || buildingScript.getHealth?.();
+                const maxHealth = buildingScript.maxHealth || buildingScript.getMaxHealth?.();
+                
+                if (currentHealth !== undefined && maxHealth !== undefined && currentHealth < maxHealth) {
+                    const distance = Vec3.distance(this.node.worldPosition, building.worldPosition);
+                    if (distance <= this.searchRange && distance < minDistance) {
+                        minDistance = distance;
+                        nearestTarget = building;
+                    }
+                }
+            }
+        }
+
+        this.repairTarget = nearestTarget;
+    }
+    
+    /**
+     * 维修建筑物
+     */
+    private repairBuilding() {
+        if (!this.repairTarget || this.isDestroyed) {
+            return;
+        }
+
+        if (!this.repairTarget.isValid || !this.repairTarget.active) {
+            this.repairTarget = null!;
+            this.isRepairing = false;
+            return;
+        }
+
+        // 获取建筑物脚本
+        const buildingScript = this.getBuildingScript(this.repairTarget);
+        if (!buildingScript) {
+            this.repairTarget = null!;
+            this.isRepairing = false;
+            return;
+        }
+
+        // 检查建筑物是否存活
+        if (buildingScript.isAlive && !buildingScript.isAlive()) {
+            this.repairTarget = null!;
+            this.isRepairing = false;
+            return;
+        }
+
+        // 获取当前生命值和最大生命值
+        const currentHealth = buildingScript.currentHealth || buildingScript.getHealth?.();
+        const maxHealth = buildingScript.maxHealth || buildingScript.getMaxHealth?.();
+
+        // 检查是否需要维修
+        if (currentHealth >= maxHealth) {
+            this.repairTarget = null!;
+            this.isRepairing = false;
+            return;
+        }
+
+        // 播放维修动画
+        this.playRepairAnimation();
+
+        // 恢复生命值
+        const healAmount = Math.min(this.healAmount, maxHealth - currentHealth);
+        
+        if (buildingScript.heal) {
+            buildingScript.heal(healAmount);
+        } else if (buildingScript.currentHealth !== undefined) {
+            buildingScript.currentHealth = Math.min(maxHealth, currentHealth + healAmount);
+            // 更新血条
+            if (buildingScript.updateHealthBar) {
+                buildingScript.updateHealthBar();
+            } else if (buildingScript.healthBar) {
+                buildingScript.healthBar.setHealth(buildingScript.currentHealth);
+            }
+        }
+
+        // 显示治疗特效和数字
+        this.showRepairEffect(this.repairTarget);
+        this.showRepairNumber(this.repairTarget, healAmount);
+    }
+    
+    /**
+     * 播放维修动画
+     */
+    private playRepairAnimation() {
+        if (this.isPlayingRepairAnimation) {
+            return;
+        }
+
+        if (!this.sprite) {
+            this.sprite = this.node.getComponent(Sprite);
+            if (!this.sprite) {
+                return;
+            }
+        }
+
+        if (!this.repairAnimationFrames || this.repairAnimationFrames.length === 0) {
+            return;
+        }
+
+        const validFrames = this.repairAnimationFrames.filter(frame => frame != null);
+        if (validFrames.length === 0) {
+            return;
+        }
+
+        this.isPlayingRepairAnimation = true;
+
+        const frames = validFrames;
+        const frameCount = frames.length;
+        const frameDuration = this.repairAnimationDuration / frameCount;
+        let animationTimer = 0;
+        let lastFrameIndex = -1;
+
+        if (frames[0]) {
+            this.sprite.spriteFrame = frames[0];
+            lastFrameIndex = 0;
+        }
+
+        const animationUpdate = (deltaTime: number) => {
+            if (!this.sprite || !this.sprite.isValid || this.isDestroyed) {
+                this.isPlayingRepairAnimation = false;
+                this.unschedule(animationUpdate);
+                return;
+            }
+
+            animationTimer += deltaTime;
+
+            if (animationTimer >= this.repairAnimationDuration) {
+                // 动画播放完成，恢复默认精灵
+                if (this.defaultSpriteFrame) {
+                    this.sprite.spriteFrame = this.defaultSpriteFrame;
+                }
+                this.isPlayingRepairAnimation = false;
+                this.unschedule(animationUpdate);
+                return;
+            }
+
+            const targetFrameIndex = Math.min(Math.floor(animationTimer / frameDuration), frameCount - 1);
+            if (targetFrameIndex !== lastFrameIndex && targetFrameIndex < frameCount && frames[targetFrameIndex]) {
+                this.sprite.spriteFrame = frames[targetFrameIndex];
+                lastFrameIndex = targetFrameIndex;
+            }
+        };
+
+        this.unschedule(animationUpdate);
+        this.schedule(animationUpdate, 0);
+    }
+    
+    /**
+     * 移动到维修目标附近
+     */
+    private moveToRepairTarget(target: Node, deltaTime: number) {
+        if (!target || !target.isValid) {
+            return;
+        }
+
+        const currentPos = this.node.worldPosition;
+        const targetPos = target.worldPosition;
+        
+        // 计算方向
+        const direction = new Vec3();
+        Vec3.subtract(direction, targetPos, currentPos);
+        direction.normalize();
+
+        // 计算新位置
+        const moveDistance = this.moveSpeed * deltaTime;
+        const newPos = new Vec3();
+        Vec3.scaleAndAdd(newPos, currentPos, direction, moveDistance);
+
+        // 更新位置
+        this.node.setWorldPosition(newPos);
+        // 不设置 isMoving = true，避免影响手动控制判断
+
+        // 根据移动方向翻转精灵
+        if (direction.x < 0) {
+            this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+        } else {
+            this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+        }
+    }
+    
+    /**
+     * 获取建筑物脚本
+     */
+    private getBuildingScript(building: Node): any {
+        const scriptNames = [
+            'WarAncientTree',
+            'HunterHall',
+            'StoneWall',
+            'WatchTower',
+            'IceTower',
+            'ThunderTower',
+            'SwordsmanHall',
+            'Church',
+            'MoonWell'
+        ];
+
+        for (const scriptName of scriptNames) {
+            const script = building.getComponent(scriptName as any);
+            if (script) {
+                return script;
+            }
+        }
+
+        return null;
+    }
+    
+    /**
+     * 根据路径查找节点
+     */
+    private findNodeByPath(path: string): Node | null {
+        const parts = path.split('/');
+        let current: Node | null = null;
+        
+        // 先尝试直接查找
+        current = find(path);
+        if (current) return current;
+        
+        // 如果直接查找失败，尝试递归查找
+        const findNodeRecursive = (node: Node, name: string): Node | null => {
+            if (node.name === name) {
+                return node;
+            }
+            for (const child of node.children) {
+                const found = findNodeRecursive(child, name);
+                if (found) return found;
+            }
+            return null;
+        };
+        
+        // 从场景根节点开始查找最后一个部分
+        if (this.node.scene && parts.length > 0) {
+            const targetName = parts[parts.length - 1];
+            return findNodeRecursive(this.node.scene, targetName);
+        }
+        
+        return null;
+    }
+    
+    /**
+     * 显示维修特效
+     */
+    private showRepairEffect(target: Node) {
+        if (this.healEffectPrefab && target && target.isValid) {
+            const effect = instantiate(this.healEffectPrefab);
+            const canvas = find('Canvas');
+            if (canvas) {
+                effect.setParent(canvas);
+            } else if (this.node.scene) {
+                effect.setParent(this.node.scene);
+            }
+            effect.setWorldPosition(target.worldPosition.clone().add3f(0, 20, 0));
+            effect.active = true;
+
+            // 延迟销毁
+            this.scheduleOnce(() => {
+                if (effect && effect.isValid) {
+                    effect.destroy();
+                }
+            }, 1.0);
+        }
+    }
+    
+    /**
+     * 显示维修数字
+     */
+    private showRepairNumber(target: Node, amount: number) {
+        if (this.damageNumberPrefab && target && target.isValid) {
+            const healNode = instantiate(this.damageNumberPrefab);
+            const canvas = find('Canvas');
+            if (canvas) {
+                healNode.setParent(canvas);
+            } else if (this.node.scene) {
+                healNode.setParent(this.node.scene);
+            }
+            
+            // 设置治疗数字位置（在建筑物上方）
+            const targetPos = target.worldPosition.clone();
+            healNode.setWorldPosition(targetPos.add3f(0, 50, 0));
+            healNode.active = true;
+            
+            // 获取DamageNumber组件并设置治疗数值和颜色
+            const healScript = healNode.getComponent('DamageNumber' as any) as any;
+            if (healScript) {
+                // 设置治疗量，使用负数表示治疗
+                healScript.setDamage(-amount);
+                // 设置为绿色
+                healScript.setColor(new Color(0, 255, 0, 255));
+            }
+        }
     }
 
     /**
@@ -290,14 +711,13 @@ export class Wisp extends Role {
 
     /**
      * 设置手动移动目标位置（用于选中移动）
-     * 覆盖父类实现：如果小精灵当前依附在建筑物上，先卸下再执行父类的移动逻辑。
+     * 覆盖父类实现：清除维修目标
      * @param worldPos 世界坐标位置
      */
     setManualMoveTargetPosition(worldPos: Vec3) {
-        // 如果已依附，先卸下
-        if (this.isAttached) {
-            this.detachFromBuilding();
-        }
+        // 清除维修目标
+        this.repairTarget = null!;
+        this.isRepairing = false;
         
         // 调用父类的手动移动逻辑（带智能分散/避让）
         super.setManualMoveTargetPosition(worldPos);
@@ -390,6 +810,11 @@ export class Wisp extends Role {
     checkBuildingOverlap() {
         // 如果已经依附，不需要检查
         if (this.isAttached) {
+            return;
+        }
+
+        // 如果正在维修，不检查重叠（避免维修时被依附）
+        if (this.isRepairing) {
             return;
         }
 
@@ -731,11 +1156,6 @@ export class Wisp extends Role {
 
         this.isDestroyed = true;
 
-        // 如果依附在建筑物上，先卸下
-        if (this.isAttached && this.attachedBuilding) {
-            this.detachFromBuilding();
-        }
-
         // 播放爆炸特效
         if (this.explosionEffect) {
             const explosion = instantiate(this.explosionEffect);
@@ -790,6 +1210,16 @@ export class Wisp extends Role {
      */
     getAttachedBuilding(): Node | null {
         return this.attachedBuilding;
+    }
+
+    /**
+     * 重写碰撞检测方法：小精灵不受任何障碍物阻挡
+     * @param position 要检测的位置
+     * @returns 始终返回 false，表示没有碰撞
+     */
+    checkCollisionAtPosition(position: Vec3): boolean {
+        // 小精灵可以穿过所有障碍物，不进行碰撞检测
+        return false;
     }
 
     // 选择和高亮逻辑由父类 Role 和 UnitSelectionManager 统一管理
