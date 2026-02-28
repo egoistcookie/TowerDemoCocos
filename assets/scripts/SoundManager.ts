@@ -79,7 +79,7 @@ export class SoundManager extends Component {
             const sfxStr = sys.localStorage.getItem('TowerDemo_SFX_Enabled');
             this.isBgmEnabled = bgmStr === null ? true : bgmStr === '1';
             this.isEffectEnabled = sfxStr === null ? true : sfxStr === '1';
-           //console.info('[SoundManager] loadSoundSettings() from localStorage, isBgmEnabled =', this.isBgmEnabled, 'isEffectEnabled =', this.isEffectEnabled);
+            console.info('[SoundManager] loadSoundSettings() from localStorage, isBgmEnabled =', this.isBgmEnabled, 'isEffectEnabled =', this.isEffectEnabled);
         } catch (e) {
             // 回退到默认值
             this.isBgmEnabled = true;
@@ -137,14 +137,14 @@ export class SoundManager extends Component {
     
     // 切换背景音乐开关（由设置里的背景音乐开关键调用）
     toggleBgm() {
-       //console.info('[SoundManager] toggleBgm() called, current isBgmEnabled =', this.isBgmEnabled);
+        console.info('[SoundManager] toggleBgm() called, current isBgmEnabled =', this.isBgmEnabled);
         this.isBgmEnabled = !this.isBgmEnabled;
         this.saveSoundSettings();
-       //console.info('[SoundManager] toggleBgm() new isBgmEnabled =', this.isBgmEnabled);
+        console.info('[SoundManager] toggleBgm() new isBgmEnabled =', this.isBgmEnabled);
         
         // 关闭时立刻停止并静音背景音乐（双保险）
         if (!this.isBgmEnabled) {
-           //console.info('[SoundManager] BGM turned OFF, calling stopGameBgm()');
+            console.info('[SoundManager] BGM turned OFF, calling stopGameBgm()');
             this.stopGameBgm();
             this.stopLocalAudioSources();
             // 将背景音乐音量设为0，防止某些平台上 stop 后残留声音
@@ -232,9 +232,9 @@ export class SoundManager extends Component {
      * 在首页时调用：播放并循环主菜单背景音乐（音量 100%）
      */
     playMenuBgm() {
-       //console.info('[SoundManager] playMenuBgm() called, isBgmEnabled =', this.isBgmEnabled);
+        console.info('[SoundManager] playMenuBgm() called, isBgmEnabled =', this.isBgmEnabled);
         if (!this.isBgmEnabled) {
-           //console.info('[SoundManager] playMenuBgm() aborted because BGM is disabled');
+            console.info('[SoundManager] playMenuBgm() aborted because BGM is disabled');
             return;
         }
 
@@ -251,7 +251,7 @@ export class SoundManager extends Component {
                 console.warn('[SoundManager] playMenuBgm() doPlay() called but menuBgmClip is null');
                 return;
             }
-           //console.info('[SoundManager] playMenuBgm() doPlay() play MENU BGM now, volume = 1.0');
+            console.info('[SoundManager] playMenuBgm() doPlay() play MENU BGM now, volume = 1.0');
             // 先强制停止当前背景音乐，避免任何残留
             audioMgr.stopBGM();
             audioMgr.setBGMVolume(1.0);
@@ -259,13 +259,13 @@ export class SoundManager extends Component {
         };
 
         if (this.menuBgmClip) {
-           //console.info('[SoundManager] playMenuBgm() use cached clip');
+            console.info('[SoundManager] playMenuBgm() use cached clip');
             doPlay();
         } else {
-           //console.info('[SoundManager] playMenuBgm() no clip yet, call loadMenuBgm()');
+            console.info('[SoundManager] playMenuBgm() no clip yet, call loadMenuBgm()');
             this.loadMenuBgm(() => {
                 if (this.isBgmEnabled) {
-                   //console.info('[SoundManager] playMenuBgm() load complete & BGM enabled, call doPlay()');
+                    console.info('[SoundManager] playMenuBgm() load complete & BGM enabled, call doPlay()');
                     doPlay();
                 }
             });
@@ -311,9 +311,9 @@ export class SoundManager extends Component {
      * 音量固定为 30%
      */
     playGameBgm() {
-       //console.info('[SoundManager] playGameBgm() called, isBgmEnabled =', this.isBgmEnabled);
+        console.info('[SoundManager] playGameBgm() called, isBgmEnabled =', this.isBgmEnabled);
         if (!this.isBgmEnabled) {
-           //console.info('[SoundManager] playGameBgm() aborted because BGM is disabled');
+            console.info('[SoundManager] playGameBgm() aborted because BGM is disabled');
             return;
         }
 
@@ -331,7 +331,7 @@ export class SoundManager extends Component {
                 return;
             }
             // 设置背景音乐音量为 30%
-           //console.info('[SoundManager] doPlay() play BGM now, volume = 0.3');
+            console.info('[SoundManager] doPlay() play BGM now, volume = 0.3');
             // 先强制停止当前背景音乐，避免菜单 BGM 残留
             audioMgr.stopBGM();
             audioMgr.setBGMVolume(0.3);

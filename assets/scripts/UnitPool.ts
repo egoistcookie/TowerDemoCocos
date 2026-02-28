@@ -125,13 +125,10 @@ export class UnitPool extends Component {
         }
         
         if (unit) {
-            // 激活对象
-            unit.active = true;
-            
-            // 更新活跃计数
+            // 注意：不在这里激活对象，由调用方在完成初始化（设置prefabName/parent/位置等）后再激活
+            // 仅更新活跃计数，表示池中有一个对象被取出使用
             const count = this.activeCount.get(prefabName) || 0;
             this.activeCount.set(prefabName, count + 1);
-            
         }
         
         return unit;

@@ -132,9 +132,35 @@ export class UIManager extends Component {
         }, 0.1);
         
         // 播放主菜单背景音乐（进入游戏首页时播放 backMusic.mp3）
+        // 如果玩家在退出到首页前已经关闭了BGM，则通过本地标记跳过一次首页自动播放，
+        // 确保“关闭背景音乐后只能在设置页重新打开”
         const soundManager = SoundManager.getInstance();
-        if (soundManager && soundManager.isBgmOn()) {
+        let skipBgmOnce = false;
+        try {
+            const skipStr = sys.localStorage.getItem('TowerDemo_SkipBgmOnNextHome');
+            skipBgmOnce = skipStr === '1';
+        } catch (e) {
+            // 读取失败时按正常逻辑处理（不跳过）
+            console.warn('[UIManager.start] 读取 TowerDemo_SkipBgmOnNextHome 失败: ', e);
+        }
+        if (skipBgmOnce) {
+            console.info('[UIManager.start] 检测到 TowerDemo_SkipBgmOnNextHome=1，本次进入首页不自动播放BGM');
+            try {
+                sys.localStorage.setItem('TowerDemo_SkipBgmOnNextHome', '0');
+            } catch (e) {
+                console.warn('[UIManager.start] 重置 TowerDemo_SkipBgmOnNextHome 失败: ', e);
+            }
+        }
+        const isBgmOn = soundManager ? soundManager.isBgmOn() : null;
+        console.info('[UIManager.start] 准备自动播放首页BGM? isBgmOn =', isBgmOn, 'skipBgmOnce =', skipBgmOnce);
+        if (soundManager && isBgmOn && !skipBgmOnce) {
+            console.info('[UIManager.start] 条件满足，调用 soundManager.playMenuBgm()');
             soundManager.playMenuBgm();
+        } else {
+            console.info('[UIManager.start] 不自动播放首页BGM，原因：',
+                !soundManager ? 'soundManager 为空' :
+                !isBgmOn ? 'BGM 开关关闭' :
+                skipBgmOnce ? 'skipBgmOnce = true' : '未知');
         }
     }
 
@@ -758,10 +784,8 @@ export class UIManager extends Component {
             this.backgroundNode = find('Canvas/Background');
         }
 
-        // 进入首页时播放主菜单背景音乐（backMusic.mp3，音量100%），前提是玩家开启了BGM
-        if (soundManager && soundManager.isBgmOn()) {
-            soundManager.playMenuBgm();
-        }
+        // 注意：首页主菜单背景音乐的自动播放逻辑统一放在 UIManager.start() 中处理，
+        // 这里不再重复播放，避免退出游戏返回首页时出现意外的BGM开启。
         
         // 绑定开始游戏事件
         startButtonComp.node.on(Button.EventType.CLICK, () => {
@@ -1747,6 +1771,28 @@ export class UIManager extends Component {
         }
         
         // 3. 如果结算面板已显示，则真正退出游戏
+        //    如果玩家在设置中关闭了背景音乐，这里确保不会在退出流程中意外重新播放BGM
+        const exitSoundManager = SoundManager.getInstance();
+        const exitBgmOn = exitSoundManager ? exitSoundManager.isBgmOn() : null;
+        console.info('[UIManager.onExitGameClick] 退出游戏时 BGM 状态 isBgmOn =', exitBgmOn);
+        if (exitSoundManager && !exitBgmOn) {
+            console.info('[UIManager.onExitGameClick] BGM 已关闭，停止当前BGM并标记下次首页不自动播放');
+            const audioMgr = AudioManager.Instance;
+            if (audioMgr) {
+                audioMgr.stopBGM();
+                audioMgr.setBGMVolume(0);
+            }
+            try {
+                sys.localStorage.setItem('TowerDemo_SkipBgmOnNextHome', '1');
+            } catch (e) {
+                console.warn('[UIManager.onExitGameClick] 写入 TowerDemo_SkipBgmOnNextHome=1 失败: ', e);
+            }
+        } else {
+            console.info('[UIManager.onExitGameClick] 未写入 Skip 标记，原因：',
+                !exitSoundManager ? 'SoundManager 为空' :
+                exitBgmOn ? 'BGM 开关为开' : '未知');
+        }
+        
         // 清除上一关的所有卡片增幅
         const buffManager = BuffManager.getInstance();
         buffManager.clearAllBuffs();
