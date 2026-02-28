@@ -41,8 +41,8 @@ export class IceTower extends Build {
     @property
     attackInterval: number = 1.5; // 攻击间隔（秒）
 
-    // 人口占用（冰塔占用1个人口）
-    protected populationCost: number = 1;
+    // 人口占用（冰塔不占用人口）
+    protected populationCost: number = 0;
 
     @property(Prefab)
     iceArrowPrefab: Prefab = null!; // 冰箭预制体

@@ -1749,8 +1749,8 @@ export class TowerBuilder extends Component {
         // 获取实际建造成本（考虑单位卡片强化减少）
         const actualCost = this.getActualBuildCost('WatchTower');
         
-        // 检查人口（哨塔占用1个人口）
-        const populationCost = 1;
+        // 检查人口（哨塔不占用人口）
+        const populationCost = 0;
         if (this.gameManager) {
             // 即使skipCost=true，也需要占用人口（初始化建造的哨塔也需要占用人口）
             if (!this.gameManager.canAddPopulation(populationCost)) {
@@ -1775,7 +1775,9 @@ export class TowerBuilder extends Component {
                 this.gameManager.spendGold(actualCost);
             }
             // 占用人口（无论是否skipCost都需要占用）
-            this.gameManager.addPopulation(populationCost);
+            if (populationCost > 0) {
+                this.gameManager.addPopulation(populationCost);
+            }
         }
 
         // 确保容器已初始化（如果编辑器没有手动绑定，则在此处兜底查找）
@@ -2066,8 +2068,8 @@ export class TowerBuilder extends Component {
         // 获取实际建造成本（考虑单位卡片强化减少）
         const actualCost = this.getActualBuildCost('IceTower', 20); // 默认20金币
         
-        // 检查人口（冰塔占用1个人口）
-        const populationCost = 1;
+        // 检查人口（冰塔不占用人口）
+        const populationCost = 0;
         if (this.gameManager) {
             // 即使skipCost=true，也需要占用人口
             if (!this.gameManager.canAddPopulation(populationCost)) {
@@ -2091,7 +2093,9 @@ export class TowerBuilder extends Component {
                 this.gameManager.spendGold(actualCost);
             }
             // 占用人口（无论是否skipCost都需要占用）
-            this.gameManager.addPopulation(populationCost);
+            if (populationCost > 0) {
+                this.gameManager.addPopulation(populationCost);
+            }
         }
 
         // 性能优化：从对象池获取建筑物
@@ -2240,8 +2244,8 @@ export class TowerBuilder extends Component {
         // 获取实际建造成本（考虑单位卡片强化减少）
         const actualCost = this.getActualBuildCost('ThunderTower', 30); // 默认30金币
         
-        // 检查人口（雷塔占用2个人口）
-        const populationCost = 2;
+        // 检查人口（雷塔不占用人口）
+        const populationCost = 0;
         if (this.gameManager) {
             // 即使skipCost=true，也需要占用人口
             if (!this.gameManager.canAddPopulation(populationCost)) {
@@ -2265,7 +2269,9 @@ export class TowerBuilder extends Component {
                 this.gameManager.spendGold(actualCost);
             }
             // 占用人口（无论是否skipCost都需要占用）
-            this.gameManager.addPopulation(populationCost);
+            if (populationCost > 0) {
+                this.gameManager.addPopulation(populationCost);
+            }
         }
 
         // 性能优化：从对象池获取建筑物

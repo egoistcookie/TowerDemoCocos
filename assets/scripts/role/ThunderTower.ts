@@ -42,8 +42,8 @@ export class ThunderTower extends Build {
     @property
     attackInterval: number = 2.0; // 攻击间隔（秒）
 
-    // 人口占用（雷塔占用2个人口）
-    protected populationCost: number = 2;
+    // 人口占用（雷塔不占用人口）
+    protected populationCost: number = 0;
 
     @property(Prefab)
     thunderChainPrefab: Prefab = null!; // 闪电链预制体

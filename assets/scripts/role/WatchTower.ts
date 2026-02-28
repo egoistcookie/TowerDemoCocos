@@ -48,8 +48,8 @@ export class WatchTower extends Build {
     @property
     attackInterval: number = 1.2; // 攻击间隔（秒）
 
-    // 人口占用（哨塔占用1个人口）
-    protected populationCost: number = 1;
+    // 人口占用（哨塔不占用人口）
+    protected populationCost: number = 0;
 
     @property(Prefab)
     arrowPrefab: Prefab = null!; // 弓箭预制体
