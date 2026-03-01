@@ -9,6 +9,7 @@ import { AudioManager } from './AudioManager';
 import { BuffManager } from './BuffManager';
 import { CheckInManager } from './CheckInManager';
 import { GamePopup } from './GamePopup';
+import { WeChatShareManager } from './WeChatShareManager';
 
 const { ccclass, property } = _decorator;
 
@@ -139,6 +140,9 @@ export class UIManager extends Component {
             this.bindStartGameButton();
             this.bindCheckInButton();
         }, 0.1);
+        
+        // 初始化微信转发功能
+        this.initWeChatShare();
         
         // 播放主菜单背景音乐（进入游戏首页时播放 backMusic.mp3）
         // 如果玩家在退出到首页前已经关闭了BGM，则通过本地标记跳过一次首页自动播放，
@@ -2430,6 +2434,34 @@ export class UIManager extends Component {
             checkInMgr = checkInNode.addComponent(CheckInManager);
             console.log('[UIManager] initCheckInManager() created CheckInManager');
         }
+    }
+
+    /**
+     * 初始化微信转发功能
+     */
+    private initWeChatShare() {
+        console.log('[UIManager] initWeChatShare() 开始初始化微信转发功能');
+        
+        const shareManager = WeChatShareManager.getInstance();
+        shareManager.initShare();
+        
+        // 监听小游戏回到前台事件（可选）
+        shareManager.onShow((res: any) => {
+            console.log('[UIManager] 小游戏回到前台，参数:', res);
+            // 可以在这里处理从转发卡片返回的逻辑
+            // 例如：根据 res.query 参数给予奖励等
+        });
+        
+        // 获取启动参数（可选）
+        const launchOptions = shareManager.getLaunchOptions();
+        if (launchOptions && launchOptions.query) {
+            console.log('[UIManager] 启动参数:', launchOptions.query);
+            // 可以在这里处理启动参数，例如：
+            // - 从转发卡片进入时给予奖励
+            // - 根据邀请码绑定好友关系等
+        }
+        
+        console.log('[UIManager] initWeChatShare() 微信转发功能初始化完成');
     }
 
     /**
