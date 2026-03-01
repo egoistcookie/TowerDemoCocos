@@ -11,13 +11,18 @@
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 40,
-          "interval": 0.40
+          "count": 55,
+          "interval": 0.30
+        },
+        {
+          "prefabName": "TrollSpearman",
+          "count": 20,
+          "interval": 0.42
         },
         {
           "prefabName": "Dragon",
-          "count": 3,
-          "interval": 1.8
+          "count": 4,
+          "interval": 1.50
         }
       ]
     },
@@ -29,23 +34,23 @@
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 30,
-          "interval": 0.28
+          "count": 45,
+          "interval": 0.23
         },
         {
           "prefabName": "TrollSpearman",
-          "count": 18,
-          "interval": 0.40
+          "count": 24,
+          "interval": 0.34
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 10,
-          "interval": 0.75
+          "count": 16,
+          "interval": 0.62
         },
         {
           "prefabName": "Dragon",
-          "count": 3,
-          "interval": 1.6
+          "count": 4,
+          "interval": 1.35
         }
       ]
     },
@@ -57,23 +62,23 @@
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 35,
-          "interval": 0.28
+          "count": 50,
+          "interval": 0.22
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 18,
-          "interval": 0.60
+          "count": 23,
+          "interval": 0.54
         },
         {
           "prefabName": "TrollSpearman",
-          "count": 20,
-          "interval": 0.40
+          "count": 26,
+          "interval": 0.33
         },
         {
           "prefabName": "Dragon",
-          "count": 3,
-          "interval": 1.5
+          "count": 4,
+          "interval": 1.25
         }
       ]
     },
@@ -85,28 +90,28 @@
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 40,
-          "interval": 0.25
+          "count": 55,
+          "interval": 0.20
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 22,
-          "interval": 0.55
+          "count": 27,
+          "interval": 0.48
         },
         {
           "prefabName": "OrcWarlord",
-          "count": 3,
-          "interval": 1.2
+          "count": 4,
+          "interval": 1.10
         },
         {
           "prefabName": "TrollSpearman",
-          "count": 22,
-          "interval": 0.38
+          "count": 28,
+          "interval": 0.31
         },
         {
           "prefabName": "Dragon",
-          "count": 3,
-          "interval": 1.5
+          "count": 4,
+          "interval": 1.20
         }
       ]
     },
@@ -118,23 +123,23 @@
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 50,
-          "interval": 0.25
+          "count": 63,
+          "interval": 0.19
         },
         {
           "prefabName": "TrollSpearman",
-          "count": 22,
-          "interval": 0.38
+          "count": 28,
+          "interval": 0.31
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 15,
-          "interval": 0.60
+          "count": 20,
+          "interval": 0.52
         },
         {
           "prefabName": "Dragon",
-          "count": 4,
-          "interval": 1.3
+          "count": 5,
+          "interval": 1.10
         }
       ]
     },
@@ -146,28 +151,28 @@
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 52,
-          "interval": 0.22
+          "count": 66,
+          "interval": 0.18
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 18,
-          "interval": 0.55
+          "count": 23,
+          "interval": 0.48
         },
         {
           "prefabName": "OrcShaman",
-          "count": 4,
-          "interval": 1.5
+          "count": 6,
+          "interval": 1.25
         },
         {
           "prefabName": "TrollSpearman",
-          "count": 24,
-          "interval": 0.35
+          "count": 30,
+          "interval": 0.29
         },
         {
           "prefabName": "Dragon",
-          "count": 3,
-          "interval": 1.3
+          "count": 4,
+          "interval": 1.10
         }
       ]
     },
@@ -179,33 +184,33 @@
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 48,
-          "interval": 0.20
+          "count": 60,
+          "interval": 0.16
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 24,
-          "interval": 0.50
+          "count": 30,
+          "interval": 0.44
         },
         {
           "prefabName": "OrcWarlord",
-          "count": 4,
-          "interval": 1.1
+          "count": 5,
+          "interval": 1.00
         },
         {
           "prefabName": "OrcShaman",
-          "count": 4,
-          "interval": 1.3
+          "count": 6,
+          "interval": 1.15
         },
         {
           "prefabName": "TrollSpearman",
-          "count": 26,
-          "interval": 0.33
+          "count": 33,
+          "interval": 0.27
         },
         {
           "prefabName": "Dragon",
-          "count": 3,
-          "interval": 1.1
+          "count": 4,
+          "interval": 1.00
         }
       ]
     },
@@ -217,28 +222,28 @@
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 58,
-          "interval": 0.20
+          "count": 70,
+          "interval": 0.16
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 22,
-          "interval": 0.45
+          "count": 28,
+          "interval": 0.40
         },
         {
           "prefabName": "OrcShaman",
-          "count": 5,
-          "interval": 1.1
+          "count": 7,
+          "interval": 1.00
         },
         {
           "prefabName": "TrollSpearman",
-          "count": 26,
-          "interval": 0.31
+          "count": 33,
+          "interval": 0.26
         },
         {
           "prefabName": "Dragon",
-          "count": 4,
-          "interval": 1.0
+          "count": 5,
+          "interval": 0.90
         }
       ]
     },
@@ -250,28 +255,28 @@
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 65,
-          "interval": 0.17
+          "count": 78,
+          "interval": 0.14
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 26,
-          "interval": 0.40
+          "count": 33,
+          "interval": 0.36
         },
         {
           "prefabName": "OrcShaman",
-          "count": 5,
-          "interval": 1.0
+          "count": 8,
+          "interval": 0.90
         },
         {
           "prefabName": "TrollSpearman",
-          "count": 30,
-          "interval": 0.28
+          "count": 37,
+          "interval": 0.23
         },
         {
           "prefabName": "Dragon",
-          "count": 4,
-          "interval": 0.9
+          "count": 6,
+          "interval": 0.80
         }
       ]
     },
@@ -283,33 +288,33 @@
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 55,
-          "interval": 0.15
+          "count": 68,
+          "interval": 0.12
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 32,
-          "interval": 0.38
+          "count": 38,
+          "interval": 0.33
         },
         {
           "prefabName": "OrcWarlord",
-          "count": 4,
-          "interval": 0.95
+          "count": 6,
+          "interval": 0.85
         },
         {
           "prefabName": "OrcShaman",
-          "count": 6,
-          "interval": 1.0
+          "count": 9,
+          "interval": 0.85
         },
         {
           "prefabName": "TrollSpearman",
-          "count": 32,
-          "interval": 0.26
+          "count": 40,
+          "interval": 0.21
         },
         {
           "prefabName": "Dragon",
-          "count": 4,
-          "interval": 0.85
+          "count": 6,
+          "interval": 0.75
         }
       ]
     }

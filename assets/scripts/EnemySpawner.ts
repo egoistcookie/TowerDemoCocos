@@ -1644,4 +1644,21 @@ export class EnemySpawner extends Component {
         
         // 不立即开始第一波，只在游戏开始后才开始波次系统
     }
+
+    /**
+     * 获取当前波次索引（从1开始）
+     */
+    public getCurrentWaveNumber(): number {
+        return this.currentWaveIndex + 1;
+    }
+
+    /**
+     * 获取总波次数
+     */
+    public getTotalWaves(): number {
+        if (!this.currentLevelConfig || !this.currentLevelConfig.waves) {
+            return 0;
+        }
+        return this.currentLevelConfig.waves.length;
+    }
 }

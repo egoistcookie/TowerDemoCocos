@@ -32,6 +32,9 @@ export class GameManager extends Component {
     @property(Label)
     timerLabel: Label = null!;
 
+    @property(Label)
+    waveLabel: Label = null!; // 波次标签
+
     @property(Node)
     gameOverPanel: Node = null!;
 
@@ -486,6 +489,90 @@ export class GameManager extends Component {
         
     }
 
+    /**
+     * 自动创建波次标签（如果不存在）
+     */
+    private autoCreateWaveLabel() {
+        // 如果已经有波次标签，直接返回
+        if (this.waveLabel && this.waveLabel.node && this.waveLabel.node.isValid) {
+            return;
+        }
+
+        // 尝试查找已存在的波次标签节点
+        const existingWaveLabel = find('Canvas/UI/WaveLabel') || find('Canvas/WaveLabel') || find('WaveLabel');
+        if (existingWaveLabel) {
+            this.waveLabel = existingWaveLabel.getComponent(Label);
+            if (!this.waveLabel) {
+                this.waveLabel = existingWaveLabel.addComponent(Label);
+            }
+            return;
+        }
+
+        // 如果没有timerLabel，无法确定位置，直接返回
+        if (!this.timerLabel || !this.timerLabel.node || !this.timerLabel.node.isValid) {
+            console.warn('[GameManager] autoCreateWaveLabel: timerLabel不存在，无法创建波次标签');
+            return;
+        }
+
+        // 创建波次标签节点，放在timerLabel的下方
+        const waveLabelNode = new Node('WaveLabel');
+        const timerParent = this.timerLabel.node.parent;
+        if (timerParent) {
+            waveLabelNode.setParent(timerParent);
+        } else {
+            const canvas = find('Canvas');
+            if (canvas) {
+                waveLabelNode.setParent(canvas);
+            } else {
+                console.warn('[GameManager] autoCreateWaveLabel: 无法找到Canvas节点');
+                return;
+            }
+        }
+
+        // 添加UITransform组件
+        const uiTransform = waveLabelNode.addComponent(UITransform);
+        const timerTransform = this.timerLabel.node.getComponent(UITransform);
+        if (timerTransform) {
+            uiTransform.setContentSize(timerTransform.width, timerTransform.height);
+        } else {
+            uiTransform.setContentSize(200, 30);
+        }
+
+        // 添加Label组件
+        const waveLabel = waveLabelNode.addComponent(Label);
+        waveLabel.string = '当前波次: --';
+        waveLabel.fontSize = this.timerLabel.fontSize || 24;
+        waveLabel.color = new Color(255, 255, 255, 255); // 白色字体
+        waveLabel.horizontalAlign = this.timerLabel.horizontalAlign;
+        waveLabel.verticalAlign = this.timerLabel.verticalAlign;
+        
+        // 添加黑色描边效果
+        waveLabel.enableOutline = true;
+        waveLabel.outlineColor = new Color(0, 0, 0, 255); // 黑色描边
+        waveLabel.outlineWidth = 2; // 描边宽度
+
+        // 为timerLabel也添加黑色描边效果
+        if (this.timerLabel) {
+            this.timerLabel.color = new Color(255, 255, 255, 255); // 白色字体
+            this.timerLabel.enableOutline = true;
+            this.timerLabel.outlineColor = new Color(0, 0, 0, 255); // 黑色描边
+            this.timerLabel.outlineWidth = 2; // 描边宽度
+        }
+
+        // 调整timerLabel的位置：向左移动20像素
+        const timerPos = this.timerLabel.node.position.clone();
+        this.timerLabel.node.setPosition(timerPos.x - 20, timerPos.y, timerPos.z);
+
+        // 设置波次标签位置：在timerLabel下方30像素（timerLabel已经向左移动了20像素）
+        const newTimerPos = this.timerLabel.node.position.clone();
+        waveLabelNode.setPosition(newTimerPos.x, newTimerPos.y - 30, newTimerPos.z);
+
+        // 保存引用
+        this.waveLabel = waveLabel;
+
+        console.log('[GameManager] 已自动创建波次标签，并调整了时间标签和波次标签的位置');
+    }
+
     start() {
         // 初始化单位管理器（性能优化）
         this.initializeUnitManager();
@@ -580,6 +667,9 @@ export class GameManager extends Component {
         
         // 自动创建BuffCardPopup（在游戏开始前就创建好，参考UnitIntroPopup的做法）
         this.autoCreateBuffCardPopup();
+        
+        // 自动创建波次标签（如果不存在）
+        this.autoCreateWaveLabel();
         
         this.updateUI();
         
@@ -795,12 +885,15 @@ export class GameManager extends Component {
             this.crystal.active = false;
         }
         
-        // 隐藏游戏内状态标签：血量 / 计时 / 金币 / 人口
+        // 隐藏游戏内状态标签：血量 / 计时 / 波次 / 金币 / 人口
         if (this.healthLabel) {
             this.healthLabel.node.active = false;
         }
         if (this.timerLabel) {
             this.timerLabel.node.active = false;
+        }
+        if (this.waveLabel) {
+            this.waveLabel.node.active = false;
         }
         if (this.goldLabel) {
             this.goldLabel.node.active = false;
@@ -974,6 +1067,10 @@ export class GameManager extends Component {
             this.timerLabel.node.active = true;
         }
         
+        if (this.waveLabel) {
+            this.waveLabel.node.active = true;
+        }
+        
         if (this.goldLabel) {
             this.goldLabel.node.active = true;
         }
@@ -1052,6 +1149,9 @@ export class GameManager extends Component {
         if (this.timerLabel && this.timerLabel.node.isValid) {
             this.timerLabel.node.active = visible;
         }
+        if (this.waveLabel && this.waveLabel.node.isValid) {
+            this.waveLabel.node.active = visible;
+        }
         if (this.goldLabel && this.goldLabel.node.isValid) {
             this.goldLabel.node.active = visible;
         }
@@ -1080,6 +1180,7 @@ export class GameManager extends Component {
             const names = [
                 'HealthLabel',
                 'TimerLabel',
+                'WaveLabel',
                 'GoldLabel',
                 'PopulationLabel',
                 'HIcon',
@@ -1141,6 +1242,22 @@ export class GameManager extends Component {
             const seconds = Math.floor(this.gameTime % 60);
             const secondsStr = seconds < 10 ? `0${seconds}` : `${seconds}`;
             this.timerLabel.string = `已防御: ${minutes}:${secondsStr}`;
+        }
+
+        // 更新波次显示
+        if (this.waveLabel) {
+            const enemySpawner = this.findComponentInScene('EnemySpawner') as any;
+            if (enemySpawner && enemySpawner.getCurrentWaveNumber && enemySpawner.getTotalWaves) {
+                const currentWave = enemySpawner.getCurrentWaveNumber();
+                const totalWaves = enemySpawner.getTotalWaves();
+                if (totalWaves > 0) {
+                    this.waveLabel.string = `当前波次: 第${currentWave}波`;
+                } else {
+                    this.waveLabel.string = `当前波次: --`;
+                }
+            } else {
+                this.waveLabel.string = `当前波次: --`;
+            }
         }
 
         // 更新金币显示
