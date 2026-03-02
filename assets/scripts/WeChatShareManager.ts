@@ -115,7 +115,8 @@ export class WeChatShareManager {
                 // 返回自定义转发内容
                 return {
                     title: '塔防游戏 - 快来一起守护水晶！',
-                    imageUrl: '', // 可以设置转发图片的路径，留空则使用默认截图
+                    imageUrlId:  '/skqbGe9TXGxU/UEWkEDqw==',
+                    imageUrl: 'https://mmocgame.qpic.cn/wechatgame/TgkTPtsibUa2coC2FwibibhPdRdleuOkA1SRDc0CIciaayq1zmtQz3Hw5MUCjAWutkCR/0', // 可以设置转发图片的路径，留空则使用默认截图
                     query: '', // 可以携带参数，例如 'level=5&invite=123'
                 };
             });
@@ -142,7 +143,8 @@ export class WeChatShareManager {
         try {
             this.wx.shareAppMessage({
                 title: title || '塔防游戏 - 快来一起守护水晶！',
-                imageUrl: imageUrl || '',
+                imageUrlId:  '/skqbGe9TXGxU/UEWkEDqw==', 
+                imageUrl: imageUrl || 'https://mmocgame.qpic.cn/wechatgame/TgkTPtsibUa2coC2FwibibhPdRdleuOkA1SRDc0CIciaayq1zmtQz3Hw5MUCjAWutkCR/0', // 可以设置转发图片的路径，留空则使用默认截图
                 query: query || '',
                 success: () => {
                     console.log('[WeChatShareManager] 主动分享成功');
@@ -173,7 +175,8 @@ export class WeChatShareManager {
             if (this.wx.shareToTimeline) {
                 this.wx.shareToTimeline({
                     title: title || '塔防游戏 - 快来一起守护水晶！',
-                    imageUrl: imageUrl || '',
+                    imageUrlId:  '/skqbGe9TXGxU/UEWkEDqw==',
+                    imageUrl: imageUrl || 'https://mmocgame.qpic.cn/wechatgame/TgkTPtsibUa2coC2FwibibhPdRdleuOkA1SRDc0CIciaayq1zmtQz3Hw5MUCjAWutkCR/0', // 可以设置转发图片的路径，留空则使用默认截图
                     query: query || '',
                     success: () => {
                         console.log('[WeChatShareManager] 分享到朋友圈成功');
