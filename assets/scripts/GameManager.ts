@@ -16,6 +16,7 @@ import { WarAncientTree } from './role/WarAncientTree';
 import { ForestGridPanel } from './ForestGridPanel';
 import { SoundManager } from './SoundManager';
 import { BuffManager } from './BuffManager';
+import { AnalyticsManager } from './AnalyticsManager';
 const { ccclass, property } = _decorator;
 
 // 重新导出 GameState 以保持向后兼容
@@ -74,6 +75,9 @@ export class GameManager extends Component {
     private playerDataManager: PlayerDataManager = null!;
     private hasShownPopulationLimitWarning: boolean = false; // 是否已显示过人口上限提示
     private hasShownFirstArrowerDeathPopup: boolean = false; // 是否已显示过第一个弓箭手死亡提示
+    // 埋点相关
+    private analyticsManager: AnalyticsManager | null = null;
+    private totalKillCount: number = 0;
     
     // 单位首次出现相关
     private appearedUnitTypes: Set<string> = new Set();
@@ -604,6 +608,27 @@ export class GameManager extends Component {
         const uiManagerNode = find('UIManager') || find('UI/UIManager') || find('Canvas/UI/UIManager');
         if (uiManagerNode) {
             this.uiManager = uiManagerNode.getComponent('UIManager');
+        }
+
+        // 初始化埋点管理器（场景中挂载的 AnalyticsManager 组件）
+        this.analyticsManager = null;
+        this.totalKillCount = 0;
+        // 优先通过节点名查找（Canvas 下的 AnalyticsManager 节点）
+        let analyticsNode = find('Canvas/AnalyticsManager') || find('AnalyticsManager');
+        if (analyticsNode) {
+            let analyticsComp = analyticsNode.getComponent(AnalyticsManager) as AnalyticsManager | null;
+            if (!analyticsComp) {
+                // 兼容通过字符串方式挂载脚本的情况
+                analyticsComp = analyticsNode.getComponent('AnalyticsManager') as any;
+            }
+            if (analyticsComp) {
+                this.analyticsManager = analyticsComp;
+                console.log('[GameManager] AnalyticsManager 已初始化并绑定 (via node search)');
+            } else {
+                console.warn('[GameManager] 找到 AnalyticsManager 节点，但未能获取组件实例');
+            }
+        } else {
+            console.warn('[GameManager] 场景中未找到 AnalyticsManager 节点，埋点功能被禁用');
         }
         
         // 每次游戏开始时清空已出现单位类型集合
@@ -1230,6 +1255,13 @@ export class GameManager extends Component {
         this.updateUI();
     }
 
+    /**
+     * 获取当前游戏时间（秒），供其他脚本调用（如埋点记录）
+     */
+    public getGameTime(): number {
+        return this.gameTime;
+    }
+
     updateUI() {
         // 更新血量显示
         if (this.healthLabel && this.crystalScript) {
@@ -1704,6 +1736,43 @@ export class GameManager extends Component {
             //console.info('[GameManager.showGameResultPanel] 游戏结算弹窗已显示');
         } else {
             console.warn('[GameManager.showGameResultPanel] 游戏结算弹窗不存在！');
+        }
+
+        // 上报埋点数据（异步，不影响游戏流程）
+        if (this.analyticsManager) {
+            const result: 'success' | 'fail' = state === GameState.Victory ? 'success' : 'fail';
+            let currentWave = 0;
+            const enemySpawner = this.findComponentInScene('EnemySpawner') as any;
+            if (enemySpawner && enemySpawner.getCurrentWaveNumber) {
+                const wave = enemySpawner.getCurrentWaveNumber();
+                if (typeof wave === 'number' && !isNaN(wave)) {
+                    currentWave = wave;
+                }
+            }
+
+            const defendTime = Math.floor(this.gameTime);
+            const finalGold = this.gold || 0;
+            const finalPopulation = this.population || 0;
+            const killCount = this.totalKillCount || 0;
+
+            this.analyticsManager.reportGameData(
+                result,
+                defendTime,
+                currentWave,
+                finalGold,
+                finalPopulation,
+                killCount
+            ).then(success => {
+                if (success) {
+                    console.log('[GameManager] 埋点数据上报成功');
+                } else {
+                    console.warn('[GameManager] 埋点数据上报失败，但不影响游戏');
+                }
+            }).catch((error) => {
+                console.error('[GameManager] 埋点数据上报异常:', error);
+            });
+        } else {
+            console.warn('[GameManager] analyticsManager 为空，跳过埋点上报');
         }
 
         // 更新左上角等级HUD显示状态（会根据gameMainPanel的显示状态自动控制）
@@ -3100,6 +3169,19 @@ export class GameManager extends Component {
             //console.info('[GameManager] _startGameInternal() BGM is disabled, skip playing game BGM');
         }
         
+        // 开始记录埋点数据（如果可用）
+        if (this.analyticsManager) {
+            let level = 1;
+            if (this.uiManager && (this.uiManager as any).getCurrentLevel) {
+                const currentLevel = (this.uiManager as any).getCurrentLevel();
+                if (typeof currentLevel === 'number' && !isNaN(currentLevel)) {
+                    level = currentLevel;
+                }
+            }
+            this.analyticsManager.startRecording(level);
+            this.totalKillCount = 0;
+        }
+
         if (this.gameState === GameState.Paused) {
             // 如果游戏已暂停，恢复游戏
             this.resumeGame();
@@ -3925,6 +4007,20 @@ export class GameManager extends Component {
     setMaxPopulation(max: number) {
         this.maxPopulation = max;
         this.updateUI();
+    }
+
+    /**
+     * 增加击杀数（供敌人脚本调用）
+     */
+    public addKillCount(count: number = 1) {
+        this.totalKillCount += count;
+    }
+
+    /**
+     * 获取当前累计击杀数
+     */
+    public getTotalKillCount(): number {
+        return this.totalKillCount;
     }
 
     restartGame() {
