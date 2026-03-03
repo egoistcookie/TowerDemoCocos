@@ -117,6 +117,45 @@ node analytics-api.js
 npm start
 ```
 
+**常见问题：端口被占用**
+
+如果遇到 `Error: listen EADDRINUSE: address already in use :::3000` 错误，说明端口已被占用。
+
+解决方案：
+
+**方案1：查找并停止占用端口的进程**
+```bash
+# 查找占用 3000 端口的进程
+lsof -i :3000
+# 或者
+netstat -tlnp | grep :3000
+
+# 找到进程 PID 后，停止它
+kill -9 <PID>
+
+# 如果是 PM2 进程，使用
+pm2 list
+pm2 stop <app-name>
+pm2 delete <app-name>
+```
+
+**方案2：使用其他端口**
+```bash
+# 方式1：通过环境变量指定端口
+PORT=3001 node analytics-api.js
+
+# 方式2：修改 .env 文件
+echo "API_PORT=3001" >> .env
+node analytics-api.js
+
+# 方式3：直接指定端口启动
+PORT=3001 pm2 start analytics-api.js --name tower-analytics
+```
+
+**注意：** 如果修改了端口，需要同步修改：
+- Nginx 配置中的 `proxy_pass` 端口
+- 游戏客户端中的 API 地址端口
+
 ### 5. 使用 PM2 启动服务
 ```bash
 # 启动服务

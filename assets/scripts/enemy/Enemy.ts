@@ -2495,6 +2495,9 @@ export class Enemy extends Component {
                 })
                 .start();
         }
+        if (this.gameManager && this.gameManager.addKillCount) {
+            this.gameManager.addKillCount(1);
+        }
     }
 
     getHealth(): number {

@@ -17,6 +17,7 @@ import { PlayerDataManager } from './PlayerDataManager';
 import { BuildingGridPanel } from './BuildingGridPanel';
 import { StoneWallGridPanel } from './StoneWallGridPanel';
 import { BuildingPool } from './BuildingPool';
+import { AnalyticsManager, OperationType } from './AnalyticsManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('TowerBuilder')
@@ -1541,6 +1542,15 @@ export class TowerBuilder extends Component {
                 this.gameManager.checkUnitFirstAppearance(unitType, treeScript);
             }
         }
+        // 记录操作
+        const analytics = AnalyticsManager.getInstance();
+        if (analytics && this.gameManager) {
+            analytics.recordOperation(
+                OperationType.BUILD_WAR_ANCIENT_TREE,
+                this.gameManager.getGameTime(),
+                { position: { x: treeScript.gridX, y: treeScript.gridY } }
+            );
+        }
 
     }
 
@@ -1625,6 +1635,15 @@ export class TowerBuilder extends Component {
                 const unitType = hallScript.unitType || 'HunterHall';
                 this.gameManager.checkUnitFirstAppearance(unitType, hallScript);
             }
+        }
+        // 记录操作
+        const analytics = AnalyticsManager.getInstance();
+        if (analytics && this.gameManager) {
+            analytics.recordOperation(
+                OperationType.BUILD_HUNTER_HALL,
+                this.gameManager.getGameTime(),
+                { position: { x: hallScript.gridX, y: hallScript.gridY } }
+            );
         }
 
     }
@@ -1736,6 +1755,15 @@ export class TowerBuilder extends Component {
             }
         }
 
+        // 记录操作
+        const analytics = AnalyticsManager.getInstance();
+        if (analytics && this.gameManager) {
+            analytics.recordOperation(
+                OperationType.BUILD_STONE_WALL,
+                this.gameManager.getGameTime(),
+                { position: { x: wallScript.gridX, y: wallScript.gridY } }
+            );
+        }
     }
 
     /**
@@ -1912,6 +1940,15 @@ export class TowerBuilder extends Component {
                 const unitType = towerScript.unitType || 'WatchTower';
                 this.gameManager.checkUnitFirstAppearance(unitType, towerScript);
             }
+        }
+        // 记录操作
+        const analytics = AnalyticsManager.getInstance();
+        if (analytics && this.gameManager) {
+            analytics.recordOperation(
+                OperationType.BUILD_WATCHTOWER,
+                this.gameManager.getGameTime(),
+                { position: { x: towerScript.gridX, y: towerScript.gridY } }
+            );
         }
     }
 
@@ -2231,6 +2268,15 @@ export class TowerBuilder extends Component {
                 this.gameManager.checkUnitFirstAppearance(unitType, towerScript);
             }
         }
+        // 记录操作
+        const analytics = AnalyticsManager.getInstance();
+        if (analytics && this.gameManager) {
+            analytics.recordOperation(
+                OperationType.BUILD_ICE_TOWER,
+                this.gameManager.getGameTime(),
+                { position: { x: towerScript.gridX, y: towerScript.gridY } }
+            );
+        }
     }
 
     /**
@@ -2396,6 +2442,15 @@ export class TowerBuilder extends Component {
                 this.gameManager.checkUnitFirstAppearance(unitType, towerScript);
             }
         }
+        // 记录操作
+        const analytics = AnalyticsManager.getInstance();
+        if (analytics && this.gameManager) {
+            analytics.recordOperation(
+                OperationType.BUILD_THUNDER_TOWER,
+                this.gameManager.getGameTime(),
+                { position: { x: towerScript.gridX, y: towerScript.gridY } }
+            );
+        }
     }
 
     /**
@@ -2479,6 +2534,15 @@ export class TowerBuilder extends Component {
                 const unitType = hallScript.unitType || 'SwordsmanHall';
                 this.gameManager.checkUnitFirstAppearance(unitType, hallScript);
             }
+        }
+        // 记录操作
+        const analytics = AnalyticsManager.getInstance();
+        if (analytics && this.gameManager) {
+            analytics.recordOperation(
+                OperationType.BUILD_SWORDSMAN_HALL,
+                this.gameManager.getGameTime(),
+                { position: { x: hallScript.gridX, y: hallScript.gridY } }
+            );
         }
 
     }
@@ -2564,6 +2628,15 @@ export class TowerBuilder extends Component {
                 const unitType = (churchScript as any).unitType || 'Church';
                 this.gameManager.checkUnitFirstAppearance(unitType, churchScript);
             }
+        }
+        // 记录操作
+        const analytics = AnalyticsManager.getInstance();
+        if (analytics && this.gameManager) {
+            analytics.recordOperation(
+                OperationType.BUILD_CHURCH,
+                this.gameManager.getGameTime(),
+                { position: { x: churchScript.gridX, y: churchScript.gridY } }
+            );
         }
 
     }

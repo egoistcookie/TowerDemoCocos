@@ -12,7 +12,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3001; // 支持通过环境变量设置端口
 
 // 中间件配置
 app.use(cors()); // 允许跨域
