@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, BlockInputEvents } from 'cc';
+import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, BlockInputEvents, sys } from 'cc';
 import { Crystal } from './role/Crystal';
 import { UnitIntroPopup } from './UnitIntroPopup';
 import { BuffCardPopup, BuffCardData } from './BuffCardPopup';
@@ -129,6 +129,10 @@ export class GameManager extends Component {
     private staminaLabel: Label | null = null;            // 体力条上的数值文字（在条内部）
     private staminaTitleLabel: Label | null = null;       // “体力”标题文字（在体力条上方）
     private staminaCountdownLabel: Label | null = null;   // 体力括号说明（体力已满/xx:xx后恢复）
+
+    // 首页击杀榜标签（位于体力值右侧）
+    private killRankLabel: Label | null = null;
+    private killRankNode: Node | null = null;
 
     // 首次加载分包/预制体时的全屏加载界面
     private loadingOverlay: Node | null = null;
@@ -1474,6 +1478,47 @@ export class GameManager extends Component {
             const staminaTitleTrans = staminaTitleNode.addComponent(UITransform);
             staminaTitleTrans.setContentSize(80, 26);
             staminaTitleNode.setPosition(staminaBgPosX, 26, 0);
+
+            // ============================
+            // 击杀榜标签（位于体力条右侧）
+            // ============================
+            const killRankNode = new Node('KillRankLabel');
+            killRankNode.setParent(this.levelHudNode);
+            this.killRankNode = killRankNode;
+
+            // 尺寸与样式：小面板 + 一行文字
+            const killRankWidth = 280;
+            const killRankHeight = 34;
+            const killRankTrans = killRankNode.addComponent(UITransform);
+            killRankTrans.setContentSize(killRankWidth, killRankHeight);
+
+            // 位置：体力条右侧 30 像素
+            const killRankPosX = staminaBgPosX + (this.levelExpBarMaxWidth / 2) + (killRankWidth / 2) + 30;
+            killRankNode.setPosition(killRankPosX, -10, 0);
+
+            // 背景（深色圆角 + 边框）
+            const killRankBg = killRankNode.addComponent(Graphics);
+            killRankBg.fillColor = new Color(40, 40, 40, 200);
+            killRankBg.roundRect(-killRankWidth / 2, -killRankHeight / 2, killRankWidth, killRankHeight, 10);
+            killRankBg.fill();
+            killRankBg.lineWidth = 2;
+            killRankBg.strokeColor = new Color(120, 200, 255, 255);
+            killRankBg.roundRect(-killRankWidth / 2, -killRankHeight / 2, killRankWidth, killRankHeight, 10);
+            killRankBg.stroke();
+
+            // 文本
+            const killRankTextNode = new Node('KillRankText');
+            killRankTextNode.setParent(killRankNode);
+            const killRankTextTrans = killRankTextNode.addComponent(UITransform);
+            killRankTextTrans.setContentSize(killRankWidth, killRankHeight);
+            killRankTextNode.setPosition(0, 0, 0);
+
+            this.killRankLabel = killRankTextNode.addComponent(Label);
+            this.killRankLabel.string = '杀敌:0  超越0%  前0%';
+            this.killRankLabel.fontSize = 18;
+            this.killRankLabel.color = new Color(255, 255, 255, 255);
+            this.killRankLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            this.killRankLabel.verticalAlign = Label.VerticalAlign.CENTER;
         }
 
         // 注意：playerDataManager 可能还没加载完；先展示默认值，等数据可用后再刷新
@@ -1523,8 +1568,80 @@ export class GameManager extends Component {
             this.staminaCountdownLabel.string = countdownText;
         }
 
+        // 更新首页击杀榜标签（异步，不影响首页展示）
+        this.updateHomeKillRankLabel();
+
         // LevelHUD 作为 gameMainPanel 的子节点，会自动随着 gameMainPanel 的显示隐藏而显示隐藏
         // 无需手动控制 active，与上一关/下一关按钮的显示逻辑完全一致
+    }
+
+    /**
+     * 首页：更新击杀榜标签（杀敌数 + 超越百分比/前百分比）
+     * 数据来源：后台 /api/analytics/player/:playerId/kill-rank（单表查询 player_kill_rank 视图）
+     */
+    private updateHomeKillRankLabel() {
+        if (!this.killRankLabel || !this.killRankLabel.node || !this.killRankLabel.node.isValid) {
+            return;
+        }
+
+        let playerId = '';
+        try {
+            playerId = sys.localStorage.getItem('player_id') || '';
+        } catch (e) {
+            // ignore
+        }
+
+        if (!playerId) {
+            // 没有 player_id：通常是 AnalyticsManager 没挂载/未初始化
+            this.killRankLabel.string = '杀敌:--  超越--  前--';
+            this.killRankLabel.color = new Color(200, 200, 200, 255);
+            return;
+        }
+
+        // 异步请求，失败不影响流程
+        const url = `https://www.egoistcookie.top/api/analytics/player/${encodeURIComponent(playerId)}/kill-rank`;
+        const xhr = new XMLHttpRequest();
+        xhr.timeout = 3000;
+        xhr.onreadystatechange = () => {
+            if (xhr.readyState !== 4) return;
+            if (xhr.status !== 200) {
+                this.killRankLabel!.string = '杀敌:--  超越--  前--';
+                this.killRankLabel!.color = new Color(200, 200, 200, 255);
+                return;
+            }
+            try {
+                const resp = JSON.parse(xhr.responseText || '{}');
+                if (!resp || !resp.success || !resp.data) {
+                    this.killRankLabel!.string = '杀敌:--  超越--  前--';
+                    this.killRankLabel!.color = new Color(200, 200, 200, 255);
+                    return;
+                }
+
+                const d = resp.data;
+                const kills = typeof d.total_kills === 'number' ? d.total_kills : 0;
+                const surpassedPercent = typeof d.surpassed_percent === 'number' ? d.surpassed_percent : 0;
+                const topPercent = typeof d.top_percent === 'number' ? d.top_percent : 0;
+
+                // 文案：杀敌数 + 超越多少玩家 + 排名前百分比（噱头十足）
+                this.killRankLabel!.string = `杀敌:${kills}  超越${surpassedPercent.toFixed(1)}%  前${topPercent.toFixed(1)}%`;
+                this.killRankLabel!.color = new Color(255, 255, 255, 255);
+            } catch (e) {
+                this.killRankLabel!.string = '杀敌:--  超越--  前--';
+                this.killRankLabel!.color = new Color(200, 200, 200, 255);
+            }
+        };
+        xhr.onerror = () => {
+            if (!this.killRankLabel) return;
+            this.killRankLabel.string = '杀敌:--  超越--  前--';
+            this.killRankLabel.color = new Color(200, 200, 200, 255);
+        };
+        xhr.ontimeout = () => {
+            if (!this.killRankLabel) return;
+            this.killRankLabel.string = '杀敌:--  超越--  前--';
+            this.killRankLabel.color = new Color(200, 200, 200, 255);
+        };
+        xhr.open('GET', url, true);
+        xhr.send();
     }
 
     onCrystalDestroyed() {

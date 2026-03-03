@@ -10,6 +10,7 @@ import { BuffManager } from './BuffManager';
 import { CheckInManager } from './CheckInManager';
 import { GamePopup } from './GamePopup';
 import { WeChatShareManager } from './WeChatShareManager';
+import { LevelPassRateLabel } from './LevelPassRateLabel';
 
 const { ccclass, property } = _decorator;
 
@@ -65,6 +66,8 @@ export class UIManager extends Component {
     private levelSelectLeftButton: Node = null!; // 向左选择关卡按钮
     private levelSelectRightButton: Node = null!; // 向右选择关卡按钮
     private currentLevelLabel: Label = null!; // 当前关卡显示标签
+    // 关卡通关率与难度标签组件
+    private levelPassRateLabelComp: LevelPassRateLabel | null = null;
 
     private activePage: 'game' | 'talent' | 'settings' = 'game';
     private currentLevel: number = 1; // 当前选择的关卡（1-10）
@@ -300,12 +303,73 @@ export class UIManager extends Component {
         levelSelectArea.setParent(gameMainPanel);
         levelSelectArea.setPosition(0, 80, 0);
         const levelSelectAreaTransform = levelSelectArea.addComponent(UITransform);
-        levelSelectAreaTransform.setContentSize(400, 80);
+        // 加高关卡选择区域，给上方“通关率/难度徽章”留空间，但不改变原有关卡标签的居中位置
+        levelSelectAreaTransform.setContentSize(400, 220);
         levelSelectAreaTransform.setAnchorPoint(0.5, 0.5);
+
+        // 在关卡选择区域上方创建通关率与难度标签容器（整体居中显示）
+        const levelStatsContainer = new Node('LevelStatsContainer');
+        levelStatsContainer.setParent(levelSelectArea);
+        // 往上移动 50 像素
+        levelStatsContainer.setPosition(0, 105, 0);
+        const levelStatsTransform = levelStatsContainer.addComponent(UITransform);
+        levelStatsTransform.setContentSize(320, 70);
+        levelStatsTransform.setAnchorPoint(0.5, 0.5);
+
+        // 添加关卡通关率组件
+        const passRateComp = levelStatsContainer.addComponent(LevelPassRateLabel);
+
+        // 通关率文本（居中）
+        const passRateNode = new Node('PassRateLabel');
+        passRateNode.setParent(levelStatsContainer);
+        passRateNode.setPosition(0, 18, 0);
+        const passRateTransform = passRateNode.addComponent(UITransform);
+        passRateTransform.setContentSize(300, 30);
+        passRateTransform.setAnchorPoint(0.5, 0.5);
+        const passRateLabel = passRateNode.addComponent(Label);
+        passRateLabel.string = '通关率 --';
+        // 字体调大两号
+        passRateLabel.fontSize = 22;
+        passRateLabel.color = new Color(220, 220, 220, 255);
+        passRateLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        passRateLabel.verticalAlign = Label.VerticalAlign.CENTER;
+
+        // 难度徽章背景节点（用于地狱/炼狱等有底色的样式）
+        const difficultyBgNode = new Node('DifficultyBg');
+        difficultyBgNode.setParent(levelStatsContainer);
+        difficultyBgNode.setPosition(0, -15, 0);
+        const difficultyBgTransform = difficultyBgNode.addComponent(UITransform);
+        difficultyBgTransform.setContentSize(120, 34);
+        difficultyBgTransform.setAnchorPoint(0.5, 0.5);
+        // 用 Graphics 画底色（Sprite 没有 spriteFrame 时不会显示颜色）
+        const difficultyBgG = difficultyBgNode.addComponent(Graphics);
+        difficultyBgG.clear(); // 初始透明，由组件根据难度设置绘制
+
+        // 难度文字
+        const difficultyLabelNode = new Node('DifficultyLabel');
+        difficultyLabelNode.setParent(difficultyBgNode);
+        difficultyLabelNode.setPosition(0, 0, 0);
+        const difficultyLabelTransform = difficultyLabelNode.addComponent(UITransform);
+        difficultyLabelTransform.setContentSize(120, 30);
+        difficultyLabelTransform.setAnchorPoint(0.5, 0.5);
+        const difficultyLabel = difficultyLabelNode.addComponent(Label);
+        difficultyLabel.string = '未知';
+        // 字体调大两号
+        difficultyLabel.fontSize = 24;
+        difficultyLabel.color = new Color(153, 153, 153, 255);
+        difficultyLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        difficultyLabel.verticalAlign = Label.VerticalAlign.CENTER;
+
+        // 将子节点绑定给组件
+        passRateComp.passRateLabel = passRateLabel;
+        passRateComp.difficultyLabel = difficultyLabel;
+        passRateComp.difficultyBg = difficultyBgNode;
+        this.levelPassRateLabelComp = passRateComp;
         
         // 创建关卡显示标签（中间）
         const levelDisplayLabel = new Node('LevelDisplayLabel');
         levelDisplayLabel.setParent(levelSelectArea);
+        // 保持原有关卡标签位置：位于左右箭头按钮之间的居中位置
         levelDisplayLabel.setPosition(0, 0, 0);
         const levelDisplayLabelTransform = levelDisplayLabel.addComponent(UITransform);
         levelDisplayLabelTransform.setContentSize(200, 60);
@@ -2216,6 +2280,10 @@ export class UIManager extends Component {
         }
         // 更新下一关按钮状态
         this.updateNextLevelButtonState();
+        // 同步更新通关率与难度标签
+        if (this.levelPassRateLabelComp) {
+            this.levelPassRateLabelComp.updateLevel(this.currentLevel);
+        }
     }
     
     /**

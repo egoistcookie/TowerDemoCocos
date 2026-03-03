@@ -201,6 +201,60 @@ app.get('/api/analytics/player/:playerId', async (req, res) => {
 });
 
 /**
+ * 查询玩家击杀榜排名（超越人数/百分比、前百分比）
+ * GET /api/analytics/player/:playerId/kill-rank
+ *
+ * 数据来源：player_kill_rank 视图（单表查询）
+ */
+app.get('/api/analytics/player/:playerId/kill-rank', async (req, res) => {
+    try {
+        const { playerId } = req.params;
+
+        const [rows] = await pool.execute(
+            `SELECT 
+                player_id,
+                total_kills,
+                kill_rank,
+                total_players,
+                top_percent,
+                surpassed_count,
+                surpassed_percent
+             FROM player_kill_rank
+             WHERE player_id = ?`,
+            [playerId]
+        );
+
+        if (rows.length === 0) {
+            // 玩家还没有任何统计数据（尚未上报过结算），返回默认
+            return res.json({
+                success: true,
+                data: {
+                    player_id: playerId,
+                    total_kills: 0,
+                    kill_rank: 0,
+                    total_players: 0,
+                    top_percent: 0,
+                    surpassed_count: 0,
+                    surpassed_percent: 0
+                }
+            });
+        }
+
+        res.json({
+            success: true,
+            data: rows[0]
+        });
+    } catch (error) {
+        console.error('[Analytics] 查询玩家击杀榜排名失败:', error);
+        res.status(500).json({
+            success: false,
+            message: '查询失败',
+            error: error.message
+        });
+    }
+});
+
+/**
  * 查询排行榜
  * GET /api/analytics/leaderboard?limit=10
  */
@@ -245,6 +299,194 @@ app.get('/api/analytics/levels', async (req, res) => {
         
     } catch (error) {
         console.error('[Analytics] 查询关卡统计失败:', error);
+        res.status(500).json({
+            success: false,
+            message: '查询失败',
+            error: error.message
+        });
+    }
+});
+
+/**
+ * 查询单个关卡的通关率
+ * GET /api/analytics/level/:levelId/pass-rate
+ */
+app.get('/api/analytics/level/:levelId/pass-rate', async (req, res) => {
+    try {
+        const levelId = parseInt(req.params.levelId);
+        
+        if (isNaN(levelId) || levelId < 1 || levelId > 10) {
+            return res.status(400).json({
+                success: false,
+                message: '无效的关卡ID'
+            });
+        }
+        
+        const [rows] = await pool.execute(
+            `SELECT 
+                level,
+                total_attempts,
+                success_count,
+                fail_count,
+                ROUND(success_count * 100.0 / NULLIF(total_attempts, 0), 2) AS pass_rate,
+                avg_defend_time,
+                avg_operations
+            FROM level_statistics 
+            WHERE level = ?`,
+            [levelId]
+        );
+        
+        if (rows.length === 0) {
+            // 如果没有数据，返回默认值
+            return res.json({
+                success: true,
+                data: {
+                    level: levelId,
+                    total_attempts: 0,
+                    success_count: 0,
+                    fail_count: 0,
+                    pass_rate: 0,
+                    difficulty_label: '未知',
+                    difficulty_color: '#999999'
+                }
+            });
+        }
+        
+        const levelData = rows[0];
+        const passRate = levelData.pass_rate || 0;
+        
+        // 根据通关率计算难度等级
+        let difficultyLabel = '';
+        let difficultyColor = '';
+        
+        if (passRate >= 80) {
+            difficultyLabel = '简单';
+            difficultyColor = '#00FF00'; // 绿色
+        } else if (passRate >= 60) {
+            difficultyLabel = '普通';
+            difficultyColor = '#4CAF50'; // 浅绿
+        } else if (passRate >= 40) {
+            difficultyLabel = '困难';
+            difficultyColor = '#FFA500'; // 橙色
+        } else if (passRate >= 20) {
+            difficultyLabel = '噩梦';
+            difficultyColor = '#FF4500'; // 橙红
+        } else if (passRate >= 10) {
+            difficultyLabel = '炼狱';
+            difficultyColor = '#DC143C'; // 深红
+        } else {
+            difficultyLabel = '地狱';
+            difficultyColor = '#8B0000'; // 暗红
+        }
+        
+        res.json({
+            success: true,
+            data: {
+                level: levelData.level,
+                total_attempts: levelData.total_attempts,
+                success_count: levelData.success_count,
+                fail_count: levelData.fail_count,
+                pass_rate: passRate,
+                avg_defend_time: levelData.avg_defend_time,
+                avg_operations: levelData.avg_operations,
+                difficulty_label: difficultyLabel,
+                difficulty_color: difficultyColor
+            }
+        });
+        
+    } catch (error) {
+        console.error('[Analytics] 查询关卡通关率失败:', error);
+        res.status(500).json({
+            success: false,
+            message: '查询失败',
+            error: error.message
+        });
+    }
+});
+
+/**
+ * 批量查询所有关卡的通关率
+ * GET /api/analytics/levels/pass-rates
+ */
+app.get('/api/analytics/levels/pass-rates', async (req, res) => {
+    try {
+        const [rows] = await pool.execute(
+            `SELECT 
+                level,
+                total_attempts,
+                success_count,
+                fail_count,
+                ROUND(success_count * 100.0 / NULLIF(total_attempts, 0), 2) AS pass_rate,
+                avg_defend_time,
+                avg_operations
+            FROM level_statistics 
+            ORDER BY level ASC`
+        );
+        
+        // 为每个关卡添加难度标签
+        const levelsWithDifficulty = [];
+        
+        for (let i = 1; i <= 10; i++) {
+            const levelData = rows.find(r => r.level === i);
+            
+            if (!levelData) {
+                // 没有数据的关卡
+                levelsWithDifficulty.push({
+                    level: i,
+                    total_attempts: 0,
+                    success_count: 0,
+                    fail_count: 0,
+                    pass_rate: 0,
+                    difficulty_label: '未知',
+                    difficulty_color: '#999999'
+                });
+                continue;
+            }
+            
+            const passRate = levelData.pass_rate || 0;
+            let difficultyLabel = '';
+            let difficultyColor = '';
+            
+            if (passRate >= 80) {
+                difficultyLabel = '简单';
+                difficultyColor = '#00FF00';
+            } else if (passRate >= 60) {
+                difficultyLabel = '普通';
+                difficultyColor = '#4CAF50';
+            } else if (passRate >= 40) {
+                difficultyLabel = '困难';
+                difficultyColor = '#FFA500';
+            } else if (passRate >= 20) {
+                difficultyLabel = '噩梦';
+                difficultyColor = '#FF4500';
+            } else if (passRate >= 10) {
+                difficultyLabel = '炼狱';
+                difficultyColor = '#DC143C';
+            } else {
+                difficultyLabel = '地狱';
+                difficultyColor = '#8B0000';
+            }
+            
+            levelsWithDifficulty.push({
+                level: levelData.level,
+                total_attempts: levelData.total_attempts,
+                success_count: levelData.success_count,
+                fail_count: levelData.fail_count,
+                pass_rate: passRate,
+                avg_defend_time: levelData.avg_defend_time,
+                avg_operations: levelData.avg_operations,
+                difficulty_label: difficultyLabel,
+                difficulty_color: difficultyColor
+            });
+        }
+        
+        res.json({
+            success: true,
+            data: levelsWithDifficulty
+        });
+        
+    } catch (error) {
+        console.error('[Analytics] 批量查询关卡通关率失败:', error);
         res.status(500).json({
             success: false,
             message: '查询失败',

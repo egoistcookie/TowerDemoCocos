@@ -194,6 +194,26 @@ SELECT
 FROM player_statistics
 ORDER BY max_level DESC, success_games DESC, total_kills DESC;
 
+-- 创建视图：击杀榜排名（供“超越多少玩家/前百分比”展示）
+-- 说明：使用窗口函数（MySQL 8.0+），查询时只需查该视图（单表查询）。
+CREATE OR REPLACE VIEW player_kill_rank AS
+SELECT
+    t.player_id,
+    t.total_kills,
+    t.kill_rank,
+    t.total_players,
+    ROUND(t.kill_rank * 100.0 / NULLIF(t.total_players, 0), 2) AS top_percent,               -- 排名前 top_percent%
+    (t.total_players - t.kill_rank) AS surpassed_count,                                     -- 超越人数
+    ROUND((t.total_players - t.kill_rank) * 100.0 / NULLIF(t.total_players, 0), 2) AS surpassed_percent -- 超越百分比
+FROM (
+    SELECT
+        pl.player_id,
+        pl.total_kills,
+        RANK() OVER (ORDER BY pl.total_kills DESC) AS kill_rank,
+        COUNT(*) OVER () AS total_players
+    FROM player_leaderboard pl
+) t;
+
 -- 创建视图：关卡难度分析
 CREATE OR REPLACE VIEW level_difficulty_analysis AS
 SELECT 
