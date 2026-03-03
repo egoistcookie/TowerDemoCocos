@@ -356,6 +356,71 @@ export class PlayerDataManager {
     }
 
     /**
+     * 计算单个单位的总强化等级（用于埋点等统计）
+     * 规则需与 TalentSystem.getUnitLevel 保持一致：
+     * - 攻击力：1点 = 1次强化
+     * - 攻击速度：5% = 1次强化
+     * - 生命值：2点 = 1次强化
+     * - 移动速度：5点 = 1次强化
+     * - 建造成本：1点 = 1次强化（负数表示减少）
+     */
+    private computeUnitLevel(enhancement: UnitEnhancement | null): number {
+        if (!enhancement || !enhancement.enhancements) {
+            return 0;
+        }
+
+        const enhancements = enhancement.enhancements;
+        let totalLevel = 0;
+
+        if (enhancements.attackDamage) {
+            totalLevel += Math.floor(enhancements.attackDamage / 1);
+        }
+
+        if (enhancements.attackSpeed) {
+            totalLevel += Math.floor(enhancements.attackSpeed / 5);
+        }
+
+        if (enhancements.maxHealth) {
+            totalLevel += Math.floor(enhancements.maxHealth / 2);
+        }
+
+        if (enhancements.moveSpeed) {
+            totalLevel += Math.floor(enhancements.moveSpeed / 5);
+        }
+
+        if (enhancements.buildCost) {
+            totalLevel += Math.abs(Math.floor(enhancements.buildCost / 1));
+        }
+
+        return totalLevel;
+    }
+
+    /**
+     * 获取所有已强化单位的等级映射（unitId -> level）
+     * 仅返回有强化记录且等级大于0的单位，用于游戏结束埋点上报。
+     */
+    public getAllUnitLevels(): Record<string, number> {
+        const result: Record<string, number> = {};
+
+        if (!this.playerData.unitEnhancements) {
+            this.playerData.unitEnhancements = {};
+        }
+
+        for (const unitId in this.playerData.unitEnhancements) {
+            if (!Object.prototype.hasOwnProperty.call(this.playerData.unitEnhancements, unitId)) {
+                continue;
+            }
+            const enhancement = this.playerData.unitEnhancements[unitId];
+            const level = this.computeUnitLevel(enhancement);
+            if (level > 0) {
+                result[unitId] = level;
+            }
+        }
+
+        return result;
+    }
+
+    /**
      * 设置单位强化数据
      * @param unitId 单位ID
      * @param enhancement 强化数据

@@ -66,12 +66,14 @@ app.post('/api/analytics/report', async (req, res) => {
         try {
             // 1. 插入游戏记录
             const operationsJson = JSON.stringify(data.operations);
+            // 新增：将各单位强化等级信息作为JSON一起入库（例如 { Arrower: 15, StoneWall: 44 }）
+            const unitLevelsJson = data.unitLevels ? JSON.stringify(data.unitLevels) : null;
             const [insertResult] = await connection.execute(
                 `INSERT INTO game_records (
                     player_id, level, result, operations_json, end_time, 
                     defend_time, current_wave, final_gold, final_population, 
-                    kill_count, operation_count
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    kill_count, operation_count, unit_levels_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     data.playerId,
                     data.level,
@@ -83,7 +85,8 @@ app.post('/api/analytics/report', async (req, res) => {
                     data.finalGold || 0,
                     data.finalPopulation || 0,
                     data.killCount || 0,
-                    data.operations.length
+                    data.operations.length,
+                    unitLevelsJson
                 ]
             );
             

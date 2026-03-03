@@ -1,4 +1,5 @@
 import { _decorator, Component, sys } from 'cc';
+import { PlayerDataManager } from './PlayerDataManager';
 const { ccclass } = _decorator;
 
 /**
@@ -52,6 +53,7 @@ export interface AnalyticsData {
     finalGold: number;             // 最终金币数
     finalPopulation: number;       // 最终人口数
     killCount: number;             // 击杀数
+    unitLevels?: Record<string, number>; // 各单位强化等级（unitId -> level）
 }
 
 /**
@@ -67,6 +69,7 @@ export class AnalyticsManager extends Component {
     private operations: OperationRecord[] = [];       // 操作记录列表
     private gameStartTime: number = 0;                // 游戏开始时间
     private isRecording: boolean = false;             // 是否正在记录
+    private playerDataManager: PlayerDataManager | null = null; // 玩家数据管理器（用于获取单位强化信息）
     
     // 服务器配置
     private readonly SERVER_URL = 'https://www.egoistcookie.top/api/analytics/report';
@@ -90,6 +93,12 @@ export class AnalyticsManager extends Component {
         
         // 初始化玩家ID（从本地存储获取或生成新的）
         this.initPlayerId();
+        
+        // 初始化玩家数据管理器（用于在埋点中附带单位强化信息）
+        this.playerDataManager = PlayerDataManager.getInstance();
+        this.playerDataManager.loadData().catch((err) => {
+            console.warn('[AnalyticsManager] 加载玩家数据失败，单位强化信息将不会包含在埋点中:', err);
+        });
         
         console.log('[AnalyticsManager] 埋点管理器初始化完成');
     }
@@ -171,6 +180,16 @@ export class AnalyticsManager extends Component {
         
         this.stopRecording();
         
+        // 从玩家数据中获取所有单位的强化等级（例如 Arrower: 15, StoneWall: 44）
+        let unitLevels: Record<string, number> = {};
+        if (this.playerDataManager) {
+            try {
+                unitLevels = this.playerDataManager.getAllUnitLevels();
+            } catch (e) {
+                console.warn('[AnalyticsManager] 获取单位等级信息失败，将跳过该字段:', e);
+            }
+        }
+        
         const analyticsData: AnalyticsData = {
             playerId: this.playerId,
             level: this.currentLevel,
@@ -181,7 +200,8 @@ export class AnalyticsManager extends Component {
             currentWave,
             finalGold,
             finalPopulation,
-            killCount
+            killCount,
+            unitLevels
         };
         
         // 转换为JSON字符串
