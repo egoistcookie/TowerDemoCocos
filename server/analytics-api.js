@@ -209,6 +209,7 @@ app.get('/api/analytics/player/:playerId', async (req, res) => {
 app.get('/api/analytics/player/:playerId/kill-rank', async (req, res) => {
     try {
         const { playerId } = req.params;
+        console.log('[Analytics] kill-rank request:', { playerId });
 
         const [rows] = await pool.execute(
             `SELECT 
@@ -225,6 +226,7 @@ app.get('/api/analytics/player/:playerId/kill-rank', async (req, res) => {
         );
 
         if (rows.length === 0) {
+            console.log('[Analytics] kill-rank no rows for player:', playerId);
             // 玩家还没有任何统计数据（尚未上报过结算），返回默认
             return res.json({
                 success: true,
@@ -240,6 +242,7 @@ app.get('/api/analytics/player/:playerId/kill-rank', async (req, res) => {
             });
         }
 
+        console.log('[Analytics] kill-rank ok:', rows[0]);
         res.json({
             success: true,
             data: rows[0]

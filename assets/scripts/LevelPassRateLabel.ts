@@ -52,7 +52,7 @@ export class LevelPassRateLabel extends Component {
             );
             
             if (response.success && response.data) {
-                this.difficultyData = response.data;
+                this.difficultyData = this.normalizeDifficultyData(response.data);
                 this.updateDisplay();
             } else {
                 console.warn(`[LevelPassRateLabel] 获取关卡 ${this.currentLevel} 数据失败`);
@@ -91,7 +91,8 @@ export class LevelPassRateLabel extends Component {
 
         // 更新通关率文本
         if (this.passRateLabel) {
-            this.passRateLabel.string = `通关率 ${this.difficultyData.pass_rate.toFixed(1)}%`;
+            const passRate = this.toNumber(this.difficultyData.pass_rate, 0);
+            this.passRateLabel.string = `通关率 ${passRate.toFixed(1)}%`;
             this.passRateLabel.color = new Color(255, 255, 255, 255);
         }
         
@@ -127,7 +128,28 @@ export class LevelPassRateLabel extends Component {
             }
         }
         
-        console.log(`[LevelPassRateLabel] 关卡 ${this.currentLevel} - ${this.difficultyData.difficulty_label} - 通关率 ${this.difficultyData.pass_rate.toFixed(1)}%`);
+        const logRate = this.toNumber(this.difficultyData.pass_rate, 0);
+        console.log(`[LevelPassRateLabel] 关卡 ${this.currentLevel} - ${this.difficultyData.difficulty_label} - 通关率 ${logRate.toFixed(1)}%`);
+    }
+
+    /**
+     * 归一化后台返回数据，避免 number/string 混用导致 toFixed 报错
+     */
+    private normalizeDifficultyData(raw: any): LevelDifficultyData {
+        return {
+            level: this.toNumber(raw?.level, this.currentLevel),
+            total_attempts: this.toNumber(raw?.total_attempts, 0),
+            success_count: this.toNumber(raw?.success_count, 0),
+            fail_count: this.toNumber(raw?.fail_count, 0),
+            pass_rate: this.toNumber(raw?.pass_rate, 0),
+            difficulty_label: String(raw?.difficulty_label ?? '未知'),
+            difficulty_color: String(raw?.difficulty_color ?? '#999999')
+        };
+    }
+
+    private toNumber(v: any, fallback: number): number {
+        const n = typeof v === 'number' ? v : (typeof v === 'string' ? parseFloat(v) : NaN);
+        return Number.isFinite(n) ? n : fallback;
     }
     
     /**
