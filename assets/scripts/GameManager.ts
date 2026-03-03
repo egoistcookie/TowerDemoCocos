@@ -140,6 +140,7 @@ export class GameManager extends Component {
     private killRankFetchInFlight: boolean = false;
     private lastKillRankFetchAt: number = 0;
     private lastKillRankPlayerId: string = '';
+    private killRankReqSeq: number = 0;
 
     // 首次加载分包/预制体时的全屏加载界面
     private loadingOverlay: Node | null = null;
@@ -1619,6 +1620,25 @@ export class GameManager extends Component {
             return;
         }
 
+        // 仅在“游戏首页”查询：进入战斗（Playing）后不再请求排行榜
+        // 1) 状态判断
+        if (this.gameState === GameState.Playing) {
+            return;
+        }
+        // 2) UI 判断：BottomSelection/GameMainPanel 必须处于激活（首页可见）
+        const bottomSelectionNode = find('Canvas/BottomSelection');
+        const gameMainPanel = bottomSelectionNode ? bottomSelectionNode.getChildByName('GameMainPanel') : null;
+        if (!bottomSelectionNode || !bottomSelectionNode.activeInHierarchy || !gameMainPanel || !gameMainPanel.activeInHierarchy) {
+            return;
+        }
+
+        const setKillRankTextSafe = (text: string, color: Color) => {
+            const lbl = this.killRankLabel;
+            if (!lbl || !lbl.node || !lbl.node.isValid) return;
+            lbl.string = text;
+            lbl.color = color;
+        };
+
         let playerId = '';
         try {
             playerId = sys.localStorage.getItem('player_id') || '';
@@ -1629,8 +1649,7 @@ export class GameManager extends Component {
         if (!playerId) {
             // 没有 player_id：通常是 AnalyticsManager 没挂载/未初始化
             console.warn('[KillRank] player_id 为空：可能未挂载/未初始化 AnalyticsManager，或 localStorage 读失败');
-            this.killRankLabel.string = '杀敌:--  超越--的玩家';
-            this.killRankLabel.color = new Color(200, 200, 200, 255);
+            setKillRankTextSafe('杀敌:--  超越--的玩家', new Color(200, 200, 200, 255));
             return;
         }
 
@@ -1650,15 +1669,30 @@ export class GameManager extends Component {
         this.killRankFetchInFlight = true;
         this.lastKillRankFetchAt = now;
         this.lastKillRankPlayerId = playerId;
+        const reqSeq = ++this.killRankReqSeq;
         console.info('[KillRank] 请求开始:', { playerId, url });
         xhr.onreadystatechange = () => {
             if (xhr.readyState !== 4) return;
             this.killRankFetchInFlight = false;
             console.info('[KillRank] 请求完成:', { status: xhr.status, statusText: xhr.statusText });
+
+            // 如果这不是最新一次请求的回包，直接丢弃（避免退出/切页后旧回包写 UI）
+            if (reqSeq !== this.killRankReqSeq) {
+                console.info('[KillRank] 丢弃过期回包:', { reqSeq, latest: this.killRankReqSeq });
+                return;
+            }
+            // 回包时再确认仍处于首页（避免退出到战斗/切页后写 UI）
+            if (this.gameState === GameState.Playing) return;
+            const bottomSelectionNode2 = find('Canvas/BottomSelection');
+            const gameMainPanel2 = bottomSelectionNode2 ? bottomSelectionNode2.getChildByName('GameMainPanel') : null;
+            if (!bottomSelectionNode2 || !bottomSelectionNode2.activeInHierarchy || !gameMainPanel2 || !gameMainPanel2.activeInHierarchy) {
+                console.info('[KillRank] 回包时不在首页，忽略写 UI');
+                return;
+            }
+
             if (xhr.status !== 200) {
                 console.warn('[KillRank] HTTP 非200，返回占位文案，responseText(截断):', (xhr.responseText || '').slice(0, 200));
-                this.killRankLabel!.string = '杀敌:--  超越--的玩家';
-                this.killRankLabel!.color = new Color(200, 200, 200, 255);
+                setKillRankTextSafe('杀敌:--  超越--的玩家', new Color(200, 200, 200, 255));
                 return;
             }
             try {
@@ -1667,8 +1701,7 @@ export class GameManager extends Component {
                 const resp = JSON.parse(xhr.responseText || '{}');
                 if (!resp || !resp.success || !resp.data) {
                     console.warn('[KillRank] JSON 结构不符合预期:', resp);
-                    this.killRankLabel!.string = '杀敌:--  超越--的玩家';
-                    this.killRankLabel!.color = new Color(200, 200, 200, 255);
+                    setKillRankTextSafe('杀敌:--  超越--的玩家', new Color(200, 200, 200, 255));
                     return;
                 }
 
@@ -1688,27 +1721,21 @@ export class GameManager extends Component {
                 const surpassedPercent = toNumber(d.surpassed_percent, 0);
 
                 // 文案：杀敌数 + 超越 x% 的玩家
-                this.killRankLabel!.string = `杀敌:${kills}  超越${surpassedPercent.toFixed(1)}%的玩家`;
-                this.killRankLabel!.color = new Color(255, 255, 255, 255);
+                setKillRankTextSafe(`杀敌:${kills}  超越${surpassedPercent.toFixed(1)}%的玩家`, new Color(255, 255, 255, 255));
             } catch (e) {
                 console.error('[KillRank] 解析 JSON 失败:', e);
-                this.killRankLabel!.string = '杀敌:--  超越--的玩家';
-                this.killRankLabel!.color = new Color(200, 200, 200, 255);
+                setKillRankTextSafe('杀敌:--  超越--的玩家', new Color(200, 200, 200, 255));
             }
         };
         xhr.onerror = () => {
-            if (!this.killRankLabel) return;
             this.killRankFetchInFlight = false;
             console.error('[KillRank] xhr.onerror 网络错误，url=', url);
-            this.killRankLabel.string = '杀敌:--  超越--的玩家';
-            this.killRankLabel.color = new Color(200, 200, 200, 255);
+            setKillRankTextSafe('杀敌:--  超越--的玩家', new Color(200, 200, 200, 255));
         };
         xhr.ontimeout = () => {
-            if (!this.killRankLabel) return;
             this.killRankFetchInFlight = false;
             console.error('[KillRank] xhr.ontimeout 请求超时(3s)，url=', url);
-            this.killRankLabel.string = '杀敌:--  超越--的玩家';
-            this.killRankLabel.color = new Color(200, 200, 200, 255);
+            setKillRankTextSafe('杀敌:--  超越--的玩家', new Color(200, 200, 200, 255));
         };
         xhr.open('GET', url, true);
         xhr.send();
