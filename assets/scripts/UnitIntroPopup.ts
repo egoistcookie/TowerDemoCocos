@@ -1,4 +1,5 @@
 import { _decorator, Component, Node, Sprite, Label, Button, EventTouch, find, UITransform, Vec3, tween, Color, UIOpacity, Graphics, view } from 'cc';
+import { GamePopup } from './GamePopup';
 const { ccclass, property } = _decorator;
 
 @ccclass('UnitIntroPopup')
@@ -21,6 +22,7 @@ export class UnitIntroPopup extends Component {
     private gameManager: any = null!; // GameManager引用（使用any避免循环依赖）
     private buildButton: Button = null!; // 建造按钮引用
     private maskLayer: Node = null!; // 遮罩层节点
+    private lastShownUnitType: string = ''; // 当前显示的介绍框对应的单位类型（用于小精灵关闭后触发新手教程）
     
     start() {
         // 尝试多种方式查找GameManager（使用字符串避免循环依赖）
@@ -274,6 +276,9 @@ export class UnitIntroPopup extends Component {
         
         // 不播放闪烁动画，直接显示（保持高亮边框）
         
+        // 记录当前显示的单位 ID（小精灵 prefabName 为 Wisp，关闭后用于触发新手教程）
+        this.lastShownUnitType = (unitInfo.unitId != null ? String(unitInfo.unitId) : '') || '';
+
         // 监听触摸事件，阻止事件冒泡到下层
         this.container.on(Node.EventType.TOUCH_START, this.onTouchStart, this);
         this.container.on(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
@@ -531,8 +536,14 @@ export class UnitIntroPopup extends Component {
         // 继续游戏
         if (this.gameManager) {
             this.gameManager.resumeGame();
+            // 小精灵（unitId 为 Wisp）首次介绍框关闭后，在第一关触发新手教程
+            if (this.lastShownUnitType === 'Wisp') {
+                this.triggerBuildTutorialIfLevel1();
+            }
         }
-        
+
+        this.lastShownUnitType = '';
+
         // 隐藏弹窗
         this.container.active = false;
     }
@@ -542,5 +553,20 @@ export class UnitIntroPopup extends Component {
      */
     onClose() {
         this.hide();
+    }
+
+    /**
+     * 第一关时触发新手教程：GamePopup 提示 + 建造按钮闪烁
+     */
+    private triggerBuildTutorialIfLevel1() {
+        const uiManagerNode = find('UIManager') || find('UI/UIManager') || find('Canvas/UI/UIManager');
+        const uiManager = uiManagerNode?.getComponent('UIManager') as any;
+        if (!uiManager || typeof uiManager.getCurrentLevel !== 'function') return;
+        const level = uiManager.getCurrentLevel();
+        if (level !== 1) return;
+        GamePopup.showMessage('可点击中央网格建造防御工事，\n或点击下方按钮建造兵营', true, 5);
+        if (typeof uiManager.highlightBuildButtonForTutorial === 'function') {
+            uiManager.highlightBuildButtonForTutorial();
+        }
     }
 }

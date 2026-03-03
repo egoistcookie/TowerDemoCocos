@@ -39,7 +39,7 @@ export class PlayerDataManager {
         playerLevel: 1,  // 玩家等级从1级开始
         talentLevels: {},
         unitEnhancements: {},
-        passedLevels: [1],  // 默认第一关已通过（解锁）
+        passedLevels: [],   // 首次进入游戏时无过关记录，只能选第一关
         stamina: 50,  // 默认满体力
         lastStaminaRecoverTime: Date.now()  // 默认当前时间
     };
@@ -83,7 +83,7 @@ export class PlayerDataManager {
                         playerLevel: 1,
                         talentLevels: {},
                         unitEnhancements: {},
-                        passedLevels: [1],  // 默认第一关已通过
+                        passedLevels: [],   // 首次玩家无过关记录
                         stamina: 50,  // 默认满体力
                         lastStaminaRecoverTime: Date.now(),
                         ...parsedData
@@ -94,8 +94,9 @@ export class PlayerDataManager {
                     if (!this.playerData.unitEnhancements) {
                         this.playerData.unitEnhancements = {};
                     }
-                    if (!this.playerData.passedLevels || this.playerData.passedLevels.length === 0) {
-                        this.playerData.passedLevels = [1];  // 默认第一关已通过
+                    // 只有已有关卡记录时才保留；首次玩家/空记录保持 []，只能选第一关
+                    if (!this.playerData.passedLevels) {
+                        this.playerData.passedLevels = [];
                     }
                     if (this.playerData.stamina === undefined) {
                         this.playerData.stamina = 50;
@@ -128,7 +129,7 @@ export class PlayerDataManager {
                         playerLevel: 1,
                         talentLevels: {},
                         unitEnhancements: {},
-                        passedLevels: [1],  // 默认第一关已通过
+                        passedLevels: [],   // 首次玩家无过关记录
                         stamina: 50,  // 默认满体力
                         lastStaminaRecoverTime: Date.now()
                     };
@@ -373,7 +374,7 @@ export class PlayerDataManager {
      */
     public passLevel(level: number): void {
         if (!this.playerData.passedLevels) {
-            this.playerData.passedLevels = [1];  // 默认第一关已通过
+            this.playerData.passedLevels = [];
         }
         if (this.playerData.passedLevels.indexOf(level) === -1) {
             this.playerData.passedLevels.push(level);
@@ -387,8 +388,8 @@ export class PlayerDataManager {
      * @returns 是否已通过
      */
     public isLevelPassed(level: number): boolean {
-        if (!this.playerData.passedLevels) {
-            this.playerData.passedLevels = [1];  // 默认第一关已通过
+        if (!this.playerData.passedLevels || this.playerData.passedLevels.length === 0) {
+            return false;  // 无过关记录时，任何关卡都视为未通过
         }
         return this.playerData.passedLevels.indexOf(level) !== -1;
     }
@@ -398,8 +399,8 @@ export class PlayerDataManager {
      * @returns 已通过的关卡号数组
      */
     public getPassedLevels(): number[] {
-        if (!this.playerData.passedLevels) {
-            this.playerData.passedLevels = [1];  // 默认第一关已通过
+        if (!this.playerData.passedLevels || this.playerData.passedLevels.length === 0) {
+            return [];
         }
         return [...this.playerData.passedLevels];
     }
@@ -414,7 +415,7 @@ export class PlayerDataManager {
             playerLevel: 1,
             talentLevels: {},
             unitEnhancements: {},
-            passedLevels: [1],  // 默认第一关已通过
+            passedLevels: [],   // 重置后无过关记录
             stamina: 50,
             lastStaminaRecoverTime: Date.now()
         };

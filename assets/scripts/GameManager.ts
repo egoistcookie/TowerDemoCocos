@@ -3496,7 +3496,7 @@ export class GameManager extends Component {
         // 优先使用unitScript.unitName，否则使用unitType
         const uniqueUnitType = unitScript.unitName || unitType;
         
-        
+
         if (!this.appearedUnitTypes.has(uniqueUnitType)) {
             this.appearedUnitTypes.add(uniqueUnitType);
             
@@ -3547,7 +3547,8 @@ export class GameManager extends Component {
                 unitName: unitName,
                 unitDescription: unitDescription,
                 unitIcon: unitIcon,
-                unitType: unitScript.unitType || 'unknown'
+                unitType: unitScript.unitType || 'unknown',
+                unitId: unitId  // prefabName，用于识别小精灵等以触发新手教程
             });
         } else {
         }

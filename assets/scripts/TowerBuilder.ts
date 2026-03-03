@@ -158,6 +158,7 @@ export class TowerBuilder extends Component {
     private stoneWallGridPanelComponent: StoneWallGridPanel = null!; // 石墙网格面板组件
     private initialStoneWallsPlaced: boolean = false; // 是否已生成初始石墙
     private initialWatchTowersPlaced: boolean = false; // 是否已生成初始哨塔
+    private hasShownDragTutorialInLevel1: boolean = false; // 第一关是否已显示过拖动建造提示
     
     // 建筑物拖拽相关
     private isDraggingBuilding: boolean = false; // 是否正在拖拽建筑物
@@ -1011,6 +1012,39 @@ export class TowerBuilder extends Component {
                 this.gridPanel.show();
             }
         }
+
+        // 第一关：在首次打开建造面板时，提示拖动候选兵营到网格中建造
+        this.showDragTutorialIfNeeded();
+    }
+
+    /**
+     * 在第一关首次点击建造按钮并展开候选面板时，显示拖动建造提示
+     */
+    private showDragTutorialIfNeeded() {
+        // 仅在第一关且未显示过时才提示
+        if (this.hasShownDragTutorialInLevel1) {
+            return;
+        }
+
+        const uiManagerNode = find('UIManager') || find('UI/UIManager') || find('Canvas/UI/UIManager');
+        const uiManager = uiManagerNode?.getComponent('UIManager') as any;
+        if (!uiManager || typeof uiManager.getCurrentLevel !== 'function') {
+            return;
+        }
+
+        const level = uiManager.getCurrentLevel();
+        if (level !== 1) {
+            return;
+        }
+
+        // 确保建造候选面板已经可见
+        const isPanelVisible = this.buildingPanel && this.buildingPanel.node && this.buildingPanel.node.active;
+        if (!isPanelVisible) {
+            return;
+        }
+
+        GamePopup.showMessage('可拖动候选兵营，到兵营网格中建造', true, 5);
+        this.hasShownDragTutorialInLevel1 = true;
     }
 
     disableBuildingMode() {

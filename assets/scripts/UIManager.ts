@@ -1410,6 +1410,52 @@ export class UIManager extends Component {
         }
     }
 
+    /**
+     * 新手教程：建造按钮高亮闪烁 5 秒（高亮->还原循环），提示玩家点击建造
+     * 进入第一关时调用
+     */
+    highlightBuildButtonForTutorial() {
+        const btnNode = this.buildButton?.node || find('Canvas/UI/BuildButton');
+        if (!btnNode || !btnNode.isValid) return;
+        if (!btnNode.active) btnNode.active = true;
+
+        tween(btnNode).stop();
+        const sprite = btnNode.getComponent(Sprite);
+        const origScale = btnNode.scale.clone();
+        const origColor = sprite ? sprite.color.clone() : new Color(255, 255, 255, 255);
+        const s = origScale.x;
+        const highlightColor = new Color(255, 255, 0, 255);
+
+        const setHighlight = () => {
+            if (btnNode.isValid) {
+                btnNode.setScale(s * 1.2, s * 1.2, 1);
+                if (sprite && sprite.isValid) sprite.color = highlightColor;
+            }
+        };
+        const setRestore = () => {
+            if (btnNode.isValid) {
+                btnNode.setScale(s, s, 1);
+                if (sprite && sprite.isValid) sprite.color = origColor;
+            }
+        };
+
+        // 高亮 0.5s -> 还原 0.5s，循环 5 次，共 5 秒
+        const blink = () => {
+            setHighlight();
+            this.scheduleOnce(() => {
+                if (!btnNode.isValid) return;
+                setRestore();
+            }, 0.5);
+        };
+        for (let i = 0; i < 5; i++) {
+            this.scheduleOnce(() => blink(), i * 1.0);
+        }
+        this.scheduleOnce(() => {
+            if (!btnNode.isValid) return;
+            setRestore();
+        }, 5.0);
+    }
+
     onRestartButtonClick() {
         
         // 重新查找GameManager
@@ -2203,9 +2249,36 @@ export class UIManager extends Component {
     }
     
     /**
+     * 更新上一关按钮的状态（启用/禁用和置灰）
+     * 第一关时置灰，否则可点击
+     */
+    updatePreviousLevelButtonState() {
+        if (!this.levelSelectLeftButton) {
+            return;
+        }
+        const canGoToPreviousLevel = this.currentLevel > 1;
+        const button = this.levelSelectLeftButton.getComponent(Button);
+        if (button) {
+            button.interactable = canGoToPreviousLevel;
+        }
+        const sprite = this.levelSelectLeftButton.getComponent(Sprite);
+        if (sprite) {
+            sprite.color = canGoToPreviousLevel ? new Color(255, 255, 255, 255) : new Color(128, 128, 128, 200);
+        }
+        let opacity = this.levelSelectLeftButton.getComponent(UIOpacity);
+        if (!opacity) {
+            opacity = this.levelSelectLeftButton.addComponent(UIOpacity);
+        }
+        if (opacity) {
+            opacity.opacity = canGoToPreviousLevel ? 255 : 150;
+        }
+    }
+
+    /**
      * 更新下一关按钮的状态（启用/禁用和置灰）
      */
     updateNextLevelButtonState() {
+        this.updatePreviousLevelButtonState();
         if (!this.levelSelectRightButton) {
             return;
         }
@@ -2233,17 +2306,8 @@ export class UIManager extends Component {
         }
         
         // 检查当前关卡是否已通过（只有通过当前关卡才能进入下一关）
-        // 第一关默认解锁，所以如果当前关卡是1，可以进入第2关
-        // 如果当前关卡大于1，需要检查当前关卡是否已通过
-        let canGoToNextLevel = false;
-        if (this.currentLevel === 1) {
-            // 第一关默认解锁，可以进入第二关
-            canGoToNextLevel = true;
-        } else {
-            // 检查当前关卡是否已通过
-            const isCurrentLevelPassed = this.playerDataManager && this.playerDataManager.isLevelPassed(this.currentLevel);
-            canGoToNextLevel = isCurrentLevelPassed || false;
-        }
+        // 首次玩家无过关记录时，只能选第一关；通过关卡1后才能选第二关
+        const canGoToNextLevel = !!(this.playerDataManager && this.playerDataManager.isLevelPassed(this.currentLevel));
         
         const button = this.levelSelectRightButton.getComponent(Button);
         if (button) {
