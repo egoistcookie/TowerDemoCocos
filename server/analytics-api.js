@@ -501,6 +501,142 @@ app.get('/api/analytics/levels/pass-rates', async (req, res) => {
     }
 });
 
+/**
+ * 更新玩家信息（名称和头像）
+ * PUT /api/analytics/player/:playerId/profile
+ */
+app.put('/api/analytics/player/:playerId/profile', async (req, res) => {
+    try {
+        const { playerId } = req.params;
+        const { player_name, player_avatar } = req.body;
+        
+        if (!playerId) {
+            return res.status(400).json({
+                success: false,
+                message: '缺少玩家ID'
+            });
+        }
+        
+        // 验证名称长度
+        if (player_name && player_name.length > 50) {
+            return res.status(400).json({
+                success: false,
+                message: '玩家名称不能超过50个字符'
+            });
+        }
+        
+        // 验证头像URL长度
+        if (player_avatar && player_avatar.length > 500) {
+            return res.status(400).json({
+                success: false,
+                message: '头像URL过长'
+            });
+        }
+        
+        // 构建更新字段
+        const updateFields = [];
+        const updateValues = [];
+        
+        if (player_name !== undefined) {
+            updateFields.push('player_name = ?');
+            updateValues.push(player_name || null);
+        }
+        
+        if (player_avatar !== undefined) {
+            updateFields.push('player_avatar = ?');
+            updateValues.push(player_avatar || null);
+        }
+        
+        if (updateFields.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: '没有需要更新的字段'
+            });
+        }
+        
+        updateValues.push(playerId);
+        
+        // 更新数据库
+        const [result] = await pool.execute(
+            `UPDATE player_statistics 
+             SET ${updateFields.join(', ')} 
+             WHERE player_id = ?`,
+            updateValues
+        );
+        
+        if (result.affectedRows === 0) {
+            // 如果玩家不存在，尝试创建
+            await pool.execute(
+                `INSERT INTO player_statistics (player_id, player_name, player_avatar) 
+                 VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE 
+                    player_name = VALUES(player_name),
+                    player_avatar = VALUES(player_avatar)`,
+                [playerId, player_name || null, player_avatar || null]
+            );
+        }
+        
+        console.log(`[Analytics] 更新玩家信息成功: ${playerId}, name=${player_name || 'null'}, avatar=${player_avatar ? '已设置' : 'null'}`);
+        
+        res.json({
+            success: true,
+            message: '更新成功',
+            data: {
+                player_id: playerId,
+                player_name: player_name || null,
+                player_avatar: player_avatar || null
+            }
+        });
+        
+    } catch (error) {
+        console.error('[Analytics] 更新玩家信息失败:', error);
+        res.status(500).json({
+            success: false,
+            message: '更新失败',
+            error: error.message
+        });
+    }
+});
+
+/**
+ * 获取玩家信息（包括名称和头像）
+ * GET /api/analytics/player/:playerId/profile
+ */
+app.get('/api/analytics/player/:playerId/profile', async (req, res) => {
+    try {
+        const { playerId } = req.params;
+        
+        const [rows] = await pool.execute(
+            'SELECT player_id, player_name, player_avatar FROM player_statistics WHERE player_id = ?',
+            [playerId]
+        );
+        
+        if (rows.length === 0) {
+            return res.json({
+                success: true,
+                data: {
+                    player_id: playerId,
+                    player_name: null,
+                    player_avatar: null
+                }
+            });
+        }
+        
+        res.json({
+            success: true,
+            data: rows[0]
+        });
+        
+    } catch (error) {
+        console.error('[Analytics] 查询玩家信息失败:', error);
+        res.status(500).json({
+            success: false,
+            message: '查询失败',
+            error: error.message
+        });
+    }
+});
+
 // 启动服务器
 app.listen(PORT, () => {
     console.log(`游戏埋点API服务已启动，监听端口: ${PORT}`);

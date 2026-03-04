@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, BlockInputEvents, sys } from 'cc';
+import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, BlockInputEvents, sys, Texture2D, ImageAsset } from 'cc';
 import { Crystal } from './role/Crystal';
 import { UnitIntroPopup } from './UnitIntroPopup';
 import { BuffCardPopup, BuffCardData } from './BuffCardPopup';
@@ -17,6 +17,7 @@ import { ForestGridPanel } from './ForestGridPanel';
 import { SoundManager } from './SoundManager';
 import { BuffManager } from './BuffManager';
 import { AnalyticsManager } from './AnalyticsManager';
+import { PlayerProfilePopup } from './PlayerProfilePopup';
 const { ccclass, property } = _decorator;
 
 // 重新导出 GameState 以保持向后兼容
@@ -125,7 +126,14 @@ export class GameManager extends Component {
     // 顶部左侧等级 HUD（头像 + 等级文字 + 等级经验条 + 体力条）
     private levelHudNode: Node | null = null;
     private levelLabel: Label | null = null;
+    private levelLabelNode: Node | null = null; // 等级标签节点（用于点击）
+    private avatarNode: Node | null = null; // 头像节点
+    private avatarSprite: Sprite | null = null; // 头像Sprite组件
+    private playerNameLabel: Label | null = null; // 玩家名称标签
     private levelExpBarNode: Node | null = null;
+    private playerProfilePopup: PlayerProfilePopup | null = null; // 玩家信息编辑弹窗
+    private playerName: string = ''; // 当前玩家名称
+    private playerAvatar: string = ''; // 当前玩家头像
     // 顶部 HUD 进度条宽度，适当放大（原来 120，整体增加约 20%）
     private levelExpBarMaxWidth: number = 144;
     private levelExpValueLabel: Label | null = null;      // 等级经验条上的数值文字
@@ -711,6 +719,9 @@ export class GameManager extends Component {
         
         // 初始化并显示左上角等级HUD（首页显示）
         this.updateLevelHud();
+        
+        // 进入首页时加载玩家信息（名称和头像）- 只加载一次
+        this.loadPlayerProfile();
 
         // 创建或查找左上角木材标签（与金币标签放在一起）
         this.initWoodLabel();
@@ -1361,25 +1372,48 @@ export class GameManager extends Component {
             const offsetY = visibleSize.height / 2 - 60; // 整体再下移 20 像素
             this.levelHudNode.setPosition(offsetX, offsetY, 0);
 
-            // 头像区域（左侧一个圆形或方形占位）
+            // 头像区域（左侧，可点击）
             const avatarNode = new Node('Avatar');
             avatarNode.setParent(this.levelHudNode);
             const avatarTransform = avatarNode.addComponent(UITransform);
-            // 头像整体再放大约 20%（在之前基础上）
             avatarTransform.setContentSize(74, 74);
             avatarNode.setPosition(-100, 0, 0);
-
+            
+            // 添加Sprite组件用于显示头像
+            this.avatarSprite = avatarNode.addComponent(Sprite);
+            this.avatarSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+            
+            // 默认头像（Graphics绘制）
             const avatarG = avatarNode.addComponent(Graphics);
             avatarG.fillColor = new Color(80, 80, 80, 255);
             avatarG.circle(0, 0, 30);
             avatarG.fill();
+            
+            // 头像可点击
+            const avatarButton = avatarNode.addComponent(Button);
+            avatarButton.node.on(Button.EventType.CLICK, this.onAvatarClick, this);
+            
+            this.avatarNode = avatarNode;
 
-            // 等级文字
+            // 玩家名称标签（头像下方）
+            const playerNameNode = new Node('PlayerName');
+            playerNameNode.setParent(this.levelHudNode);
+            const playerNameTransform = playerNameNode.addComponent(UITransform);
+            playerNameTransform.setContentSize(150, 24);
+            playerNameNode.setPosition(-100, -40, 0);
+            this.playerNameLabel = playerNameNode.addComponent(Label);
+            this.playerNameLabel.string = '';
+            this.playerNameLabel.fontSize = 18;
+            this.playerNameLabel.color = new Color(255, 255, 255, 255);
+            this.playerNameLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            this.playerNameLabel.verticalAlign = Label.VerticalAlign.CENTER;
+
+            // 等级文字（可点击）
             const levelLabelNode = new Node('LevelLabel');
             levelLabelNode.setParent(this.levelHudNode);
+            this.levelLabelNode = levelLabelNode;
             this.levelLabel = levelLabelNode.addComponent(Label);
             this.levelLabel.string = 'Lv.1';
-            // 等级文字在之前基础上再放大约 20%
             this.levelLabel.fontSize = 32;
             this.levelLabel.color = new Color(255, 255, 255, 255);
             this.levelLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
@@ -1388,6 +1422,10 @@ export class GameManager extends Component {
             const levelLabelTransform = levelLabelNode.addComponent(UITransform);
             levelLabelTransform.setContentSize(180, 34);
             levelLabelNode.setPosition(-10, 26, 0);
+            
+            // 等级标签可点击
+            const levelButton = levelLabelNode.addComponent(Button);
+            levelButton.node.on(Button.EventType.CLICK, this.onLevelLabelClick, this);
 
             // 等级经验条背景
             const barBgNode = new Node('LevelExpBarBg');
@@ -1609,6 +1647,420 @@ export class GameManager extends Component {
 
         // LevelHUD 作为 gameMainPanel 的子节点，会自动随着 gameMainPanel 的显示隐藏而显示隐藏
         // 无需手动控制 active，与上一关/下一关按钮的显示逻辑完全一致
+        // 注意：玩家信息（名称和头像）的加载已移至 start() 和保存回调中，避免频繁查询
+    }
+    
+    /**
+     * 头像点击事件
+     */
+    private onAvatarClick() {
+        this.showPlayerProfilePopup();
+    }
+    
+    /**
+     * 等级标签点击事件
+     */
+    private onLevelLabelClick() {
+        this.showPlayerProfilePopup();
+    }
+    
+    /**
+     * 名称输入框点击事件（调用原生输入框）
+     */
+    private onNameInputClick() {
+        // 使用浏览器原生prompt作为输入框（简化处理）
+        // 实际项目中建议使用EditBox组件或自定义输入弹窗
+        const currentName = this.playerName || '';
+        const inputName = prompt('请输入玩家名称（最多50个字符）:', currentName);
+        if (inputName !== null) {
+            const trimmedName = inputName.trim().substring(0, 50);
+            if (trimmedName.length > 0) {
+                // 更新弹窗中的显示
+                if (this.playerProfilePopup && this.playerProfilePopup.nameInputLabel) {
+                    this.playerProfilePopup.nameInputLabel.string = trimmedName;
+                    this.playerProfilePopup.nameInputLabel.color = new Color(255, 255, 255, 255);
+                }
+            }
+        }
+    }
+    
+    /**
+     * 显示玩家信息编辑弹窗
+     */
+    private showPlayerProfilePopup() {
+        // 创建弹窗（如果不存在）
+        if (!this.playerProfilePopup) {
+            this.createPlayerProfilePopup();
+        }
+        
+        if (!this.playerProfilePopup) return;
+        
+        // 获取player_id
+        let playerId = '';
+        try {
+            playerId = sys.localStorage.getItem('player_id') || '';
+        } catch (e) {
+            console.error('[GameManager] 获取player_id失败:', e);
+            return;
+        }
+        
+        if (!playerId) {
+            console.warn('[GameManager] player_id为空，无法打开编辑弹窗');
+            return;
+        }
+        
+        // 显示弹窗
+        this.playerProfilePopup.show(
+            playerId,
+            this.playerName,
+            this.playerAvatar,
+            (name: string, avatar: string) => {
+                // 保存成功回调
+                this.playerName = name;
+                this.playerAvatar = avatar;
+                this.updatePlayerProfileDisplay();
+                // 保存成功后重新从服务器加载玩家信息，确保数据一致性
+                this.loadPlayerProfile();
+            },
+            () => {
+                // 取消回调
+            }
+        );
+    }
+    
+    /**
+     * 创建玩家信息编辑弹窗
+     */
+    private createPlayerProfilePopup() {
+        const canvas = find('Canvas');
+        if (!canvas) {
+            console.error('[GameManager] 找不到Canvas节点');
+            return;
+        }
+        
+        // 创建弹窗根节点
+        const popupNode = new Node('PlayerProfilePopup');
+        popupNode.setParent(canvas);
+        popupNode.setPosition(0, 0, 0);
+        popupNode.active = false;
+        // 确保弹窗显示在最上层
+        popupNode.setSiblingIndex(Number.MAX_SAFE_INTEGER);
+        
+        const popupTransform = popupNode.addComponent(UITransform);
+        popupTransform.setContentSize(750, 640);
+        popupTransform.setAnchorPoint(0.5, 0.5);
+        
+        // 添加组件
+        this.playerProfilePopup = popupNode.addComponent(PlayerProfilePopup);
+        
+        // 先创建半透明背景遮罩（必须在容器之前创建，确保容器在遮罩之上）
+        const mask = new Node('Mask');
+        mask.setParent(popupNode);
+        const maskTransform = mask.addComponent(UITransform);
+        maskTransform.setContentSize(750, 640);
+        maskTransform.setAnchorPoint(0.5, 0.5);
+        mask.setPosition(0, 0, 0);
+        const maskG = mask.addComponent(Graphics);
+        maskG.fillColor = new Color(0, 0, 0, 200); // 降低不透明度，让背景更清晰
+        maskG.rect(-375, -320, 750, 640);
+        maskG.fill();
+        // 确保遮罩在底层
+        mask.setSiblingIndex(0);
+        
+        // 创建弹窗容器（内容面板）- 必须在遮罩之后创建，确保在遮罩之上
+        const container = new Node('PopupContainer');
+        container.setParent(popupNode);
+        const containerTransform = container.addComponent(UITransform);
+        containerTransform.setContentSize(500, 400);
+        containerTransform.setAnchorPoint(0.5, 0.5);
+        container.setPosition(0, 0, 0);
+        // 确保容器在遮罩之上
+        container.setSiblingIndex(1);
+        
+        // 内容面板背景（增强对比度和亮度）
+        const bgG = container.addComponent(Graphics);
+        bgG.fillColor = new Color(50, 55, 75, 255); // 提高亮度，增强对比度
+        bgG.roundRect(-250, -200, 500, 400, 15);
+        bgG.fill();
+        bgG.lineWidth = 4; // 增加边框宽度
+        bgG.strokeColor = new Color(150, 200, 255, 255); // 更亮的边框色
+        bgG.roundRect(-250, -200, 500, 400, 15);
+        bgG.stroke();
+        
+        // 标题
+        const titleNode = new Node('Title');
+        titleNode.setParent(container);
+        const titleLabel = titleNode.addComponent(Label);
+        titleLabel.string = '编辑玩家信息';
+        titleLabel.fontSize = 28;
+        titleLabel.color = new Color(255, 255, 255, 255);
+        titleLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        const titleTransform = titleNode.addComponent(UITransform);
+        titleTransform.setContentSize(500, 40);
+        titleNode.setPosition(0, 150, 0);
+        
+        // 头像显示区域
+        const avatarDisplayNode = new Node('AvatarDisplay');
+        avatarDisplayNode.setParent(container);
+        const avatarDisplayTransform = avatarDisplayNode.addComponent(UITransform);
+        avatarDisplayTransform.setContentSize(100, 100);
+        avatarDisplayTransform.setAnchorPoint(0.5, 0.5);
+        avatarDisplayNode.setPosition(0, 50, 0);
+        const avatarSprite = avatarDisplayNode.addComponent(Sprite);
+        this.playerProfilePopup.avatarSprite = avatarSprite;
+        
+        // 上传头像按钮
+        const uploadBtnNode = new Node('UploadButton');
+        uploadBtnNode.setParent(container);
+        const uploadBtnTransform = uploadBtnNode.addComponent(UITransform);
+        uploadBtnTransform.setContentSize(150, 40);
+        uploadBtnTransform.setAnchorPoint(0.5, 0.5);
+        uploadBtnNode.setPosition(0, -20, 0);
+        // 先添加Graphics背景
+        const uploadBtnG = uploadBtnNode.addComponent(Graphics);
+        uploadBtnG.fillColor = new Color(80, 120, 200, 255);
+        uploadBtnG.roundRect(-75, -20, 150, 40, 8);
+        uploadBtnG.fill();
+        // 后添加Button组件，确保能接收点击事件
+        const uploadBtn = uploadBtnNode.addComponent(Button);
+        uploadBtn.transition = Button.Transition.COLOR;
+        uploadBtn.normalColor = new Color(255, 255, 255, 255);
+        uploadBtn.hoverColor = new Color(200, 200, 255, 255);
+        uploadBtn.pressedColor = new Color(150, 150, 255, 255);
+        this.playerProfilePopup.uploadAvatarButton = uploadBtn;
+        const uploadBtnLabel = new Node('UploadLabel');
+        uploadBtnLabel.setParent(uploadBtnNode);
+        const uploadLabel = uploadBtnLabel.addComponent(Label);
+        uploadLabel.string = '上传头像';
+        uploadLabel.fontSize = 20;
+        uploadLabel.color = new Color(255, 255, 255, 255);
+        uploadLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        const uploadLabelTransform = uploadBtnLabel.addComponent(UITransform);
+        uploadLabelTransform.setContentSize(150, 40);
+        
+        // 名称输入框（使用EditBox）
+        const nameInputNode = new Node('NameInput');
+        nameInputNode.setParent(container);
+        const nameInputTransform = nameInputNode.addComponent(UITransform);
+        nameInputTransform.setContentSize(300, 40);
+        nameInputTransform.setAnchorPoint(0.5, 0.5);
+        nameInputNode.setPosition(0, -80, 0);
+        
+        // 输入框背景
+        const nameInputBg = nameInputNode.addComponent(Graphics);
+        nameInputBg.fillColor = new Color(60, 60, 80, 255);
+        nameInputBg.roundRect(-150, -20, 300, 40, 8);
+        nameInputBg.fill();
+        nameInputBg.lineWidth = 2;
+        nameInputBg.strokeColor = new Color(150, 150, 200, 255);
+        nameInputBg.roundRect(-150, -20, 300, 40, 8);
+        nameInputBg.stroke();
+        
+        // 名称输入Label（简化处理：实际项目中建议使用EditBox或原生输入框）
+        // 注意：在Cocos Creator中，文本输入需要使用EditBox组件，但需要正确配置
+        // 这里先用Label作为占位，实际输入可以通过点击后调用原生输入框实现
+        const nameLabel = nameInputNode.addComponent(Label);
+        nameLabel.string = '请输入玩家名称';
+        nameLabel.fontSize = 20;
+        nameLabel.color = new Color(150, 150, 150, 255);
+        nameLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        this.playerProfilePopup.nameInputLabel = nameLabel;
+        
+        // 名称输入框可点击，点击后调用原生输入框
+        const nameInputButton = nameInputNode.addComponent(Button);
+        nameInputButton.node.on(Button.EventType.CLICK, () => {
+            this.onNameInputClick();
+        }, this);
+        
+        // 保存按钮
+        const saveBtnNode = new Node('SaveButton');
+        saveBtnNode.setParent(container);
+        const saveBtnTransform = saveBtnNode.addComponent(UITransform);
+        saveBtnTransform.setContentSize(120, 45);
+        saveBtnTransform.setAnchorPoint(0.5, 0.5);
+        saveBtnNode.setPosition(-80, -150, 0);
+        // 先添加Graphics背景
+        const saveBtnG = saveBtnNode.addComponent(Graphics);
+        saveBtnG.fillColor = new Color(60, 180, 60, 255);
+        saveBtnG.roundRect(-60, -22.5, 120, 45, 8);
+        saveBtnG.fill();
+        // 后添加Button组件，确保能接收点击事件
+        const saveBtn = saveBtnNode.addComponent(Button);
+        saveBtn.transition = Button.Transition.COLOR;
+        saveBtn.normalColor = new Color(255, 255, 255, 255);
+        saveBtn.hoverColor = new Color(200, 255, 200, 255);
+        saveBtn.pressedColor = new Color(150, 255, 150, 255);
+        this.playerProfilePopup.saveButton = saveBtn;
+        const saveBtnLabel = new Node('SaveLabel');
+        saveBtnLabel.setParent(saveBtnNode);
+        const saveLabel = saveBtnLabel.addComponent(Label);
+        saveLabel.string = '保存';
+        saveLabel.fontSize = 22;
+        saveLabel.color = new Color(255, 255, 255, 255);
+        saveLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        const saveLabelTransform = saveBtnLabel.addComponent(UITransform);
+        saveLabelTransform.setContentSize(120, 45);
+        
+        // 取消按钮
+        const cancelBtnNode = new Node('CancelButton');
+        cancelBtnNode.setParent(container);
+        const cancelBtnTransform = cancelBtnNode.addComponent(UITransform);
+        cancelBtnTransform.setContentSize(120, 45);
+        cancelBtnTransform.setAnchorPoint(0.5, 0.5);
+        cancelBtnNode.setPosition(80, -150, 0);
+        // 先添加Graphics背景
+        const cancelBtnG = cancelBtnNode.addComponent(Graphics);
+        cancelBtnG.fillColor = new Color(180, 60, 60, 255);
+        cancelBtnG.roundRect(-60, -22.5, 120, 45, 8);
+        cancelBtnG.fill();
+        // 后添加Button组件，确保能接收点击事件
+        const cancelBtn = cancelBtnNode.addComponent(Button);
+        cancelBtn.transition = Button.Transition.COLOR;
+        cancelBtn.normalColor = new Color(255, 255, 255, 255);
+        cancelBtn.hoverColor = new Color(255, 200, 200, 255);
+        cancelBtn.pressedColor = new Color(255, 150, 150, 255);
+        this.playerProfilePopup.cancelButton = cancelBtn;
+        const cancelBtnLabel = new Node('CancelLabel');
+        cancelBtnLabel.setParent(cancelBtnNode);
+        const cancelLabel = cancelBtnLabel.addComponent(Label);
+        cancelLabel.string = '取消';
+        cancelLabel.fontSize = 22;
+        cancelLabel.color = new Color(255, 255, 255, 255);
+        cancelLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        const cancelLabelTransform = cancelBtnLabel.addComponent(UITransform);
+        cancelLabelTransform.setContentSize(120, 45);
+        
+        this.playerProfilePopup.popupContainer = container;
+    }
+    
+    /**
+     * 从服务器加载玩家信息（名称和头像）
+     */
+    private async loadPlayerProfile() {
+        let playerId = '';
+        try {
+            playerId = sys.localStorage.getItem('player_id') || '';
+        } catch (e) {
+            return;
+        }
+        
+        if (!playerId) return;
+        
+        try {
+            const response = await this.fetchPlayerProfile(playerId);
+            if (response && response.success && response.data) {
+                this.playerName = response.data.player_name || '';
+                this.playerAvatar = response.data.player_avatar || '';
+                this.updatePlayerProfileDisplay();
+            }
+        } catch (error) {
+            console.error('[GameManager] 加载玩家信息失败:', error);
+        }
+    }
+    
+    /**
+     * 获取玩家信息
+     */
+    private async fetchPlayerProfile(playerId: string): Promise<any> {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.timeout = 3000;
+            
+            xhr.onreadystatechange = () => {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        try {
+                            const data = JSON.parse(xhr.responseText);
+                            resolve(data);
+                        } catch (error) {
+                            reject(new Error('解析响应失败'));
+                        }
+                    } else {
+                        reject(new Error(`请求失败: ${xhr.status}`));
+                    }
+                }
+            };
+            
+            xhr.onerror = () => reject(new Error('网络错误'));
+            xhr.ontimeout = () => reject(new Error('请求超时'));
+            
+            xhr.open('GET', `https://www.egoistcookie.top/api/analytics/player/${encodeURIComponent(playerId)}/profile`, true);
+            xhr.send();
+        });
+    }
+    
+    /**
+     * 更新玩家信息显示（头像和名称）
+     */
+    private updatePlayerProfileDisplay() {
+        // 更新名称
+        if (this.playerNameLabel) {
+            this.playerNameLabel.string = this.playerName || '';
+        }
+        
+        // 更新头像
+        if (this.avatarSprite && this.playerAvatar) {
+            // 从Base64加载头像
+            this.loadAvatarFromBase64(this.playerAvatar);
+        } else {
+            // 默认头像（灰色圆圈）
+            this.showDefaultAvatar();
+        }
+    }
+    
+    /**
+     * 从Base64字符串加载头像
+     * 注意：Cocos Creator中从Base64加载图片比较复杂，这里简化处理
+     * 实际项目中建议将图片上传到服务器，返回URL，然后使用resources.load加载
+     */
+    private loadAvatarFromBase64(base64: string) {
+        if (!this.avatarSprite || !this.avatarNode) return;
+        
+        // 简化处理：用Graphics绘制一个彩色圆圈表示已设置头像
+        // 实际项目中应该：
+        // 1. 将Base64图片上传到服务器，获取URL
+        // 2. 使用resources.load或assetManager加载图片资源
+        // 3. 创建SpriteFrame并设置到Sprite
+        
+        const graphics = this.avatarNode.getComponent(Graphics);
+        if (graphics) {
+            graphics.clear();
+            // 用不同颜色表示已设置头像（实际应该显示图片）
+            graphics.fillColor = new Color(100, 150, 200, 255);
+            graphics.circle(0, 0, 30);
+            graphics.fill();
+            graphics.lineWidth = 2;
+            graphics.strokeColor = new Color(150, 200, 255, 255);
+            graphics.circle(0, 0, 30);
+            graphics.stroke();
+        }
+        
+        // 清空SpriteFrame（因为暂时无法从Base64直接创建）
+        if (this.avatarSprite) {
+            this.avatarSprite.spriteFrame = null;
+        }
+        
+        console.log('[GameManager] 头像Base64已保存，实际显示需要服务器URL支持');
+    }
+    
+    /**
+     * 显示默认头像
+     */
+    private showDefaultAvatar() {
+        if (!this.avatarNode) return;
+        
+        const graphics = this.avatarNode.getComponent(Graphics);
+        if (graphics) {
+            graphics.clear();
+            graphics.fillColor = new Color(80, 80, 80, 255);
+            graphics.circle(0, 0, 30);
+            graphics.fill();
+        }
+        
+        // 清空SpriteFrame
+        if (this.avatarSprite) {
+            this.avatarSprite.spriteFrame = null;
+        }
     }
 
     /**

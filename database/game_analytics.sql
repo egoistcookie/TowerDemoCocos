@@ -54,6 +54,8 @@ CREATE TABLE IF NOT EXISTS game_records (
 CREATE TABLE IF NOT EXISTS player_statistics (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '统计ID',
     player_id VARCHAR(100) NOT NULL UNIQUE COMMENT '玩家ID',
+    player_name VARCHAR(50) DEFAULT NULL COMMENT '玩家名称',
+    player_avatar VARCHAR(500) DEFAULT NULL COMMENT '玩家头像URL（Base64或URL）',
     total_games INT DEFAULT 0 COMMENT '总游戏局数',
     success_games INT DEFAULT 0 COMMENT '成功局数',
     fail_games INT DEFAULT 0 COMMENT '失败局数',
@@ -68,6 +70,47 @@ CREATE TABLE IF NOT EXISTS player_statistics (
     INDEX idx_max_level (max_level),
     INDEX idx_total_games (total_games)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='玩家统计表';
+
+-- 为已存在的表添加新字段（如果表已存在）
+-- 注意：如果字段已存在，执行会报错，可以忽略或先检查
+-- MySQL 8.0.19+ 支持 IF NOT EXISTS，但为了兼容性，这里使用存储过程方式
+
+DELIMITER //
+CREATE PROCEDURE IF NOT EXISTS add_player_profile_columns()
+BEGIN
+    -- 检查并添加 player_name 字段
+    IF NOT EXISTS (
+        SELECT * FROM information_schema.COLUMNS 
+        WHERE TABLE_SCHEMA = DATABASE() 
+        AND TABLE_NAME = 'player_statistics' 
+        AND COLUMN_NAME = 'player_name'
+    ) THEN
+        ALTER TABLE player_statistics 
+        ADD COLUMN player_name VARCHAR(50) DEFAULT NULL COMMENT '玩家名称' AFTER player_id;
+    END IF;
+    
+    -- 检查并添加 player_avatar 字段
+    IF NOT EXISTS (
+        SELECT * FROM information_schema.COLUMNS 
+        WHERE TABLE_SCHEMA = DATABASE() 
+        AND TABLE_NAME = 'player_statistics' 
+        AND COLUMN_NAME = 'player_avatar'
+    ) THEN
+        ALTER TABLE player_statistics 
+        ADD COLUMN player_avatar VARCHAR(500) DEFAULT NULL COMMENT '玩家头像URL（Base64或URL）' AFTER player_name;
+    END IF;
+END //
+DELIMITER ;
+
+-- 执行存储过程添加字段
+CALL add_player_profile_columns();
+
+-- 删除临时存储过程
+DROP PROCEDURE IF EXISTS add_player_profile_columns;
+
+-- 或者，如果不想使用存储过程，可以直接执行（如果字段已存在会报错，可以忽略）：
+-- ALTER TABLE player_statistics ADD COLUMN player_name VARCHAR(50) DEFAULT NULL COMMENT '玩家名称' AFTER player_id;
+-- ALTER TABLE player_statistics ADD COLUMN player_avatar VARCHAR(500) DEFAULT NULL COMMENT '玩家头像URL（Base64或URL）' AFTER player_name;
 
 -- 操作类型统计表
 CREATE TABLE IF NOT EXISTS operation_statistics (
