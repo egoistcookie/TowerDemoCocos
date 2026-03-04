@@ -266,11 +266,15 @@ app.get('/api/analytics/player/:playerId/kill-rank', async (req, res) => {
  */
 app.get('/api/analytics/leaderboard', async (req, res) => {
     try {
-        const limit = parseInt(req.query.limit) || 10;
+        let limit = parseInt(req.query.limit);
+        if (isNaN(limit) || limit <= 0) {
+            limit = 10;
+        }
+        // 做一个上限，避免一次查询过多
+        limit = Math.min(limit, 100);
         
         const [rows] = await pool.execute(
-            'SELECT * FROM player_leaderboard LIMIT ?',
-            [limit]
+            `SELECT * FROM player_leaderboard LIMIT ${limit}`
         );
         
         res.json({
@@ -280,6 +284,49 @@ app.get('/api/analytics/leaderboard', async (req, res) => {
         
     } catch (error) {
         console.error('[Analytics] 查询排行榜失败:', error);
+        res.status(500).json({
+            success: false,
+            message: '查询失败',
+            error: error.message
+        });
+    }
+});
+
+/**
+ * 查询杀敌数排行榜（前N名）
+ * GET /api/analytics/leaderboard/kill-top?limit=10
+ * 数据来源：player_kill_rank 视图 + player_leaderboard 视图 + player_statistics 表
+ */
+app.get('/api/analytics/leaderboard/kill-top', async (req, res) => {
+    try {
+        let limit = parseInt(req.query.limit);
+        if (isNaN(limit) || limit <= 0) {
+            limit = 10;
+        }
+        // 做一个上限，避免一次查询过多
+        limit = Math.min(limit, 100);
+        
+        const [rows] = await pool.execute(
+            `SELECT 
+                k.player_id,
+                COALESCE(ps.player_name, '') AS player_name,
+                COALESCE(ps.player_avatar, '') AS player_avatar,
+                k.total_kills,
+                COALESCE(pl.max_level, 0) AS max_level,
+                k.kill_rank
+             FROM player_kill_rank k
+             LEFT JOIN player_leaderboard pl ON pl.player_id = k.player_id
+             LEFT JOIN player_statistics ps ON ps.player_id = k.player_id
+             ORDER BY k.total_kills DESC
+             LIMIT ${limit}`
+        );
+        
+        res.json({
+            success: true,
+            data: rows
+        });
+    } catch (error) {
+        console.error('[Analytics] 查询杀敌排行榜失败:', error);
         res.status(500).json({
             success: false,
             message: '查询失败',
@@ -525,12 +572,26 @@ app.put('/api/analytics/player/:playerId/profile', async (req, res) => {
             });
         }
         
-        // 验证头像URL长度
-        if (player_avatar && player_avatar.length > 500) {
-            return res.status(400).json({
-                success: false,
-                message: '头像URL过长'
-            });
+        // 验证头像长度
+        if (player_avatar) {
+            // 如果是 Base64（data:image 开头），允许更长（前端已限制文件<=2MB）
+            if (player_avatar.startsWith('data:image')) {
+                // 预留大约 3MB 的字符串长度空间
+                if (player_avatar.length > 3 * 1024 * 1024) {
+                    return res.status(400).json({
+                        success: false,
+                        message: '头像数据过大'
+                    });
+                }
+            } else {
+                // 普通 URL 情况下限制长度
+                if (player_avatar.length > 500) {
+                    return res.status(400).json({
+                        success: false,
+                        message: '头像URL过长'
+                    });
+                }
+            }
         }
         
         // 构建更新字段

@@ -1,4 +1,6 @@
-import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, BlockInputEvents, sys, Texture2D, ImageAsset } from 'cc';
+import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, BlockInputEvents, sys, Texture2D, ImageAsset, Mask } from 'cc';
+// 微信小游戏全局对象声明（避免 TypeScript 报错）
+declare const wx: any;
 import { Crystal } from './role/Crystal';
 import { UnitIntroPopup } from './UnitIntroPopup';
 import { BuffCardPopup, BuffCardData } from './BuffCardPopup';
@@ -149,6 +151,19 @@ export class GameManager extends Component {
     private lastKillRankFetchAt: number = 0;
     private lastKillRankPlayerId: string = '';
     private killRankReqSeq: number = 0;
+
+    // 杀敌排行榜卷轴面板
+    private killRankPanelNode: Node | null = null;
+    private killRankPanelVisible: boolean = false;
+
+    // 首页杀敌榜缓存（避免出现 "--"）
+    private lastKillRankKills: number = 0;
+    private lastKillRankSurpassedPercent: number = 0;
+    private hasKillRankCache: boolean = false;
+    private readonly KILL_RANK_CACHE_KEY = 'tower_kill_rank_cache';
+
+    // 杀敌标签下方提示文字（“点击可查看贡献榜”）
+    private killRankHintLabel: Label | null = null;
 
     // 首次加载分包/预制体时的全屏加载界面
     private loadingOverlay: Node | null = null;
@@ -1379,34 +1394,54 @@ export class GameManager extends Component {
             avatarTransform.setContentSize(74, 74);
             avatarNode.setPosition(-100, 0, 0);
             
-            // 添加Sprite组件用于显示头像
-            this.avatarSprite = avatarNode.addComponent(Sprite);
-            this.avatarSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+            // 添加圆形遮罩，用于裁剪头像为圆形/圆角效果
+            const avatarMask = avatarNode.addComponent(Mask);
+            // 兼容不同版本引擎：优先使用 ELLIPSE，没有则退回 RECT
+            const ellipseType = (Mask.Type as any).ELLIPSE;
+            const rectType = (Mask.Type as any).RECT;
+            avatarMask.type = ellipseType !== undefined ? ellipseType : rectType;
             
-            // 默认头像（Graphics绘制）
+            // 使用 Graphics 在遮罩节点上绘制一个圆形，作为遮罩形状和默认背景
             const avatarG = avatarNode.addComponent(Graphics);
             avatarG.fillColor = new Color(80, 80, 80, 255);
             avatarG.circle(0, 0, 30);
             avatarG.fill();
             
-            // 头像可点击
+            // 创建实际显示头像图片的子节点（会被遮罩裁剪）
+            const avatarImageNode = new Node('AvatarImage');
+            avatarImageNode.setParent(avatarNode);
+            const avatarImageTransform = avatarImageNode.addComponent(UITransform);
+            avatarImageTransform.setContentSize(60, 60);
+            avatarImageTransform.setAnchorPoint(0.5, 0.5);
+            avatarImageNode.setPosition(0, 0, 0);
+            // 添加Sprite组件用于显示头像图片
+            this.avatarSprite = avatarImageNode.addComponent(Sprite);
+            this.avatarSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+            
+            // 头像可点击（点击遮罩节点）
             const avatarButton = avatarNode.addComponent(Button);
             avatarButton.node.on(Button.EventType.CLICK, this.onAvatarClick, this);
             
             this.avatarNode = avatarNode;
 
-            // 玩家名称标签（头像下方）
+            // 玩家名称标签（放到等级标签下方，Y 与体力括号说明齐平）
             const playerNameNode = new Node('PlayerName');
             playerNameNode.setParent(this.levelHudNode);
             const playerNameTransform = playerNameNode.addComponent(UITransform);
-            playerNameTransform.setContentSize(150, 24);
-            playerNameNode.setPosition(-100, -40, 0);
+            playerNameTransform.setContentSize(180, 24);
+            // 等级标签中心 (-10, 26)，体力括号说明 Y = -38，这里采用 -38，X 与等级标签一致
+            playerNameNode.setPosition(-10, -38, 0);
             this.playerNameLabel = playerNameNode.addComponent(Label);
             this.playerNameLabel.string = '';
             this.playerNameLabel.fontSize = 18;
-            this.playerNameLabel.color = new Color(255, 255, 255, 255);
+            // 棕色字体
+            this.playerNameLabel.color = new Color(160, 110, 60, 255);
             this.playerNameLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
             this.playerNameLabel.verticalAlign = Label.VerticalAlign.CENTER;
+            // 黑色描边（使用 Label 自带描边属性，避免 LabelOutline 组件的弃用警告）
+            this.playerNameLabel.enableOutline = true;
+            this.playerNameLabel.outlineColor = new Color(0, 0, 0, 255);
+            this.playerNameLabel.outlineWidth = 2;
 
             // 等级文字（可点击）
             const levelLabelNode = new Node('LevelLabel');
@@ -1588,17 +1623,35 @@ export class GameManager extends Component {
             killRankTextNode.setPosition(0, 0, 0);
 
             this.killRankLabel = killRankTextNode.addComponent(Label);
-            this.killRankLabel.string = '杀敌:0  超越0%的玩家';
+            this.killRankLabel.string = '杀敌:0  超越0%的指挥官';
             this.killRankLabel.fontSize = 18;
             this.killRankLabel.color = new Color(255, 255, 255, 255);
             this.killRankLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
             this.killRankLabel.verticalAlign = Label.VerticalAlign.CENTER;
+
+            // 使击杀榜标签可点击，打开排行榜卷轴
+            const killRankButton = killRankNode.addComponent(Button);
+            killRankButton.transition = Button.Transition.SCALE;
+            killRankButton.node.on(Button.EventType.CLICK, this.onKillRankClick, this);
+
+            // 在杀敌标签下方增加提示文字：“(点击可查看贡献榜)”，Y 与体力括号说明一致
+            const killRankHintNode = new Node('KillRankHint');
+            killRankHintNode.setParent(this.levelHudNode);
+            const killRankHintTrans = killRankHintNode.addComponent(UITransform);
+            killRankHintTrans.setContentSize(killRankWidth, 24);
+            killRankHintNode.setPosition(killRankPosX, -38, 0);
+            this.killRankHintLabel = killRankHintNode.addComponent(Label);
+            this.killRankHintLabel.string = '（点击可查看贡献榜）';
+            this.killRankHintLabel.fontSize = 16;
+            this.killRankHintLabel.color = new Color(230, 230, 230, 255);
+            this.killRankHintLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            this.killRankHintLabel.verticalAlign = Label.VerticalAlign.CENTER;
         }
 
         // 注意：playerDataManager 可能还没加载完；先展示默认值，等数据可用后再刷新
 
         const playerLevel = this.playerDataManager ? this.playerDataManager.getPlayerLevel() : 1;
-        const level = Math.max(1, playerLevel); // 使用独立的玩家等级
+        const level = Math.max(1, playerLevel); // 使用独立的指挥官等级
         const currentExp = this.playerDataManager ? this.playerDataManager.getExperience() : 0; // 0-99
         const ratio = Math.max(0, Math.min(1, currentExp / 100));
 
@@ -1668,19 +1721,347 @@ export class GameManager extends Component {
      * 名称输入框点击事件（调用原生输入框）
      */
     private onNameInputClick() {
-        // 使用浏览器原生prompt作为输入框（简化处理）
-        // 实际项目中建议使用EditBox组件或自定义输入弹窗
         const currentName = this.playerName || '';
-        const inputName = prompt('请输入玩家名称（最多50个字符）:', currentName);
+
+        // 1. 微信小游戏环境：使用系统键盘输入名称
+        if (sys.platform === sys.Platform.WECHAT_GAME && typeof wx !== 'undefined' && wx.showKeyboard) {
+            console.log('[GameManager] onNameInputClick in WECHAT_GAME, 使用 wx.showKeyboard');
+
+            try {
+                wx.showKeyboard({
+                    defaultValue: currentName,
+                    maxLength: 50,
+                    multiple: false,
+                    confirmHold: false,
+                    confirmType: 'done',
+                    success: () => {
+                        // 成功弹出键盘后，监听确认事件
+                        const handleConfirm = (res: any) => {
+                            try {
+                                const value = (res && res.value) ? String(res.value) : '';
+                                const trimmedName = value.trim().substring(0, 50);
+                                if (trimmedName.length > 0) {
+                                    if (this.playerProfilePopup && this.playerProfilePopup.nameInputLabel) {
+                                        this.playerProfilePopup.nameInputLabel.string = trimmedName;
+                                        this.playerProfilePopup.nameInputLabel.color = new Color(255, 255, 255, 255);
+                                    }
+                                }
+                            } finally {
+                                // 一次性监听，用完后解绑，避免多次触发
+                                if (wx.offKeyboardConfirm) {
+                                    wx.offKeyboardConfirm(handleConfirm);
+                                }
+                            }
+                        };
+
+                        if (wx.onKeyboardConfirm) {
+                            wx.onKeyboardConfirm(handleConfirm);
+                        }
+                    },
+                    fail: (err: any) => {
+                        console.warn('[GameManager] wx.showKeyboard 调用失败:', err);
+                    }
+                });
+            } catch (e) {
+                console.error('[GameManager] wx.showKeyboard 调用异常:', e);
+            }
+
+            return;
+        }
+
+        // 2. 浏览器 / H5 环境：使用原生 prompt 作为简易输入框
+        const hasPrompt = typeof window !== 'undefined' && typeof (window as any).prompt === 'function';
+        if (!hasPrompt) {
+            console.warn('[GameManager] 当前环境不支持 window.prompt，名称输入被忽略');
+            return;
+        }
+
+        const inputName = (window as any).prompt('请输入玩家名称（最多50个字符）:', currentName);
         if (inputName !== null) {
             const trimmedName = inputName.trim().substring(0, 50);
             if (trimmedName.length > 0) {
-                // 更新弹窗中的显示
                 if (this.playerProfilePopup && this.playerProfilePopup.nameInputLabel) {
                     this.playerProfilePopup.nameInputLabel.string = trimmedName;
                     this.playerProfilePopup.nameInputLabel.color = new Color(255, 255, 255, 255);
                 }
             }
+        }
+    }
+    
+    /**
+     * 击杀榜标签点击事件：展开/收起“指挥官贡献榜”卷轴
+     */
+    private onKillRankClick() {
+        if (this.killRankPanelVisible) {
+            this.hideKillRankPanel();
+        } else {
+            this.showKillRankPanel();
+        }
+    }
+    
+    /**
+     * 创建并显示杀敌排行榜卷轴
+     */
+    private showKillRankPanel() {
+        if (!this.killRankPanelNode || !this.killRankPanelNode.isValid) {
+            this.killRankPanelNode = this.createKillRankPanel();
+        }
+        if (!this.killRankPanelNode) return;
+        
+        // 直接显示在预设位置（后续如需动画可再精细化）
+        this.killRankPanelNode.active = true;
+        this.killRankPanelNode.setSiblingIndex(Number.MAX_SAFE_INTEGER);
+        this.killRankPanelVisible = true;
+        
+        // 异步拉取排行榜数据
+        this.fetchKillLeaderboard();
+    }
+    
+    /**
+     * 收起杀敌排行榜卷轴
+     */
+    private hideKillRankPanel() {
+        if (!this.killRankPanelNode || !this.killRankPanelNode.isValid) {
+            this.killRankPanelVisible = false;
+            return;
+        }
+        
+        // 简化为直接隐藏，避免位移后下次无法再次显示的问题
+        this.killRankPanelNode.active = false;
+        this.killRankPanelVisible = false;
+    }
+    
+    /**
+     * 创建杀敌排行榜卷轴面板节点
+     */
+    private createKillRankPanel(): Node | null {
+        const canvas = find('Canvas');
+        if (!canvas) {
+            console.warn('[GameManager] createKillRankPanel: Canvas not found');
+            return null;
+        }
+        
+        const panelWidth = 520;
+        const panelHeight = 720; // 原高度基础上拉高 200 像素
+        
+        const panelNode = new Node('KillRankPanel');
+        panelNode.setParent(canvas);
+        
+        const uiTrans = panelNode.addComponent(UITransform);
+        uiTrans.setContentSize(panelWidth, panelHeight);
+        // 居中显示卷轴，整体向上移动 350 像素
+        uiTrans.setAnchorPoint(0.5, 0.5);
+        panelNode.setPosition(0, 390, 0);
+        
+        // 卷轴背景（上圆下圆 + 中间矩形，偏 parchment 风格）
+        const g = panelNode.addComponent(Graphics);
+        const bgColor = new Color(245, 230, 200, 240);
+        const borderColor = new Color(180, 140, 80, 255);
+        const radius = 24;
+        const h = panelHeight;
+        const w = panelWidth;
+        
+        g.fillColor = bgColor;
+        g.roundRect(-w / 2, -h, w, h, radius);
+        g.fill();
+        g.lineWidth = 4;
+        g.strokeColor = borderColor;
+        g.roundRect(-w / 2, -h, w, h, radius);
+        g.stroke();
+        
+        // 标题：指挥官贡献榜
+        const titleNode = new Node('KillRankTitle');
+        titleNode.setParent(panelNode);
+        const titleLabel = titleNode.addComponent(Label);
+        titleLabel.string = '指挥官贡献榜';
+        titleLabel.fontSize = 30;
+        titleLabel.color = new Color(255, 255, 255, 255);
+        titleLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        titleLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        // 棕色描边
+        titleLabel.enableOutline = true;
+        titleLabel.outlineColor = new Color(120, 80, 20, 255);
+        titleLabel.outlineWidth = 3;
+        const titleTrans = titleNode.addComponent(UITransform);
+        titleTrans.setContentSize(panelWidth, 40);
+        titleNode.setPosition(0, -50, 0);
+        
+        // 排行内容容器
+        const listNode = new Node('KillRankList');
+        listNode.setParent(panelNode);
+        const listTrans = listNode.addComponent(UITransform);
+        listTrans.setContentSize(panelWidth - 40, panelHeight - 200);
+        listTrans.setAnchorPoint(0.5, 1);
+        listNode.setPosition(0, -90, 0);
+        
+        // 底部感谢语
+        const footerNode = new Node('KillRankFooter');
+        footerNode.setParent(panelNode);
+        const footerLabel = footerNode.addComponent(Label);
+        footerLabel.string = '感谢指挥官们为守护古树防线而做出的卓越贡献';
+        footerLabel.fontSize = 22;
+        footerLabel.color = new Color(255, 255, 255, 255);
+        footerLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        footerLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        // 金色描边
+        footerLabel.enableOutline = true;
+        footerLabel.outlineColor = new Color(200, 160, 60, 255);
+        footerLabel.outlineWidth = 2;
+        const footerTrans = footerNode.addComponent(UITransform);
+        footerTrans.setContentSize(panelWidth - 40, 40);
+        // 保持在卷轴最下方居中（相对原位置再向下移动 300 像素）
+        footerNode.setPosition(0, -panelHeight / 2 - 280, 0);
+        
+        return panelNode;
+    }
+    
+    /**
+     * 从服务器拉取杀敌排行榜前十并填充卷轴
+     */
+    private async fetchKillLeaderboard() {
+        const url = 'https://www.egoistcookie.top/api/analytics/leaderboard/kill-top?limit=10';
+        
+        return new Promise<void>((resolve) => {
+            const xhr = new XMLHttpRequest();
+            xhr.timeout = 5000;
+            
+            xhr.onreadystatechange = () => {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        try {
+                            const resp = JSON.parse(xhr.responseText);
+                            if (resp && resp.success && Array.isArray(resp.data)) {
+                                this.populateKillRankPanel(resp.data);
+                            }
+                        } catch (e) {
+                            console.error('[GameManager] 解析杀敌排行榜响应失败:', e);
+                        }
+                    } else {
+                        console.warn('[GameManager] 请求杀敌排行榜失败:', xhr.status);
+                    }
+                    resolve();
+                }
+            };
+            
+            xhr.onerror = () => {
+                console.error('[GameManager] 请求杀敌排行榜网络错误');
+                resolve();
+            };
+            xhr.ontimeout = () => {
+                console.error('[GameManager] 请求杀敌排行榜超时');
+                resolve();
+            };
+            
+            xhr.open('GET', url, true);
+            xhr.send();
+        });
+    }
+    
+    /**
+     * 将排行榜数据渲染到卷轴面板
+     */
+    private populateKillRankPanel(rows: any[]) {
+        if (!this.killRankPanelNode || !this.killRankPanelNode.isValid) return;
+        const listNode = this.killRankPanelNode.getChildByName('KillRankList');
+        if (!listNode) return;
+        
+        // 清理旧内容
+        const children = [...listNode.children];
+        for (const c of children) {
+            c.destroy();
+        }
+        
+        const entryHeight = 40;
+        let y = -20;
+        
+        for (let i = 0; i < rows.length && i < 10; i++) {
+            const row = rows[i];
+            const rank = i + 1;
+            const playerId = row.player_id || '';
+            const hasName = !!row.player_name;
+            const displayName = hasName
+                ? row.player_name
+                : (playerId.length > 4 ? playerId.slice(-4) : playerId || '未知指挥官');
+            const totalKills = row.total_kills || 0;
+            const maxLevel = row.max_level || 0;
+            const avatar = row.player_avatar || '';
+            
+            const entryNode = new Node(`Entry_${rank}`);
+            entryNode.setParent(listNode);
+            const entryTrans = entryNode.addComponent(UITransform);
+            entryTrans.setContentSize(listNode.getComponent(UITransform)!.width, entryHeight);
+            entryTrans.setAnchorPoint(0.5, 1);
+            entryNode.setPosition(0, y, 0);
+            y -= entryHeight + 4;
+            
+            // 背景
+            const g = entryNode.addComponent(Graphics);
+            let bgColor = new Color(255, 255, 255, 30);
+            if (rank === 1) bgColor = new Color(255, 215, 0, 60);       // 金
+            else if (rank === 2) bgColor = new Color(205, 127, 50, 60); // 铜
+            else if (rank === 3) bgColor = new Color(192, 192, 192, 60); // 银
+            g.fillColor = bgColor;
+            g.roundRect(-entryTrans.width / 2, -entryHeight, entryTrans.width, entryHeight - 4, 10);
+            g.fill();
+            
+            // 头像（小圆）
+            const avatarNode = new Node('Avatar');
+            avatarNode.setParent(entryNode);
+            const avatarTrans = avatarNode.addComponent(UITransform);
+            avatarTrans.setContentSize(32, 32);
+            avatarTrans.setAnchorPoint(0.5, 0.5);
+            avatarNode.setPosition(-entryTrans.width / 2 + 26, -entryHeight / 2, 0);
+            // 背景圆：作为无头像时的占位
+            const avatarBgG = avatarNode.addComponent(Graphics);
+            avatarBgG.fillColor = new Color(80, 80, 80, 255);
+            avatarBgG.circle(0, 0, 16);
+            avatarBgG.fill();
+            // 实际头像 Sprite 放在子节点，确保在背景之上
+            if (avatar && avatar.startsWith('data:image')) {
+                const avatarImgNode = new Node('AvatarImage');
+                avatarImgNode.setParent(avatarNode);
+                const avatarImgTrans = avatarImgNode.addComponent(UITransform);
+                avatarImgTrans.setContentSize(32, 32);
+                avatarImgTrans.setAnchorPoint(0.5, 0.5);
+                avatarImgNode.setPosition(0, 0, 0);
+                const avatarSprite = avatarImgNode.addComponent(Sprite);
+                avatarSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+                this.loadSpriteFromBase64(avatar, avatarSprite);
+            }
+            
+            // 文本节点
+            const textNode = new Node('Text');
+            textNode.setParent(entryNode);
+            const textLabel = textNode.addComponent(Label);
+            textLabel.string = `${rank}. ${displayName}  杀敌 ${totalKills}  最大通关 ${maxLevel}`;
+            textLabel.fontSize = 18;
+            textLabel.color = new Color(255, 255, 255, 255);
+            textLabel.enableOutline = true;
+            
+            if (rank === 1) {
+                // 金边白字
+                textLabel.outlineColor = new Color(255, 215, 0, 255);
+                textLabel.outlineWidth = 2;
+            } else if (rank === 2) {
+                // 铜色边白字
+                textLabel.outlineColor = new Color(205, 127, 50, 255);
+                textLabel.outlineWidth = 2;
+            } else if (rank === 3) {
+                // 银色边白字
+                textLabel.outlineColor = new Color(192, 192, 192, 255);
+                textLabel.outlineWidth = 2;
+            } else {
+                // 黑边白字
+                textLabel.outlineColor = new Color(0, 0, 0, 255);
+                textLabel.outlineWidth = 2;
+            }
+            
+            textLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
+            textLabel.verticalAlign = Label.VerticalAlign.CENTER;
+            const textTrans = textNode.addComponent(UITransform);
+            textTrans.setContentSize(entryTrans.width - 80, entryHeight);
+            textTrans.setAnchorPoint(0, 0.5);
+            textNode.setPosition(-entryTrans.width / 2 + 48, -entryHeight / 2, 0);
         }
     }
     
@@ -1799,14 +2180,30 @@ export class GameManager extends Component {
         titleTransform.setContentSize(500, 40);
         titleNode.setPosition(0, 150, 0);
         
-        // 头像显示区域
+        // 头像显示区域（带圆形遮罩）
         const avatarDisplayNode = new Node('AvatarDisplay');
         avatarDisplayNode.setParent(container);
         const avatarDisplayTransform = avatarDisplayNode.addComponent(UITransform);
         avatarDisplayTransform.setContentSize(100, 100);
         avatarDisplayTransform.setAnchorPoint(0.5, 0.5);
         avatarDisplayNode.setPosition(0, 50, 0);
-        const avatarSprite = avatarDisplayNode.addComponent(Sprite);
+        // 添加圆形遮罩和背景
+        const avatarMask = avatarDisplayNode.addComponent(Mask);
+        const ellipseType = (Mask.Type as any).ELLIPSE;
+        const rectType = (Mask.Type as any).RECT;
+        avatarMask.type = ellipseType !== undefined ? ellipseType : rectType;
+        const avatarBgG = avatarDisplayNode.addComponent(Graphics);
+        avatarBgG.fillColor = new Color(80, 80, 80, 255);
+        avatarBgG.circle(0, 0, 50);
+        avatarBgG.fill();
+        // 实际头像图片节点（被遮罩裁剪）
+        const avatarImageNode = new Node('AvatarImage');
+        avatarImageNode.setParent(avatarDisplayNode);
+        const avatarImageTrans = avatarImageNode.addComponent(UITransform);
+        avatarImageTrans.setContentSize(100, 100);
+        avatarImageTrans.setAnchorPoint(0.5, 0.5);
+        avatarImageNode.setPosition(0, 0, 0);
+        const avatarSprite = avatarImageNode.addComponent(Sprite);
         this.playerProfilePopup.avatarSprite = avatarSprite;
         
         // 上传头像按钮
@@ -2016,31 +2413,77 @@ export class GameManager extends Component {
     private loadAvatarFromBase64(base64: string) {
         if (!this.avatarSprite || !this.avatarNode) return;
         
-        // 简化处理：用Graphics绘制一个彩色圆圈表示已设置头像
-        // 实际项目中应该：
-        // 1. 将Base64图片上传到服务器，获取URL
-        // 2. 使用resources.load或assetManager加载图片资源
-        // 3. 创建SpriteFrame并设置到Sprite
-        
-        const graphics = this.avatarNode.getComponent(Graphics);
-        if (graphics) {
-            graphics.clear();
-            // 用不同颜色表示已设置头像（实际应该显示图片）
-            graphics.fillColor = new Color(100, 150, 200, 255);
-            graphics.circle(0, 0, 30);
-            graphics.fill();
-            graphics.lineWidth = 2;
-            graphics.strokeColor = new Color(150, 200, 255, 255);
-            graphics.circle(0, 0, 30);
-            graphics.stroke();
+        // 仅在浏览器环境下可用
+        if (typeof Image === 'undefined') {
+            console.warn('[GameManager] 当前环境不支持 Image 对象，无法从Base64加载头像');
+            return;
         }
         
-        // 清空SpriteFrame（因为暂时无法从Base64直接创建）
-        if (this.avatarSprite) {
-            this.avatarSprite.spriteFrame = null;
+        const img = new Image();
+        img.onload = () => {
+            try {
+                const imageAsset = new ImageAsset(img);
+                const texture = new Texture2D();
+                texture.image = imageAsset;
+                
+                const spriteFrame = new SpriteFrame();
+                spriteFrame.texture = texture;
+                
+                this.avatarSprite.spriteFrame = spriteFrame;
+                
+                // 清理占位用的 Graphics（如果有）
+                const graphics = this.avatarNode!.getComponent(Graphics);
+                if (graphics) {
+                    graphics.clear();
+                }
+                
+                console.log('[GameManager] 已从Base64加载并显示头像');
+            } catch (e) {
+                console.error('[GameManager] 从Base64创建头像失败:', e);
+            }
+        };
+        img.onerror = (err) => {
+            console.error('[GameManager] 加载Base64头像失败:', err);
+        };
+        img.src = base64;
+    }
+    
+    /**
+     * 通用：从Base64加载图片到指定 Sprite（用于排行榜头像等）
+     */
+    private loadSpriteFromBase64(base64: string, sprite: Sprite) {
+        if (!sprite) return;
+        if (typeof Image === 'undefined') {
+            console.warn('[GameManager] 当前环境不支持 Image 对象，无法从Base64加载Sprite');
+            return;
         }
         
-        console.log('[GameManager] 头像Base64已保存，实际显示需要服务器URL支持');
+        const img = new Image();
+        img.onload = () => {
+            try {
+                const imageAsset = new ImageAsset(img);
+                const texture = new Texture2D();
+                texture.image = imageAsset;
+                
+                const spriteFrame = new SpriteFrame();
+                spriteFrame.texture = texture;
+                
+                sprite.spriteFrame = spriteFrame;
+            } catch (e) {
+                console.error('[GameManager] 从Base64创建Sprite失败:', e);
+            }
+        };
+        img.onerror = (err) => {
+            console.error('[GameManager] 加载Base64 Sprite 失败:', err);
+        };
+        img.src = base64;
+    }
+
+    /**
+     * 提供给 UIManager 等外部调用：强制关闭杀敌排行榜
+     */
+    public hideKillRankPanelExternally() {
+        this.hideKillRankPanel();
     }
     
     /**
@@ -2091,6 +2534,47 @@ export class GameManager extends Component {
             lbl.color = color;
         };
 
+        // 从本地缓存加载上一次成功的杀敌数/百分比（仅加载一次）
+        const loadKillRankCacheIfNeeded = () => {
+            if (this.hasKillRankCache) return;
+            try {
+                const raw = sys.localStorage.getItem(this.KILL_RANK_CACHE_KEY);
+                if (raw) {
+                    const obj = JSON.parse(raw);
+                    if (typeof obj.kills === 'number' && typeof obj.surpassedPercent === 'number') {
+                        this.lastKillRankKills = obj.kills;
+                        this.lastKillRankSurpassedPercent = obj.surpassedPercent;
+                        this.hasKillRankCache = true;
+                    }
+                }
+            } catch (e) {
+                console.warn('[KillRank] 读取本地缓存失败:', e);
+            }
+        };
+
+        const formatKillRankTextFromCache = () => {
+            if (!this.hasKillRankCache) return '杀敌:0  超越0%的指挥官';
+            return `杀敌:${this.lastKillRankKills}  超越${this.lastKillRankSurpassedPercent.toFixed(1)}%的指挥官`;
+        };
+
+        const saveKillRankCache = (kills: number, surpassedPercent: number) => {
+            this.lastKillRankKills = kills;
+            this.lastKillRankSurpassedPercent = surpassedPercent;
+            this.hasKillRankCache = true;
+            try {
+                sys.localStorage.setItem(
+                    this.KILL_RANK_CACHE_KEY,
+                    JSON.stringify({ kills, surpassedPercent })
+                );
+            } catch (e) {
+                console.warn('[KillRank] 写入本地缓存失败:', e);
+            }
+        };
+
+        // 先加载缓存，并立即用缓存填充一版文字，避免出现 "--"
+        loadKillRankCacheIfNeeded();
+        setKillRankTextSafe(formatKillRankTextFromCache(), new Color(255, 255, 255, 255));
+
         let playerId = '';
         try {
             playerId = sys.localStorage.getItem('player_id') || '';
@@ -2101,7 +2585,8 @@ export class GameManager extends Component {
         if (!playerId) {
             // 没有 player_id：通常是 AnalyticsManager 没挂载/未初始化
             console.warn('[KillRank] player_id 为空：可能未挂载/未初始化 AnalyticsManager，或 localStorage 读失败');
-            setKillRankTextSafe('杀敌:--  超越--的玩家', new Color(200, 200, 200, 255));
+            // 没有playerId时也优先使用缓存
+            setKillRankTextSafe(formatKillRankTextFromCache(), new Color(200, 200, 200, 255));
             return;
         }
 
@@ -2144,7 +2629,8 @@ export class GameManager extends Component {
 
             if (xhr.status !== 200) {
                 console.warn('[KillRank] HTTP 非200，返回占位文案，responseText(截断):', (xhr.responseText || '').slice(0, 200));
-                setKillRankTextSafe('杀敌:--  超越--的玩家', new Color(200, 200, 200, 255));
+                // 请求失败时保持/恢复上一次成功的值
+                setKillRankTextSafe(formatKillRankTextFromCache(), new Color(200, 200, 200, 255));
                 return;
             }
             try {
@@ -2153,7 +2639,7 @@ export class GameManager extends Component {
                 const resp = JSON.parse(xhr.responseText || '{}');
                 if (!resp || !resp.success || !resp.data) {
                     console.warn('[KillRank] JSON 结构不符合预期:', resp);
-                    setKillRankTextSafe('杀敌:--  超越--的玩家', new Color(200, 200, 200, 255));
+                    setKillRankTextSafe(formatKillRankTextFromCache(), new Color(200, 200, 200, 255));
                     return;
                 }
 
@@ -2171,23 +2657,25 @@ export class GameManager extends Component {
 
                 const kills = toNumber(d.total_kills, 0);
                 const surpassedPercent = toNumber(d.surpassed_percent, 0);
+                // 持久化缓存
+                saveKillRankCache(kills, surpassedPercent);
 
-                // 文案：杀敌数 + 超越 x% 的玩家
-                setKillRankTextSafe(`杀敌:${kills}  超越${surpassedPercent.toFixed(1)}%的玩家`, new Color(255, 255, 255, 255));
+                // 文案：杀敌数 + 超越 x% 的指挥官
+                setKillRankTextSafe(`杀敌:${kills}  超越${surpassedPercent.toFixed(1)}%的指挥官`, new Color(255, 255, 255, 255));
             } catch (e) {
                 console.error('[KillRank] 解析 JSON 失败:', e);
-                setKillRankTextSafe('杀敌:--  超越--的玩家', new Color(200, 200, 200, 255));
+                setKillRankTextSafe(formatKillRankTextFromCache(), new Color(200, 200, 200, 255));
             }
         };
         xhr.onerror = () => {
             this.killRankFetchInFlight = false;
             console.error('[KillRank] xhr.onerror 网络错误，url=', url);
-            setKillRankTextSafe('杀敌:--  超越--的玩家', new Color(200, 200, 200, 255));
+            setKillRankTextSafe(formatKillRankTextFromCache(), new Color(200, 200, 200, 255));
         };
         xhr.ontimeout = () => {
             this.killRankFetchInFlight = false;
             console.error('[KillRank] xhr.ontimeout 请求超时(3s)，url=', url);
-            setKillRankTextSafe('杀敌:--  超越--的玩家', new Color(200, 200, 200, 255));
+            setKillRankTextSafe(formatKillRankTextFromCache(), new Color(200, 200, 200, 255));
         };
         xhr.open('GET', url, true);
         xhr.send();

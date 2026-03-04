@@ -1,4 +1,6 @@
-import { _decorator, Component, Node, Label, Button, Sprite, UITransform, Color, Graphics, find, sys } from 'cc';
+import { _decorator, Component, Node, Label, Button, Sprite, UITransform, Color, Graphics, find, sys, Texture2D, ImageAsset, SpriteFrame, Mask } from 'cc';
+// 微信小游戏全局对象声明（避免 TypeScript 报错）
+declare const wx: any;
 const { ccclass, property } = _decorator;
 
 /**
@@ -126,14 +128,79 @@ export class PlayerProfilePopup extends Component {
      */
     private onUploadAvatarClick() {
         console.log('[PlayerProfilePopup] 上传头像按钮被点击');
-        // 创建隐藏的文件输入元素
-        const input = document.createElement('input');
+
+        // 1. 微信小游戏环境：使用 wx.chooseImage + FileSystemManager 读取为 Base64
+        if (sys.platform === sys.Platform.WECHAT_GAME && typeof wx !== 'undefined' && wx.chooseImage) {
+            console.log('[PlayerProfilePopup] 使用 wx.chooseImage 选择头像');
+            wx.chooseImage({
+                count: 1,
+                sizeType: ['compressed'],
+                sourceType: ['album', 'camera'],
+                success: (res: any) => {
+                    const filePath = res.tempFilePaths && res.tempFilePaths[0];
+                    if (!filePath) {
+                        console.warn('[PlayerProfilePopup] wx.chooseImage 未返回有效文件路径');
+                        return;
+                    }
+                    const fs = wx.getFileSystemManager && wx.getFileSystemManager();
+                    if (!fs) {
+                        console.warn('[PlayerProfilePopup] wx.getFileSystemManager 不可用，无法读取头像文件');
+                        return;
+                    }
+                    fs.readFile({
+                        filePath,
+                        encoding: 'base64',
+                        success: (r: any) => {
+                            const base64Data = r.data;
+                            if (!base64Data) {
+                                console.warn('[PlayerProfilePopup] 读取头像文件为空');
+                                return;
+                            }
+                            // 默认使用 png 前缀，足够在前后端统一解析
+                            this.currentAvatar = `data:image/png;base64,${base64Data}`;
+                            console.log('[PlayerProfilePopup] 已从微信小游戏读取头像并转换为Base64');
+                            this.updateAvatarDisplay();
+                        },
+                        fail: (err: any) => {
+                            console.error('[PlayerProfilePopup] 读取微信头像文件失败:', err);
+                        }
+                    });
+                },
+                fail: (err: any) => {
+                    const msg = err && (err.errMsg || err.errorMessage)
+                        ? (err.errMsg || err.errorMessage)
+                        : JSON.stringify(err || {});
+                    console.warn('[PlayerProfilePopup] wx.chooseImage 失败或被取消:', msg);
+                    // 尝试给玩家一个友好提示（例如隐私声明未配置/未同意）
+                    try {
+                        if (wx && wx.showToast) {
+                            wx.showToast({
+                                title: '无法打开相册，请在微信隐私设置中允许使用头像',
+                                icon: 'none',
+                                duration: 2000
+                            });
+                        }
+                    } catch (e) {
+                        // ignore
+                    }
+                }
+            });
+            return;
+        }
+
+        // 2. 浏览器环境：使用隐藏的 file input
+        if (typeof document === 'undefined' || !document.createElement) {
+            console.warn('[PlayerProfilePopup] 当前运行环境不支持本地文件选择，头像上传已禁用');
+            return;
+        }
+        
+        const input: any = document.createElement('input');
         input.type = 'file';
         input.accept = 'image/*';
         input.style.display = 'none';
         
         input.onchange = (e: any) => {
-            const file = e.target.files[0];
+            const file = e.target.files && e.target.files[0];
             if (!file) return;
             
             // 验证文件大小（限制2MB）
@@ -153,7 +220,11 @@ export class PlayerProfilePopup extends Component {
         };
         
         document.body.appendChild(input);
-        input.click();
+        if (typeof input.click === 'function') {
+            input.click();
+        } else {
+            console.warn('[PlayerProfilePopup] input.click 不可用，无法弹出文件选择框');
+        }
         document.body.removeChild(input);
     }
     
@@ -164,18 +235,9 @@ export class PlayerProfilePopup extends Component {
         if (!this.avatarSprite) return;
         
         if (this.currentAvatar) {
-            // 如果是Base64，直接使用
+            // 如果是Base64，转换为真实图片显示
             if (this.currentAvatar.startsWith('data:image')) {
-                // 需要将Base64转换为SpriteFrame
-                // 这里简化处理，实际需要创建Texture2D和SpriteFrame
-                // 暂时用Graphics绘制一个占位
-                const graphics = this.avatarSprite.node.getComponent(Graphics);
-                if (graphics) {
-                    graphics.clear();
-                    graphics.fillColor = new Color(100, 150, 200, 255);
-                    graphics.circle(0, 0, 30);
-                    graphics.fill();
-                }
+                this.loadAvatarFromBase64(this.currentAvatar);
             }
         } else {
             // 显示默认头像
@@ -187,6 +249,45 @@ export class PlayerProfilePopup extends Component {
                 graphics.fill();
             }
         }
+    }
+    
+    /**
+     * 从Base64字符串加载头像到Sprite（浏览器环境）
+     */
+    private loadAvatarFromBase64(base64: string) {
+        if (!this.avatarSprite) return;
+        
+        // 仅在浏览器环境下可用
+        if (typeof Image === 'undefined') {
+            console.warn('[PlayerProfilePopup] 当前环境不支持 Image 对象，无法从Base64加载头像');
+            return;
+        }
+        
+        const img = new Image();
+        img.onload = () => {
+            try {
+                const imageAsset = new ImageAsset(img);
+                const texture = new Texture2D();
+                texture.image = imageAsset;
+                
+                const spriteFrame = new SpriteFrame();
+                spriteFrame.texture = texture;
+                
+                this.avatarSprite.spriteFrame = spriteFrame;
+                
+                // 清理占位用的 Graphics（如果有）
+                const graphics = this.avatarSprite.node.getComponent(Graphics);
+                if (graphics) {
+                    graphics.clear();
+                }
+            } catch (e) {
+                console.error('[PlayerProfilePopup] 从Base64创建头像失败:', e);
+            }
+        };
+        img.onerror = (err) => {
+            console.error('[PlayerProfilePopup] 加载Base64头像失败:', err);
+        };
+        img.src = base64;
     }
     
     /**

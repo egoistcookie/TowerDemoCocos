@@ -1118,6 +1118,11 @@ export class UIManager extends Component {
         const isTalent = page === 'talent';
         const isSettings = page === 'settings';
 
+        // 切到天赋或设置页时，关闭首页的杀敌排行榜卷轴
+        if (!isGame && this.gameManager && (this.gameManager as any).hideKillRankPanelExternally) {
+            (this.gameManager as any).hideKillRankPanelExternally();
+        }
+
         // 保持通用背景始终可见
         if (this.backgroundNode) {
             this.backgroundNode.active = true;
