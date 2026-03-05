@@ -158,6 +158,7 @@ export class TowerBuilder extends Component {
     private stoneWallGridPanelComponent: StoneWallGridPanel = null!; // 石墙网格面板组件
     private initialStoneWallsPlaced: boolean = false; // 是否已生成初始石墙
     private initialWatchTowersPlaced: boolean = false; // 是否已生成初始哨塔
+    private initialWarAncientTreePlaced: boolean = false; // 第一关是否已生成初始弓箭手小屋
     private hasShownDragTutorialInLevel1: boolean = false; // 第一关是否已显示过拖动建造提示
     
     // 建筑物拖拽相关
@@ -350,6 +351,7 @@ export class TowerBuilder extends Component {
     public resetForRestart() {
         this.initialStoneWallsPlaced = false;
         this.initialWatchTowersPlaced = false;
+        this.initialWarAncientTreePlaced = false;
 
         // 重置建筑网格占用状态
         if (!this.gridPanel) {
@@ -1014,7 +1016,7 @@ export class TowerBuilder extends Component {
         }
 
         // 第一关：在首次打开建造面板时，提示拖动候选兵营到网格中建造
-        this.showDragTutorialIfNeeded();
+        //this.showDragTutorialIfNeeded();
     }
 
     /**
@@ -1491,7 +1493,7 @@ export class TowerBuilder extends Component {
     /**
      * 建造战争古树
      */
-    buildWarAncientTree(worldPosition: Vec3) {
+    buildWarAncientTree(worldPosition: Vec3, skipCost: boolean = false) {
         if (!this.warAncientTreePrefab) {
             return;
         }
@@ -1504,8 +1506,8 @@ export class TowerBuilder extends Component {
         // 从配置文件中获取建造成本（考虑单位卡片强化减少）
         const actualCost = this.getActualBuildCost('WarAncientTree');
         
-        // 消耗金币
-        if (this.gameManager) {
+        // 消耗金币（初始化赠送建筑可跳过扣费）
+        if (this.gameManager && !skipCost) {
             this.gameManager.spendGold(actualCost);
         }
 
@@ -2034,9 +2036,47 @@ export class TowerBuilder extends Component {
     }
 
     /**
+     * 第一关：在建筑物网格第三排第一个位置生成一个初始弓箭手小屋
+     * （向上移动一个建筑物网格：由原来的第二排 gridY = 1 调整为第三排 gridY = 2）
+     */
+    public spawnInitialWarAncientTreeForLevel1() {
+        if (this.initialWarAncientTreePlaced) {
+            return;
+        }
+
+        // 确保建筑物网格面板存在
+        if (!this.gridPanel) {
+            this.findGridPanel();
+        }
+        const panel = this.gridPanel;
+        if (!panel) {
+            return;
+        }
+
+        const gridX = 0;
+        const gridY = 2; // 第三排（从下往上数）
+
+        // 如果该格子已被占用，则不再生成，避免与后续逻辑冲突
+        if (panel.isGridOccupied(gridX, gridY)) {
+            return;
+        }
+
+        const worldPos = panel.gridToWorld(gridX, gridY);
+        if (!worldPos) {
+            return;
+        }
+
+        // 初始化赠送建筑：不消耗金币
+        this.buildWarAncientTree(worldPos, true);
+        this.initialWarAncientTreePlaced = true;
+    }
+
+    /**
      * 在石墙网格中随机生成指定数量的哨塔（仅在游戏开始时调用一次）
-     * 确保x坐标相差至少3格，避免太密集
-     * 不生成在最上层网格（y=9）
+     * 要求：
+     * - y轴坐标固定：哨塔占据石墙网格从上往下数第3、4个格子
+     *   （即以StoneWallGridPanel顶行为 gridY = gridHeight - 1，则底部格为 gridY = gridHeight - 4）
+     * - x轴坐标仍然随机，且之间保持最小间距
      */
     spawnInitialWatchTowers(count: number = 3) {
        //console.info('[TowerBuilder] spawnInitialWatchTowers: 开始生成初始哨塔，数量=', count);
@@ -2055,13 +2095,19 @@ export class TowerBuilder extends Component {
         }
        //console.info('[TowerBuilder] spawnInitialWatchTowers: 找到石墙网格面板，gridWidth=', panel.gridWidth, 'gridHeight=', panel.gridHeight);
 
-        // 排除最上层（y=9），在其他行中随机选择
-        // 哨塔占据两个网格高度，所以还需要排除倒数第二层（y=8），因为y=8时y+1=9会超出范围
-        const availableYs: number[] = [];
-        for (let y = 0; y < panel.gridHeight - 2; y++) { // 排除最上层（y=9）和倒数第二层（y=8）
-            availableYs.push(y);
+        // 计算固定的Y坐标：
+        // 顶行索引为 gridHeight - 1，从上往下第3、4行为：
+        //   第3行：gridHeight - 3
+        //   第4行：gridHeight - 4
+        // 哨塔底部格子为更靠下的那一行（第4行），即 baseY = gridHeight - 4
+        const baseY = panel.gridHeight - 4;
+        if (baseY < 0 || baseY + 1 >= panel.gridHeight) {
+            // 网格高度异常，直接返回，避免越界
+            return;
         }
-       //console.info('[TowerBuilder] spawnInitialWatchTowers: 可用y坐标范围=', availableYs);
+
+        // 只允许在这一行放置哨塔
+        const availableYs: number[] = [baseY];
 
         // 生成所有可能的x坐标
         const availableXs: number[] = [];
@@ -2086,7 +2132,7 @@ export class TowerBuilder extends Component {
         const minXDistance = 3; // x坐标最小间距
        //console.info('[TowerBuilder] spawnInitialWatchTowers: 开始尝试放置哨塔，最小x间距=', minXDistance);
 
-        // 尝试放置哨塔
+        // 尝试放置哨塔（Y固定，X随机）
         for (const y of availableYs) {
             if (placed >= count) break;
             

@@ -190,9 +190,9 @@ export class Role extends Component {
     private dialogLabel: Label | null = null; // 对话框文字标签
     private dialogTimer: number = 0; // 对话框显示计时器（用于控制显示时间和渐隐）
     private dialogIntervalTimer: number = 0; // 对话框间隔计时器（用于累计间隔时间）
-    private dialogInterval: number = 0; // 下次显示对话框的间隔时间（5-10秒随机）
-    private readonly DIALOG_MIN_INTERVAL: number = 5; // 最小间隔5秒
-    private readonly DIALOG_MAX_INTERVAL: number = 10; // 最大间隔10秒
+    private dialogInterval: number = 0; // 下次显示对话框的间隔时间（3-6秒随机，稍微提高口号频率）
+    private readonly DIALOG_MIN_INTERVAL: number = 3; // 最小间隔从 5 秒调整为 3 秒
+    private readonly DIALOG_MAX_INTERVAL: number = 6; // 最大间隔从 10 秒调整为 6 秒
     private readonly DIALOG_DURATION: number = 2; // 对话框显示持续时间2秒
     
     // 性能监控相关属性

@@ -537,9 +537,9 @@ export class UnitIntroPopup extends Component {
         if (this.gameManager) {
             this.gameManager.resumeGame();
             // 小精灵（unitId 为 Wisp）首次介绍框关闭后，在第一关触发新手教程
-            if (this.lastShownUnitType === 'Wisp') {
-                this.triggerBuildTutorialIfLevel1();
-            }
+            // if (this.lastShownUnitType === 'Wisp') {
+            //     this.triggerBuildTutorialIfLevel1();
+            // }
         }
 
         this.lastShownUnitType = '';

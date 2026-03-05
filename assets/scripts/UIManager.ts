@@ -79,6 +79,9 @@ export class UIManager extends Component {
     private otherBundle: any = null; // other bundle 引用
     private defaultBackgroundSprite: SpriteFrame | null = null; // 记录初始背景图，用于切回第一关
 
+    // 是否已执行过“首次自动开始第一关”的逻辑（避免重复触发）
+    private hasCheckedFirstRunAutoStart: boolean = false;
+
     start() {
         // 查找游戏管理器
         this.findGameManager();
@@ -98,6 +101,9 @@ export class UIManager extends Component {
                 if (passed && passed.length > 0) {
                     const maxPassed = Math.max(...passed);
                     this.currentLevel = Math.min(10, maxPassed + 1);
+                } else {
+                    // 首次进入游戏：本地无任何通关记录，默认从第1关开始
+                    this.currentLevel = 1;
                 }
             }
             // 初始化关卡显示和下一关按钮状态
@@ -113,6 +119,9 @@ export class UIManager extends Component {
                         console.warn('[UIManager.start] 加载分包背景资源失败，仍使用默认背景', err);
                     });
             }
+
+            // 首次进入游戏时，根据本地缓存自动开始第一关
+            this.checkAndAutoStartFirstLevel();
         });
 
         // 检查并自动创建countdownPopup
@@ -178,6 +187,91 @@ export class UIManager extends Component {
                 !isBgmOn ? 'BGM 开关关闭' :
                 skipBgmOnce ? 'skipBgmOnce = true' : '未知');
         }
+    }
+
+    /**
+     * 首次进入游戏时，根据本地缓存自动开始第一关
+     * 规则：
+     * - 本地无任何通关记录（passedLevels 为空或不存在）；
+     * - 且本地没有“已自动开始过”的标记；
+     * 则自动触发开始第一关，相当于玩家点了一次“开始游戏”按钮。
+     */
+    private checkAndAutoStartFirstLevel() {
+        if (this.hasCheckedFirstRunAutoStart) {
+            return;
+        }
+        this.hasCheckedFirstRunAutoStart = true;
+
+        try {
+            const flag = sys.localStorage.getItem('tower_first_run_auto_started');
+            if (flag === '1') {
+                // 已经自动开始过，不再重复触发
+                return;
+            }
+        } catch (e) {
+            console.warn('[UIManager.checkAndAutoStartFirstLevel] 读取本地标记失败:', e);
+        }
+
+        // 判定是否为“首次进入”：没有任何通关记录
+        let isFirstRun = true;
+        if (this.playerDataManager && this.playerDataManager.getPassedLevels) {
+            const passed = this.playerDataManager.getPassedLevels();
+            if (passed && passed.length > 0) {
+                isFirstRun = false;
+            }
+        }
+
+        if (!isFirstRun) {
+            return;
+        }
+
+        console.log('[UIManager.checkAndAutoStartFirstLevel] 检测为首次进入游戏，自动开始第一关');
+
+        // currentLevel 已在 loadData 后初始化为 1，这里直接模拟点击开始游戏
+        // 需要确保 BottomSelection / 开始按钮 已创建完毕，使用 scheduleOnce 延迟一帧执行
+        this.scheduleOnce(() => {
+            try {
+                // 通过已经绑定的开始游戏逻辑来启动游戏，避免重复写启动代码
+                if (this.startGameButtonNode && this.startGameButtonNode.isValid) {
+                    const btn = this.startGameButtonNode.getComponent(Button);
+                    if (btn && btn.clickEvents && btn.clickEvents.length > 0) {
+                        // 如果通过 Cocos 事件面板配置了 clickEvents，可以遍历触发
+                        btn.clickEvents.forEach((ev) => {
+                            if (ev && ev.target && ev.component && ev.handler && (ev.target as any)[ev.component] && typeof (ev.target as any)[ev.component][ev.handler] === 'function') {
+                                (ev.target as any)[ev.component][ev.handler].apply(ev.target, ev.customEventData ? [ev.customEventData] : []);
+                            }
+                        });
+                    } else {
+                        // 否则，直接复用我们在 createBottomSelectionUI 中配置的回调逻辑
+                        // 这里简单调用 setActivePage('game') 并隐藏底部三页签，再通知 GameManager 开始游戏
+                        this.setActivePage('game');
+                        const bottomSelectionNode = this.bottomSelectionNodeRef || find('Canvas/BottomSelection');
+                        if (bottomSelectionNode) {
+                            bottomSelectionNode.active = false;
+                        }
+                        // 同时隐藏签到按钮（签到宝箱），与上一关/下一关按钮保持一致：仅在首页关卡选择界面显示
+                        if (this.checkInButton && this.checkInButton.node && this.checkInButton.node.isValid) {
+                            this.checkInButton.node.active = false;
+                        }
+                        // 通知 GameManager 实际开始游戏
+                        this.findGameManager();
+                        const gm = this.gameManager as any;
+                        if (gm && gm.startGame) {
+                            gm.startGame(this.currentLevel || 1);
+                        }
+                    }
+                }
+
+                // 标记已自动开始过，后续不再重复自动触发
+                try {
+                    sys.localStorage.setItem('tower_first_run_auto_started', '1');
+                } catch (e) {
+                    console.warn('[UIManager.checkAndAutoStartFirstLevel] 写入本地标记失败:', e);
+                }
+            } catch (e) {
+                console.error('[UIManager.checkAndAutoStartFirstLevel] 自动开始第一关异常:', e);
+            }
+        }, 0.2);
     }
 
     /**
@@ -870,6 +964,11 @@ export class UIManager extends Component {
             
             // 1. 直接隐藏底部三页签，不依赖GameManager
             bottomSelectionNode.active = false;
+            
+            // 1.1 隐藏签到按钮（签到宝箱），逻辑同“上一关/下一关按钮”：只在首页关卡选择界面显示，进入战斗时隐藏
+            if (this.checkInButton && this.checkInButton.node && this.checkInButton.node.isValid) {
+                this.checkInButton.node.active = false;
+            }
             
             // 2. 强制显示水晶节点，不依赖GameManager
             const crystal = find('Canvas/Crystal');
@@ -2106,6 +2205,10 @@ export class UIManager extends Component {
                             }
                             
                             // 缓存加载的背景图片
+                            if (!this.backgroundSprites) {
+                                // 兼容性兜底：某些运行环境中私有 Map 字段可能被初始化为 null
+                                this.backgroundSprites = new Map<number, SpriteFrame>();
+                            }
                             this.backgroundSprites.set(level, spriteFrame);
                             console.log(`[UIManager] 成功加载分包资源: ${resourcePath} (关卡 ${level})`);
                             resolveItem();

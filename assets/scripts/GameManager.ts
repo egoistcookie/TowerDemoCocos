@@ -4194,63 +4194,63 @@ export class GameManager extends Component {
                                     loadPrefab('HunterHall', 6, totalSteps, (hunterHallPrefab) => {
                                         loadPrefab('SwordsmanHall', 7, totalSteps, (swordsmanHallPrefab) => {
                                             loadPrefab('Church', 8, totalSteps, (churchPrefab) => {
-                                                try {
-                                                    const towerBuilder = this.findComponentInScene('TowerBuilder') as any;
-                                                    if (towerBuilder) {
-                                                        if (stoneWallPrefab && typeof towerBuilder.setStoneWallPrefab === 'function') {
+                    try {
+                        const towerBuilder = this.findComponentInScene('TowerBuilder') as any;
+                        if (towerBuilder) {
+                            if (stoneWallPrefab && typeof towerBuilder.setStoneWallPrefab === 'function') {
                                                             //console.info('[GameManager] 将分包中的 StoneWall 预制体注入 TowerBuilder');
-                                                            towerBuilder.setStoneWallPrefab(stoneWallPrefab);
-                                                        }
-                                                        if (iceTowerPrefab && typeof towerBuilder.setIceTowerPrefab === 'function') {
+                                towerBuilder.setStoneWallPrefab(stoneWallPrefab);
+                            }
+                            if (iceTowerPrefab && typeof towerBuilder.setIceTowerPrefab === 'function') {
                                                             //console.info('[GameManager] 将分包中的 IceTower 预制体注入 TowerBuilder');
-                                                            towerBuilder.setIceTowerPrefab(iceTowerPrefab);
-                                                        }
-                                                        if (thunderTowerPrefab && typeof towerBuilder.setThunderTowerPrefab === 'function') {
+                                towerBuilder.setIceTowerPrefab(iceTowerPrefab);
+                            }
+                            if (thunderTowerPrefab && typeof towerBuilder.setThunderTowerPrefab === 'function') {
                                                             //console.info('[GameManager] 将分包中的 ThunderTower 预制体注入 TowerBuilder');
-                                                            towerBuilder.setThunderTowerPrefab(thunderTowerPrefab);
-                                                        }
-                                                        if (watchTowerPrefab && typeof towerBuilder.setWatchTowerPrefab === 'function') {
+                                towerBuilder.setThunderTowerPrefab(thunderTowerPrefab);
+                            }
+                            if (watchTowerPrefab && typeof towerBuilder.setWatchTowerPrefab === 'function') {
                                                             //console.info('[GameManager] 将分包中的 WatchTower 预制体注入 TowerBuilder');
-                                                            towerBuilder.setWatchTowerPrefab(watchTowerPrefab);
-                                                        }
-                                                        if (warAncientTreePrefab && typeof towerBuilder.setWarAncientTreePrefab === 'function') {
+                                towerBuilder.setWatchTowerPrefab(watchTowerPrefab);
+                            }
+                            if (warAncientTreePrefab && typeof towerBuilder.setWarAncientTreePrefab === 'function') {
                                                             //console.info('[GameManager] 将分包中的 WarAncientTree 预制体注入 TowerBuilder');
-                                                            towerBuilder.setWarAncientTreePrefab(warAncientTreePrefab);
-                                                        }
-                                                        if (hunterHallPrefab && typeof towerBuilder.setHunterHallPrefab === 'function') {
+                                towerBuilder.setWarAncientTreePrefab(warAncientTreePrefab);
+                            }
+                            if (hunterHallPrefab && typeof towerBuilder.setHunterHallPrefab === 'function') {
                                                             //console.info('[GameManager] 将分包中的 HunterHall 预制体注入 TowerBuilder');
-                                                            towerBuilder.setHunterHallPrefab(hunterHallPrefab);
-                                                        }
-                                                        if (swordsmanHallPrefab && typeof towerBuilder.setSwordsmanHallPrefab === 'function') {
+                                towerBuilder.setHunterHallPrefab(hunterHallPrefab);
+                            }
+                            if (swordsmanHallPrefab && typeof towerBuilder.setSwordsmanHallPrefab === 'function') {
                                                             //console.info('[GameManager] 将分包中的 SwordsmanHall 预制体注入 TowerBuilder');
-                                                            towerBuilder.setSwordsmanHallPrefab(swordsmanHallPrefab);
-                                                        }
-                                                        if (churchPrefab && typeof towerBuilder.setChurchPrefab === 'function') {
+                                towerBuilder.setSwordsmanHallPrefab(swordsmanHallPrefab);
+                            }
+                            if (churchPrefab && typeof towerBuilder.setChurchPrefab === 'function') {
                                                             //console.info('[GameManager] 将分包中的 Church 预制体注入 TowerBuilder');
-                                                            towerBuilder.setChurchPrefab(churchPrefab);
-                                                        }
-                                                        
+                                towerBuilder.setChurchPrefab(churchPrefab);
+                            }
+
                                                         // 所有预制体注入完成后，更新建筑类型列表
-                                                        if (typeof towerBuilder.refreshBuildingTypes === 'function') {
+                            if (typeof towerBuilder.refreshBuildingTypes === 'function') {
                                                             //console.info('[GameManager] 刷新建筑类型列表');
-                                                            towerBuilder.refreshBuildingTypes();
-                                                        }
-                                                    } else {
-                                                        console.warn('[GameManager] TowerBuilder 组件不存在，无法注入分包预制体');
-                                                    }
-                                                } catch (e) {
-                                                    console.error('[GameManager] 注入分包建筑预制体到 TowerBuilder 时出错:', e);
-                                                }
+                                towerBuilder.refreshBuildingTypes();
+                            }
+                        } else {
+                            console.warn('[GameManager] TowerBuilder 组件不存在，无法注入分包预制体');
+                        }
+                    } catch (e) {
+                        console.error('[GameManager] 注入分包建筑预制体到 TowerBuilder 时出错:', e);
+                    }
 
-                                                this.prefabsSubLoaded = true;
-                                                this.isLoadingPrefabsSub = false;
+                    this.prefabsSubLoaded = true;
+                    this.isLoadingPrefabsSub = false;
 
-                                                // 确保进度条拉满，然后关闭加载界面
-                                                this.updateLoadingProgress(1);
-                                                this.hideLoadingOverlay();
+                    // 确保进度条拉满，然后关闭加载界面
+                    this.updateLoadingProgress(1);
+                    this.hideLoadingOverlay();
 
                                                 // 分包加载完毕后，再次调用开始逻辑（这次会直接走内部实现）
-                                                this._startGameInternal();
+                    this._startGameInternal();
                                             });
                                         });
                                     });
@@ -4292,8 +4292,8 @@ export class GameManager extends Component {
         }
         
         // 开始记录埋点数据（如果可用）
+        let level = 1;
         if (this.analyticsManager) {
-            let level = 1;
             if (this.uiManager && (this.uiManager as any).getCurrentLevel) {
                 const currentLevel = (this.uiManager as any).getCurrentLevel();
                 if (typeof currentLevel === 'number' && !isNaN(currentLevel)) {
@@ -4322,7 +4322,7 @@ export class GameManager extends Component {
                 }, 0.2);
             }
 
-            // 开局在石墙网格顶行生成初始石墙
+            // 开局在石墙网格顶行生成初始石墙与哨塔
             // 注意：这里传入的是组件名 'TowerBuilder'，而不是节点路径
             const towerBuilder = this.findComponentInScene('TowerBuilder') as any;
             if (towerBuilder && towerBuilder.spawnInitialStoneWalls) {
@@ -4336,8 +4336,13 @@ export class GameManager extends Component {
                         this.scheduleOnce(() => {
                             towerBuilder.spawnInitialWatchTowers(3);
                         }, 0.1); // 延迟0.1秒，确保所有组件初始化完成
-                    } else {
-                        //console.info('[GameManager] TowerBuilder没有spawnInitialWatchTowers方法');
+                    }
+
+                    // 第一关额外生成一个初始弓箭手小屋：建筑物网格第二排第一个位置
+                    if (level === 1 && towerBuilder.spawnInitialWarAncientTreeForLevel1) {
+                        this.scheduleOnce(() => {
+                            towerBuilder.spawnInitialWarAncientTreeForLevel1();
+                        }, 0.05);
                     }
                 }, 0);
             }

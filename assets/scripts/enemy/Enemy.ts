@@ -530,6 +530,9 @@ export class Enemy extends Component {
     }
 
     update(deltaTime: number) {
+        // 先更新敌人的战争口号/对话框系统（与我方单位一致，持续在战斗中随机喊话）
+        this.updateDialogSystem(deltaTime);
+
         // 简化版索敌和攻击逻辑（参考 Boss），优先使用该逻辑
         if (this.runSimpleAI(deltaTime)) {
             return;
