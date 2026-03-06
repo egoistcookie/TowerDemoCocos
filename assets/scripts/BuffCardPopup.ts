@@ -67,6 +67,7 @@ export class BuffCardPopup extends Component {
     private rerollButtonNode: Node = null!; // 再抽一次按钮节点
     private getAllButtonNode: Node = null!; // 全部获取按钮节点
     private videoAd: any = null; // 微信小游戏激励视频广告实例
+    private videoAdCloseHandler: ((res: any) => void) | null = null; // 广告关闭事件处理器
     
     start() {
         // 查找GameManager
@@ -352,6 +353,48 @@ export class BuffCardPopup extends Component {
             return;
         }
         
+        // 使用标志位防止重复执行回调
+        let isCallbackExecuted = false;
+        const executeCallback = (success: boolean) => {
+            if (isCallbackExecuted) {
+                console.warn('[BuffCardPopup] 广告回调已被执行，忽略重复调用');
+                return;
+            }
+            isCallbackExecuted = true;
+            
+            if (success) {
+                console.log('[BuffCardPopup] 激励视频广告观看完成');
+                onSuccess();
+            } else {
+                console.log('[BuffCardPopup] 激励视频广告中途退出');
+                if (onFail) {
+                    onFail();
+                }
+            }
+        };
+        
+        // 移除之前的 onClose 监听器（如果存在）
+        if (this.videoAdCloseHandler) {
+            // 注意：微信小游戏 API 可能不支持 offClose，但我们可以尝试
+            if (this.videoAd.offClose && typeof this.videoAd.offClose === 'function') {
+                this.videoAd.offClose(this.videoAdCloseHandler);
+            }
+        }
+        
+        // 创建新的关闭事件处理器
+        this.videoAdCloseHandler = (res: any) => {
+            if (res && res.isEnded) {
+                // 正常播放结束，可以下发游戏奖励
+                executeCallback(true);
+            } else {
+                // 播放中途退出，不下发游戏奖励
+                executeCallback(false);
+            }
+        };
+        
+        // 监听用户点击关闭广告按钮的事件（在显示前绑定）
+        this.videoAd.onClose(this.videoAdCloseHandler);
+        
         // 显示广告
         this.videoAd.show()
             .catch(() => {
@@ -363,29 +406,17 @@ export class BuffCardPopup extends Component {
                     })
                     .catch((err: any) => {
                         console.error('[BuffCardPopup] 激励视频广告显示失败', err);
-                        if (onFail) {
-                            onFail();
-                        } else {
-                            // 默认降级处理：直接执行成功回调
-                            onSuccess();
+                        if (!isCallbackExecuted) {
+                            isCallbackExecuted = true;
+                            if (onFail) {
+                                onFail();
+                            } else {
+                                // 默认降级处理：直接执行成功回调
+                                onSuccess();
+                            }
                         }
                     });
             });
-        
-        // 监听用户点击关闭广告按钮的事件
-        this.videoAd.onClose((res: any) => {
-            if (res && res.isEnded) {
-                // 正常播放结束，可以下发游戏奖励
-                console.log('[BuffCardPopup] 激励视频广告观看完成');
-                onSuccess();
-            } else {
-                // 播放中途退出，不下发游戏奖励
-                console.log('[BuffCardPopup] 激励视频广告中途退出');
-                if (onFail) {
-                    onFail();
-                }
-            }
-        });
     }
     
     /**
