@@ -4626,9 +4626,9 @@ export class GameManager extends Component {
     /**
      * 生成增益卡片数据（总是生成3张卡片）
      */
-    generateBuffCards(): BuffCardData[] {
+    generateBuffCards(isRerollMode: boolean = false): BuffCardData[] {
         const activeUnitTypes = this.getActiveUnitTypes();
-        //console.info(`[GameManager] generateBuffCards: 已上场的单位类型数量=${activeUnitTypes.length}`);
+        //console.info(`[GameManager] generateBuffCards: 已上场的单位类型数量=${activeUnitTypes.length}, 再抽一次模式=${isRerollMode}`);
         
         const cards: BuffCardData[] = [];
         const configManager = UnitConfigManager.getInstance();
@@ -4638,14 +4638,35 @@ export class GameManager extends Component {
             console.warn('[GameManager] generateBuffCards: 增益卡片配置未加载，使用默认配置');
         }
         
+        // 如果是再抽一次模式，确定UR卡片的位置（随机选择一张）
+        let urCardIndex = -1;
+        if (isRerollMode) {
+            // 检查是否有支持UR的单位类型（只有角色和防御塔有UR）
+            const urEligibleTypes = this.getUREligibleUnitTypes(activeUnitTypes);
+            if (urEligibleTypes.length > 0) {
+                urCardIndex = Math.floor(Math.random() * 3);
+            } else {
+                // 如果没有支持UR的单位类型，不设置UR位置
+                console.warn('[GameManager] generateBuffCards: 再抽一次模式，但没有支持UR的单位类型');
+            }
+        }
+        
         // 总是生成3张卡片
         for (let cardCount = 0; cardCount < 3; cardCount++) {
-            // 生成卡片稀有度
-            const rarity = buffCardConfigManager.generateRarity();
+            let rarity: 'R' | 'SR' | 'SSR' | 'UR';
+            
+            // 如果是再抽一次模式且当前卡片是UR位置
+            if (isRerollMode && cardCount === urCardIndex && urCardIndex >= 0) {
+                rarity = 'UR';
+            } else {
+                // 生成卡片稀有度（普通模式或非UR位置）
+                rarity = buffCardConfigManager.generateRarity();
+            }
             //console.info(`[GameManager] generateBuffCards: 卡片 ${cardCount + 1} 稀有度=${rarity}`);
             
             // 决定是单位增益还是全局增益（20%概率生成全局增益）
-            const isGlobalBuff = Math.random() < 0.2;
+            // 注意：UR卡片只有角色和防御塔才有，不生成全局增益
+            const isGlobalBuff = rarity !== 'UR' && Math.random() < 0.2;
             
             let cardData: BuffCardData;
             
@@ -4705,7 +4726,18 @@ export class GameManager extends Component {
                 }
             } else if (activeUnitTypes.length > 0) {
                 // 生成单位增益卡片
-                cardData = this.generateUnitBuffCard(activeUnitTypes, configManager, buffCardConfigManager, rarity, cardCount);
+                // 如果是UR卡片，只从支持UR的单位类型中选择（角色和防御塔）
+                let eligibleTypes = activeUnitTypes;
+                if (rarity === 'UR') {
+                    eligibleTypes = this.getUREligibleUnitTypes(activeUnitTypes);
+                    if (eligibleTypes.length === 0) {
+                        // 如果没有支持UR的单位类型，降级为SSR（这种情况不应该发生，因为前面已经检查过）
+                        console.warn('[GameManager] generateBuffCards: UR卡片但没有支持UR的单位类型，降级为SSR');
+                        rarity = 'SSR';
+                        eligibleTypes = activeUnitTypes;
+                    }
+                }
+                cardData = this.generateUnitBuffCard(eligibleTypes, configManager, buffCardConfigManager, rarity, cardCount);
             } else {
                 // 没有已上场的单位，生成全局增益
                 const globalEffects = buffCardConfigManager.getGlobalBuffEffects(rarity);
@@ -4752,13 +4784,28 @@ export class GameManager extends Component {
     }
     
     /**
+     * 获取支持UR的单位类型（只有角色和防御塔有UR）
+     */
+    private getUREligibleUnitTypes(activeUnitTypes: string[]): string[] {
+        // 角色类型（继承Role的单位）
+        const roleTypes = ['Arrower', 'Hunter', 'ElfSwordsman', 'Priest'];
+        // 防御塔类型
+        const towerTypes = ['WatchTower', 'IceTower', 'ThunderTower'];
+        
+        // 筛选出既是已上场单位，又是角色或防御塔的单位类型
+        return activeUnitTypes.filter(type => 
+            roleTypes.indexOf(type) !== -1 || towerTypes.indexOf(type) !== -1
+        );
+    }
+    
+    /**
      * 生成单位增益卡片
      */
     private generateUnitBuffCard(
         activeUnitTypes: string[],
         configManager: UnitConfigManager,
         buffCardConfigManager: BuffCardConfigManager,
-        rarity: 'R' | 'SR' | 'SSR',
+        rarity: 'R' | 'SR' | 'SSR' | 'UR',
         cardIndex: number
     ): BuffCardData {
         // 打乱单位类型
@@ -4802,19 +4849,34 @@ export class GameManager extends Component {
         const unitCategory = buffCardConfigManager.getUnitTypeCategory(unitType);
         
         // 获取该单位类型可用的增益效果
-        const buffEffects = buffCardConfigManager.getBuffEffects(rarity, unitCategory);
+        // 如果是UR，先尝试获取UR配置，如果没有则使用SSR配置并增强
+        let buffEffects = buffCardConfigManager.getBuffEffects(rarity, unitCategory);
+        let buffValueMultiplier = 1.0; // UR属性加成倍数（在SSR之上）
+        
+        if (rarity === 'UR') {
+            // UR卡片：如果配置中没有UR，使用SSR配置并增强50%
+            if (Object.keys(buffEffects).length === 0) {
+                buffEffects = buffCardConfigManager.getBuffEffects('SSR', unitCategory);
+                buffValueMultiplier = 1.5; // UR属性加成在SSR基础上增加50%
+            } else {
+                // 如果配置中有UR，使用UR配置（通常UR配置的值已经比SSR高）
+                buffValueMultiplier = 1.0;
+            }
+        }
+        
         const buffTypes = Object.keys(buffEffects);
         
         if (buffTypes.length === 0) {
             console.warn(`[GameManager] generateUnitBuffCard: 单位类型 ${unitType} 没有可用的增益效果`);
-            // 使用默认增益
+            // 使用默认增益（UR时增强）
+            const baseValue = rarity === 'UR' ? 30 : 20;
             return {
                 unitId: unitType,
                 unitName: unitName,
                 unitIcon: unitIcon,
                 buffType: 'attackDamage',
-                buffValue: 20,
-                buffDescription: `${unitName}: 攻击力+20%`,
+                buffValue: baseValue,
+                buffDescription: `${unitName}: 攻击力+${baseValue}%`,
                 rarity: rarity
             };
         }
@@ -4823,13 +4885,16 @@ export class GameManager extends Component {
         const randomBuffType = buffTypes[Math.floor(Math.random() * buffTypes.length)];
         const buff = buffEffects[randomBuffType];
         
+        // 应用UR加成倍数
+        const finalBuffValue = Math.round(buff.value * buffValueMultiplier);
+        
         return {
             unitId: unitType,
             unitName: unitName,
             unitIcon: unitIcon,
             buffType: randomBuffType,
-            buffValue: buff.value,
-            buffDescription: `${unitName}: ${buff.desc}`,
+            buffValue: finalBuffValue,
+            buffDescription: `${unitName}: ${buff.desc.replace(/\d+/, finalBuffValue.toString())}`,
             rarity: rarity
         };
     }

@@ -92,7 +92,7 @@ export class BuffCardConfigManager {
     }
 
     /**
-     * 根据概率随机生成卡片稀有度
+     * 根据概率随机生成卡片稀有度（不包括UR，UR只能通过再抽一次获得）
      */
     public generateRarity(): 'R' | 'SR' | 'SSR' {
         if (!this.config) {
@@ -141,7 +141,7 @@ export class BuffCardConfigManager {
     /**
      * 获取指定稀有度和单位类型的增益效果列表
      */
-    public getBuffEffects(rarity: 'R' | 'SR' | 'SSR', unitCategory: 'tower' | 'role' | 'building' | null): Record<string, BuffEffect> {
+    public getBuffEffects(rarity: 'R' | 'SR' | 'SSR' | 'UR', unitCategory: 'tower' | 'role' | 'building' | null): Record<string, BuffEffect> {
         if (!this.config) {
             return {};
         }
@@ -161,7 +161,7 @@ export class BuffCardConfigManager {
     /**
      * 获取全局增益效果列表（人口、金币等）
      */
-    public getGlobalBuffEffects(rarity: 'R' | 'SR' | 'SSR'): Record<string, BuffEffect> {
+    public getGlobalBuffEffects(rarity: 'R' | 'SR' | 'SSR' | 'UR'): Record<string, BuffEffect> {
         if (!this.config) {
             return {};
         }

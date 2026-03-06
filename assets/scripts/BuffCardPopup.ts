@@ -12,7 +12,7 @@ export interface BuffCardData {
     buffType: string;            // 增益类型（如：攻击力、攻击速度、生命值等）
     buffValue: number;           // 增益数值
     buffDescription: string;     // 增益描述
-    rarity: 'R' | 'SR' | 'SSR'; // 卡片稀有度
+    rarity: 'R' | 'SR' | 'SSR' | 'UR'; // 卡片稀有度
 }
 
 @ccclass('BuffCardPopup')
@@ -61,6 +61,12 @@ export class BuffCardPopup extends Component {
     private gameManager: any = null!; // GameManager引用
     private maskLayer: Node = null!; // 遮罩层节点
     private cardData: BuffCardData[] = []; // 卡片数据数组
+    private isRerollMode: boolean = false; // 是否为再抽一次模式（必定有一张UR）
+    private rerollButton: Button = null!; // 再抽一次按钮
+    private getAllButton: Button = null!; // 全部获取按钮
+    private rerollButtonNode: Node = null!; // 再抽一次按钮节点
+    private getAllButtonNode: Node = null!; // 全部获取按钮节点
+    private videoAd: any = null; // 微信小游戏激励视频广告实例
     
     start() {
         // 查找GameManager
@@ -68,6 +74,9 @@ export class BuffCardPopup extends Component {
         if (gmNode) {
             this.gameManager = gmNode.getComponent('GameManager' as any);
         }
+        
+        // 初始化微信小游戏激励视频广告
+        this.initVideoAd();
         
         // 创建遮罩层
         this.createMaskLayer();
@@ -185,8 +194,338 @@ export class BuffCardPopup extends Component {
             containerOpacity.opacity = 255;
         }
         
+        // 创建按钮（如果不存在）
+        this.createButtons();
+        
         // 显示弹窗（参考UnitIntroPopup的实现，不重新绘制Graphics，直接使用创建时绘制的内容）
         this.container.active = true;
+        
+        // 重置再抽一次模式标志
+        this.isRerollMode = false;
+    }
+    
+    /**
+     * 创建再抽一次和全部获取按钮
+     */
+    private createButtons() {
+        if (!this.container) return;
+        
+        // 获取容器尺寸
+        const containerTransform = this.container.getComponent(UITransform);
+        if (!containerTransform) return;
+        
+        const containerHeight = containerTransform.height;
+        const buttonY = -containerHeight / 2 - 60; // 按钮位置在卡片下方
+        
+        // 创建再抽一次按钮（如果不存在）
+        if (!this.rerollButtonNode || !this.rerollButtonNode.isValid) {
+            this.rerollButtonNode = new Node('RerollButton');
+            this.rerollButtonNode.setParent(this.container);
+            const rerollTransform = this.rerollButtonNode.addComponent(UITransform);
+            rerollTransform.setContentSize(150, 45);
+            rerollTransform.setAnchorPoint(0.5, 0.5);
+            this.rerollButtonNode.setPosition(-100, buttonY, 0);
+            
+            // 按钮背景
+            const rerollBg = this.rerollButtonNode.addComponent(Graphics);
+            rerollBg.fillColor = new Color(100, 150, 255, 255);
+            rerollBg.roundRect(-75, -22.5, 150, 45, 8);
+            rerollBg.fill();
+            rerollBg.strokeColor = new Color(150, 200, 255, 255);
+            rerollBg.lineWidth = 2;
+            rerollBg.roundRect(-75, -22.5, 150, 45, 8);
+            rerollBg.stroke();
+            
+            // 按钮组件
+            this.rerollButton = this.rerollButtonNode.addComponent(Button);
+            this.rerollButton.transition = Button.Transition.COLOR;
+            this.rerollButton.normalColor = new Color(255, 255, 255, 255);
+            this.rerollButton.hoverColor = new Color(200, 220, 255, 255);
+            this.rerollButton.pressedColor = new Color(150, 180, 255, 255);
+            
+            // 按钮文字
+            const rerollLabelNode = new Node('RerollLabel');
+            rerollLabelNode.setParent(this.rerollButtonNode);
+            const rerollLabelTransform = rerollLabelNode.addComponent(UITransform);
+            rerollLabelTransform.setContentSize(150, 45);
+            const rerollLabel = rerollLabelNode.addComponent(Label);
+            rerollLabel.string = '再抽一次';
+            rerollLabel.fontSize = 20;
+            rerollLabel.color = new Color(255, 255, 255, 255);
+            rerollLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            
+            // 绑定点击事件
+            this.rerollButton.node.on(Button.EventType.CLICK, () => this.onRerollClick(), this);
+        }
+        
+        // 创建全部获取按钮（如果不存在）
+        if (!this.getAllButtonNode || !this.getAllButtonNode.isValid) {
+            this.getAllButtonNode = new Node('GetAllButton');
+            this.getAllButtonNode.setParent(this.container);
+            const getAllTransform = this.getAllButtonNode.addComponent(UITransform);
+            getAllTransform.setContentSize(150, 45);
+            getAllTransform.setAnchorPoint(0.5, 0.5);
+            this.getAllButtonNode.setPosition(100, buttonY, 0);
+            
+            // 按钮背景
+            const getAllBg = this.getAllButtonNode.addComponent(Graphics);
+            getAllBg.fillColor = new Color(100, 255, 100, 255);
+            getAllBg.roundRect(-75, -22.5, 150, 45, 8);
+            getAllBg.fill();
+            getAllBg.strokeColor = new Color(150, 255, 150, 255);
+            getAllBg.lineWidth = 2;
+            getAllBg.roundRect(-75, -22.5, 150, 45, 8);
+            getAllBg.stroke();
+            
+            // 按钮组件
+            this.getAllButton = this.getAllButtonNode.addComponent(Button);
+            this.getAllButton.transition = Button.Transition.COLOR;
+            this.getAllButton.normalColor = new Color(255, 255, 255, 255);
+            this.getAllButton.hoverColor = new Color(200, 255, 200, 255);
+            this.getAllButton.pressedColor = new Color(150, 255, 150, 255);
+            
+            // 按钮文字
+            const getAllLabelNode = new Node('GetAllLabel');
+            getAllLabelNode.setParent(this.getAllButtonNode);
+            const getAllLabelTransform = getAllLabelNode.addComponent(UITransform);
+            getAllLabelTransform.setContentSize(150, 45);
+            const getAllLabel = getAllLabelNode.addComponent(Label);
+            getAllLabel.string = '全部获取';
+            getAllLabel.fontSize = 20;
+            getAllLabel.color = new Color(255, 255, 255, 255);
+            getAllLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            
+            // 绑定点击事件
+            this.getAllButton.node.on(Button.EventType.CLICK, () => this.onGetAllClick(), this);
+        }
+        
+        // 确保按钮可见
+        if (this.rerollButtonNode) {
+            this.rerollButtonNode.active = true;
+        }
+        if (this.getAllButtonNode) {
+            this.getAllButtonNode.active = true;
+        }
+    }
+    
+    /**
+     * 初始化微信小游戏激励视频广告
+     */
+    private initVideoAd() {
+        // 检查是否在微信小游戏环境中
+        const wx = (window as any).wx;
+        if (wx && wx.createRewardedVideoAd) {
+            try {
+                this.videoAd = wx.createRewardedVideoAd({
+                    adUnitId: 'adunit-e4a8d497181fe16d'
+                });
+                
+                // 监听广告加载事件
+                this.videoAd.onLoad(() => {
+                    console.log('[BuffCardPopup] 激励视频广告加载成功');
+                });
+                
+                // 监听广告错误事件
+                this.videoAd.onError((err: any) => {
+                    console.error('[BuffCardPopup] 激励视频广告错误:', err);
+                });
+            } catch (error) {
+                console.error('[BuffCardPopup] 创建激励视频广告失败:', error);
+                this.videoAd = null;
+            }
+        } else {
+            console.warn('[BuffCardPopup] 不在微信小游戏环境中，无法创建激励视频广告');
+            this.videoAd = null;
+        }
+    }
+    
+    /**
+     * 显示激励视频广告
+     * @param onSuccess 广告观看成功回调
+     * @param onFail 广告观看失败回调
+     */
+    private showVideoAd(onSuccess: () => void, onFail?: () => void) {
+        if (!this.videoAd) {
+            // 如果没有广告实例，直接执行成功回调（降级处理）
+            console.warn('[BuffCardPopup] 激励视频广告未初始化，直接执行操作');
+            onSuccess();
+            return;
+        }
+        
+        // 显示广告
+        this.videoAd.show()
+            .catch(() => {
+                // 失败重试
+                console.log('[BuffCardPopup] 广告显示失败，尝试加载后重试');
+                this.videoAd.load()
+                    .then(() => {
+                        return this.videoAd.show();
+                    })
+                    .catch((err: any) => {
+                        console.error('[BuffCardPopup] 激励视频广告显示失败', err);
+                        if (onFail) {
+                            onFail();
+                        } else {
+                            // 默认降级处理：直接执行成功回调
+                            onSuccess();
+                        }
+                    });
+            });
+        
+        // 监听用户点击关闭广告按钮的事件
+        this.videoAd.onClose((res: any) => {
+            if (res && res.isEnded) {
+                // 正常播放结束，可以下发游戏奖励
+                console.log('[BuffCardPopup] 激励视频广告观看完成');
+                onSuccess();
+            } else {
+                // 播放中途退出，不下发游戏奖励
+                console.log('[BuffCardPopup] 激励视频广告中途退出');
+                if (onFail) {
+                    onFail();
+                }
+            }
+        });
+    }
+    
+    /**
+     * 再抽一次按钮点击事件
+     */
+    private onRerollClick() {
+        if (!this.gameManager) {
+            console.error('[BuffCardPopup] GameManager不存在，无法再抽一次');
+            return;
+        }
+        
+        // 显示激励视频广告，观看完成后执行再抽一次
+        this.showVideoAd(() => {
+            this.executeReroll();
+        }, () => {
+            console.warn('[BuffCardPopup] 广告观看失败，无法再抽一次');
+        });
+    }
+    
+    /**
+     * 执行再抽一次逻辑
+     */
+    private executeReroll() {
+        if (!this.gameManager) {
+            return;
+        }
+        
+        // 设置再抽一次模式标志（必定有一张UR）
+        this.isRerollMode = true;
+        
+        // 重新生成卡片（通过GameManager）
+        const newCards = this.gameManager.generateBuffCards(true); // 传入true表示再抽一次模式
+        if (newCards && newCards.length > 0) {
+            // 更新卡片数据
+            this.cardData = newCards.slice(0, 3);
+            // 重置卡片状态
+            this.resetCardsState();
+            // 更新卡片显示
+            this.updateCards();
+        } else {
+            console.warn('[BuffCardPopup] 再抽一次失败，没有生成新卡片');
+        }
+    }
+    
+    /**
+     * 全部获取按钮点击事件
+     */
+    private onGetAllClick() {
+        // 显示激励视频广告，观看完成后执行全部获取
+        this.showVideoAd(() => {
+            this.executeGetAll();
+        }, () => {
+            console.warn('[BuffCardPopup] 广告观看失败，无法全部获取');
+        });
+    }
+    
+    /**
+     * 执行全部获取逻辑
+     */
+    private executeGetAll() {
+        // 应用所有三张卡片的增益效果
+        for (let i = 0; i < this.cardData.length; i++) {
+            this.applyBuff(this.cardData[i]);
+        }
+        
+        // 隐藏弹窗，三张卡片同时翻转
+        this.hideWithAllCardsFlipped();
+    }
+    
+    /**
+     * 隐藏弹窗，所有卡片同时翻转
+     */
+    private hideWithAllCardsFlipped() {
+        if (!this.container) return;
+        
+        // 获取所有卡片节点
+        const cards = [this.card1, this.card2, this.card3];
+        const cardCount = this.cardData.length;
+        
+        // 跟踪完成的卡片数量
+        let completedCards = 0;
+        const totalActiveCards = cardCount;
+        
+        // 完成回调函数
+        const onCardEffectComplete = () => {
+            completedCards++;
+            // 当所有卡片特效完成后，恢复游戏
+            if (completedCards >= totalActiveCards) {
+                // 隐藏容器和遮罩层
+                if (this.container && this.container.isValid) {
+                    this.container.active = false;
+                }
+                this.hideMaskLayer();
+                
+                // 继续游戏
+                if (this.gameManager) {
+                    this.gameManager.resumeGame();
+                }
+                
+                // 调用关闭回调
+                if (this.onCloseCallback) {
+                    this.onCloseCallback();
+                    this.onCloseCallback = null;
+                }
+            }
+        };
+        
+        // 为每张卡片添加翻转特效
+        for (let i = 0; i < cardCount && i < cards.length; i++) {
+            const card = cards[i];
+            if (!card || !card.isValid || !card.active) {
+                continue;
+            }
+            
+            // 所有卡片都执行翻转特效（X轴翻转 + 淡出）
+            const cardOpacity = card.getComponent(UIOpacity) || card.addComponent(UIOpacity);
+            cardOpacity.opacity = 255;
+            
+            // 保存原始位置和缩放
+            const originalPosition = card.position.clone();
+            const originalScale = card.scale.clone();
+            
+            tween(card)
+                .parallel(
+                    // X轴翻转：scaleX从1到-1，保持Y坐标不变
+                    tween(card).to(0.5, { 
+                        scale: new Vec3(-1, originalScale.y, originalScale.z) 
+                    }, { easing: 'sineInOut' }),
+                    tween(cardOpacity).to(0.5, { opacity: 0 })
+                )
+                .call(() => {
+                    // 恢复原始状态（为下次使用做准备）
+                    if (card && card.isValid) {
+                        card.setScale(originalScale);
+                        card.setPosition(originalPosition);
+                    }
+                    onCardEffectComplete();
+                })
+                .start();
+        }
     }
     
     /**
@@ -400,7 +739,7 @@ export class BuffCardPopup extends Component {
     /**
      * 根据稀有度更新卡片边框颜色
      */
-    private updateCardBorder(cardNode: Node, rarity: 'R' | 'SR' | 'SSR') {
+    private updateCardBorder(cardNode: Node, rarity: 'R' | 'SR' | 'SSR' | 'UR') {
         const cardBg = cardNode.getChildByName('CardBackground');
         if (!cardBg) {
             console.warn(`[BuffCardPopup] updateCardBorder: 找不到CardBackground节点，卡片=${cardNode.name}`);
@@ -431,6 +770,11 @@ export class BuffCardPopup extends Component {
                 // 金色边框 (255, 215, 0)
                 borderColor = new Color(255, 215, 0, 255);
                 lineWidth = 4; // SSR边框更粗
+                break;
+            case 'UR':
+                // UR边框：紫金色渐变效果，使用更亮的紫金色 (255, 100, 255)
+                borderColor = new Color(255, 100, 255, 255);
+                lineWidth = 5; // UR边框最粗
                 break;
             default:
                 borderColor = new Color(100, 100, 100, 255);
