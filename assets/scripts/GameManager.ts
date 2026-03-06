@@ -164,12 +164,22 @@ export class GameManager extends Component {
 
     // 杀敌标签下方提示文字（“点击可查看贡献榜”）
     private killRankHintLabel: Label | null = null;
+    // 玩家未设置昵称时的提示标签（显示在等级标签下方，与名称位置一致）
+    private playerNameHintLabel: Label | null = null;
 
     // 首次加载分包/预制体时的全屏加载界面
     private loadingOverlay: Node | null = null;
     private loadingBarNode: Node | null = null;
     private loadingBarMaxWidth: number = 300;
     private loadingLabel: Label | null = null;
+    // 加载界面背景轮播（使用 5-8 关背景图轮询播放）
+    private loadingBgNode: Node | null = null;
+    private loadingBgSprite: Sprite | null = null;
+    private loadingBgFrames: (SpriteFrame | null)[] = [];
+    private loadingBgIndex: number = 0;
+    private loadingBgTimer: number = 0;
+    private readonly LOADING_BG_INTERVAL: number = 0.25; // 每张图显示 0.25 秒
+    private loadingBgBundleLoading: boolean = false;
 
     // 结算页等级进度条
     private gameOverLevelBarBg: Node | null = null;
@@ -1442,6 +1452,30 @@ export class GameManager extends Component {
             this.playerNameLabel.enableOutline = true;
             this.playerNameLabel.outlineColor = new Color(0, 0, 0, 255);
             this.playerNameLabel.outlineWidth = 2;
+            // 名称区域可点击，打开资料编辑弹窗
+            const playerNameButton = playerNameNode.addComponent(Button);
+            playerNameButton.node.on(Button.EventType.CLICK, this.onLevelLabelClick, this);
+
+            // 未设置昵称时的提示标签（位置与名称一致）
+            const playerNameHintNode = new Node('PlayerNameHint');
+            playerNameHintNode.setParent(this.levelHudNode);
+            const playerNameHintTransform = playerNameHintNode.addComponent(UITransform);
+            playerNameHintTransform.setContentSize(220, 24);
+            playerNameHintNode.setPosition(-10, -38, 0);
+            this.playerNameHintLabel = playerNameHintNode.addComponent(Label);
+            this.playerNameHintLabel.string = '（可设置头像和昵称）';
+            this.playerNameHintLabel.fontSize = 16;
+            this.playerNameHintLabel.color = new Color(200, 180, 140, 255);
+            this.playerNameHintLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            this.playerNameHintLabel.verticalAlign = Label.VerticalAlign.CENTER;
+            this.playerNameHintLabel.enableOutline = true;
+            this.playerNameHintLabel.outlineColor = new Color(0, 0, 0, 255);
+            this.playerNameHintLabel.outlineWidth = 2;
+            // 提示文本也可点击，打开资料编辑弹窗
+            const playerNameHintButton = playerNameHintNode.addComponent(Button);
+            playerNameHintButton.node.on(Button.EventType.CLICK, this.onLevelLabelClick, this);
+            // 初始时根据当前名称决定是否显示
+            playerNameHintNode.active = !this.playerName || this.playerName.trim().length === 0;
 
             // 等级文字（可点击）
             const levelLabelNode = new Node('LevelLabel');
@@ -1841,8 +1875,9 @@ export class GameManager extends Component {
             return null;
         }
         
-        const panelWidth = 520;
-        const panelHeight = 720; // 原高度基础上拉高 200 像素
+        // 指挥官排行榜整体尺寸：原基础上宽+50、高+100
+        const panelWidth = 570;
+        const panelHeight = 820;
         
         const panelNode = new Node('KillRankPanel');
         panelNode.setParent(canvas);
@@ -1890,7 +1925,7 @@ export class GameManager extends Component {
         const listNode = new Node('KillRankList');
         listNode.setParent(panelNode);
         const listTrans = listNode.addComponent(UITransform);
-        listTrans.setContentSize(panelWidth - 40, panelHeight - 200);
+        listTrans.setContentSize(panelWidth - 40, panelHeight - 220);
         listTrans.setAnchorPoint(0.5, 1);
         listNode.setPosition(0, -90, 0);
         
@@ -1909,8 +1944,8 @@ export class GameManager extends Component {
         footerLabel.outlineWidth = 2;
         const footerTrans = footerNode.addComponent(UITransform);
         footerTrans.setContentSize(panelWidth - 40, 40);
-        // 保持在卷轴最下方居中（相对原位置再向下移动 300 像素）
-        footerNode.setPosition(0, -panelHeight / 2 - 280, 0);
+        // 保持在卷轴最下方居中，并在原基础上再向下移动 250 像素
+        footerNode.setPosition(0, -panelHeight / 2 - 330, 0);
         
         return panelNode;
     }
@@ -1971,7 +2006,8 @@ export class GameManager extends Component {
             c.destroy();
         }
         
-        const entryHeight = 40;
+        // 每行稍微加高一点，给三列排版留空间
+        const entryHeight = 44;
         let y = -20;
         
         for (let i = 0; i < rows.length && i < 10; i++) {
@@ -2029,39 +2065,53 @@ export class GameManager extends Component {
                 this.loadSpriteFromBase64(avatar, avatarSprite);
             }
             
-            // 文本节点
-            const textNode = new Node('Text');
-            textNode.setParent(entryNode);
-            const textLabel = textNode.addComponent(Label);
-            textLabel.string = `${rank}. ${displayName}  杀敌 ${totalKills}  最大通关 ${maxLevel}`;
-            textLabel.fontSize = 18;
-            textLabel.color = new Color(255, 255, 255, 255);
-            textLabel.enableOutline = true;
-            
-            if (rank === 1) {
-                // 金边白字
-                textLabel.outlineColor = new Color(255, 215, 0, 255);
-                textLabel.outlineWidth = 2;
-            } else if (rank === 2) {
-                // 铜色边白字
-                textLabel.outlineColor = new Color(205, 127, 50, 255);
-                textLabel.outlineWidth = 2;
-            } else if (rank === 3) {
-                // 银色边白字
-                textLabel.outlineColor = new Color(192, 192, 192, 255);
-                textLabel.outlineWidth = 2;
-            } else {
-                // 黑边白字
-                textLabel.outlineColor = new Color(0, 0, 0, 255);
-                textLabel.outlineWidth = 2;
-            }
-            
-            textLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
-            textLabel.verticalAlign = Label.VerticalAlign.CENTER;
-            const textTrans = textNode.addComponent(UITransform);
-            textTrans.setContentSize(entryTrans.width - 80, entryHeight);
-            textTrans.setAnchorPoint(0, 0.5);
-            textNode.setPosition(-entryTrans.width / 2 + 48, -entryHeight / 2, 0);
+            // 三列文本：昵称 / 杀敌数 / 最大通关，全部左对齐
+            const columnsTotalWidth = entryTrans.width - 80; // 去掉头像左侧占位
+            const colWidth = columnsTotalWidth / 3;
+            const baseLeftX = -entryTrans.width / 2 + 48; // 从头像右侧一点开始
+
+            // 公共函数：创建一列 Label
+            const createColumnLabel = (name: string, text: string, colIndex: number) => {
+                const node = new Node(name);
+                node.setParent(entryNode);
+                const label = node.addComponent(Label);
+                label.string = text;
+                // 字体全部加大一号：原来 18 → 19
+                label.fontSize = 19;
+                label.color = new Color(255, 255, 255, 255);
+                label.enableOutline = true;
+
+                if (rank === 1) {
+                    label.outlineColor = new Color(255, 215, 0, 255);
+                    label.outlineWidth = 2;
+                } else if (rank === 2) {
+                    label.outlineColor = new Color(205, 127, 50, 255);
+                    label.outlineWidth = 2;
+                } else if (rank === 3) {
+                    label.outlineColor = new Color(192, 192, 192, 255);
+                    label.outlineWidth = 2;
+                } else {
+                    label.outlineColor = new Color(0, 0, 0, 255);
+                    label.outlineWidth = 2;
+                }
+
+                label.horizontalAlign = Label.HorizontalAlign.LEFT;
+                label.verticalAlign = Label.VerticalAlign.CENTER;
+
+                const trans = node.addComponent(UITransform);
+                trans.setContentSize(colWidth, entryHeight);
+                trans.setAnchorPoint(0, 0.5);
+
+                const leftX = baseLeftX + colWidth * colIndex;
+                node.setPosition(leftX, -entryHeight / 2, 0);
+            };
+
+            // 第 0 列：排名 + 昵称
+            createColumnLabel('NameLabel', `${rank}. ${displayName}`, 0);
+            // 第 1 列：杀敌数
+            createColumnLabel('KillLabel', `杀敌 ${totalKills}`, 1);
+            // 第 2 列：最大通关数
+            createColumnLabel('LevelLabel', `最大通关 ${maxLevel}`, 2);
         }
     }
     
@@ -2134,21 +2184,7 @@ export class GameManager extends Component {
         // 添加组件
         this.playerProfilePopup = popupNode.addComponent(PlayerProfilePopup);
         
-        // 先创建半透明背景遮罩（必须在容器之前创建，确保容器在遮罩之上）
-        const mask = new Node('Mask');
-        mask.setParent(popupNode);
-        const maskTransform = mask.addComponent(UITransform);
-        maskTransform.setContentSize(750, 640);
-        maskTransform.setAnchorPoint(0.5, 0.5);
-        mask.setPosition(0, 0, 0);
-        const maskG = mask.addComponent(Graphics);
-        maskG.fillColor = new Color(0, 0, 0, 200); // 降低不透明度，让背景更清晰
-        maskG.rect(-375, -320, 750, 640);
-        maskG.fill();
-        // 确保遮罩在底层
-        mask.setSiblingIndex(0);
-        
-        // 创建弹窗容器（内容面板）- 必须在遮罩之后创建，确保在遮罩之上
+        // 创建弹窗容器（内容面板）
         const container = new Node('PopupContainer');
         container.setParent(popupNode);
         const containerTransform = container.addComponent(UITransform);
@@ -2391,8 +2427,13 @@ export class GameManager extends Component {
      */
     private updatePlayerProfileDisplay() {
         // 更新名称
+        const name = (this.playerName || '').trim();
         if (this.playerNameLabel) {
-            this.playerNameLabel.string = this.playerName || '';
+            this.playerNameLabel.string = name;
+        }
+        // 未设置昵称提示：当名称为空时显示“（可设置头像和昵称）”
+        if (this.playerNameHintLabel && this.playerNameHintLabel.node && this.playerNameHintLabel.node.isValid) {
+            this.playerNameHintLabel.node.active = name.length === 0;
         }
         
         // 更新头像

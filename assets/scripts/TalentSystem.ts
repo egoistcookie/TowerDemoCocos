@@ -42,6 +42,12 @@ export class TalentSystem extends Component {
     private talentPoints: number = 0; // 初始天赋点
     private playerDataManager: PlayerDataManager = null!;
     private expLabelNode: Node = null!; // 经验值标签节点
+    // 单位 prefab 本地缓存，按 unitId 缓存，避免重复加载；仅用于天赋页单位卡片图标显示
+    private unitPrefabCache: Map<string, Prefab> = new Map();
+    // 分包 prefab_sub 的 bundle 缓存，避免重复 loadBundle
+    private prefabSubBundle: any = null;
+    // 主包（assets/ 下的默认 bundle，一般名为 "main"）缓存，用于加载 Arrower / Hunter / Priest / ElfSwordsman
+    private mainBundle: any = null;
     
     start() {
         // 初始化玩家数据管理器
@@ -1090,7 +1096,7 @@ export class TalentSystem extends Component {
      * @param sprite Sprite组件，用于显示图标
      */
     loadUnitCardIcon(unitId: string, sprite: Sprite) {
-        
+        console.log('[TalentSystem] loadUnitCardIcon called, unitId =', unitId, 'sprite valid =', !!(sprite && sprite.node && sprite.node.isValid));
         // 根据单位ID构建节点名称
         const nodeName = unitId;
         
@@ -1108,11 +1114,13 @@ export class TalentSystem extends Component {
      */
     private tryGetIconFromUnitScript(unitScript: any, node: Node, sprite: Sprite, unitId: string): boolean {
         if (!unitScript) {
+            console.warn('[TalentSystem] tryGetIconFromUnitScript: unitScript is null, unitId =', unitId);
             return false;
         }
         
         // 1. 优先使用cardIcon
         if (unitScript.cardIcon) {
+            console.log('[TalentSystem] tryGetIconFromUnitScript: use cardIcon for unitId =', unitId);
             sprite.spriteFrame = unitScript.cardIcon;
             return true;
         } else {
@@ -1120,6 +1128,7 @@ export class TalentSystem extends Component {
         
         // 2. 如果没有cardIcon，尝试获取unitIcon
         if (unitScript.unitIcon) {
+            console.log('[TalentSystem] tryGetIconFromUnitScript: use unitIcon for unitId =', unitId);
             sprite.spriteFrame = unitScript.unitIcon;
             return true;
         } else {
@@ -1127,6 +1136,7 @@ export class TalentSystem extends Component {
         
         // 3. 尝试获取defaultSpriteFrame
         if (unitScript.defaultSpriteFrame) {
+            console.log('[TalentSystem] tryGetIconFromUnitScript: use defaultSpriteFrame for unitId =', unitId);
             sprite.spriteFrame = unitScript.defaultSpriteFrame;
             return true;
         } else {
@@ -1136,6 +1146,7 @@ export class TalentSystem extends Component {
         const spriteComponent = node.getComponent(Sprite);
         if (spriteComponent) {
             if (spriteComponent.spriteFrame) {
+                console.log('[TalentSystem] tryGetIconFromUnitScript: use node Sprite.spriteFrame for unitId =', unitId);
                 sprite.spriteFrame = spriteComponent.spriteFrame;
                 return true;
             } else {
@@ -1148,61 +1159,137 @@ export class TalentSystem extends Component {
     
     /**
      * 尝试从预制体获取单位图标
+     * 说明：
+     *  - 旧版通过硬编码 UUID 加载 prefab，不同工程 / 机器 UUID 会变化，导致图标丢失。
+     *  - 新版改为使用「资源路径 + 本地缓存」，只要资源目录一致，多机开发就能兼容。
      * @param unitId 单位ID
-     * @param nodeName 节点名称
+     * @param nodeName 节点名称（目前保留参数，方便以后扩展）
      * @param sprite Sprite组件
      */
     private tryGetIconFromPrefab(unitId: string, nodeName: string, sprite: Sprite) {
-        
-        // 单位 prefab 的 UUID 映射表
-        // 注意：这些 UUID 来自当前工程中对应 prefab 的 .meta 文件，
-        // 如果以后重新导入资源或拷贝到新工程导致 UUID 变化，需要同步更新这里。
-        const prefabUuidMap: Record<string, string> = {
-            // 单位（根据当前工程 prefab .meta 文件更新）
-            'Arrower': 'bcbcc8da-eb3d-4ad2-a55a-b0a0cb5da998',
-            'Hunter': '989ff20a-2de2-44bb-9590-29df03813990',
-            'ElfSwordsman': '2f39c6d5-5dcc-4f99-b0e8-8137ca283667',
-            'Priest': 'f3983aea-26d4-452d-8336-0e29fd2ec477',
-            // 建筑 / 防御
-            'WarAncientTree': 'be50baf7-2a47-44a1-85e1-8116927ef58e',
-            'HunterHall': '84fcb7a8-0a07-41ce-b1b3-19821780e361',
-            'SwordsmanHall': '42935d61-4a45-4323-aa06-5518bd9b5b8d',
-            'Church': 'ca650a85-5921-4179-9dc2-e6357f29e73c',
-            'StoneWall': 'a7405231-7385-4e8a-9fb9-633c4577e610',
+        console.log('[TalentSystem] tryGetIconFromPrefab enter, unitId =', unitId);
+        // 角色单位 & 建筑 / 防御单位：统一在分包 prefabs_sub 下（assets/prefabs_sub/）
+        // 注意：你需要确保这 9 个 prefab 的文件名与这里的 key 一致，并都放在 assets/prefabs_sub/ 下
+        const mainPrefabPathMap: Record<string, string> = {}; // 不再从 main bundle 加载
+        const subPrefabNameMap: Record<string, string> = {
+            // 角色单位
+            'Arrower': 'Arrower',
+            'Hunter': 'Hunter',
+            'ElfSwordsman': 'ElfSwordsman',
+            'Priest': 'Priest',
+            'WarAncientTree': 'WarAncientTree',
+            'HunterHall': 'HunterHall',
+            'SwordsmanHall': 'SwordsmanHall',
+            'Church': 'Church',
+            'StoneWall': 'StoneWall',
         };
-        
-        // 1. 优先使用 TalentSystem 的 arrowerPrefab 属性（如果配置了）
+
+        // 1. Arrower 优先使用通过 @property 配置的 prefab（编辑器里拖拽一份即可）
         if (unitId === 'Arrower' && this.arrowerPrefab) {
+            console.log('[TalentSystem] tryGetIconFromPrefab: use arrowerPrefab property for Arrower');
             this.loadIconFromPrefabInstance(this.arrowerPrefab, unitId, sprite);
             return;
         }
-        
-        // 2. 通过 UUID 加载 prefab
-        const uuid = prefabUuidMap[unitId];
-        if (!uuid) {
+
+        // 2. 优先从本地缓存取，避免重复加载
+        const cachedPrefab = this.unitPrefabCache.get(unitId);
+        if (cachedPrefab) {
+            console.log('[TalentSystem] tryGetIconFromPrefab: hit unitPrefabCache for', unitId);
+            this.loadIconFromPrefabInstance(cachedPrefab, unitId, sprite);
             return;
         }
-        
-        const spriteRef = sprite; // 保存 sprite 引用
-        const unitIdRef = unitId; // 保存 unitId 引用
-        
-        assetManager.loadAny({ uuid: uuid, type: Prefab }, (err, loadedPrefab) => {
-            if (!err && loadedPrefab) {
-                // 检查 sprite 是否有效，如果无效则尝试重新查找
+
+        const spriteRef = sprite;
+        const unitIdRef = unitId;
+
+        // 3A. 主包 main 下的单位（Arrower / Hunter / Priest / ElfSwordsman，路径在 assets/prefabs/ 下）
+        const mainPath = mainPrefabPathMap[unitId];
+        if (mainPath) {
+            console.log('[TalentSystem] tryGetIconFromPrefab: will load from main bundle, path =', mainPath, 'unitId =', unitId);
+            const loadFromMainBundle = (bundle: any) => {
+                bundle.load(mainPath, Prefab, (err: any, loadedPrefab: Prefab) => {
+                    if (err || !loadedPrefab) {
+                        console.warn('[TalentSystem] load main prefab failed for', unitId, 'path =', mainPath, 'err =', err);
+                        return;
+                    }
+
+                    console.log('[TalentSystem] load main prefab success for', unitId, 'path =', mainPath);
+                    this.unitPrefabCache.set(unitIdRef, loadedPrefab);
+
+                    let validSprite = spriteRef;
+                    if (!validSprite || !validSprite.node || !validSprite.node.isValid) {
+                        validSprite = this.tryFindSpriteByUnitId(unitIdRef);
+                    }
+
+                    if (validSprite && validSprite.node && validSprite.node.isValid) {
+                        this.loadIconFromPrefabInstance(loadedPrefab as Prefab, unitIdRef, validSprite);
+                    }
+                });
+            };
+
+            // 如果主包已经缓存，直接用
+            if (this.mainBundle) {
+                console.log('[TalentSystem] tryGetIconFromPrefab: use cached mainBundle');
+                loadFromMainBundle(this.mainBundle);
+            } else {
+                // 否则先加载主包（默认名一般为 "main"）
+                assetManager.loadBundle('main', (err, bundle) => {
+                    if (err || !bundle) {
+                        console.warn('[TalentSystem] loadBundle("main") failed, err =', err);
+                        return;
+                    }
+                    console.log('[TalentSystem] loadBundle("main") success');
+                    this.mainBundle = bundle;
+                    loadFromMainBundle(bundle);
+                });
+            }
+            return;
+        }
+
+        // 3B. 分包 prefabs_sub 下的单位（WarAncientTree / HunterHall / SwordsmanHall / Church / StoneWall）
+        const subName = subPrefabNameMap[unitId];
+        if (!subName) {
+            console.warn('[TalentSystem] tryGetIconFromPrefab: unitId not found in any map, unitId =', unitId);
+            return;
+        }
+
+        const loadFromSubBundle = (bundle: any) => {
+            bundle.load(subName, Prefab, (err: any, loadedPrefab: Prefab) => {
+                if (err || !loadedPrefab) {
+                    console.warn('[TalentSystem] load sub prefab failed for', unitId, 'name =', subName, 'err =', err);
+                    return;
+                }
+
+                console.log('[TalentSystem] load sub prefab success for', unitId, 'name =', subName);
+                this.unitPrefabCache.set(unitIdRef, loadedPrefab);
+
                 let validSprite = spriteRef;
                 if (!validSprite || !validSprite.node || !validSprite.node.isValid) {
                     validSprite = this.tryFindSpriteByUnitId(unitIdRef);
-                    if (validSprite) {
-                    } else {
-                    }
                 }
+
                 if (validSprite && validSprite.node && validSprite.node.isValid) {
-                    // 确保 sprite 节点仍然有效
-                    this.loadIconFromPrefabInstance(loadedPrefab as Prefab, unitIdRef, validSprite);
-                } else {
+                    this.loadIconFromPrefabInstance(loadedPrefab, unitIdRef, validSprite);
                 }
-            } else {
+            });
+        };
+
+        // 如果 bundle 已经缓存，直接用
+        if (this.prefabSubBundle) {
+            console.log('[TalentSystem] tryGetIconFromPrefab: use cached prefabSubBundle');
+            loadFromSubBundle(this.prefabSubBundle);
+            return;
+        }
+
+        // 否则先加载分包，再从分包里加载 prefab
+        assetManager.loadBundle('prefabs_sub', (err, bundle) => {
+            if (err || !bundle) {
+                console.warn('[TalentSystem] loadBundle("prefabs_sub") failed, err =', err);
+                return;
             }
+            console.log('[TalentSystem] loadBundle("prefabs_sub") success');
+            this.prefabSubBundle = bundle;
+            loadFromSubBundle(bundle);
         });
     }
     
@@ -1214,13 +1301,16 @@ export class TalentSystem extends Component {
      */
     private loadIconFromPrefabInstance(prefab: Prefab, unitId: string, sprite: Sprite) {
         if (!prefab) {
+            console.warn('[TalentSystem] loadIconFromPrefabInstance: prefab is null, unitId =', unitId);
             return;
         }
         if (!sprite) {
+            console.warn('[TalentSystem] loadIconFromPrefabInstance: sprite is null, unitId =', unitId);
             return;
         }
         // 检查 sprite 节点是否仍然有效
         if (!sprite.node || !sprite.node.isValid) {
+            console.warn('[TalentSystem] loadIconFromPrefabInstance: sprite node invalid, unitId =', unitId);
             return;
         }
         
@@ -1231,6 +1321,7 @@ export class TalentSystem extends Component {
             if (prefabSprite) {
                 // 如果 spriteFrame 存在，直接使用
                 if (prefabSprite.spriteFrame) {
+                    console.log('[TalentSystem] loadIconFromPrefabInstance: use prefab.data Sprite for unitId =', unitId);
                     sprite.spriteFrame = prefabSprite.spriteFrame;
                     return;
                 }
