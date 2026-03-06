@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Sprite, Label, Button, find, UITransform, Vec3, tween, Color, UIOpacity, Graphics, view, SpriteFrame } from 'cc';
+import { _decorator, Component, Node, Sprite, Label, Button, find, UITransform, Vec3, tween, Color, UIOpacity, Graphics, view, SpriteFrame, resources, LabelOutline } from 'cc';
 import { BuffManager } from './BuffManager';
 const { ccclass, property } = _decorator;
 
@@ -68,6 +68,10 @@ export class BuffCardPopup extends Component {
     private getAllButtonNode: Node = null!; // 全部获取按钮节点
     private videoAd: any = null; // 微信小游戏激励视频广告实例
     private videoAdCloseHandler: ((res: any) => void) | null = null; // 广告关闭事件处理器
+
+    // “需要看视频”按钮背景图（assets/resources/textures/icon/video.png）
+    private videoButtonSpriteFrame: SpriteFrame | null = null;
+    private videoButtonSpriteFrameLoading: Promise<SpriteFrame | null> | null = null;
     
     start() {
         // 查找GameManager
@@ -223,19 +227,15 @@ export class BuffCardPopup extends Component {
             this.rerollButtonNode = new Node('RerollButton');
             this.rerollButtonNode.setParent(this.container);
             const rerollTransform = this.rerollButtonNode.addComponent(UITransform);
-            rerollTransform.setContentSize(150, 45);
+            // 按钮稍微放大一点：宽度从 130 调整为 140
+            rerollTransform.setContentSize(140, 50);
             rerollTransform.setAnchorPoint(0.5, 0.5);
             this.rerollButtonNode.setPosition(-100, buttonY, 0);
             
-            // 按钮背景
-            const rerollBg = this.rerollButtonNode.addComponent(Graphics);
-            rerollBg.fillColor = new Color(100, 150, 255, 255);
-            rerollBg.roundRect(-75, -22.5, 150, 45, 8);
-            rerollBg.fill();
-            rerollBg.strokeColor = new Color(150, 200, 255, 255);
-            rerollBg.lineWidth = 2;
-            rerollBg.roundRect(-75, -22.5, 150, 45, 8);
-            rerollBg.stroke();
+            // 按钮背景：使用视频图标（表示需要看视频）
+            const rerollSprite = this.rerollButtonNode.addComponent(Sprite);
+            rerollSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+            this.applyVideoButtonBg(this.rerollButtonNode);
             
             // 按钮组件
             this.rerollButton = this.rerollButtonNode.addComponent(Button);
@@ -248,12 +248,20 @@ export class BuffCardPopup extends Component {
             const rerollLabelNode = new Node('RerollLabel');
             rerollLabelNode.setParent(this.rerollButtonNode);
             const rerollLabelTransform = rerollLabelNode.addComponent(UITransform);
-            rerollLabelTransform.setContentSize(150, 45);
+            rerollLabelTransform.setContentSize(140, 50);
             const rerollLabel = rerollLabelNode.addComponent(Label);
-            rerollLabel.string = '再抽一次';
+            // 两行文字：主文案 + “（观看视频）”
+            rerollLabel.string = '再抽一次\n（观看视频）';
             rerollLabel.fontSize = 20;
+            // 文本为白色，配合黑色描边，保证在视频图标上的可读性
             rerollLabel.color = new Color(255, 255, 255, 255);
             rerollLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            rerollLabel.verticalAlign = Label.VerticalAlign.CENTER;
+
+            // 黑色描边
+            const rerollOutline = rerollLabelNode.addComponent(LabelOutline);
+            rerollOutline.color = new Color(0, 0, 0, 255);
+            rerollOutline.width = 2;
             
             // 绑定点击事件
             this.rerollButton.node.on(Button.EventType.CLICK, () => this.onRerollClick(), this);
@@ -264,19 +272,15 @@ export class BuffCardPopup extends Component {
             this.getAllButtonNode = new Node('GetAllButton');
             this.getAllButtonNode.setParent(this.container);
             const getAllTransform = this.getAllButtonNode.addComponent(UITransform);
-            getAllTransform.setContentSize(150, 45);
+            // 按钮稍微放大一点：宽度从 130 调整为 140
+            getAllTransform.setContentSize(140, 50);
             getAllTransform.setAnchorPoint(0.5, 0.5);
             this.getAllButtonNode.setPosition(100, buttonY, 0);
             
-            // 按钮背景
-            const getAllBg = this.getAllButtonNode.addComponent(Graphics);
-            getAllBg.fillColor = new Color(100, 255, 100, 255);
-            getAllBg.roundRect(-75, -22.5, 150, 45, 8);
-            getAllBg.fill();
-            getAllBg.strokeColor = new Color(150, 255, 150, 255);
-            getAllBg.lineWidth = 2;
-            getAllBg.roundRect(-75, -22.5, 150, 45, 8);
-            getAllBg.stroke();
+            // 按钮背景：使用视频图标（表示需要看视频）
+            const getAllSprite = this.getAllButtonNode.addComponent(Sprite);
+            getAllSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+            this.applyVideoButtonBg(this.getAllButtonNode);
             
             // 按钮组件
             this.getAllButton = this.getAllButtonNode.addComponent(Button);
@@ -289,12 +293,20 @@ export class BuffCardPopup extends Component {
             const getAllLabelNode = new Node('GetAllLabel');
             getAllLabelNode.setParent(this.getAllButtonNode);
             const getAllLabelTransform = getAllLabelNode.addComponent(UITransform);
-            getAllLabelTransform.setContentSize(150, 45);
+            getAllLabelTransform.setContentSize(140, 50);
             const getAllLabel = getAllLabelNode.addComponent(Label);
-            getAllLabel.string = '全部获取';
+            // 两行文字：主文案 + “（观看视频）”
+            getAllLabel.string = '全部获取\n（观看视频）';
             getAllLabel.fontSize = 20;
+            // 文本为白色，配合黑色描边，保证在视频图标上的可读性
             getAllLabel.color = new Color(255, 255, 255, 255);
             getAllLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            getAllLabel.verticalAlign = Label.VerticalAlign.CENTER;
+
+            // 黑色描边
+            const getAllOutline = getAllLabelNode.addComponent(LabelOutline);
+            getAllOutline.color = new Color(0, 0, 0, 255);
+            getAllOutline.width = 2;
             
             // 绑定点击事件
             this.getAllButton.node.on(Button.EventType.CLICK, () => this.onGetAllClick(), this);
@@ -307,6 +319,46 @@ export class BuffCardPopup extends Component {
         if (this.getAllButtonNode) {
             this.getAllButtonNode.active = true;
         }
+    }
+
+    /**
+     * 给按钮节点应用“看视频”背景图（assets/resources/textures/icon/video.png）
+     */
+    private applyVideoButtonBg(buttonNode: Node) {
+        this.loadVideoButtonSpriteFrame()
+            .then((sf) => {
+                if (!sf || !buttonNode || !buttonNode.isValid) return;
+                const sp = buttonNode.getComponent(Sprite);
+                if (!sp || !sp.isValid) return;
+                sp.spriteFrame = sf;
+            })
+            .catch((err) => {
+                console.warn('[BuffCardPopup] 加载视频按钮背景失败', err);
+            });
+    }
+
+    /**
+     * 懒加载并缓存按钮背景 SpriteFrame（resources 路径不带后缀，SpriteFrame 需要 “/spriteFrame”）
+     */
+    private loadVideoButtonSpriteFrame(): Promise<SpriteFrame | null> {
+        if (this.videoButtonSpriteFrame) return Promise.resolve(this.videoButtonSpriteFrame);
+        if (this.videoButtonSpriteFrameLoading) return this.videoButtonSpriteFrameLoading;
+
+        const path = 'textures/icon/video/spriteFrame';
+        this.videoButtonSpriteFrameLoading = new Promise((resolve) => {
+            resources.load(path, SpriteFrame, (err, sf) => {
+                this.videoButtonSpriteFrameLoading = null;
+                if (err) {
+                    console.error('[BuffCardPopup] resources.load 失败:', path, err);
+                    resolve(null);
+                    return;
+                }
+                this.videoButtonSpriteFrame = sf;
+                resolve(sf);
+            });
+        });
+
+        return this.videoButtonSpriteFrameLoading;
     }
     
     /**
