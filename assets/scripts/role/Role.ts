@@ -96,6 +96,19 @@ export class Role extends Component {
     @property
     moveAnimationDuration: number = 0; // 移动动画时长（秒）
 
+    // 待机动画相关属性（最多支持3段待机动画）
+    @property({ type: [SpriteFrame], tooltip: "待机动画帧数组1（可选，最多支持3段待机动画）" })
+    idleAnimationFrames1: SpriteFrame[] = []; // 待机动画帧数组1
+
+    @property({ type: [SpriteFrame], tooltip: "待机动画帧数组2（可选，最多支持3段待机动画）" })
+    idleAnimationFrames2: SpriteFrame[] = []; // 待机动画帧数组2
+
+    @property({ type: [SpriteFrame], tooltip: "待机动画帧数组3（可选，最多支持3段待机动画）" })
+    idleAnimationFrames3: SpriteFrame[] = []; // 待机动画帧数组3
+
+    @property
+    idleAnimationDuration: number = 1.0; // 待机动画时长（秒）
+
     @property
     collisionRadius: number = 15; // 碰撞半径（像素）
 
@@ -132,6 +145,15 @@ export class Role extends Component {
     protected isMoving: boolean = false; // 是否正在移动
     protected moveTarget: Node = null!; // 移动目标（敌人）
     protected isPlayingMoveAnimation: boolean = false; // 是否正在播放移动动画
+    protected isPlayingIdleAnimation: boolean = false; // 是否正在播放待机动画
+    protected idleAnimationOriginalSizeMode: number | null = null; // 待机动画前的原始sizeMode（Sprite.SizeMode枚举值）
+    protected idleAnimationOriginalSize: { width: number; height: number } | null = null; // 待机动画前的原始尺寸
+    protected idleAnimationOriginalTrim: boolean | null = null; // 待机动画前的原始trim设置
+    protected idleAnimationOriginalType: number | null = null; // 待机动画前的原始type设置（Sprite.Type枚举值）
+    protected idleAnimationOriginalScale: Vec3 | null = null; // 待机动画前的原始缩放
+    protected moveAnimationDisplaySize: { width: number; height: number } | null = null; // 移动动画时的实际显示大小
+    protected idleAnimationFixedScale: Vec3 | null = null; // 待机动画的固定缩放比例（在整个待机动画过程中保持不变）
+    protected currentIdleAnimationSegmentIndex: number = -1; // 当前播放的待机动画段落索引（用于判断是否是第三段）
     protected avoidDirection: Vec3 = new Vec3(); // 避障方向
     protected avoidTimer: number = 0; // 避障计时器
     protected collisionCheckCount: number = 0; // 碰撞检测调用计数（用于调试）
@@ -186,14 +208,23 @@ export class Role extends Component {
     // 对话框相关属性
     @property({ type: [CCString], tooltip: "战斗口号数组，每种单位可以配置自己的战斗口号" })
     battleSlogans: string[] = []; // 战斗口号数组（可在编辑器中配置）
+    @property({ type: [CCString], tooltip: "待机口号数组，在播放待机动画时触发（如：休息一下吧，指挥官）" })
+    idleSlogans: string[] = []; // 待机口号数组（可在编辑器中配置）
     private dialogNode: Node | null = null; // 对话框节点
     private dialogLabel: Label | null = null; // 对话框文字标签
+    private isDialogIdleSlogan: boolean = false; // 当前对话框是否为“待机口号”
     private dialogTimer: number = 0; // 对话框显示计时器（用于控制显示时间和渐隐）
     private dialogIntervalTimer: number = 0; // 对话框间隔计时器（用于累计间隔时间）
     private dialogInterval: number = 0; // 下次显示对话框的间隔时间（3-6秒随机，稍微提高口号频率）
     private readonly DIALOG_MIN_INTERVAL: number = 3; // 最小间隔从 5 秒调整为 3 秒
     private readonly DIALOG_MAX_INTERVAL: number = 6; // 最大间隔从 10 秒调整为 6 秒
     private readonly DIALOG_DURATION: number = 2; // 对话框显示持续时间2秒
+
+    // 第三段待机动画“拉宽50%”相关：
+    // 由于血条/对话框是 this.node 的子节点，如果直接拉宽 this.node，会一起被拉宽；
+    // 所以在拉宽生效时对血条/对话框做反向缩放补偿，保持它们宽度不变。
+    private static readonly IDLE_THIRD_WIDTH_SCALE_FACTOR: number = 1.5;
+    private isIdleThirdWidthScaleActive: boolean = false;
     
     // 性能监控相关属性
     private static unitCountLogTimer: number = 0; // 单位数量日志输出计时器（静态，所有Role实例共享）
@@ -400,13 +431,31 @@ export class Role extends Component {
         this.healthBarNode.setParent(this.node);
         this.healthBarNode.setPosition(0, 30, 0); // 在弓箭手上方
         // 确保血条初始缩放为正数（正常朝向）
-        this.healthBarNode.setScale(1, 1, 1);
+        this.refreshOverheadNodesScale();
         
         // 添加HealthBar组件
         this.healthBar = this.healthBarNode.addComponent(HealthBar);
         if (this.healthBar) {
             this.healthBar.setMaxHealth(this.maxHealth);
             this.healthBar.setHealth(this.currentHealth);
+        }
+    }
+
+    /**
+     * 刷新血条/对话框的缩放：
+     * - 始终保持文字从左往右（根据角色朝向翻转）
+     * - 如果第三段待机动画正在拉宽角色本体，则对血条/对话框做反向补偿（除以1.5），避免被拉宽
+     */
+    private refreshOverheadNodesScale() {
+        const facingSignX = this.node.scale.x < 0 ? -1 : 1;
+        const compensation = this.isIdleThirdWidthScaleActive ? (1 / Role.IDLE_THIRD_WIDTH_SCALE_FACTOR) : 1;
+        const overheadScaleX = facingSignX * compensation;
+
+        if (this.healthBarNode && this.healthBarNode.isValid) {
+            this.healthBarNode.setScale(overheadScaleX, 1, 1);
+        }
+        if (this.dialogNode && this.dialogNode.isValid) {
+            this.dialogNode.setScale(overheadScaleX, 1, 1);
         }
     }
 
@@ -423,23 +472,25 @@ export class Role extends Component {
     /**
      * 创建对话框节点
      */
-    createDialog() {
+    /**
+     * 创建对话框
+     * @param sloganText 可选的口号文本，如果不提供则使用战斗口号
+     * @param isIdleSlogan 是否为待机口号（用于区分战斗口号和待机口号）
+     */
+    createDialog(sloganText?: string, isIdleSlogan: boolean = false) {
         if (this.dialogNode && this.dialogNode.isValid) {
             // 如果对话框已存在，先销毁
             this.dialogNode.destroy();
         }
+        // 记录当前对话框类型
+        this.isDialogIdleSlogan = isIdleSlogan;
 
         // 创建对话框节点
         this.dialogNode = new Node('Dialog');
         this.dialogNode.setParent(this.node);
         this.dialogNode.setPosition(0, 50, 0); // 在血条上方
-        // 根据当前单位的朝向设置对话框的scale（与血条保持一致，确保文字从左往右显示）
-        const currentUnitScaleX = this.node.scale.x;
-        if (currentUnitScaleX < 0) {
-            this.dialogNode.setScale(-1, 1, 1);
-        } else {
-            this.dialogNode.setScale(1, 1, 1);
-        }
+        // 根据当前单位的朝向设置对话框scale，并在第三段待机拉宽时做反向补偿
+        this.refreshOverheadNodesScale();
 
         // 添加UITransform组件
         const dialogTransform = this.dialogNode.addComponent(UITransform);
@@ -454,7 +505,14 @@ export class Role extends Component {
         labelTransform.setContentSize(150, 30);
 
         this.dialogLabel = labelNode.addComponent(Label);
-        this.dialogLabel.string = this.getRandomSlogan();
+        // 如果提供了口号文本，使用提供的文本；否则根据类型获取
+        if (sloganText) {
+            this.dialogLabel.string = sloganText;
+        } else if (isIdleSlogan) {
+            this.dialogLabel.string = this.getRandomIdleSlogan();
+        } else {
+            this.dialogLabel.string = this.getRandomSlogan();
+        }
         this.dialogLabel.fontSize = 16;
         this.dialogLabel.color = new Color(0, 255, 0, 255); // 绿色文字（我方单位）
         this.dialogLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
@@ -469,6 +527,20 @@ export class Role extends Component {
     }
 
     /**
+     * 如果当前正在显示的是待机口号对话框，则立即清理。
+     * 用于进入移动/攻击等动作时，避免“我休息一下，指挥官”残留到战斗过程中。
+     */
+    private clearIdleSloganDialogIfAny() {
+        if (this.isDialogIdleSlogan && this.dialogNode && this.dialogNode.isValid) {
+            this.dialogNode.destroy();
+            this.dialogNode = null;
+            this.dialogLabel = null;
+            this.dialogTimer = 0;
+            this.isDialogIdleSlogan = false;
+        }
+    }
+
+    /**
      * 获取随机口号
      */
     getRandomSlogan(): string {
@@ -479,6 +551,19 @@ export class Role extends Component {
         }
         // 默认口号（如果没有配置）
         return '为了荣耀！';
+    }
+
+    /**
+     * 获取随机待机口号
+     */
+    getRandomIdleSlogan(): string {
+        // 如果配置了待机口号，使用配置的口号；否则返回默认待机口号
+        if (this.idleSlogans && this.idleSlogans.length > 0) {
+            const index = Math.floor(Math.random() * this.idleSlogans.length);
+            return this.idleSlogans[index];
+        }
+        // 默认待机口号（如果没有配置）
+        return '我休息一下，指挥官';
     }
 
     /**
@@ -521,6 +606,41 @@ export class Role extends Component {
     }
 
     /**
+     * 触发待机口号（在播放第三段待机动画时调用）
+     */
+    triggerIdleSlogan() {
+        // 只有在真正待机时才允许触发待机口号
+        // 避免在移动/攻击/受击/死亡等状态下误触发
+        const isIdleState =
+            !this.isMoving &&
+            !this.isPlayingMoveAnimation &&
+            !this.isPlayingAttackAnimation &&
+            !this.isPlayingHitAnimation &&
+            !this.isPlayingDeathAnimation &&
+            this.isPlayingIdleAnimation;
+        if (!isIdleState) {
+            return;
+        }
+
+        // 新规则：索敌范围内一旦有敌人，就不触发待机口号
+        // 避免战斗气氛下突然喊“我休息一下，指挥官”
+        const detectionRange = this.getDetectionRange();
+        const nearbyEnemies = this.getEnemies(true, detectionRange);
+        if (nearbyEnemies.length > 0) {
+            return;
+        }
+
+        // 如果对话框正在显示，不重复创建
+        if (this.dialogNode && this.dialogNode.isValid) {
+            return;
+        }
+
+        // 立即创建待机口号对话框
+        this.createDialog(undefined, true);
+        this.dialogTimer = 0; // 重置显示计时器
+    }
+
+    /**
      * 尝试在移动或攻击时触发口号
      * 如果还没有对话框且间隔计时器已经累计了一定时间，就立即创建对话框
      */
@@ -554,13 +674,8 @@ export class Role extends Component {
 
         // 更新对话框位置（跟随单位，保持在血条上方）
         this.dialogNode.setPosition(0, 50, 0);
-        // 根据当前单位的朝向更新对话框的scale（与血条保持一致，确保文字从左往右显示）
-        const currentUnitScaleX = this.node.scale.x;
-        if (currentUnitScaleX < 0) {
-            this.dialogNode.setScale(-1, 1, 1);
-        } else {
-            this.dialogNode.setScale(1, 1, 1);
-        }
+        // 根据当前单位的朝向更新对话框scale，并在第三段待机拉宽时做反向补偿
+        this.refreshOverheadNodesScale();
 
         // 更新显示计时器
         this.dialogTimer += deltaTime;
@@ -585,6 +700,7 @@ export class Role extends Component {
                 }
                 this.dialogNode = null;
                 this.dialogLabel = null;
+                this.isDialogIdleSlogan = false;
                 this.dialogTimer = 0;
                 this.dialogIntervalTimer = 0; // 重置间隔计时器
                 // 重新随机生成下次显示的间隔时间
@@ -876,6 +992,11 @@ export class Role extends Component {
             // 没有目标，停止移动
             this.stopMoving();
         }
+
+        // 检查是否需要播放待机动画（在非移动、非攻击状态时）
+        if (!this.isMoving && !this.isPlayingAttackAnimation && !this.isPlayingHitAnimation && !this.isPlayingDeathAnimation && !this.isPlayingIdleAnimation) {
+            this.checkAndPlayIdleAnimation();
+        }
         
         // 性能监控：结束 update 方法计时
         // PerformanceMonitor.endTiming('Role.update', updateStartTime, 5);
@@ -943,25 +1064,13 @@ export class Role extends Component {
         if (this.tempVec3_1.x < 0) {
             // 向左移动，翻转
             this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-            // 血条反向翻转，保持正常朝向
-            if (this.healthBarNode && this.healthBarNode.isValid) {
-                this.healthBarNode.setScale(-1, 1, 1);
-            }
-            // 对话框反向翻转，保持正常朝向（文字从左往右）
-            if (this.dialogNode && this.dialogNode.isValid) {
-                this.dialogNode.setScale(-1, 1, 1);
-            }
+            // 血条/对话框保持正常朝向（并在第三段待机拉宽时做反向补偿）
+            this.refreshOverheadNodesScale();
         } else {
             // 向右移动，正常朝向
             this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-            // 血条正常朝向
-            if (this.healthBarNode && this.healthBarNode.isValid) {
-                this.healthBarNode.setScale(1, 1, 1);
-            }
-            // 对话框正常朝向（文字从左往右）
-            if (this.dialogNode && this.dialogNode.isValid) {
-                this.dialogNode.setScale(1, 1, 1);
-            }
+            // 血条/对话框保持正常朝向（并在第三段待机拉宽时做反向补偿）
+            this.refreshOverheadNodesScale();
         }
 
         // 播放移动动画
@@ -1296,25 +1405,13 @@ export class Role extends Component {
         if (finalDirection.x < 0) {
             // 向左移动，翻转
             this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-            // 血条反向翻转，保持正常朝向
-            if (this.healthBarNode && this.healthBarNode.isValid) {
-                this.healthBarNode.setScale(-1, 1, 1);
-            }
-            // 对话框反向翻转，保持正常朝向（文字从左往右）
-            if (this.dialogNode && this.dialogNode.isValid) {
-                this.dialogNode.setScale(-1, 1, 1);
-            }
+            // 血条/对话框保持正常朝向（并在第三段待机拉宽时做反向补偿）
+            this.refreshOverheadNodesScale();
         } else {
             // 向右移动，正常朝向
             this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-            // 血条正常朝向
-            if (this.healthBarNode && this.healthBarNode.isValid) {
-                this.healthBarNode.setScale(1, 1, 1);
-            }
-            // 对话框正常朝向（文字从左往右）
-            if (this.dialogNode && this.dialogNode.isValid) {
-                this.dialogNode.setScale(1, 1, 1);
-            }
+            // 血条/对话框保持正常朝向（并在第三段待机拉宽时做反向补偿）
+            this.refreshOverheadNodesScale();
         }
 
         // 播放移动动画
@@ -1337,6 +1434,15 @@ export class Role extends Component {
         // 如果正在播放移动动画，不重复播放
         if (this.isPlayingMoveAnimation) {
             return;
+        }
+
+        // 进入移动状态时，不允许显示待机口令
+        this.clearIdleSloganDialogIfAny();
+
+        // 停止待机动画并恢复设置
+        if (this.isPlayingIdleAnimation) {
+            this.isPlayingIdleAnimation = false;
+            this.restoreIdleAnimationSettings();
         }
 
         // 如果没有移动动画帧，使用默认SpriteFrame
@@ -1366,6 +1472,24 @@ export class Role extends Component {
         if (frames[0]) {
             this.sprite.spriteFrame = frames[0];
             lastFrameIndex = 0;
+            
+            // 记录移动动画时的实际显示大小，用于待机动画时保持一致
+            const uiTransform = this.node.getComponent(UITransform);
+            const firstFrame = frames[0];
+            if (firstFrame && uiTransform) {
+                const originalSize = firstFrame.originalSize || { width: 0, height: 0 };
+                const rect = firstFrame.rect || { width: 0, height: 0, x: 0, y: 0 };
+                const actualDisplayWidth = rect.width * Math.abs(this.node.scale.x);
+                const actualDisplayHeight = rect.height * Math.abs(this.node.scale.y);
+                
+                // 记录移动时的实际显示大小
+                this.moveAnimationDisplaySize = {
+                    width: actualDisplayWidth,
+                    height: actualDisplayHeight
+                };
+                
+                console.log(`[Role] 移动动画 - UITransform: (${uiTransform.width}, ${uiTransform.height}), 节点缩放: (${this.node.scale.x.toFixed(2)}, ${this.node.scale.y.toFixed(2)}), SpriteFrame rect: (${rect.width}, ${rect.height}), 实际显示大小: (${actualDisplayWidth.toFixed(2)}, ${actualDisplayHeight.toFixed(2)}), 单位名称=${this.unitName || '未知'}`);
+            }
         }
 
         // 使用update方法逐帧播放
@@ -1402,6 +1526,10 @@ export class Role extends Component {
         // 恢复默认SpriteFrame
         if (this.sprite && this.sprite.isValid && this.defaultSpriteFrame) {
             this.sprite.spriteFrame = this.defaultSpriteFrame;
+        }
+        // 如果不在攻击状态，尝试播放待机动画
+        if (!this.isPlayingAttackAnimation && !this.isMoving) {
+            this.checkAndPlayIdleAnimation();
         }
     }
 
@@ -2129,6 +2257,15 @@ export class Role extends Component {
             return;
         }
 
+        // 进入攻击状态时，不允许显示待机口令
+        this.clearIdleSloganDialogIfAny();
+
+        // 停止待机动画并恢复设置
+        if (this.isPlayingIdleAnimation) {
+            this.isPlayingIdleAnimation = false;
+            this.restoreIdleAnimationSettings();
+        }
+
         // 如果没有Sprite组件或没有动画帧，直接返回
         if (!this.sprite) {
             return;
@@ -2283,6 +2420,9 @@ export class Role extends Component {
         // 如果正在移动，恢复移动动画
         if (this.isMoving) {
             this.playMoveAnimation();
+        } else {
+            // 如果不在移动状态，尝试播放待机动画
+            this.checkAndPlayIdleAnimation();
         }
     }
     
@@ -2292,8 +2432,319 @@ export class Role extends Component {
     stopAllAnimations() {
         this.isPlayingAttackAnimation = false;
         this.isPlayingHitAnimation = false;
+        this.isPlayingIdleAnimation = false;
         // 不停止死亡动画
         this.isHit = false; // 清除被攻击标志
+    }
+
+    /**
+     * 检查并播放待机动画（如果配置了待机动画且角色处于非移动、非攻击状态）
+     */
+    private checkAndPlayIdleAnimation() {
+        // 如果正在移动或攻击，不播放待机动画
+        if (this.isMoving || this.isPlayingAttackAnimation || this.isPlayingHitAnimation || this.isPlayingDeathAnimation) {
+            return;
+        }
+
+        // 如果有有效攻击目标（目标存活且有效），不播放待机动画
+        if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
+            if (this.isAliveEnemy(this.currentTarget)) {
+                return;
+            } else {
+                // 目标已死亡或无效，清理目标引用，避免影响后续待机判断
+                this.currentTarget = null!;
+            }
+        }
+
+        // 如果已经在播放待机动画，不重复播放
+        if (this.isPlayingIdleAnimation) {
+            return;
+        }
+
+        // 收集所有配置的待机动画
+        const idleAnimations: SpriteFrame[][] = [];
+        if (this.idleAnimationFrames1 && this.idleAnimationFrames1.length > 0) {
+            idleAnimations.push(this.idleAnimationFrames1);
+        }
+        if (this.idleAnimationFrames2 && this.idleAnimationFrames2.length > 0) {
+            idleAnimations.push(this.idleAnimationFrames2);
+        }
+        if (this.idleAnimationFrames3 && this.idleAnimationFrames3.length > 0) {
+            idleAnimations.push(this.idleAnimationFrames3);
+        }
+
+        // 如果没有配置待机动画，维持现有逻辑（不播放）
+        if (idleAnimations.length === 0) {
+            return;
+        }
+
+        // 播放待机动画
+        this.playIdleAnimation(idleAnimations);
+    }
+
+    /**
+     * 播放待机动画
+     * @param idleAnimations 待机动画数组（最多3段）
+     *
+     * 注意：这里不再做任何缩放或 UITransform 尺寸的特殊处理，
+     * 播放逻辑完全参照移动动画的实现，只是多了"随机段落 + 末尾静止 2-5 秒"的机制。
+     * 特殊处理：播放第三段待机动画时，将角色拉宽50%。
+     */
+    private playIdleAnimation(idleAnimations: SpriteFrame[][]) {
+        if (!this.sprite || !this.sprite.isValid || this.isDestroyed) {
+            return;
+        }
+
+        // 选择一段待机动画播放：
+        // - 当三段都配置时：段1=40%，段2=40%，段3=20%
+        // - 当只有1-2段配置时：等概率随机
+        let selectedAnimation: SpriteFrame[] = [];
+        let selectedIndex: number = 0; // 记录选中的段落索引（0/1/2）
+        if (idleAnimations.length === 3) {
+            const r = Math.random();
+            if (r < 0.4) {
+                selectedIndex = 0;
+            } else if (r < 0.8) {
+                selectedIndex = 1;
+            } else {
+                selectedIndex = 2;
+            }
+            selectedAnimation = idleAnimations[selectedIndex];
+        } else if (idleAnimations.length === 2) {
+            selectedIndex = Math.floor(Math.random() * 2);
+            selectedAnimation = idleAnimations[selectedIndex];
+        } else {
+            selectedIndex = 0;
+            selectedAnimation = idleAnimations[0];
+        }
+
+        // 过滤出有效的帧
+        const validFrames = selectedAnimation.filter(frame => frame != null && frame.isValid);
+        if (validFrames.length === 0) {
+            return;
+        }
+
+        // 保存当前播放的段落索引，并标记进入待机播放（用于待机口号触发判断）
+        this.currentIdleAnimationSegmentIndex = selectedIndex;
+        this.isPlayingIdleAnimation = true;
+
+        // 特殊处理：如果是第三段待机动画（索引为2），将角色拉宽50%
+        const isThirdSegment = selectedIndex === 2;
+        if (isThirdSegment) {
+            this.isIdleThirdWidthScaleActive = true;
+            // 保存原始缩放（如果还没有保存）
+            if (this.idleAnimationOriginalScale === null) {
+                this.idleAnimationOriginalScale = this.node.scale.clone();
+            }
+            // 将scale.x增加50%（乘以1.5）
+            const currentScale = this.node.scale;
+            this.node.setScale(
+                currentScale.x * 1.5,
+                currentScale.y,
+                currentScale.z
+            );
+            //console.log(`[Role] 第三段待机动画 - 拉宽50%，原始缩放: (${this.idleAnimationOriginalScale.x.toFixed(2)}, ${this.idleAnimationOriginalScale.y.toFixed(2)}), 新缩放: (${(currentScale.x * 1.5).toFixed(2)}, ${currentScale.y.toFixed(2)})`);
+            
+            // 触发待机口号（在播放第三段待机动画时）
+            // 再次做一次状态保护，避免切换到攻击/移动的瞬间误触发
+            if (!this.isMoving && !this.isPlayingAttackAnimation && !this.isPlayingHitAnimation && !this.isPlayingDeathAnimation) {
+                this.triggerIdleSlogan();
+            }
+
+            // 血条/对话框不跟随拉宽
+            this.refreshOverheadNodesScale();
+        } else {
+            this.isIdleThirdWidthScaleActive = false;
+            // 如果不是第三段，确保恢复原始缩放（如果之前播放过第三段）
+            if (this.idleAnimationOriginalScale) {
+                this.node.setScale(
+                    this.idleAnimationOriginalScale.x,
+                    this.idleAnimationOriginalScale.y,
+                    this.idleAnimationOriginalScale.z
+                );
+                //console.log(`[Role] 非第三段待机动画 - 恢复原始缩放: (${this.idleAnimationOriginalScale.x.toFixed(2)}, ${this.idleAnimationOriginalScale.y.toFixed(2)})`);
+            }
+            this.refreshOverheadNodesScale();
+        }
+
+        const frames = validFrames;
+        const frameCount = frames.length;
+        const frameDuration = this.idleAnimationDuration / frameCount;
+        let animationTimer = 0;
+        let lastFrameIndex = -1;
+
+        // 立即播放第一帧（逻辑与移动动画一致）
+        if (frames[0]) {
+            this.sprite.spriteFrame = frames[0];
+            lastFrameIndex = 0;
+
+            // 仅打印当前 UITransform 尺寸，便于对比调试，不做任何修改
+            const uiTransform = this.node.getComponent(UITransform);
+            if (uiTransform) {
+                //console.log(`[Role] 播放待机动画 - UITransform大小: width=${uiTransform.width}, height=${uiTransform.height}, 单位名称=${this.unitName || '未知'}`);
+            }
+        }
+
+        // 使用 update 方法逐帧播放（整体结构与移动动画一致）
+        const animationUpdate = (deltaTime: number) => {
+            // 如果角色开始移动或攻击，停止待机动画
+            if (this.isMoving || this.isPlayingAttackAnimation || !this.sprite || !this.sprite.isValid || this.isDestroyed) {
+                this.isPlayingIdleAnimation = false;
+                this.unschedule(animationUpdate);
+                // 恢复原始设置（即便当前实现没有改动尺寸/缩放，这里留作安全兜底）
+                this.restoreIdleAnimationSettings();
+                return;
+            }
+
+            animationTimer += deltaTime;
+
+            // 检查动画是否播放完成
+            if (animationTimer >= this.idleAnimationDuration) {
+                // 动画播放完成，保持最后一帧
+                const lastFrame = frames[frameCount - 1];
+                if (lastFrame) {
+                    this.sprite.spriteFrame = lastFrame;
+                }
+
+                // 停止动画更新，等待静止时间
+                this.isPlayingIdleAnimation = false;
+                this.unschedule(animationUpdate);
+
+                // 如果是第三段动画播放完成，立即恢复原始缩放
+                if (this.currentIdleAnimationSegmentIndex === 2 && this.idleAnimationOriginalScale) {
+                    this.node.setScale(
+                        this.idleAnimationOriginalScale.x,
+                        this.idleAnimationOriginalScale.y,
+                        this.idleAnimationOriginalScale.z
+                    );
+                    //console.log(`[Role] 第三段待机动画播放完成 - 恢复原始缩放: (${this.idleAnimationOriginalScale.x.toFixed(2)}, ${this.idleAnimationOriginalScale.y.toFixed(2)})`);
+                    this.isIdleThirdWidthScaleActive = false;
+                    this.refreshOverheadNodesScale();
+                    // 重置段落索引
+                    this.currentIdleAnimationSegmentIndex = -1;
+                }
+
+                // 随机等待 2-5 秒后播放下一段待机动画
+                const waitTime = 2 + Math.random() * 3;
+                this.scheduleOnce(() => {
+                    // 等待结束后，如果仍然处于待机状态，播放下一段待机动画
+                    if (!this.isMoving && !this.isPlayingAttackAnimation && !this.isPlayingHitAnimation && !this.isPlayingDeathAnimation) {
+                        this.checkAndPlayIdleAnimation();
+                    } else {
+                        this.restoreIdleAnimationSettings();
+                    }
+                }, waitTime);
+
+                return;
+            }
+
+            // 计算当前应该显示的帧索引
+            const targetFrameIndex = Math.min(Math.floor(animationTimer / frameDuration), frameCount - 1);
+
+            // 更新到当前帧（只在帧变化时更新）
+            if (targetFrameIndex !== lastFrameIndex && targetFrameIndex < frameCount && frames[targetFrameIndex]) {
+                this.sprite.spriteFrame = frames[targetFrameIndex];
+                lastFrameIndex = targetFrameIndex;
+
+                // 打印 UITransform 尺寸做对比（不作修改）
+                // const uiTransform = this.node.getComponent(UITransform);
+                // if (uiTransform) {
+                    //console.log(`[Role] 待机动画切换帧后 - UITransform大小: width=${uiTransform.width}, height=${uiTransform.height}, 帧索引=${targetFrameIndex}, 单位名称=${this.unitName || '未知'}`);
+                //}
+            }
+        };
+
+        // 先取消之前的调度，避免重复调度
+        this.unschedule(animationUpdate);
+        // 开始动画更新（每帧更新）
+        this.schedule(animationUpdate, 0);
+    }
+
+    /**
+     * 应用待机动画缩放，让SpriteFrame的rect区域的实际显示大小等于目标尺寸
+     * 注意：实际显示大小 = rect尺寸 * 节点缩放
+     */
+    private applyIdleAnimationScale() {
+        if (!this.sprite || !this.sprite.isValid || !this.sprite.spriteFrame || !this.idleAnimationOriginalSize) {
+            return;
+        }
+
+        const spriteFrame = this.sprite.spriteFrame;
+        const rect = spriteFrame.rect || { width: 0, height: 0 };
+        
+        // 如果rect尺寸为0，不应用缩放
+        if (rect.width <= 0 || rect.height <= 0) {
+            return;
+        }
+
+        // 计算缩放比例，让rect区域的实际显示大小等于目标尺寸
+        // 实际显示大小 = rect * 节点缩放
+        // 目标：rect * 新缩放 = 目标尺寸
+        // 所以：新缩放 = 目标尺寸 / rect
+        const targetWidth = this.idleAnimationOriginalSize.width;
+        const targetHeight = this.idleAnimationOriginalSize.height;
+        const scaleX = targetWidth / rect.width;
+        const scaleY = targetHeight / rect.height;
+        
+        // 使用原始缩放作为基础，应用新的缩放
+        if (this.idleAnimationOriginalScale) {
+            const newScaleX = this.idleAnimationOriginalScale.x * scaleX;
+            const newScaleY = this.idleAnimationOriginalScale.y * scaleY;
+            this.node.setScale(
+                newScaleX,
+                newScaleY,
+                this.idleAnimationOriginalScale.z
+            );
+            
+            // 计算实际显示大小
+            const actualDisplayWidth = rect.width * Math.abs(newScaleX);
+            const actualDisplayHeight = rect.height * Math.abs(newScaleY);
+            //console.log(`[Role] 应用待机动画缩放 - rect: (${rect.width}, ${rect.height}), 目标尺寸: (${targetWidth}, ${targetHeight}), 原始缩放: (${this.idleAnimationOriginalScale.x.toFixed(2)}, ${this.idleAnimationOriginalScale.y.toFixed(2)}), 新缩放: (${newScaleX.toFixed(2)}, ${newScaleY.toFixed(2)}), 实际显示大小: (${actualDisplayWidth.toFixed(2)}, ${actualDisplayHeight.toFixed(2)})`);
+        } else {
+            this.node.setScale(scaleX, scaleY, 1);
+            const actualDisplayWidth = rect.width * Math.abs(scaleX);
+            const actualDisplayHeight = rect.height * Math.abs(scaleY);
+            //console.log(`[Role] 应用待机动画缩放 - rect: (${rect.width}, ${rect.height}), 目标尺寸: (${targetWidth}, ${targetHeight}), 缩放: (${scaleX.toFixed(2)}, ${scaleY.toFixed(2)}), 实际显示大小: (${actualDisplayWidth.toFixed(2)}, ${actualDisplayHeight.toFixed(2)})`);
+        }
+    }
+
+    /**
+     * 恢复待机动画前的Sprite设置
+     */
+    private restoreIdleAnimationSettings() {
+        // 恢复Sprite设置（如果有修改）
+        if (this.idleAnimationOriginalSizeMode !== null && this.sprite && this.sprite.isValid) {
+            this.sprite.sizeMode = this.idleAnimationOriginalSizeMode;
+            if (this.idleAnimationOriginalTrim !== null) {
+                this.sprite.trim = this.idleAnimationOriginalTrim;
+            }
+            if (this.idleAnimationOriginalType !== null) {
+                this.sprite.type = this.idleAnimationOriginalType;
+            }
+        }
+        
+        // 恢复原始缩放（如果保存了，比如第三段待机动画的拉宽效果）
+        if (this.idleAnimationOriginalScale) {
+            this.node.setScale(
+                this.idleAnimationOriginalScale.x,
+                this.idleAnimationOriginalScale.y,
+                this.idleAnimationOriginalScale.z
+            );
+            //console.log(`[Role] 恢复待机动画缩放 - 恢复到原始缩放: (${this.idleAnimationOriginalScale.x.toFixed(2)}, ${this.idleAnimationOriginalScale.y.toFixed(2)})`);
+        }
+
+        // 退出第三段待机拉宽状态后，刷新血条/对话框缩放（避免残留补偿）
+        this.isIdleThirdWidthScaleActive = false;
+        this.refreshOverheadNodesScale();
+        
+        // 清除所有保存的设置
+        this.idleAnimationOriginalSizeMode = null;
+        this.idleAnimationOriginalSize = null;
+        this.idleAnimationOriginalTrim = null;
+        this.idleAnimationOriginalType = null;
+        this.idleAnimationOriginalScale = null;
+        this.idleAnimationFixedScale = null; // 清除固定缩放
+        this.currentIdleAnimationSegmentIndex = -1; // 重置段落索引
     }
     
     /**
@@ -2833,8 +3284,8 @@ export class Role extends Component {
      * 重置单位状态（用于对象池回收）
      */
     private resetRoleState() {
-        console.info(`[Role.resetRoleState] ${this.constructor.name} 重置前：攻击力=${this.attackDamage}, 生命值=${this.maxHealth}`);
-        console.info(`[Role.resetRoleState] ${this.constructor.name} 初始值：攻击力=${this._initialAttackDamage}, 生命值=${this._initialMaxHealth}`);
+        //console.info(`[Role.resetRoleState] ${this.constructor.name} 重置前：攻击力=${this.attackDamage}, 生命值=${this.maxHealth}`);
+        //console.info(`[Role.resetRoleState] ${this.constructor.name} 初始值：攻击力=${this._initialAttackDamage}, 生命值=${this._initialMaxHealth}`);
         
         // 恢复初始属性值（移除所有增幅效果）
         this.maxHealth = this._initialMaxHealth;
@@ -2842,7 +3293,7 @@ export class Role extends Component {
         this.attackInterval = this._initialAttackInterval;
         this.moveSpeed = this._initialMoveSpeed;
         
-        console.info(`[Role.resetRoleState] ${this.constructor.name} 重置后：攻击力=${this.attackDamage}, 生命值=${this.maxHealth}`);
+        //console.info(`[Role.resetRoleState] ${this.constructor.name} 重置后：攻击力=${this.attackDamage}, 生命值=${this.maxHealth}`);
         
         // 重置所有状态变量
         this.currentHealth = this.maxHealth;
@@ -2990,11 +3441,11 @@ export class Role extends Component {
         
         // 防止重复应用增幅：如果已经应用过，直接返回
         if (this._enhancementsApplied) {
-            console.info(`[Role.onEnable] ${unitId} 增幅已应用，跳过重复调用`);
+            //console.info(`[Role.onEnable] ${unitId} 增幅已应用，跳过重复调用`);
             return;
         }
         
-        console.info(`[Role.onEnable] ${unitId} 开始应用增幅，当前攻击力=${this.attackDamage}, 生命值=${this.maxHealth}`);
+        //console.info(`[Role.onEnable] ${unitId} 开始应用增幅，当前攻击力=${this.attackDamage}, 生命值=${this.maxHealth}`);
         
         // 清除BuffManager保存的基准值缓存（对象池复用时必须清除）
         const hadCache = !!(this as any)._originalAttackDamage;
@@ -3006,15 +3457,15 @@ export class Role extends Component {
         (this as any)._buffAttackIntervalPercent = undefined;
         (this as any)._buffMaxHealthPercent = undefined;
         (this as any)._buffMoveSpeedPercent = undefined;
-        console.info(`[Role.onEnable] ${unitId} 清除缓存完成，hadCache=${hadCache}`);
+        //console.info(`[Role.onEnable] ${unitId} 清除缓存完成，hadCache=${hadCache}`);
         
         // 应用天赋增幅（必须在应用卡片增幅之前）
         this.applyTalentEnhancements();
-        console.info(`[Role.onEnable] ${unitId} 天赋增幅后，攻击力=${this.attackDamage}, 生命值=${this.maxHealth}`);
+        //console.info(`[Role.onEnable] ${unitId} 天赋增幅后，攻击力=${this.attackDamage}, 生命值=${this.maxHealth}`);
         
         // 应用已保存的增益效果（会更新maxHealth和currentHealth，并再次更新血条）
         this.applyBuffsFromManager();
-        console.info(`[Role.onEnable] ${unitId} 卡片增幅后，攻击力=${this.attackDamage}, 生命值=${this.maxHealth}`);
+        //console.info(`[Role.onEnable] ${unitId} 卡片增幅后，攻击力=${this.attackDamage}, 生命值=${this.maxHealth}`);
         
         // 标记增幅已应用
         this._enhancementsApplied = true;

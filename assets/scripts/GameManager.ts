@@ -181,12 +181,31 @@ export class GameManager extends Component {
     private readonly LOADING_BG_INTERVAL: number = 0.25; // 每张图显示 0.25 秒
     private loadingBgBundleLoading: boolean = false;
 
+    // 游戏内动态背景切换（从 assets/other/backgroundX 文件夹加载）
+    private gameBackgroundNode: Node | null = null;
+    private gameBackgroundSprite: Sprite | null = null;
+    private gameBackgroundFrames: SpriteFrame[] = [];
+    private gameBackgroundIndex: number = 0;
+    private readonly GAME_BG_INTERVAL: number = 0.33; // 每张图显示 0.5 秒（2fps，即每秒2帧）
+    private gameBackgroundActive: boolean = false;
+    private gameBackgroundDefaultSprite: SpriteFrame | null = null; // 默认静态背景
+
     // 结算页等级进度条
     private gameOverLevelBarBg: Node | null = null;
     private gameOverLevelBar: Node | null = null;
     private gameOverLevelLabel: Label | null = null;
     private gameOverLevelBarMaxWidth: number = 260;
     private gameOverLevelBarHeight: number = 20;
+
+    // 失败结算页：激励视频复活（本局仅一次）
+    private reviveUsedThisRun: boolean = false; // 本局是否已使用过复活（成功复活后置为true）
+    private reviveButtonNode: Node | null = null;
+    private reviveButton: Button | null = null;
+    private reviveButtonLabel: Label | null = null;
+    private reviveVideoAd: any = null; // 微信小游戏激励视频广告实例
+    private reviveVideoAdCloseHandler: ((res: any) => void) | null = null;
+    private reviveVideoButtonSpriteFrame: SpriteFrame | null = null;
+    private reviveVideoButtonSpriteFrameLoading: Promise<SpriteFrame | null> | null = null;
 
     // 木材 UI 标签（左上角），在场景中通过代码创建并缓存
     private woodLabel: Label | null = null;
@@ -380,6 +399,249 @@ export class GameManager extends Component {
         };
 
         playSequence();
+    }
+
+    /**
+     * 初始化失败结算页激励视频广告（复活用）
+     * 逻辑参考 BuffCardPopup.ts
+     */
+    private initReviveVideoAd() {
+        const wxObj = (window as any).wx;
+        if (wxObj && wxObj.createRewardedVideoAd) {
+            try {
+                this.reviveVideoAd = wxObj.createRewardedVideoAd({
+                    adUnitId: 'adunit-e4a8d497181fe16d'
+                });
+                this.reviveVideoAd.onLoad(() => {
+                    console.log('[GameManager] 复活激励视频广告加载成功');
+                });
+                this.reviveVideoAd.onError((err: any) => {
+                    console.error('[GameManager] 复活激励视频广告错误:', err);
+                });
+            } catch (error) {
+                console.error('[GameManager] 创建复活激励视频广告失败:', error);
+                this.reviveVideoAd = null;
+            }
+        } else {
+            console.warn('[GameManager] 不在微信小游戏环境中，无法创建复活激励视频广告');
+            this.reviveVideoAd = null;
+        }
+    }
+
+    /**
+     * 懒加载并缓存“看视频”按钮背景（assets/resources/textures/icon/video.png）
+     */
+    private loadReviveVideoButtonSpriteFrame(): Promise<SpriteFrame | null> {
+        if (this.reviveVideoButtonSpriteFrame) return Promise.resolve(this.reviveVideoButtonSpriteFrame);
+        if (this.reviveVideoButtonSpriteFrameLoading) return this.reviveVideoButtonSpriteFrameLoading;
+
+        const path = 'textures/icon/video/spriteFrame';
+        this.reviveVideoButtonSpriteFrameLoading = new Promise((resolve) => {
+            resources.load(path, SpriteFrame, (err, sf) => {
+                this.reviveVideoButtonSpriteFrameLoading = null;
+                if (err) {
+                    console.error('[GameManager] resources.load 失败:', path, err);
+                    resolve(null);
+                    return;
+                }
+                this.reviveVideoButtonSpriteFrame = sf;
+                resolve(sf);
+            });
+        });
+        return this.reviveVideoButtonSpriteFrameLoading;
+    }
+
+    private applyReviveVideoButtonBg(buttonNode: Node) {
+        this.loadReviveVideoButtonSpriteFrame()
+            .then((sf) => {
+                if (!sf || !buttonNode || !buttonNode.isValid) return;
+                const sp = buttonNode.getComponent(Sprite);
+                if (!sp || !sp.isValid) return;
+                sp.spriteFrame = sf;
+            })
+            .catch((err) => {
+                console.warn('[GameManager] 加载复活视频按钮背景失败', err);
+            });
+    }
+
+    /**
+     * 显示激励视频广告（复活用）
+     */
+    private showReviveVideoAd(onSuccess: () => void, onFail?: () => void) {
+        if (!this.reviveVideoAd) {
+            console.warn('[GameManager] 复活激励视频广告未初始化，直接执行操作（降级）');
+            onSuccess();
+            return;
+        }
+
+        let isCallbackExecuted = false;
+        const executeCallback = (success: boolean) => {
+            if (isCallbackExecuted) {
+                console.warn('[GameManager] 广告回调已被执行，忽略重复调用');
+                return;
+            }
+            isCallbackExecuted = true;
+            if (success) {
+                console.log('[GameManager] 复活激励视频广告观看完成');
+                onSuccess();
+            } else {
+                console.log('[GameManager] 复活激励视频广告中途退出');
+                if (onFail) onFail();
+            }
+        };
+
+        // 移除之前的 onClose 监听器（如果存在）
+        if (this.reviveVideoAdCloseHandler) {
+            if (this.reviveVideoAd.offClose && typeof this.reviveVideoAd.offClose === 'function') {
+                this.reviveVideoAd.offClose(this.reviveVideoAdCloseHandler);
+            }
+        }
+
+        // 创建新的关闭事件处理器
+        this.reviveVideoAdCloseHandler = (res: any) => {
+            if (res && res.isEnded) {
+                executeCallback(true);
+            } else {
+                executeCallback(false);
+            }
+        };
+
+        this.reviveVideoAd.onClose(this.reviveVideoAdCloseHandler);
+
+        this.reviveVideoAd.show().catch(() => {
+            console.log('[GameManager] 复活广告显示失败，尝试加载后重试');
+            this.reviveVideoAd.load()
+                .then(() => this.reviveVideoAd.show())
+                .catch((err: any) => {
+                    console.error('[GameManager] 复活激励视频广告显示失败', err);
+                    if (!isCallbackExecuted) {
+                        isCallbackExecuted = true;
+                        if (onFail) onFail();
+                        else onSuccess(); // 默认降级：直接成功
+                    }
+                });
+        });
+    }
+
+    private hideReviveButton() {
+        if (this.reviveButtonNode && this.reviveButtonNode.isValid) {
+            this.reviveButtonNode.active = false;
+        }
+    }
+
+    /**
+     * 在失败结算弹窗中创建/显示复活按钮（本局仅一次）
+     */
+    private createOrShowReviveButton() {
+        if (!this.gameOverDialog || !this.gameOverDialog.isValid) return;
+        if (this.reviveUsedThisRun) return;
+
+        if (!this.reviveButtonNode || !this.reviveButtonNode.isValid) {
+            const btnNode = new Node('ReviveButton');
+            btnNode.setParent(this.gameOverDialog);
+
+            const tr = btnNode.addComponent(UITransform);
+            // 默认尺寸先给一个值，后面再根据 RestartButton 尺寸同步
+            tr.setContentSize(200, 60);
+
+            const sp = btnNode.addComponent(Sprite);
+            sp.sizeMode = Sprite.SizeMode.CUSTOM;
+            this.applyReviveVideoButtonBg(btnNode);
+
+            const btn = btnNode.addComponent(Button);
+            btnNode.on(Button.EventType.CLICK, this.onReviveClick, this);
+
+            // 文案（白字黑边）
+            const labelNode = new Node('ReviveButtonLabel');
+            labelNode.setParent(btnNode);
+            labelNode.setPosition(0, 0, 0);
+            const labelTr = labelNode.addComponent(UITransform);
+            labelTr.setContentSize(180, 54);
+
+            const label = labelNode.addComponent(Label);
+            // 文案改为两行：“（观看视频）”单独一行
+            label.string = '复活一次并清屏\n（观看视频）';
+            // 字体略小，避免拥挤
+            label.fontSize = 20;
+            label.color = new Color(255, 255, 255, 255);
+            label.horizontalAlign = Label.HorizontalAlign.CENTER;
+            label.verticalAlign = Label.VerticalAlign.CENTER;
+            label.enableOutline = true;
+            label.outlineColor = new Color(0, 0, 0, 255);
+            label.outlineWidth = 2;
+
+            this.reviveButtonNode = btnNode;
+            this.reviveButton = btn;
+            this.reviveButtonLabel = label;
+        }
+
+        this.reviveButtonNode.active = true;
+        this.reviveButtonNode.setSiblingIndex(Number.MAX_SAFE_INTEGER);
+    }
+
+    private onReviveClick() {
+        if (this.reviveUsedThisRun) return;
+
+        // 防止重复点击
+        if (this.reviveButton) {
+            (this.reviveButton as any).interactable = false;
+        }
+
+        this.showReviveVideoAd(() => {
+            this.executeReviveOnce();
+        }, () => {
+            console.warn('[GameManager] 复活广告观看失败/中途退出，无法复活');
+            if (this.reviveButton) {
+                (this.reviveButton as any).interactable = true;
+            }
+        });
+    }
+
+    /**
+     * 复活一次：恢复游戏进行状态 + 清屏敌人 + 血量回满 + 金币/木材+50
+     * 防御计时与波次不重置，继续进行。
+     */
+    private executeReviveOnce() {
+        if (this.reviveUsedThisRun) return;
+
+        this.reviveUsedThisRun = true;
+        this.hideReviveButton();
+
+        // 关闭结算弹窗与遮罩
+        if (this.gameOverDialog && this.gameOverDialog.isValid) this.gameOverDialog.active = false;
+        if (this.gameOverPanel && this.gameOverPanel.isValid) this.gameOverPanel.active = false;
+        if (this.gameOverMask && this.gameOverMask.isValid) this.gameOverMask.active = false;
+
+        // 清屏：消灭全屏敌人
+        const enemiesNode = find('Canvas/Enemies');
+        if (enemiesNode && enemiesNode.isValid) {
+            const enemies = enemiesNode.children.slice();
+            for (const e of enemies) {
+                if (e && e.isValid) e.destroy();
+            }
+        }
+
+        // 水晶回血并重新激活（复用重置逻辑）
+        if (this.crystalScript) {
+            try {
+                (this.crystalScript as any).currentHealth = this.crystalScript.getMaxHealth();
+                (this.crystalScript as any).isDestroyed = false;
+                if (this.crystal && this.crystal.isValid) {
+                    this.crystal.active = true;
+                }
+            } catch (e) {
+                console.warn('[GameManager] 复活重置水晶失败:', e);
+            }
+        }
+
+        // 资源奖励：在失败前基础上 +50
+        this.gold = (this.gold || 0) + 50;
+        this.wood = (this.wood || 0) + 50;
+
+        // 恢复游戏状态并继续计时/波次
+        this.setInGameUIVisible(true);
+        this.updateUI();
+        this.resumeGame();
     }
     
     // 自动创建UnitIntroPopup
@@ -678,6 +940,11 @@ export class GameManager extends Component {
         
         // 重置本局经验值
         this.currentGameExp = 0;
+
+        // 每局开始时重置“复活一次”状态
+        this.reviveUsedThisRun = false;
+        // 初始化失败结算页激励视频广告（微信环境下）
+        this.initReviveVideoAd();
         
         // 显式将游戏状态设置为Ready，确保游戏开始前处于准备状态
         this.gameState = GameState.Ready;
@@ -982,6 +1249,9 @@ export class GameManager extends Component {
         if (this.forestRightNode && this.forestRightNode.isValid) {
             this.forestRightNode.active = false;
         }
+
+        // 停止动态背景切换，恢复静态背景
+        this.stopDynamicBackground();
 
         // 隐藏建造按钮（多种路径兼容）
         const buildButtonNode = find('UI/BuildButton') || find('Canvas/UI/BuildButton') || find('BuildButton');
@@ -2870,6 +3140,8 @@ export class GameManager extends Component {
                 }
             } else if (state === GameState.Defeat) {
                 this.gameOverLabel.string = '失败！';
+                // 失败结算：展示一次性复活按钮
+                this.createOrShowReviveButton();
             } else {
                 this.gameOverLabel.string = '游戏结束';
             }
@@ -3656,6 +3928,19 @@ export class GameManager extends Component {
         // 右侧：重新开始按钮
         restartButtonNode.setPosition(80, buttonY, 0);
 
+        // 复活按钮：与两按钮 Y 坐标一致，放在“重置游戏”右侧
+        if (this.reviveButtonNode && this.reviveButtonNode.isValid && this.reviveButtonNode.active) {
+            const reviveTr = this.reviveButtonNode.getComponent(UITransform);
+            const restartTr2 = restartButtonNode.getComponent(UITransform);
+            if (reviveTr && restartTr2) {
+                // 尺寸与“重置游戏”一致
+                reviveTr.setContentSize(restartTr2.width, restartTr2.height);
+            }
+            const restartPos2 = restartButtonNode.position.clone();
+            const offsetX = (restartTr2 ? restartTr2.width : 100) + 30; // 向右一个按钮宽度 + 间距
+            this.reviveButtonNode.setPosition(restartPos2.x + offsetX, buttonY, restartPos2.z);
+        }
+
         // 更新 currentY（如果后续还要布局其他元素）
         currentY = buttonY - rowHeight / 2 - spacing;
     }
@@ -4170,6 +4455,10 @@ export class GameManager extends Component {
     startGame() {
         console.log('startGame' + this.gameState.toString());
 
+        // 新开一局：重置复活按钮状态
+        this.reviveUsedThisRun = false;
+        this.hideReviveButton();
+
         // 如果分包还未加载，先加载分包和其中的所有预制体，然后再继续开始游戏逻辑
         if (!this.prefabsSubLoaded) {
             if (this.isLoadingPrefabsSub) {
@@ -4354,6 +4643,9 @@ export class GameManager extends Component {
             
             // 显示所有游戏元素
             this.showGameElements();
+
+            // 启动动态背景切换
+            this.startDynamicBackground(level);
 
             // 游戏正式开始时，让生命之树自动训练一个小精灵
             const crystalComp = this.findComponentInScene('Crystal') as any;
@@ -5261,6 +5553,10 @@ export class GameManager extends Component {
         // 恢复时间缩放（确保游戏时间正常，避免退出时暂停导致的问题）
         director.getScheduler().setTimeScale(1);
         this.originalTimeScale = 1;
+
+        // 重新开始：重置复活按钮状态
+        this.reviveUsedThisRun = false;
+        this.hideReviveButton();
         
         // 停止伤害统计
         const damageStats = DamageStatistics.getInstance();
@@ -5425,6 +5721,149 @@ export class GameManager extends Component {
             }
         }
 
+    }
+
+    /**
+     * 启动动态背景切换（从 assets/other/backgroundX 文件夹加载图片并循环播放）
+     * @param level 当前关卡号
+     */
+    private startDynamicBackground(level: number) {
+        // 获取背景节点
+        if (!this.gameBackgroundNode) {
+            this.gameBackgroundNode = find('Canvas/Background');
+        }
+
+        if (!this.gameBackgroundNode) {
+            console.warn('[GameManager] 未找到背景节点 Canvas/Background，无法启动动态背景');
+            return;
+        }
+
+        // 获取或创建 Sprite 组件
+        this.gameBackgroundSprite = this.gameBackgroundNode.getComponent(Sprite);
+        if (!this.gameBackgroundSprite) {
+            this.gameBackgroundSprite = this.gameBackgroundNode.addComponent(Sprite);
+        }
+
+        // 记录默认静态背景
+        if (!this.gameBackgroundDefaultSprite && this.gameBackgroundSprite.spriteFrame) {
+            this.gameBackgroundDefaultSprite = this.gameBackgroundSprite.spriteFrame;
+        }
+
+        // 加载对应关卡文件夹中的图片
+        const folderName = `background${level}`;
+        this.loadGameBackgroundImages(folderName);
+    }
+
+    /**
+     * 加载游戏动态背景图片（从 assets/other/backgroundX 文件夹）
+     * @param folderName 文件夹名称（如 "background1"）
+     */
+    private loadGameBackgroundImages(folderName: string) {
+        // 清空之前的图片
+        this.gameBackgroundFrames = [];
+        this.gameBackgroundIndex = 0;
+        this.gameBackgroundActive = false;
+
+        // 加载 other bundle
+        assetManager.loadBundle('other', (err, bundle) => {
+            if (err) {
+                console.warn(`[GameManager] 加载 other bundle 失败，回退到静态背景:`, err);
+                this.fallbackToStaticBackground();
+                return;
+            }
+
+            // 尝试加载文件夹中的所有图片
+            // 注意：在 Cocos Creator 中，loadDir 需要传入文件夹路径
+            const folderPath = folderName;
+            bundle.loadDir(folderPath, SpriteFrame, (err2, spriteFrames) => {
+                if (err2 || !spriteFrames || spriteFrames.length === 0) {
+                    console.warn(`[GameManager] 文件夹 ${folderPath} 不存在或没有图片，回退到静态背景:`, err2);
+                    this.fallbackToStaticBackground();
+                    return;
+                }
+
+                // 过滤出有效的 SpriteFrame
+                const validFrames: SpriteFrame[] = [];
+                for (const frame of spriteFrames) {
+                    if (frame && frame.isValid) {
+                        validFrames.push(frame);
+                    }
+                }
+
+                if (validFrames.length === 0) {
+                    console.warn(`[GameManager] 文件夹 ${folderPath} 中没有有效的图片，回退到静态背景`);
+                    this.fallbackToStaticBackground();
+                    return;
+                }
+
+                // 保存图片数组并启动切换
+                this.gameBackgroundFrames = validFrames;
+                this.gameBackgroundIndex = 0;
+                this.gameBackgroundActive = true;
+
+                // 立即显示第一张图片
+                if (this.gameBackgroundSprite && this.gameBackgroundFrames.length > 0) {
+                    this.gameBackgroundSprite.spriteFrame = this.gameBackgroundFrames[0];
+                    this.gameBackgroundSprite.enabled = true;
+                }
+
+                // 启动定时切换（每 0.05 秒切换一次，即 20fps）
+                this.schedule(this.updateGameBackground, this.GAME_BG_INTERVAL);
+
+                console.log(`[GameManager] 成功加载 ${validFrames.length} 张动态背景图片，开始循环播放`);
+            });
+        });
+    }
+
+    /**
+     * 更新游戏动态背景（每 0.05 秒调用一次）
+     */
+    private updateGameBackground() {
+        if (!this.gameBackgroundActive || this.gameBackgroundFrames.length === 0) {
+            return;
+        }
+
+        // 切换到下一张图片
+        this.gameBackgroundIndex = (this.gameBackgroundIndex + 1) % this.gameBackgroundFrames.length;
+        
+        if (this.gameBackgroundSprite && this.gameBackgroundFrames[this.gameBackgroundIndex]) {
+            this.gameBackgroundSprite.spriteFrame = this.gameBackgroundFrames[this.gameBackgroundIndex];
+        }
+    }
+
+    /**
+     * 停止动态背景切换，回退到静态背景
+     */
+    private stopDynamicBackground() {
+        // 停止定时器
+        this.unschedule(this.updateGameBackground);
+        this.gameBackgroundActive = false;
+        this.gameBackgroundFrames = [];
+        this.gameBackgroundIndex = 0;
+
+        // 恢复静态背景
+        this.fallbackToStaticBackground();
+    }
+
+    /**
+     * 回退到静态背景（使用 UIManager 的 changeBackground 方法）
+     */
+    private fallbackToStaticBackground() {
+        // 如果有默认背景，恢复它
+        if (this.gameBackgroundSprite && this.gameBackgroundDefaultSprite) {
+            this.gameBackgroundSprite.spriteFrame = this.gameBackgroundDefaultSprite;
+            this.gameBackgroundSprite.enabled = true;
+        } else if (this.uiManager && (this.uiManager as any).changeBackground) {
+            // 否则通过 UIManager 切换背景
+            let level = 1;
+            if (this.uiManager && (this.uiManager as any).getCurrentLevel) {
+                const currentLevel = (this.uiManager as any).getCurrentLevel();
+                if (typeof currentLevel === 'number' && !isNaN(currentLevel)) {
+                    level = currentLevel;
+                }
+            }
+            (this.uiManager as any).changeBackground(level);
+        }
     }
 }
 
