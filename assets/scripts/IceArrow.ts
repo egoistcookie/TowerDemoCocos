@@ -12,7 +12,10 @@ export class IceArrow extends Component {
     speed: number = 600; // 冰箭飞行速度（像素/秒）
 
     @property
-    damage: number = 15; // 伤害值
+    damage: number = 15; // 单体基础伤害值
+
+    @property
+    aoeRadius: number = 70; // 范围伤害与减速的半径（像素）
 
     @property
     slowDownRatio: number = 0.5; // 减速比例（0.5表示减速50%）
@@ -87,33 +90,71 @@ export class IceArrow extends Component {
     }
 
     /**
-     * 命中目标
+     * 命中目标（触发范围伤害与范围减速）
      */
     hitTarget(hitPos: Vec3, enemy: Node) {
-        if (!this.isFlying || this.hitEnemies.has(enemy)) {
+        if (!this.isFlying) {
             return;
         }
 
-        this.hitEnemies.add(enemy);
+        // 标记冰箭已命中，后续不再参与碰撞检测
+        this.isFlying = false;
 
-        // 应用减速效果
-        this.applySlowDown(enemy);
+        // 在命中点执行范围效果
+        this.applyAreaDamageAndSlow(hitPos);
 
-        // 显示寒气特效（跟随敌人移动）
-        this.createColdEffect(enemy);
-
-        // 调用命中回调
-        if (this.onHitCallback) {
-            this.onHitCallback(this.damage, hitPos, enemy);
+        // 为主命中目标创建寒气特效（视觉效果中心仍然跟随某个敌人）
+        if (enemy && enemy.isValid) {
+            this.createColdEffect(enemy);
         }
 
-        // 销毁冰箭
-        this.isFlying = false;
+        // 延迟销毁冰箭节点
         this.scheduleOnce(() => {
             if (this.node && this.node.isValid) {
                 this.node.destroy();
             }
         }, 0.1);
+    }
+
+    /**
+     * 在命中点附近执行范围伤害与范围减速
+     */
+    private applyAreaDamageAndSlow(hitPos: Vec3) {
+        const enemiesNode = find('Canvas/Enemies');
+        if (!enemiesNode) return;
+
+        const radius = this.aoeRadius > 0 ? this.aoeRadius : 80;
+        const radiusSq = radius * radius;
+
+        for (const enemy of enemiesNode.children) {
+            if (!enemy || !enemy.isValid || !enemy.active) continue;
+
+            const enemyScript = enemy.getComponent('Enemy') as any ||
+                               enemy.getComponent('OrcWarlord') as any ||
+                               enemy.getComponent('OrcWarrior') as any ||
+                               enemy.getComponent('TrollSpearman') as any;
+
+            if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) continue;
+
+            const dx = enemy.worldPosition.x - hitPos.x;
+            const dy = enemy.worldPosition.y - hitPos.y;
+            const distanceSq = dx * dx + dy * dy;
+
+            if (distanceSq <= radiusSq) {
+                // 记录为已命中的敌人，避免重复处理
+                if (!this.hitEnemies.has(enemy)) {
+                    this.hitEnemies.add(enemy);
+                }
+
+                // 对范围内敌人应用减速
+                this.applySlowDown(enemy);
+
+                // 调用命中回调，让冰塔结算伤害（每个敌人都算一次伤害）
+                if (this.onHitCallback) {
+                    this.onHitCallback(this.damage, hitPos, enemy);
+                }
+            }
+        }
     }
 
     /**

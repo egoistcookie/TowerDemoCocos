@@ -275,7 +275,7 @@
       "maxHealth": 100,
       "buildCost": 20,
       "attackRange": 250,
-      "attackDamage": 20,
+      "attackDamage": 15,
       "attackInterval": 1.5,
       "goldReward": 2,
       "level": 1,
