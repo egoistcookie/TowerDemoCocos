@@ -130,34 +130,34 @@ export class Boss extends Component {
     public prefabName: string = "Boss";
 
     // ====== 运行时状态 ======
-    private currentHealth: number = 100;
-    private healthBar: HealthBar = null!;
-    private healthBarNode: Node = null!;
-    private isDestroyed: boolean = false;
+    protected currentHealth: number = 100;
+    protected healthBar: HealthBar = null!;
+    protected healthBarNode: Node = null!;
+    protected isDestroyed: boolean = false;
     protected attackTimer: number = 0; // 攻击计时器
-    private currentTarget: Node = null!;
-    private gameManager: GameManager = null!;
-    private unitManager: UnitManager = null!;
+    protected currentTarget: Node = null!;
+    protected gameManager: GameManager = null!;
+    protected unitManager: UnitManager = null!;
 
     // 动画相关
-    private sprite: Sprite = null!;
-    private uiTransform: UITransform = null!;
-    private currentAnimationFrameIndex: number = 0;
-    private animationTimer: number = 0;
-    private isPlayingIdleAnimation: boolean = false;
-    private isPlayingWalkAnimation: boolean = false;
+    protected sprite: Sprite = null!;
+    protected uiTransform: UITransform = null!;
+    protected currentAnimationFrameIndex: number = 0;
+    protected animationTimer: number = 0;
+    protected isPlayingIdleAnimation: boolean = false;
+    protected isPlayingWalkAnimation: boolean = false;
     protected isPlayingAttackAnimation: boolean = false;
-    private isPlayingHitAnimation: boolean = false;
+    protected isPlayingHitAnimation: boolean = false;
     protected isPlayingDeathAnimation: boolean = false;
-    private defaultSpriteFrame: SpriteFrame = null!;
-    private defaultScale: Vec3 = new Vec3(1, 1, 1); // 默认缩放比例，用于方向翻转
-    private isHit: boolean = false; // 表示敌人是否正在被攻击
-    private attackComplete: boolean = false; // 攻击动画是否完成
+    protected defaultSpriteFrame: SpriteFrame = null!;
+    protected defaultScale: Vec3 = new Vec3(1, 1, 1); // 默认缩放比例，用于方向翻转
+    protected isHit: boolean = false; // 表示敌人是否正在被攻击
+    protected attackComplete: boolean = false; // 攻击动画是否完成
 
     // 伤害计算相关属性（韧性）
-    private recentDamage: number = 0; // 最近1秒内受到的总伤害
-    private damageTime: number = 0; // 最近一次伤害的时间戳
-    private lastStaggerTime: number = -1; // 上次产生僵直的时间戳（-1表示从未产生过僵直）
+    protected recentDamage: number = 0; // 最近1秒内受到的总伤害
+    protected damageTime: number = 0; // 最近一次伤害的时间戳
+    protected lastStaggerTime: number = -1; // 上次产生僵直的时间戳（-1表示从未产生过僵直）
 
     // ====== 生命周期与初始化 ======
 
@@ -435,13 +435,18 @@ export class Boss extends Component {
         }
 
         if (this.currentTarget) {
-            const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
+            const myPos = this.node.worldPosition;
+            const targetPos = this.currentTarget.worldPosition;
+            const dx = myPos.x - targetPos.x;
+            const dy = myPos.y - targetPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            const attackRangeSq = this.attackRange * this.attackRange;
             
             // 如果正在播放攻击动画，不进行距离检查和移动，让攻击动画完成
             if (this.isPlayingAttackAnimation) {
                 // 攻击动画播放中，停止移动
                 this.stopMoving();
-            } else if (distance <= this.attackRange) {
+            } else if (distanceSq <= attackRangeSq) {
                 // 在攻击范围内，停止移动并攻击
                 if (!this.isPlayingAttackAnimation) {
                     this.stopMoving();
@@ -510,8 +515,14 @@ export class Boss extends Component {
         if (this.targetCrystal && this.targetCrystal.isValid) {
             const crystalScript = this.targetCrystal.getComponent('Crystal') as any;
             if (crystalScript && crystalScript.isAlive && crystalScript.isAlive()) {
-                const distance = Vec3.distance(this.node.worldPosition, this.targetCrystal.worldPosition);
-                if (distance <= detectionRange) {
+                const myPos = this.node.worldPosition;
+                const crystalPos = this.targetCrystal.worldPosition;
+                const dx = myPos.x - crystalPos.x;
+                const dy = myPos.y - crystalPos.y;
+                const distanceSq = dx * dx + dy * dy;
+                const detectionRangeSq = detectionRange * detectionRange;
+                if (distanceSq <= detectionRangeSq) {
+                    const distance = Math.sqrt(distanceSq);
                     nearestTarget = this.targetCrystal;
                     minDistance = distance;
                     targetPriority = PRIORITY.CRYSTAL;
@@ -522,8 +533,14 @@ export class Boss extends Component {
         // 2. 检查路径是否被石墙阻挡（优先级第二）
         const blockedStoneWall = this.checkPathBlockedByStoneWall();
         if (blockedStoneWall) {
-            const distance = Vec3.distance(this.node.worldPosition, blockedStoneWall.worldPosition);
-            if (distance <= detectionRange) {
+            const myPos = this.node.worldPosition;
+            const wallPos = blockedStoneWall.worldPosition;
+            const dx = myPos.x - wallPos.x;
+            const dy = myPos.y - wallPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            const detectionRangeSq = detectionRange * detectionRange;
+            if (distanceSq <= detectionRangeSq) {
+                const distance = Math.sqrt(distanceSq);
                 // 如果石墙在检测范围内，且优先级更高或距离更近
                 if (PRIORITY.STONEWALL < targetPriority || 
                     (PRIORITY.STONEWALL === targetPriority && distance < minDistance)) {
@@ -544,9 +561,15 @@ export class Boss extends Component {
                 const characterScript = towerScript || priestScript;
                 // 检查弓箭手或牧师是否存活
                 if (characterScript && characterScript.isAlive && characterScript.isAlive()) {
-                    const distance = Vec3.distance(this.node.worldPosition, tower.worldPosition);
+                    const myPos = this.node.worldPosition;
+                    const towerPos = tower.worldPosition;
+                    const dx = myPos.x - towerPos.x;
+                    const dy = myPos.y - towerPos.y;
+                    const distanceSq = dx * dx + dy * dy;
+                    const detectionRangeSq = detectionRange * detectionRange;
                     // 如果角色在范围内，且优先级更高或距离更近
-                    if (distance <= detectionRange) {
+                    if (distanceSq <= detectionRangeSq) {
+                        const distance = Math.sqrt(distanceSq);
                         if (PRIORITY.CHARACTER < targetPriority || 
                             (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
                             minDistance = distance;
@@ -568,9 +591,15 @@ export class Boss extends Component {
                 const hunterScript = hunter.getComponent('Hunter') as any;
                 // 检查女猎手是否存活
                 if (hunterScript && hunterScript.isAlive && hunterScript.isAlive()) {
-                    const distance = Vec3.distance(this.node.worldPosition, hunter.worldPosition);
+                    const myPos = this.node.worldPosition;
+                    const hunterPos = hunter.worldPosition;
+                    const dx = myPos.x - hunterPos.x;
+                    const dy = myPos.y - hunterPos.y;
+                    const distanceSq = dx * dx + dy * dy;
+                    const detectionRangeSq = detectionRange * detectionRange;
                     // 如果女猎手在范围内，且优先级更高或距离更近
-                    if (distance <= detectionRange) {
+                    if (distanceSq <= detectionRangeSq) {
+                        const distance = Math.sqrt(distanceSq);
                         if (PRIORITY.CHARACTER < targetPriority || 
                             (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
                             minDistance = distance;
@@ -589,9 +618,15 @@ export class Boss extends Component {
                 const treeScript = tree.getComponent('WarAncientTree') as any;
                 // 检查战争古树是否存活
                 if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
-                    const distance = Vec3.distance(this.node.worldPosition, tree.worldPosition);
+                    const myPos = this.node.worldPosition;
+                    const treePos = tree.worldPosition;
+                    const dx = myPos.x - treePos.x;
+                    const dy = myPos.y - treePos.y;
+                    const distanceSq = dx * dx + dy * dy;
+                    const detectionRangeSq = detectionRange * detectionRange;
                     // 如果战争古树在范围内，且优先级更高或距离更近
-                    if (distance <= detectionRange) {
+                    if (distanceSq <= detectionRangeSq) {
+                        const distance = Math.sqrt(distanceSq);
                         if (PRIORITY.BUILDING < targetPriority || 
                             (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
                             minDistance = distance;
@@ -608,9 +643,15 @@ export class Boss extends Component {
                 const hallScript = hall.getComponent('HunterHall') as any;
                 // 检查猎手大厅是否存活
                 if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
-                    const distance = Vec3.distance(this.node.worldPosition, hall.worldPosition);
+                    const myPos = this.node.worldPosition;
+                    const hallPos = hall.worldPosition;
+                    const dx = myPos.x - hallPos.x;
+                    const dy = myPos.y - hallPos.y;
+                    const distanceSq = dx * dx + dy * dy;
+                    const detectionRangeSq = detectionRange * detectionRange;
                     // 如果猎手大厅在范围内，且优先级更高或距离更近
-                    if (distance <= detectionRange) {
+                    if (distanceSq <= detectionRangeSq) {
+                        const distance = Math.sqrt(distanceSq);
                         if (PRIORITY.BUILDING < targetPriority || 
                             (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
                             minDistance = distance;
@@ -633,9 +674,15 @@ export class Boss extends Component {
                 const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
                 // 检查精灵剑士是否存活
                 if (swordsmanScript && swordsmanScript.isAlive && swordsmanScript.isAlive()) {
-                    const distance = Vec3.distance(this.node.worldPosition, swordsman.worldPosition);
+                    const myPos = this.node.worldPosition;
+                    const targetPos = swordsman.worldPosition;
+                    const dx = myPos.x - targetPos.x;
+                    const dy = myPos.y - targetPos.y;
+                    const distanceSq = dx * dx + dy * dy;
+                    const detectionRangeSq = detectionRange * detectionRange;
                     // 如果精灵剑士在范围内，且优先级更高或距离更近
-                    if (distance <= detectionRange) {
+                    if (distanceSq <= detectionRangeSq) {
+                        const distance = Math.sqrt(distanceSq);
                         if (PRIORITY.CHARACTER < targetPriority || 
                             (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
                             minDistance = distance;
@@ -668,8 +715,14 @@ export class Boss extends Component {
             const watchTowerScript = watchTower.getComponent('WatchTower') as any;
             if (!watchTowerScript || !watchTowerScript.isAlive || !watchTowerScript.isAlive()) continue;
             
-            const distance = Vec3.distance(this.node.worldPosition, watchTower.worldPosition);
-            if (distance <= detectionRange) {
+            const myPos = this.node.worldPosition;
+            const towerPos = watchTower.worldPosition;
+            const dx = myPos.x - towerPos.x;
+            const dy = myPos.y - towerPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            const detectionRangeSq = detectionRange * detectionRange;
+            if (distanceSq <= detectionRangeSq) {
+                const distance = Math.sqrt(distanceSq);
                 if (PRIORITY.BUILDING < targetPriority || 
                     (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
                     minDistance = distance;
@@ -697,8 +750,14 @@ export class Boss extends Component {
             const iceTowerScript = iceTower.getComponent('IceTower') as any;
             if (!iceTowerScript || !iceTowerScript.isAlive || !iceTowerScript.isAlive()) continue;
             
-            const distance = Vec3.distance(this.node.worldPosition, iceTower.worldPosition);
-            if (distance <= detectionRange) {
+            const myPos = this.node.worldPosition;
+            const towerPos = iceTower.worldPosition;
+            const dx = myPos.x - towerPos.x;
+            const dy = myPos.y - towerPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            const detectionRangeSq = detectionRange * detectionRange;
+            if (distanceSq <= detectionRangeSq) {
+                const distance = Math.sqrt(distanceSq);
                 if (PRIORITY.BUILDING < targetPriority || 
                     (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
                     minDistance = distance;
@@ -726,8 +785,14 @@ export class Boss extends Component {
             const thunderTowerScript = thunderTower.getComponent('ThunderTower') as any;
             if (!thunderTowerScript || !thunderTowerScript.isAlive || !thunderTowerScript.isAlive()) continue;
             
-            const distance = Vec3.distance(this.node.worldPosition, thunderTower.worldPosition);
-            if (distance <= detectionRange) {
+            const myPos = this.node.worldPosition;
+            const towerPos = thunderTower.worldPosition;
+            const dx = myPos.x - towerPos.x;
+            const dy = myPos.y - towerPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            const detectionRangeSq = detectionRange * detectionRange;
+            if (distanceSq <= detectionRangeSq) {
+                const distance = Math.sqrt(distanceSq);
                 if (PRIORITY.BUILDING < targetPriority || 
                     (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
                     minDistance = distance;
@@ -975,7 +1040,7 @@ export class Boss extends Component {
 
         const allStoneWalls = findAllStoneWalls(scene);
         let nearestWall: Node | null = null;
-        let minDistance = Infinity;
+        let minDistanceSq = Infinity;
 
         for (const wall of allStoneWalls) {
             if (!wall || !wall.active || !wall.isValid) continue;
@@ -984,10 +1049,12 @@ export class Boss extends Component {
             if (!wallScript || !wallScript.isAlive || !wallScript.isAlive()) continue;
 
             const wallPos = wall.worldPosition;
-            const distance = Vec3.distance(this.node.worldPosition, wallPos);
+            const dx = this.node.worldPosition.x - wallPos.x;
+            const dy = this.node.worldPosition.y - wallPos.y;
+            const distanceSq = dx * dx + dy * dy;
 
-            if (distance < minDistance) {
-                minDistance = distance;
+            if (distanceSq < minDistanceSq) {
+                minDistanceSq = distanceSq;
                 nearestWall = wall;
             }
         }
@@ -1034,11 +1101,14 @@ export class Boss extends Component {
 
             const wallPos = wall.worldPosition;
             const wallRadius = wallScript.collisionRadius ?? 25; // 使用预制体设置的值，如果没有设置则默认为25
-            const distanceToWall = Vec3.distance(position, wallPos);
+            const dx = position.x - wallPos.x;
+            const dy = position.y - wallPos.y;
+            const distanceSq = dx * dx + dy * dy;
             const minDistance = enemyRadius + wallRadius;
+            const minDistanceSq = minDistance * minDistance;
 
-            // 如果距离小于最小距离，说明碰撞
-            if (distanceToWall < minDistance) {
+            // 如果距离小于最小距离，说明碰撞（使用平方距离比较）
+            if (distanceSq < minDistanceSq) {
                 return true;
             }
         }
@@ -1134,7 +1204,7 @@ export class Boss extends Component {
         const checkSteps = Math.ceil(distanceToCrystal / 50); // 每50像素检测一次
         const stepSize = distanceToCrystal / checkSteps;
         const stoneWalls = stoneWallsNode.children || [];
-        const blockingWalls: { wall: Node; distance: number }[] = [];
+        const blockingWalls: { wall: Node; distanceSq: number }[] = [];
 
         for (let i = 0; i <= checkSteps; i++) {
             const checkPos = new Vec3();
@@ -1149,12 +1219,18 @@ export class Boss extends Component {
 
                 const wallPos = wall.worldPosition;
                 const wallRadius = wallScript.collisionRadius || 40;
-                const distanceToWall = Vec3.distance(checkPos, wallPos);
+                const dx = checkPos.x - wallPos.x;
+                const dy = checkPos.y - wallPos.y;
+                const distanceToWallSq = dx * dx + dy * dy;
+                const minDistance = wallRadius + 20;
+                const minDistanceSq = minDistance * minDistance;
 
                 // 如果检测点距离石墙太近，说明路径被阻挡
-                if (distanceToWall < wallRadius + 20) { // 20像素的缓冲距离
-                    const distanceFromEnemy = Vec3.distance(enemyPos, wallPos);
-                    blockingWalls.push({ wall, distance: distanceFromEnemy });
+                if (distanceToWallSq < minDistanceSq) { // 20像素的缓冲距离
+                    const dx2 = enemyPos.x - wallPos.x;
+                    const dy2 = enemyPos.y - wallPos.y;
+                    const distanceFromEnemySq = dx2 * dx2 + dy2 * dy2;
+                    blockingWalls.push({ wall, distanceSq: distanceFromEnemySq });
                 }
             }
         }
@@ -1163,8 +1239,8 @@ export class Boss extends Component {
             return null; // 没有阻挡的石墙
         }
 
-        // 找到最近的石墙
-        blockingWalls.sort((a, b) => a.distance - b.distance);
+        // 找到最近的石墙（使用平方距离比较）
+        blockingWalls.sort((a, b) => a.distanceSq - b.distanceSq);
         const nearestWall = blockingWalls[0].wall;
 
         // 尝试左右绕行检测
@@ -1192,8 +1268,9 @@ export class Boss extends Component {
 
     /**
      * 检查从起点到终点的路径是否畅通（没有石墙阻挡）
+     * 子类（如 MinotaurWarrior）在重用路径检测逻辑时也会调用，因此使用 protected
      */
-    private checkPathClear(startPos: Vec3, endPos: Vec3, stoneWalls: Node[]): boolean {
+    protected checkPathClear(startPos: Vec3, endPos: Vec3, stoneWalls: Node[]): boolean {
         const direction = new Vec3();
         Vec3.subtract(direction, endPos, startPos);
         const distance = direction.length();
@@ -1218,9 +1295,13 @@ export class Boss extends Component {
 
                 const wallPos = wall.worldPosition;
                 const wallRadius = wallScript.collisionRadius || 40;
-                const distanceToWall = Vec3.distance(checkPos, wallPos);
+                const dx = checkPos.x - wallPos.x;
+                const dy = checkPos.y - wallPos.y;
+                const distanceSq = dx * dx + dy * dy;
+                const minDistance = wallRadius + 20;
+                const minDistanceSq = minDistance * minDistance;
 
-                if (distanceToWall < wallRadius + 20) {
+                if (distanceSq < minDistanceSq) {
                     return false; // 路径被阻挡
                 }
             }
@@ -1393,12 +1474,17 @@ export class Boss extends Component {
         let bestPriority = Infinity;
         let bestDistance = Infinity;
         
+        const detectionRangeSq2 = detectionRange * detectionRange;
         for (const target of allPotentialTargets) {
             if (!target || !target.isValid) continue;
             
-            // 计算距离
-            const distance = Vec3.distance(enemyPos, target.worldPosition);
-            if (distance > detectionRange) continue;
+            // 计算距离（平方距离）
+            const targetPos = target.worldPosition;
+            const dx = enemyPos.x - targetPos.x;
+            const dy = enemyPos.y - targetPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            if (distanceSq > detectionRangeSq2) continue;
+            const distance = Math.sqrt(distanceSq);
             
             // 确定目标优先级
             let targetPriority: number;
@@ -1494,8 +1580,8 @@ export class Boss extends Component {
         }
     }
 
-    // 更新攻击动画
-    updateAttackAnimation() {
+    // 更新攻击动画（允许子类按需重写）
+    protected updateAttackAnimation() {
         // 检查目标是否仍然有效，如果无效则停止攻击动画
         if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
             this.isPlayingAttackAnimation = false;
@@ -1579,8 +1665,8 @@ export class Boss extends Component {
         }
     }
 
-    // 更新被攻击动画
-    updateHitAnimation() {
+    // 更新被攻击动画（允许子类重写）
+    protected updateHitAnimation() {
         if (this.hitAnimationFrames.length === 0) {
             this.isPlayingHitAnimation = false;
             this.resumeMovement();
@@ -1643,8 +1729,8 @@ export class Boss extends Component {
         }
     }
 
-    // 更新死亡动画
-    updateDeathAnimation() {
+    // 更新死亡动画（允许子类重写）
+    protected updateDeathAnimation() {
         if (this.deathAnimationFrames.length === 0) {
             this.isPlayingDeathAnimation = false;
             return;
@@ -1948,16 +2034,24 @@ export class Boss extends Component {
         this.isHit = false;
         
         if (!this.isDestroyed && !this.isPlayingAttackAnimation && !this.isPlayingDeathAnimation) {
+            const myPos = this.node.worldPosition;
+            const attackRangeSq = this.attackRange * this.attackRange;
             if (this.currentTarget) {
-                const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
-                if (distance > this.attackRange) {
+                const targetPos = this.currentTarget.worldPosition;
+                const dx = myPos.x - targetPos.x;
+                const dy = myPos.y - targetPos.y;
+                const distanceSq = dx * dx + dy * dy;
+                if (distanceSq > attackRangeSq) {
                     this.playWalkAnimation();
                 } else {
                     this.playIdleAnimation();
                 }
             } else if (this.targetCrystal && this.targetCrystal.isValid) {
-                const distance = Vec3.distance(this.node.worldPosition, this.targetCrystal.worldPosition);
-                if (distance > this.attackRange) {
+                const crystalPos = this.targetCrystal.worldPosition;
+                const dx = myPos.x - crystalPos.x;
+                const dy = myPos.y - crystalPos.y;
+                const distanceSq = dx * dx + dy * dy;
+                if (distanceSq > attackRangeSq) {
                     this.playWalkAnimation();
                 } else {
                     this.playIdleAnimation();
@@ -2045,13 +2139,18 @@ export class Boss extends Component {
         const enemies = enemiesNode.children || [];
         const currentTime = this.attackTimer;
         
+        const myPos2 = this.node.worldPosition;
+        const warcryRangeSq = this.warcryRange * this.warcryRange;
         for (const enemy of enemies) {
             if (!enemy || !enemy.isValid || !enemy.active) {
                 continue;
             }
             
-            const distance = Vec3.distance(this.node.worldPosition, enemy.worldPosition);
-            if (distance <= this.warcryRange) {
+            const enemyPos = enemy.worldPosition;
+            const dx = myPos2.x - enemyPos.x;
+            const dy = myPos2.y - enemyPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            if (distanceSq <= warcryRangeSq) {
                 const enemyScript = enemy.getComponent('Enemy') as any || 
                                    enemy.getComponent('OrcWarrior') as any || 
                                    enemy.getComponent('OrcWarlord') as any ||
@@ -2225,8 +2324,9 @@ export class Boss extends Component {
     
     /**
      * 清理所有插在身上的武器（箭矢、长矛、回旋镖等）
+     * 子类（如 MinotaurWarrior）在重置状态时也会调用，因此使用 protected
      */
-    private clearAttachedWeapons() {
+    protected clearAttachedWeapons() {
         const childrenToRemove: Node[] = [];
         if (this.node) {
             const children = this.node.children || [];
@@ -2259,8 +2359,9 @@ export class Boss extends Component {
 
     /**
      * 重置敌人状态（用于对象池回收）
+     * 允许子类在此基础上扩展，因此使用 protected
      */
-    private resetEnemyState() {
+    protected resetEnemyState() {
         this.clearAttachedWeapons();
         
         this.currentHealth = this.maxHealth;
@@ -2306,8 +2407,9 @@ export class Boss extends Component {
 
     /**
      * 计算敌人避让方向（简单分离算法）
+     * 允许子类根据需要重写，因此使用 protected
      */
-    private calculateEnemyAvoidanceDirection(currentPos: Vec3, desiredDirection: Vec3, deltaTime: number): Vec3 {
+    protected calculateEnemyAvoidanceDirection(currentPos: Vec3, desiredDirection: Vec3, deltaTime: number): Vec3 {
         const avoidanceForce = new Vec3(0, 0, 0);
         let obstacleCount = 0;
         let maxStrength = 0;
@@ -2355,19 +2457,24 @@ export class Boss extends Component {
             }
 
             const enemyPos = enemy.worldPosition;
-            const distance = Vec3.distance(currentPos, enemyPos);
+            const dx = currentPos.x - enemyPos.x;
+            const dy = currentPos.y - enemyPos.y;
+            const distanceSq = dx * dx + dy * dy;
             
             const otherRadius = enemyScript.collisionRadius || 20;
             const minDistance = this.collisionRadius + otherRadius;
+            const minDistanceSq = minDistance * minDistance;
+            const detectionRangeSq2 = detectionRange * detectionRange;
 
-            if (distance < detectionRange && distance > 0.1) {
+            if (distanceSq < detectionRangeSq2 && distanceSq > 0.01) {
+                const distance = Math.sqrt(distanceSq);
                 const avoidDir = new Vec3();
                 Vec3.subtract(avoidDir, currentPos, enemyPos);
                 avoidDir.normalize();
                 
                 let strength = 1 - (distance / detectionRange);
                 
-                if (distance < minDistance) {
+                if (distanceSq < minDistanceSq) {
                     strength = 2.0; // 强制避障
                 }
                 

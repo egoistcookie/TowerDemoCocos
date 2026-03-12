@@ -207,12 +207,14 @@ export class Arrow2 extends Component {
                 continue;
             }
 
-            // 计算距离
+            // 计算距离（使用平方距离比较）
             const enemyPos = enemy.worldPosition;
-            const distance = Vec3.distance(currentPos, enemyPos);
+            const dx = currentPos.x - enemyPos.x;
+            const dy = currentPos.y - enemyPos.y;
+            const distanceSq = dx * dx + dy * dy;
 
             // 如果距离足够近，认为命中
-            if (distance < hitRadius) {
+            if (distanceSq < hitRadius * hitRadius) {
                 // 命中敌人（穿透，不停止飞行）
                 this.hitTarget(currentPos, enemy);
                 // 继续飞行，不停止

@@ -49,10 +49,13 @@ export class Arrow extends Component {
         }
 
         // 计算飞行时间（基于距离和速度）
-        const distance = Vec3.distance(this.startPos, this.targetPos);
-        if (distance < 0.1) {
+        const dx = this.startPos.x - this.targetPos.x;
+        const dy = this.startPos.y - this.targetPos.y;
+        const distanceSq = dx * dx + dy * dy;
+        if (distanceSq < 0.01) {
             return;
         }
+        const distance = Math.sqrt(distanceSq);
         
         this.travelTime = distance / this.speed;
         if (this.travelTime <= 0) {
@@ -192,13 +195,16 @@ export class Arrow extends Component {
         }
         this.lastPos = currentPos.clone();
         
-        // 检查是否命中目标
+        // 检查是否命中目标（使用平方距离比较）
         if (this.targetNode && this.targetNode.isValid) {
             const currentTargetPos = this.targetNode.worldPosition;
-            const distance = Vec3.distance(currentPos, currentTargetPos);
+            const dx = currentPos.x - currentTargetPos.x;
+            const dy = currentPos.y - currentTargetPos.y;
+            const distanceSq = dx * dx + dy * dy;
             
             // 如果距离足够近，认为命中
-            if (distance < 30) {
+            const hitRadius = 30;
+            if (distanceSq < hitRadius * hitRadius) {
                 this.hitTarget();
                 return;
             }
@@ -368,6 +374,7 @@ export class Arrow extends Component {
         const t = Math.max(0, Math.min(1, Vec3.dot(Vec3.subtract(new Vec3(), point, lineStart), lineDir) / lineLengthSqr));
         const projection = Vec3.add(new Vec3(), lineStart, Vec3.multiplyScalar(new Vec3(), lineDir, t));
         
+        // 这里函数需要实际距离值，仍然使用 Vec3.distance
         return Vec3.distance(point, projection);
     }
 }

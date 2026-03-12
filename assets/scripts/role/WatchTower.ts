@@ -635,11 +635,16 @@ export class WatchTower extends Build {
             }
         }
 
-        // 处理攻击逻辑
+        // 处理攻击逻辑（使用平方距离比较）
         if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
-            const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
+            const myPos = this.node.worldPosition;
+            const targetPos = this.currentTarget.worldPosition;
+            const dx = myPos.x - targetPos.x;
+            const dy = myPos.y - targetPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            const attackRangeSq = this.attackRange * this.attackRange;
             
-            if (distance <= this.attackRange) {
+            if (distanceSq <= attackRangeSq) {
                 // 在攻击范围内，进行攻击
                 if (this.attackTimer >= this.attackInterval) {
                     // 再次检查游戏状态，确保游戏仍在进行
@@ -957,10 +962,14 @@ export class WatchTower extends Build {
         // 使用UnitManager优化
         if (this.unitManager) {
             const enemies = this.unitManager.getEnemiesInRange(center, maxRange, true);
+            const maxRangeSq = maxRange * maxRange;
             for (const enemy of enemies) {
-                const distance = Vec3.distance(center, enemy.worldPosition);
-                if (distance < minDistance) {
-                    minDistance = distance;
+                const enemyPos = enemy.worldPosition;
+                const dx = center.x - enemyPos.x;
+                const dy = center.y - enemyPos.y;
+                const distanceSq = dx * dx + dy * dy;
+                if (distanceSq <= maxRangeSq && distanceSq < minDistance * minDistance) {
+                    minDistance = Math.sqrt(distanceSq);
                     nearestTarget = enemy;
                 }
             }
@@ -980,9 +989,13 @@ export class WatchTower extends Build {
                                        enemy.getComponent('OrcWarrior') as any ||
                                        enemy.getComponent('TrollSpearman') as any;
                     if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) continue;
-                    const distance = Vec3.distance(center, enemy.worldPosition);
-                    if (distance <= maxRange && distance < minDistance) {
-                        minDistance = distance;
+                    const enemyPos = enemy.worldPosition;
+                    const dx = center.x - enemyPos.x;
+                    const dy = center.y - enemyPos.y;
+                    const distanceSq = dx * dx + dy * dy;
+                    const maxRangeSq = maxRange * maxRange;
+                    if (distanceSq <= maxRangeSq && distanceSq < minDistance * minDistance) {
+                        minDistance = Math.sqrt(distanceSq);
                         nearestTarget = enemy;
                     }
                 }
@@ -1008,9 +1021,13 @@ export class WatchTower extends Build {
                 const priestScript = unit.getComponent('Priest') as any;
                 const unitScript = arrowerScript || priestScript;
                 if (!unitScript || !unitScript.isAlive || !unitScript.isAlive()) continue;
-                const distance = Vec3.distance(center, unit.worldPosition);
-                if (distance <= maxRange && distance < minDistance) {
-                    minDistance = distance;
+                const unitPos = unit.worldPosition;
+                const dx = center.x - unitPos.x;
+                const dy = center.y - unitPos.y;
+                const distanceSq = dx * dx + dy * dy;
+                const maxRangeSq = maxRange * maxRange;
+                if (distanceSq <= maxRangeSq && distanceSq < minDistance * minDistance) {
+                    minDistance = Math.sqrt(distanceSq);
                     nearestTarget = unit;
                 }
             }
@@ -1023,9 +1040,13 @@ export class WatchTower extends Build {
                 if (!unit || !unit.isValid || !unit.active) continue;
                 const unitScript = unit.getComponent('Hunter') as any;
                 if (!unitScript || !unitScript.isAlive || !unitScript.isAlive()) continue;
-                const distance = Vec3.distance(center, unit.worldPosition);
-                if (distance <= maxRange && distance < minDistance) {
-                    minDistance = distance;
+                const unitPos = unit.worldPosition;
+                const dx = center.x - unitPos.x;
+                const dy = center.y - unitPos.y;
+                const distanceSq = dx * dx + dy * dy;
+                const maxRangeSq = maxRange * maxRange;
+                if (distanceSq <= maxRangeSq && distanceSq < minDistance * minDistance) {
+                    minDistance = Math.sqrt(distanceSq);
                     nearestTarget = unit;
                 }
             }
@@ -1038,9 +1059,13 @@ export class WatchTower extends Build {
                 if (!unit || !unit.isValid || !unit.active) continue;
                 const unitScript = unit.getComponent('ElfSwordsman') as any;
                 if (!unitScript || !unitScript.isAlive || !unitScript.isAlive()) continue;
-                const distance = Vec3.distance(center, unit.worldPosition);
-                if (distance <= maxRange && distance < minDistance) {
-                    minDistance = distance;
+                const unitPos = unit.worldPosition;
+                const dx = center.x - unitPos.x;
+                const dy = center.y - unitPos.y;
+                const distanceSq = dx * dx + dy * dy;
+                const maxRangeSq = maxRange * maxRange;
+                if (distanceSq <= maxRangeSq && distanceSq < minDistance * minDistance) {
+                    minDistance = Math.sqrt(distanceSq);
                     nearestTarget = unit;
                 }
             }

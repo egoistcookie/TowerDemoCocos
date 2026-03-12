@@ -1530,7 +1530,7 @@ export class Enemy extends Component {
         }
 
         let nearestWall: Node | null = null;
-        let minDistance = Infinity;
+        let minDistanceSq = Infinity;
 
         for (const wall of stoneWalls) {
             if (!wall || !wall.active || !wall.isValid) continue;
@@ -1539,10 +1539,12 @@ export class Enemy extends Component {
             if (!wallScript || !wallScript.isAlive || !wallScript.isAlive()) continue;
 
             const wallPos = wall.worldPosition;
-            const distance = Vec3.distance(this.node.worldPosition, wallPos);
+            const dx = this.node.worldPosition.x - wallPos.x;
+            const dy = this.node.worldPosition.y - wallPos.y;
+            const distanceSq = dx * dx + dy * dy;
 
-            if (distance < minDistance) {
-                minDistance = distance;
+            if (distanceSq < minDistanceSq) {
+                minDistanceSq = distanceSq;
                 nearestWall = wall;
             }
         }
@@ -1574,11 +1576,15 @@ export class Enemy extends Component {
 
             const wallPos = wall.worldPosition;
             const wallRadius = wallScript.collisionRadius ?? 25; // 使用预制体设置的值，如果没有设置则默认为25
-            const distanceToWall = Vec3.distance(position, wallPos);
-            const minDistance = enemyRadius + wallRadius;
 
-            // 如果距离小于最小距离，说明碰撞
-            if (distanceToWall < minDistance) {
+            const dx = position.x - wallPos.x;
+            const dy = position.y - wallPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            const minDistance = enemyRadius + wallRadius;
+            const minDistanceSq = minDistance * minDistance;
+
+            // 如果距离小于最小距离，说明碰撞（使用平方距离比较）
+            if (distanceSq < minDistanceSq) {
                 return wall;
             }
         }
@@ -2317,18 +2323,29 @@ export class Enemy extends Component {
         
         // 如果敌人还活着，并且没有其他动画在播放，恢复移动
         if (!this.isDestroyed && !this.isPlayingAttackAnimation && !this.isPlayingDeathAnimation) {
+            const myPos = this.node.worldPosition;
+            const attackRangeSq = this.attackRange * this.attackRange;
+
             // 如果有当前目标，向目标移动
             if (this.currentTarget) {
-                const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
-                if (distance > this.attackRange) {
+                const targetPos = this.currentTarget.worldPosition;
+                const dx = myPos.x - targetPos.x;
+                const dy = myPos.y - targetPos.y;
+                const distanceSq = dx * dx + dy * dy;
+
+                if (distanceSq > attackRangeSq) {
                     this.playWalkAnimation();
                 } else {
                     this.playIdleAnimation();
                 }
             } else if (this.targetCrystal && this.targetCrystal.isValid) {
                 // 没有当前目标，向水晶移动
-                const distance = Vec3.distance(this.node.worldPosition, this.targetCrystal.worldPosition);
-                if (distance > this.attackRange) {
+                const crystalPos = this.targetCrystal.worldPosition;
+                const dx = myPos.x - crystalPos.x;
+                const dy = myPos.y - crystalPos.y;
+                const distanceSq = dx * dx + dy * dy;
+
+                if (distanceSq > attackRangeSq) {
                     this.playWalkAnimation();
                 } else {
                     this.playIdleAnimation();
@@ -2563,13 +2580,18 @@ export class Enemy extends Component {
 
         // 步骤2：根据是否有目标决定行动
         if (this.currentTarget && this.currentTarget.isValid) {
-            // 有目标：计算距离
-            const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
+            // 有目标：计算平方距离
+            const myPos = this.node.worldPosition;
+            const targetPos = this.currentTarget.worldPosition;
+            const dx = myPos.x - targetPos.x;
+            const dy = myPos.y - targetPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            const attackRangeSq = this.attackRange * this.attackRange;
 
             if (this.isPlayingAttackAnimation) {
                 // 攻击动画期间不移动
                 this.stopMoving();
-            } else if (distance <= this.attackRange) {
+            } else if (distanceSq <= attackRangeSq) {
                 // 在攻击范围内，停止移动并尝试攻击
                 this.stopMoving();
                 if (this.attackTimer >= this.attackInterval) {
@@ -3074,10 +3096,14 @@ export class Enemy extends Component {
                 const wallPos = wall.worldPosition;
                 const wallScript = wall.getComponent('StoneWall') as any;
                 const wallRadius = wallScript?.collisionRadius || 40;
-                const distanceToWall = Vec3.distance(checkPos, wallPos);
-                const minDistance = enemyRadius + wallRadius + 10; // 增加10像素的安全距离
 
-                if (distanceToWall < minDistance) {
+                const dx = checkPos.x - wallPos.x;
+                const dy = checkPos.y - wallPos.y;
+                const distanceSq = dx * dx + dy * dy;
+                const minDistance = enemyRadius + wallRadius + 10; // 增加10像素的安全距离
+                const minDistanceSq = minDistance * minDistance;
+
+                if (distanceSq < minDistanceSq) {
                     return true; // 路径被阻挡
                 }
             }
@@ -3348,7 +3374,7 @@ export class Enemy extends Component {
             }
         }
 
-        // 检查与每个敌人的碰撞
+        // 检查与每个敌人的碰撞（使用平方距离比较）
         for (const enemy of allEnemies) {
             if (!enemy || !enemy.isValid || !enemy.active || enemy === this.node) {
                 continue;
@@ -3368,13 +3394,16 @@ export class Enemy extends Component {
             }
 
             const enemyPos = enemy.worldPosition;
-            const enemyDistance = Vec3.distance(position, enemyPos);
+            const dx = position.x - enemyPos.x;
+            const dy = position.y - enemyPos.y;
+            const distanceSq = dx * dx + dy * dy;
             
             // 获取敌人的碰撞半径（如果有collisionRadius属性）
             const otherRadius = enemyScript.collisionRadius || 5;
             const minDistance = this.collisionRadius + otherRadius;
+            const minDistanceSq = minDistance * minDistance;
 
-            if (enemyDistance < minDistance && enemyDistance > 0.1) {
+            if (distanceSq < minDistanceSq && distanceSq > 0.01) {
                 return true; // 碰撞
             }
         }
@@ -3442,13 +3471,18 @@ export class Enemy extends Component {
             }
 
             const enemyPos = enemy.worldPosition;
-            const distance = Vec3.distance(currentPos, enemyPos);
+            const dx = currentPos.x - enemyPos.x;
+            const dy = currentPos.y - enemyPos.y;
+            const distanceSq = dx * dx + dy * dy;
             
             // 获取敌人的碰撞半径
             const otherRadius = enemyScript.collisionRadius || 5;
             const minDistance = this.collisionRadius + otherRadius;
+            const minDistanceSq = minDistance * minDistance;
+            const detectionRangeSq = detectionRange * detectionRange;
 
-            if (distance < detectionRange && distance > 0.1) {
+            if (distanceSq < detectionRangeSq && distanceSq > 0.01) {
+                const distance = Math.sqrt(distanceSq);
                 const avoidDir = new Vec3();
                 Vec3.subtract(avoidDir, currentPos, enemyPos);
                 avoidDir.normalize();
@@ -3457,7 +3491,7 @@ export class Enemy extends Component {
                 let strength = 1 - (distance / detectionRange);
                 
                 // 如果已经在碰撞范围内，大幅增强避障力
-                if (distance < minDistance) {
+                if (distanceSq < minDistanceSq) {
                     strength = 2.0; // 强制避障
                 }
                 

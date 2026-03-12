@@ -160,13 +160,7 @@ export class MinotaurWarrior extends Boss {
     stompAnimationDuration: number = 1.0; // 战争践踏动画时长
 
     // 私有属性（需要从OrcWarlord复制）
-    private currentHealth: number = 200;
-    private healthBar: HealthBar = null!;
-    private healthBarNode: Node = null!;
-    private isDestroyed: boolean = false;
-    private currentTarget: Node = null!;
-    private gameManager: GameManager = null!;
-    private unitManager: UnitManager = null!;
+    // 生命值、血条与大部分运行时状态均由 Boss 基类维护，这里不再重复声明这些字段
     
     @property
     goldReward: number = 10; // 比OrcWarlord的5更高
@@ -180,25 +174,7 @@ export class MinotaurWarrior extends Boss {
     @property(AudioClip)
     attackSound: AudioClip = null!;
 
-    // 动画相关私有属性
-    private sprite: Sprite = null!;
-    private uiTransform: UITransform = null!;
-    private currentAnimationFrameIndex: number = 0;
-    private animationTimer: number = 0;
-    private isPlayingIdleAnimation: boolean = false;
-    private isPlayingWalkAnimation: boolean = false;
-    private isPlayingAttackAnimation: boolean = false;
-    private isPlayingHitAnimation: boolean = false;
-    private isPlayingDeathAnimation: boolean = false;
-    private defaultSpriteFrame: SpriteFrame = null!;
-    private defaultScale: Vec3 = new Vec3(1, 1, 1);
-    private isHit: boolean = false;
-    private attackComplete: boolean = false;
-    
-    // 伤害计算相关属性
-    private recentDamage: number = 0;
-    private damageTime: number = 0;
-    private lastStaggerTime: number = -1;
+    // 动画与伤害相关运行时状态由 Boss 基类维护，这里不再重复声明
 
     // 战争践踏私有属性
     private stompTimer: number = 0; // 战争践踏冷却计时器
@@ -883,61 +859,9 @@ export class MinotaurWarrior extends Boss {
         }
     }
 
-    /**
-     * 停止所有动画（需要从OrcWarlord.ts复制，但需要添加战争践踏）
-     */
-    private stopAllAnimations() {
-        this.isPlayingIdleAnimation = false;
-        this.isPlayingWalkAnimation = false;
-        this.isPlayingAttackAnimation = false;
-        this.isPlayingHitAnimation = false;
-        this.isPlayingWarcryAnimation = false;
-        this.isPlayingStompAnimation = false;
-        // 不停止死亡动画
-        this.isHit = false; // 清除被攻击标志
-    }
+    // 停止所有动画逻辑复用 Boss 基类的 stopAllAnimations，外加战争践踏状态控制
 
-    /**
-     * 播放待机动画（需要从OrcWarlord.ts复制）
-     */
-    private playIdleAnimation() {
-        if (this.isPlayingIdleAnimation || this.isDestroyed) {
-            return;
-        }
-
-        this.stopAllAnimations();
-        this.isPlayingIdleAnimation = true;
-        this.animationTimer = 0;
-        this.currentAnimationFrameIndex = -1;
-    }
-
-    /**
-     * 攻击方法（需要从OrcWarlord.ts复制）
-     */
-    private attack() {
-        // 如果正在播放攻击动画，不重复触发攻击
-        if (this.isPlayingAttackAnimation) {
-            return;
-        }
-        
-        if (!this.currentTarget || this.isDestroyed) {
-            return;
-        }
-
-        // 再次检查目标是否有效
-        if (!this.currentTarget.isValid || !this.currentTarget.active) {
-            this.currentTarget = null!;
-            return;
-        }
-
-        // 攻击时朝向目标方向
-        const direction = new Vec3();
-        Vec3.subtract(direction, this.currentTarget.worldPosition, this.node.worldPosition);
-        this.flipDirection(direction);
-
-        // 播放攻击动画
-        this.playAttackAnimation();
-    }
+    // 攻击方法逻辑与 Boss 基类一致，直接继承 Boss.attack()
 
     // 由于代码量非常大，以下方法需要从OrcWarlord.ts完整复制
     // 由于响应长度限制，这里只添加关键方法框架
@@ -1337,40 +1261,7 @@ export class MinotaurWarrior extends Boss {
         }
     }
 
-    // 以下方法需要从OrcWarlord.ts完整复制实现
-    // 由于代码量非常大，这里只添加方法框架，完整实现请从OrcWarlord.ts复制对应方法
-    
-    private clearAttachedWeapons() {
-        // 从OrcWarlord.ts的clearAttachedWeapons()方法完整复制（2298-2334行）
-        const childrenToRemove: Node[] = [];
-        if (this.node) {
-            const children = this.node.children || [];
-            for (const child of children) {
-                if (child && child.isValid) {
-                    const arrowScript = child.getComponent('Arrow') as any;
-                    const arrow2Script = child.getComponent('Arrow2') as any;
-                    const boomerangScript = child.getComponent('Boomerang') as any;
-                    const spearScript = child.getComponent('Spear') as any;
-                    const childName = child.name.toLowerCase();
-                    
-                    if (childName !== 'healthbar' && childName !== 'health bar') {
-                        if (arrowScript || arrow2Script || boomerangScript || spearScript || 
-                            childName.includes('arrow') || childName.includes('spear') || 
-                            childName.includes('boomerang') || childName.includes('长矛') || 
-                            childName.includes('箭矢') || childName.includes('回旋镖')) {
-                            childrenToRemove.push(child);
-                        }
-                    }
-                }
-            }
-        }
-        
-        for (const child of childrenToRemove) {
-            if (child && child.isValid) {
-                child.destroy();
-            }
-        }
-    }
+    // 插在身上的武器清理逻辑复用 Boss 基类的 protected clearAttachedWeapons
 
     stopMoving() {
         if (!this.isPlayingAttackAnimation && !this.isPlayingHitAnimation && !this.isPlayingDeathAnimation) {
@@ -1402,37 +1293,11 @@ export class MinotaurWarrior extends Boss {
         }
     }
 
-    private updateIdleAnimation() {
-        if (this.idleAnimationFrames.length === 0) {
-            this.isPlayingIdleAnimation = false;
-            return;
-        }
+    // 动画更新逻辑（待机、行走等）直接继承 Boss 基类的实现
 
-        const frameDuration = this.idleAnimationDuration / this.idleAnimationFrames.length;
-        const frameIndex = Math.floor(this.animationTimer / frameDuration) % this.idleAnimationFrames.length;
+    // 行走动画更新逻辑同样复用 Boss 基类的 updateWalkAnimation
 
-        if (frameIndex !== this.currentAnimationFrameIndex) {
-            this.currentAnimationFrameIndex = frameIndex;
-            this.sprite.spriteFrame = this.idleAnimationFrames[frameIndex];
-        }
-    }
-
-    private updateWalkAnimation() {
-        if (this.walkAnimationFrames.length === 0) {
-            this.isPlayingWalkAnimation = false;
-            return;
-        }
-
-        const frameDuration = this.walkAnimationDuration / this.walkAnimationFrames.length;
-        const frameIndex = Math.floor(this.animationTimer / frameDuration) % this.walkAnimationFrames.length;
-
-        if (frameIndex !== this.currentAnimationFrameIndex) {
-            this.currentAnimationFrameIndex = frameIndex;
-            this.sprite.spriteFrame = this.walkAnimationFrames[frameIndex];
-        }
-    }
-
-    private updateAttackAnimation() {
+    protected updateAttackAnimation() {
         // 从OrcWarlord.ts的updateAttackAnimation()方法完整复制（1510-1594行）
         if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
             this.isPlayingAttackAnimation = false;
@@ -1511,7 +1376,7 @@ export class MinotaurWarrior extends Boss {
         }
     }
 
-    private updateHitAnimation() {
+    protected updateHitAnimation() {
         if (this.hitAnimationFrames.length === 0) {
             this.isPlayingHitAnimation = false;
             this.resumeMovement();
@@ -1532,7 +1397,7 @@ export class MinotaurWarrior extends Boss {
         }
     }
 
-    private updateDeathAnimation() {
+    protected updateDeathAnimation() {
         if (this.deathAnimationFrames.length === 0) {
             this.isPlayingDeathAnimation = false;
             return;
@@ -1554,18 +1419,9 @@ export class MinotaurWarrior extends Boss {
         }
     }
 
-    private playWalkAnimation() {
-        if (this.isPlayingWalkAnimation || this.isDestroyed) {
-            return;
-        }
+    // 行走动画播放逻辑复用 Boss 基类的 playWalkAnimation
 
-        this.stopAllAnimations();
-        this.isPlayingWalkAnimation = true;
-        this.animationTimer = 0;
-        this.currentAnimationFrameIndex = -1;
-    }
-
-    private playAttackAnimation() {
+    playAttackAnimation() {
         if (this.isPlayingDeathAnimation || this.isDestroyed) {
             return;
         }
@@ -1592,30 +1448,9 @@ export class MinotaurWarrior extends Boss {
         }
     }
 
-    private playHitAnimation() {
-        if (this.isPlayingDeathAnimation || this.isDestroyed) {
-            return;
-        }
+    // 受击与死亡动画播放逻辑复用 Boss 基类的 playHitAnimation / playDeathAnimation
 
-        this.stopAllAnimations();
-        this.isPlayingHitAnimation = true;
-        this.isHit = true;
-        this.animationTimer = 0;
-        this.currentAnimationFrameIndex = -1;
-    }
-
-    private playDeathAnimation() {
-        if (this.isPlayingDeathAnimation) {
-            return;
-        }
-
-        this.stopAllAnimations();
-        this.isPlayingDeathAnimation = true;
-        this.animationTimer = 0;
-        this.currentAnimationFrameIndex = -1;
-    }
-
-    private dealDamage() {
+    dealDamage() {
         // 从OrcWarlord.ts的dealDamage()方法完整复制（1825-1878行）
         if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
             this.currentTarget = null!;
@@ -1725,82 +1560,9 @@ export class MinotaurWarrior extends Boss {
         }
     }
 
-    private resumeMovement() {
-        this.isHit = false;
-        
-        if (!this.isDestroyed && !this.isPlayingAttackAnimation && !this.isPlayingDeathAnimation) {
-            if (this.currentTarget) {
-                const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
-                if (distance > this.attackRange) {
-                    this.playWalkAnimation();
-                } else {
-                    this.playIdleAnimation();
-                }
-            } else if (this.targetCrystal && this.targetCrystal.isValid) {
-                const distance = Vec3.distance(this.node.worldPosition, this.targetCrystal.worldPosition);
-                if (distance > this.attackRange) {
-                    this.playWalkAnimation();
-                } else {
-                    this.playIdleAnimation();
-                }
-            } else {
-                this.playIdleAnimation();
-            }
-        }
-    }
+    // 恢复移动逻辑复用 Boss 基类的 resumeMovement
 
-    private showDamageNumber(damage: number) {
-        // 从OrcWarlord.ts的showDamageNumber()方法完整复制（2023-2079行）
-        let damageNode: Node;
-        if (this.damageNumberPrefab) {
-            damageNode = instantiate(this.damageNumberPrefab);
-        } else {
-            damageNode = new Node('DamageNumber');
-            const label = damageNode.addComponent(Label);
-            label.string = `-${Math.floor(damage)}`;
-            label.fontSize = 20;
-            label.color = Color.WHITE;
-        }
-        
-        const canvas = find('Canvas');
-        if (canvas) {
-            damageNode.setParent(canvas);
-        } else {
-            damageNode.setParent(this.node.scene);
-        }
-        
-        damageNode.setWorldPosition(this.node.worldPosition.clone().add3f(0, 40, 0));
-        
-        const damageScript = damageNode.getComponent(DamageNumber);
-        if (damageScript) {
-            damageScript.setDamage(damage);
-        } else {
-            const label = damageNode.getComponent(Label);
-            if (label) {
-                const startPos = damageNode.position.clone();
-                const endPos = startPos.clone();
-                endPos.y += 50;
-                
-                tween(damageNode)
-                    .to(1.0, { position: endPos })
-                    .parallel(
-                        tween().to(1.0, {}, {
-                            onUpdate: (target, ratio) => {
-                                const color = label.color.clone();
-                                color.a = 255 * (1 - ratio);
-                                label.color = color;
-                            }
-                        })
-                    )
-                    .call(() => {
-                        if (damageNode && damageNode.isValid) {
-                            damageNode.destroy();
-                        }
-                    })
-                    .start();
-            }
-        }
-    }
+    // 伤害数字显示逻辑复用 Boss 基类的 showDamageNumber
 
     die() {
         // 从OrcWarlord.ts的die()方法完整复制（2232-2296行），但需要调用super.clearAllWarcryBuffs()
@@ -1847,42 +1609,13 @@ export class MinotaurWarrior extends Boss {
         }, 60000);
     }
 
-    private resetEnemyState() {
-        // 从OrcWarlord.ts的resetEnemyState()方法完整复制（2339-2382行）
-        this.clearAttachedWeapons();
-        this.currentHealth = this.maxHealth;
-        this.isDestroyed = false;
-        this.attackTimer = 0;
-        this.attackComplete = false;
-        this.warcryTimer = 0;
-        this.isPlayingWarcryAnimation = false;
-        this.warcryBuffedEnemies.clear();
-        this.warcryBuffEndTime.clear();
-        this.wasPlayingAttackBeforeWarcry = false;
+    protected resetEnemyState() {
+        // 先调用父类的重置逻辑
+        super.resetEnemyState();
+        // 再重置 MinotaurWarrior 自己新增的状态（如战争践踏）
         this.stompTimer = 0;
         this.isPlayingStompAnimation = false;
         this.wasPlayingAttackBeforeStomp = false;
-        this.isHit = false;
-        this.isPlayingAttackAnimation = false;
-        this.isPlayingHitAnimation = false;
-        this.isPlayingDeathAnimation = false;
-        this.isPlayingIdleAnimation = false;
-        this.isPlayingWalkAnimation = false;
-        this.currentTarget = null!;
-        
-        this.currentAnimationFrameIndex = 0;
-        this.animationTimer = 0;
-        
-        if (this.node) {
-            this.node.setScale(this.defaultScale);
-            this.node.angle = 0;
-            if (this.sprite) {
-                const color = this.sprite.color.clone();
-                color.a = 255;
-                this.sprite.color = color;
-            }
-        }
-        
         if (this.healthBarNode && this.healthBarNode.isValid) {
             this.healthBarNode.destroy();
         }
@@ -2105,38 +1838,7 @@ export class MinotaurWarrior extends Boss {
         return null;
     }
 
-    private checkPathClear(startPos: Vec3, endPos: Vec3, stoneWalls: Node[]): boolean {
-        const direction = new Vec3();
-        Vec3.subtract(direction, endPos, startPos);
-        const distance = direction.length();
-        
-        if (distance < 0.1) {
-            return true;
-        }
-
-        direction.normalize();
-        const checkSteps = Math.ceil(distance / 50);
-        const stepSize = distance / checkSteps;
-
-        for (let i = 0; i <= checkSteps; i++) {
-            const checkPos = new Vec3();
-            Vec3.scaleAndAdd(checkPos, startPos, direction, stepSize * i);
-
-            for (const wall of stoneWalls) {
-                if (!wall || !wall.active || !wall.isValid) continue;
-                const wallScript = wall.getComponent('StoneWall') as any;
-                if (!wallScript || !wallScript.isAlive || !wallScript.isAlive()) continue;
-                const wallPos = wall.worldPosition;
-                const wallRadius = wallScript.collisionRadius || 40;
-                const distanceToWall = Vec3.distance(checkPos, wallPos);
-                if (distanceToWall < wallRadius + 20) {
-                    return false;
-                }
-            }
-        }
-
-        return true;
-    }
+    // 路径畅通检测逻辑复用自 Boss 基类的 protected checkPathClear(startPos, endPos, stoneWalls)
 
     checkForTargetsOnPath() {
         const detectionRange = 200;
@@ -2316,7 +2018,7 @@ export class MinotaurWarrior extends Boss {
         }
     }
 
-    private calculateEnemyAvoidanceDirection(currentPos: Vec3, desiredDirection: Vec3, deltaTime: number): Vec3 {
+    protected calculateEnemyAvoidanceDirection(currentPos: Vec3, desiredDirection: Vec3, deltaTime: number): Vec3 {
         const avoidanceForce = new Vec3(0, 0, 0);
         let obstacleCount = 0;
         let maxStrength = 0;
