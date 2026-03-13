@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, tween, EventTouch, input, Input, resources, Sprite, SpriteFrame, Texture2D, Camera, AudioClip, view, CCString } from 'cc';
+import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, tween, EventTouch, input, Input, resources, Sprite, SpriteFrame, Texture2D, Camera, AudioClip, view, CCString, UIOpacity, LabelOutline } from 'cc';
 import { AudioManager } from '../AudioManager';
 import { GameManager } from '../GameManager';
 import { GameState } from '../GameState';
@@ -518,6 +518,11 @@ export class Role extends Component {
         this.dialogLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         this.dialogLabel.verticalAlign = Label.VerticalAlign.CENTER;
         this.dialogLabel.overflow = Label.Overflow.RESIZE_HEIGHT;
+
+        // 黑色描边
+        const outline = labelNode.addComponent(LabelOutline);
+        outline.color = new Color(0, 0, 0, 255);
+        outline.width = 2;
 
         // 初始设置为完全显示
         this.dialogNode.active = true;
@@ -2970,12 +2975,12 @@ export class Role extends Component {
         // 保存当前目标的引用，避免回调函数中引用失效的目标
         const targetNode = this.currentTarget;
         
-        // 初始化弓箭，设置命中回调
+        // 初始化弓箭，设置命中回调（带受力方向）
         arrowScript.init(
             startPos,
             targetNode,
             this.attackDamage,
-            (damage: number) => {
+            (damage: number, hitDirection: Vec3) => {
                 // 播放箭矢击中音效
                 if (this.hitSound) {
                     AudioManager.Instance?.playSFX(this.hitSound);
@@ -2988,7 +2993,8 @@ export class Role extends Component {
                         // 获取敌人脚本
                         const enemyScript = this.getEnemyScript(targetNode);
                         if (enemyScript && enemyScript.takeDamage) {
-                            enemyScript.takeDamage(damage);
+                            // 将受力方向传给敌人，用于控制伤害数字飘动方向
+                            enemyScript.takeDamage(damage, hitDirection);
                             // 记录伤害统计
                             this.recordDamageToStatistics(damage);
                         }
@@ -3032,18 +3038,34 @@ export class Role extends Component {
         }, 0.1);
     }
 
-    takeDamage(damage: number) {
+    // 最近一次受击方向（用于伤害数字沿攻击方向飘动）
+    private lastHitDirection: Vec3 | null = null;
+
+    takeDamage(damage: number, hitDirection?: Vec3) {
         if (this.isDestroyed) {
             return;
         }
 
+        // 记录最近一次受击方向（标准化后的力方向）
+        if (hitDirection && hitDirection.length() > 0.001) {
+            if (!this.lastHitDirection) {
+                this.lastHitDirection = new Vec3();
+            }
+            this.lastHitDirection.set(hitDirection);
+            this.lastHitDirection.normalize();
+        }
+
+        // 10% 概率触发暴击，实际伤害加成
+        const isCritical = Math.random() < 0.1;
+        const finalDamage = isCritical ? Math.floor(damage * 1.5) : damage;
+
         // 显示伤害数字
-        this.showDamageNumber(damage);
+        this.showDamageNumber(finalDamage, isCritical, hitDirection);
         
         // 播放受击动画
         this.playHitAnimation();
 
-        this.currentHealth -= damage;
+        this.currentHealth -= finalDamage;
 
         // 更新血条
         if (this.healthBar) {
@@ -3118,11 +3140,14 @@ export class Role extends Component {
         // 设置位置（在Tower上方）
         healNode.setWorldPosition(this.node.worldPosition.clone().add3f(0, 30, 0));
 
-        // 添加Label组件显示+号
+        // 添加Label组件显示+号（黑边绿字）
         const label = healNode.addComponent(Label);
         label.string = `+${Math.floor(amount)}`;
         label.fontSize = 20;
         label.color = Color.GREEN;
+        const outline = healNode.addComponent(LabelOutline);
+        outline.color = new Color(0, 0, 0, 255);
+        outline.width = 2;
 
         // 添加UITransform
         const uiTransform = healNode.addComponent(UITransform);
@@ -3154,18 +3179,19 @@ export class Role extends Component {
             .start();
     }
 
-    showDamageNumber(damage: number) {
+    showDamageNumber(damage: number, isCritical: boolean = false, hitDirection?: Vec3) {
         // 创建伤害数字节点
         let damageNode: Node;
         if (this.damageNumberPrefab) {
             damageNode = instantiate(this.damageNumberPrefab);
         } else {
-            // 如果没有预制体，创建简单的Label节点
             damageNode = new Node('DamageNumber');
-            const label = damageNode.addComponent(Label);
-            label.string = `-${Math.floor(damage)}`;
-            label.fontSize = 20;
-            label.color = Color.WHITE;
+        }
+
+        // 如果预制体上自带 DamageNumber 组件（包含自己的上飘逻辑），先移除，避免与当前自定义飘动冲突
+        const builtinDamageComp = damageNode.getComponent(DamageNumber);
+        if (builtinDamageComp) {
+            damageNode.removeComponent(DamageNumber);
         }
         
         // 添加到Canvas或场景
@@ -3176,40 +3202,78 @@ export class Role extends Component {
             damageNode.setParent(this.node.scene);
         }
         
-        // 设置位置（在弓箭手上方）
-        damageNode.setWorldPosition(this.node.worldPosition.clone().add3f(0, 30, 0));
+        // 起始位置：在单位上方一点
+        const startPos = this.node.worldPosition.clone();
+        startPos.y += 30;
+        damageNode.setWorldPosition(startPos);
         
-        // 如果有DamageNumber组件，设置伤害值
-        const damageScript = damageNode.getComponent(DamageNumber);
-        if (damageScript) {
-            damageScript.setDamage(damage);
-        } else {
-            // 如果没有组件，手动添加动画
-            const label = damageNode.getComponent(Label);
-            if (label) {
-                const startPos = damageNode.position.clone();
-                const endPos = startPos.clone();
-                endPos.y += 50;
-                
-                tween(damageNode)
-                    .to(1.0, { position: endPos })
-                    .parallel(
-                        tween().to(1.0, {}, {
-                            onUpdate: (target, ratio) => {
-                                const color = label.color.clone();
-                                color.a = 255 * (1 - ratio);
-                                label.color = color;
-                            }
-                        })
-                    )
-                    .call(() => {
-                        if (damageNode && damageNode.isValid) {
-                            damageNode.destroy();
-                        }
-                    })
-                    .start();
+        // 查找或创建 Label
+        let label: Label | null = damageNode.getComponent(Label);
+        if (!label) {
+            const labelsInChildren = damageNode.getComponentsInChildren(Label);
+            if (labelsInChildren && labelsInChildren.length > 0) {
+                label = labelsInChildren[0];
             }
         }
+        if (!label) {
+            label = damageNode.addComponent(Label);
+            label.fontSize = 20;
+        }
+
+        // 文字内容与样式
+        const baseDamageText = `-${Math.floor(damage)}`;
+        label.string = isCritical ? `${baseDamageText}!` : baseDamageText;
+        // 我方单位受伤：统一使用黑边红字，暴击仅在尺寸和感叹号上区分
+        label.color = new Color(255, 0, 0, 255);
+
+        // 黑色描边（使用非弃用 API）
+        let outline = label.node.getComponent(LabelOutline);
+        if (!outline) {
+            outline = label.node.addComponent(LabelOutline);
+        }
+        (label as any).outlineColor = new Color(0, 0, 0, 255);
+        (label as any).outlineWidth = 2;
+
+        // 暴击放大（略小一点，避免过于夸张）
+        if (isCritical) {
+            label.fontSize = label.fontSize * 1.2;
+        }
+
+        // 飘动方向：沿攻击方向飘动
+        const floatDir = new Vec3();
+        const sourceDir = hitDirection && hitDirection.length() > 0.001
+            ? hitDirection
+            : (this.lastHitDirection && this.lastHitDirection.length() > 0.001 ? this.lastHitDirection : null);
+
+        if (sourceDir) {
+            floatDir.set(sourceDir);
+            floatDir.normalize();
+        } else {
+            // 如果没有记录受击方向，默认向上
+            floatDir.set(0, 1, 0);
+        }
+
+        // 飘动距离与敌人保持一致（缩短版）
+        const floatDistance = isCritical ? 40 : 25;
+        const offset = new Vec3();
+        Vec3.scaleAndAdd(offset, startPos, floatDir, floatDistance);
+        const endWorldPos = offset;
+
+        // 渐隐飘动动画
+        const uiOpacity = damageNode.getComponent(UIOpacity) || damageNode.addComponent(UIOpacity);
+        uiOpacity.opacity = 255;
+
+        tween(damageNode)
+            .to(0.6, { worldPosition: endWorldPos }, { easing: 'sineOut' })
+            .parallel(
+                tween(uiOpacity).to(0.6, { opacity: 0 })
+            )
+            .call(() => {
+                if (damageNode && damageNode.isValid) {
+                    damageNode.destroy();
+                }
+            })
+            .start();
     }
 
     destroyTower() {

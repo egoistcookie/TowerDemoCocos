@@ -1170,12 +1170,12 @@ export class WatchTower extends Build {
         // 保存当前目标的引用，避免回调函数中引用失效的目标
         const targetNode = this.currentTarget;
         
-        // 初始化弓箭，设置命中回调
+        // 初始化弓箭，设置命中回调（带受力方向）
         arrowScript.init(
             startPos,
             targetNode,
             this.attackDamage,
-            (damage: number) => {
+            (damage: number, hitDirection: Vec3) => {
                 // 播放箭矢击中音效
                 if (this.hitSound) {
                     AudioManager.Instance?.playSFX(this.hitSound);
@@ -1198,7 +1198,8 @@ export class WatchTower extends Build {
                     }
                     
                     if (targetScript && targetScript.takeDamage) {
-                        targetScript.takeDamage(damage);
+                        // 将受力方向传给目标单位，用于控制伤害数字飘动方向
+                        targetScript.takeDamage(damage, hitDirection);
                         // 记录伤害统计（哨塔属于建筑，使用Build里的方法）
                         this.recordDamageToStatistics(damage);
                     }

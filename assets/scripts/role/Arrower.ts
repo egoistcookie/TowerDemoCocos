@@ -200,7 +200,13 @@ export class Arrower extends Role {
                 // 获取敌人脚本并造成伤害
                 const enemyScript = this.getEnemyScript(enemy);
                 if (enemyScript && enemyScript.takeDamage) {
-                    enemyScript.takeDamage(damage);
+                    // 计算受力方向：从弓箭手指向被击中的敌人
+                    const hitDirection = new Vec3();
+                    Vec3.subtract(hitDirection, enemy.worldPosition, this.node.worldPosition);
+                    if (hitDirection.length() > 0.001) {
+                        hitDirection.normalize();
+                    }
+                    enemyScript.takeDamage(damage, hitDirection);
                     // 记录伤害统计
                     this.recordDamageToStatistics(damage);
                 }

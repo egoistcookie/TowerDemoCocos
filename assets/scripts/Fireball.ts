@@ -248,7 +248,9 @@ export class Fireball extends Component {
             // 如果在爆炸范围内，造成伤害
             if (distanceSq <= radiusSq) {
                 if (unitScript.takeDamage && typeof unitScript.takeDamage === 'function') {
-                    unitScript.takeDamage(this.damage);
+                    // 使用火球飞行方向作为受击方向
+                    const hitDirection = this.direction.clone().normalize();
+                    unitScript.takeDamage(this.damage, hitDirection);
                 }
             }
         }

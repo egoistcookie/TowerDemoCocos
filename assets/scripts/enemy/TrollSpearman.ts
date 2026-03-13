@@ -222,12 +222,12 @@ export class TrollSpearman extends Enemy {
             AudioManager.Instance.playSFX(this.attackSound);
         }
 
-        // 初始化长矛，设置命中回调
+        // 初始化长矛，设置命中回调（带受击方向）
         spearScript.init(
             startPos,
             targetNode,
             this.attackDamage,
-            (damage: number) => {
+            (damage: number, hitDirection: Vec3) => {
                 // 检查目标是否仍然有效
                 if (targetNode && targetNode.isValid && targetNode.active) {
                     const towerScript = targetNode.getComponent('Arrower') as any;
@@ -241,7 +241,7 @@ export class TrollSpearman extends Enemy {
                     const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript;
                     
                     if (targetScript && targetScript.takeDamage) {
-                        targetScript.takeDamage(damage);
+                        targetScript.takeDamage(damage, hitDirection);
                         // 根据目标类型输出关键日志
                         if (stoneWallScript) {
                         } else if (crystalScript) {

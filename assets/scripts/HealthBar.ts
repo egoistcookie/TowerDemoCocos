@@ -57,6 +57,12 @@ export class HealthBar extends Component {
         const barX = -this.barWidth / 2;
         const barY = 0;
 
+        // 绘制黑色边框
+        this.graphics.strokeColor = Color.BLACK;
+        this.graphics.lineWidth = 1.5;
+        this.graphics.rect(barX - 1, barY - 1, this.barWidth + 2, this.barHeight + 2);
+        this.graphics.stroke();
+
         // 绘制背景（红色）
         this.graphics.fillColor = Color.RED;
         this.graphics.rect(barX, barY, this.barWidth, this.barHeight);

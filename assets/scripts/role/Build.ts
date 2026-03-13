@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Sprite, SpriteFrame, Color, Graphics, UITransform, Label, EventTouch, Camera } from 'cc';
+import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Sprite, SpriteFrame, Color, Graphics, UITransform, Label, EventTouch, Camera, UIOpacity, LabelOutline, tween } from 'cc';
 import { GameManager } from '../GameManager';
 import { GameState } from '../GameState';
 import { HealthBar } from '../HealthBar';
@@ -245,28 +245,31 @@ export class Build extends Component {
         }
     }
 
-    protected takeDamage(damage: number) {
+    // 最近一次受击方向（用于伤害数字沿攻击方向飘动）
+    protected lastHitDirection: Vec3 | null = null;
+
+    protected takeDamage(damage: number, hitDirection?: Vec3) {
         if (this.isDestroyed) {
             return;
         }
 
-        this.currentHealth -= damage;
+        // 记录最近一次受击方向（标准化后的力方向）
+        if (hitDirection && hitDirection.length() > 0.001) {
+            if (!this.lastHitDirection) {
+                this.lastHitDirection = new Vec3();
+            }
+            this.lastHitDirection.set(hitDirection);
+            this.lastHitDirection.normalize();
+        }
+
+        // 10% 概率触发暴击，实际伤害加成
+        const isCritical = Math.random() < 0.1;
+        const finalDamage = isCritical ? Math.floor(damage * 1.5) : damage;
+
+        this.currentHealth -= finalDamage;
 
         // 显示伤害数字
-        if (this.damageNumberPrefab) {
-            const damageNode = instantiate(this.damageNumberPrefab);
-            const canvas = find('Canvas');
-            if (canvas) {
-                damageNode.setParent(canvas);
-            } else if (this.node.scene) {
-                damageNode.setParent(this.node.scene);
-            }
-            damageNode.setWorldPosition(this.node.worldPosition.clone().add3f(0, 50, 0));
-            const damageScript = damageNode.getComponent(DamageNumber);
-            if (damageScript) {
-                damageScript.setDamage(damage);
-            }
-        }
+        this.showDamageNumber(finalDamage, isCritical, hitDirection);
 
         // 更新血条
         if (this.healthBar) {
@@ -276,6 +279,104 @@ export class Build extends Component {
         if (this.currentHealth <= 0) {
             this.die();
         }
+    }
+
+    /**
+     * 显示建筑物伤害数字（与单位/敌人一致的表现）
+     */
+    protected showDamageNumber(damage: number, isCritical: boolean = false, hitDirection?: Vec3) {
+        if (!this.damageNumberPrefab) {
+            return;
+        }
+
+        // 创建伤害数字节点
+        const damageNode = instantiate(this.damageNumberPrefab);
+
+        // 如果预制体上自带 DamageNumber 组件（包含自己的上飘逻辑），先移除，避免与当前自定义飘动冲突
+        const builtinDamageComp = damageNode.getComponent(DamageNumber);
+        if (builtinDamageComp) {
+            damageNode.removeComponent(DamageNumber);
+        }
+
+        const canvas = find('Canvas');
+        if (canvas) {
+            damageNode.setParent(canvas);
+        } else if (this.node.scene) {
+            damageNode.setParent(this.node.scene);
+        } else {
+            damageNode.setParent(this.node.parent);
+        }
+
+        // 起始位置：在建筑物上方一点
+        const startPos = this.node.worldPosition.clone();
+        startPos.y += 50;
+        damageNode.setWorldPosition(startPos);
+
+        // 查找或创建 Label
+        let label: Label | null = damageNode.getComponent(Label);
+        if (!label) {
+            const labelsInChildren = damageNode.getComponentsInChildren(Label);
+            if (labelsInChildren && labelsInChildren.length > 0) {
+                label = labelsInChildren[0];
+            }
+        }
+        if (!label) {
+            label = damageNode.addComponent(Label);
+            label.fontSize = 20;
+        }
+
+        // 文字内容与样式（建筑物受伤：统一黑边红字）
+        const baseDamageText = `-${Math.floor(damage)}`;
+        label.string = isCritical ? `${baseDamageText}!` : baseDamageText;
+        label.color = new Color(255, 0, 0, 255);
+
+        // 黑色描边
+        let outline = label.node.getComponent(LabelOutline);
+        if (!outline) {
+            outline = label.node.addComponent(LabelOutline);
+        }
+        (label as any).outlineColor = new Color(0, 0, 0, 255);
+        (label as any).outlineWidth = 2;
+
+        // 暴击放大（略小一点）
+        if (isCritical) {
+            label.fontSize = label.fontSize * 1.2;
+        }
+
+        // 飘动方向：沿攻击方向飘动
+        const floatDir = new Vec3();
+        const sourceDir = hitDirection && hitDirection.length() > 0.001
+            ? hitDirection
+            : (this.lastHitDirection && this.lastHitDirection.length() > 0.001 ? this.lastHitDirection : null);
+
+        if (sourceDir) {
+            floatDir.set(sourceDir);
+            floatDir.normalize();
+        } else {
+            // 如果没有记录受击方向，默认向上
+            floatDir.set(0, 1, 0);
+        }
+
+        const floatDistance = isCritical ? 40 : 25;
+        const offset = new Vec3();
+        Vec3.scaleAndAdd(offset, startPos, floatDir, floatDistance);
+        const endWorldPos = offset;
+
+        // 渐隐飘动动画
+        const uiOpacity = damageNode.getComponent(UIOpacity) || damageNode.addComponent(UIOpacity);
+        uiOpacity.opacity = 255;
+
+        tween(damageNode)
+            .to(0.6, { worldPosition: endWorldPos }, { easing: 'sineOut' })
+            .parallel(
+                tween(uiOpacity).to(0.6, { opacity: 0 })
+            )
+            .call(() => {
+                if (damageNode && damageNode.isValid) {
+                    damageNode.destroy();
+                }
+            })
+            .start();
     }
 
     /**

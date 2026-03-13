@@ -141,7 +141,14 @@ export class Boomerang extends Component {
         // 直接对当前目标造成伤害，支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
         const enemyScript = this.targetNode.getComponent('Enemy') as any || this.targetNode.getComponent('OrcWarrior') as any || this.targetNode.getComponent('OrcWarlord') as any || this.targetNode.getComponent('TrollSpearman') as any;
         if (enemyScript && typeof enemyScript.isAlive === 'function' && enemyScript.isAlive() && typeof enemyScript.takeDamage === 'function') {
-            enemyScript.takeDamage(this.currentDamage);
+            // 使用当前飞行方向作为受击方向
+            const currentPos = this.node.worldPosition.clone();
+            const dir = new Vec3();
+            Vec3.subtract(dir, currentPos, this.lastPos);
+            if (dir.length() > 0.001) {
+                dir.normalize();
+            }
+            enemyScript.takeDamage(this.currentDamage, dir);
         } else {
         }
         

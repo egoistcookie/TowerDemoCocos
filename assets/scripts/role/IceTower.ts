@@ -772,9 +772,9 @@ export class IceTower extends Build {
             startPos,
             this.currentTarget,
             this.attackDamage,
-            (damage: number, hitPos: Vec3, enemy: Node) => {
+            (damage: number, hitPos: Vec3, enemy: Node, hitDirection: Vec3) => {
                 // 命中回调
-                this.onArrowHit(damage, enemy);
+                this.onArrowHit(damage, enemy, hitDirection);
             }
         );
     }
@@ -782,7 +782,7 @@ export class IceTower extends Build {
     /**
      * 冰箭命中回调
      */
-    private onArrowHit(damage: number, enemy: Node) {
+    private onArrowHit(damage: number, enemy: Node, hitDirection: Vec3) {
         if (!enemy || !enemy.isValid || !enemy.active) {
             return;
         }
@@ -799,7 +799,7 @@ export class IceTower extends Build {
                            enemy.getComponent('TrollSpearman') as any;
         
         if (enemyScript && enemyScript.takeDamage) {
-            enemyScript.takeDamage(damage);
+            enemyScript.takeDamage(damage, hitDirection);
             // 记录伤害统计
             this.recordDamageToStatistics(damage);
         }

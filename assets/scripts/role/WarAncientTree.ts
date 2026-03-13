@@ -457,14 +457,16 @@ export class WarAncientTree extends Build {
             arrowScript = arrow.addComponent(Arrow);
         }
 
+        // 初始化弓箭，设置命中回调（带受力方向）
         arrowScript.init(
             startPos,
             this.currentTarget,
             this.attackDamage,
-            (damage: number) => {
+            (damage: number, hitDirection: Vec3) => {
                 const enemyScript = this.currentTarget?.getComponent('Enemy') as any || this.currentTarget?.getComponent('OrcWarrior') as any || this.currentTarget?.getComponent('OrcWarlord') as any || this.currentTarget?.getComponent('TrollSpearman') as any;
                 if (enemyScript && enemyScript.takeDamage) {
-                    enemyScript.takeDamage(damage);
+                    // 将受力方向传给敌人，用于控制伤害数字飘动方向
+                    enemyScript.takeDamage(damage, hitDirection);
                     // 记录伤害统计
                     this.recordDamageToStatistics(damage);
                 }

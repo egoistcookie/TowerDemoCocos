@@ -49,10 +49,10 @@ export class ForestGridPanel extends Component {
         this.createGridGraphics();
         this.drawGrid();
 
-        // 默认始终可见
+        // 默认始终可见，但不显示树林网格的边框/格线，仅用于计算与种树
         this.node.active = true;
         if (this.gridGraphics && this.gridGraphics.node) {
-            this.gridGraphics.node.active = true;
+            this.gridGraphics.node.active = false;
         }
 
         // 在每个网格中心种一棵树（从分包中懒加载 Tree 预制体）

@@ -4671,8 +4671,8 @@ export class GameManager extends Component {
                         }, 0.1); // 延迟0.1秒，确保所有组件初始化完成
                     }
 
-                    // 第一关额外生成一个初始弓箭手小屋：建筑物网格第二排第一个位置
-                    if (level === 1 && towerBuilder.spawnInitialWarAncientTreeForLevel1) {
+                    // 第1~4关额外生成一个初始弓箭手小屋：建筑物网格固定位置
+                    if (level >= 1 && level <= 4 && towerBuilder.spawnInitialWarAncientTreeForLevel1) {
                         this.scheduleOnce(() => {
                             towerBuilder.spawnInitialWarAncientTreeForLevel1();
                         }, 0.05);

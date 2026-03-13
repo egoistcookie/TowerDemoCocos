@@ -18,19 +18,22 @@ export class Arrow extends Component {
     private targetPos: Vec3 = new Vec3();
     private travelTime: number = 0;
     private elapsedTime: number = 0;
-    private onHitCallback: ((damage: number) => void) | null = null;
+    // 命中回调：携带伤害值和箭矢的受力方向（世界坐标系下，从攻击者指向受击者）
+    private onHitCallback: ((damage: number, hitDirection: Vec3) => void) | null = null;
     private isFlying: boolean = false;
     private lastPos: Vec3 = new Vec3();
     private gameManager: any = null; // GameManager引用（使用any避免循环依赖）
+    // 当前飞行方向（每帧更新，用于命中时确定受力方向）
+    private currentDirection: Vec3 = new Vec3();
 
     /**
      * 初始化弓箭
      * @param startPos 起始位置
      * @param targetNode 目标节点
      * @param damage 伤害值
-     * @param onHit 命中回调函数
+     * @param onHit 命中回调函数（参数：伤害值，受力方向）
      */
-    init(startPos: Vec3, targetNode: Node, damage: number, onHit?: (damage: number) => void) {
+    init(startPos: Vec3, targetNode: Node, damage: number, onHit?: (damage: number, hitDirection: Vec3) => void) {
         this.startPos = startPos.clone();
         this.targetNode = targetNode;
         this.damage = damage;
@@ -66,12 +69,16 @@ export class Arrow extends Component {
         this.isFlying = true;
         this.lastPos = this.startPos.clone();
 
-        // 设置初始旋转角度（指向目标）
+        // 设置初始旋转角度（指向目标），并记录初始飞行方向
         const initialDirection = new Vec3();
         Vec3.subtract(initialDirection, this.targetPos, this.startPos);
         if (initialDirection.length() > 0.1) {
+            initialDirection.normalize();
+            this.currentDirection.set(initialDirection);
             const angle = Math.atan2(initialDirection.y, initialDirection.x) * 180 / Math.PI;
             this.node.setRotationFromEuler(0, 0, angle);
+        } else {
+            this.currentDirection.set(1, 0, 0);
         }
 
     }
@@ -119,9 +126,31 @@ export class Arrow extends Component {
 
         this.isFlying = false;
 
+        // 计算受力方向（箭矢飞行方向）：优先使用当前飞行方向
+        const hitDirection = new Vec3();
+        if (this.currentDirection.length() > 0.001) {
+            hitDirection.set(this.currentDirection);
+        } else if (this.targetNode && this.targetNode.isValid) {
+            Vec3.subtract(hitDirection, this.targetNode.worldPosition, this.startPos);
+        } else {
+            Vec3.subtract(hitDirection, this.node.worldPosition, this.startPos);
+        }
+        if (hitDirection.length() > 0.001) {
+            hitDirection.normalize();
+        } else {
+            // 回退到默认向下方向
+            hitDirection.set(0, -1, 0);
+        }
+
+        // 调试日志：箭矢命中方向
+        console.info('[Arrow.hitTarget] hitDirection:', hitDirection, 
+            'currentDirection:', this.currentDirection, 
+            'startPos:', this.startPos, 
+            'targetPos:', this.targetPos);
+
         // 调用命中回调
         if (this.onHitCallback) {
-            this.onHitCallback(this.damage);
+            this.onHitCallback(this.damage, hitDirection);
         }
 
         // 立即销毁弓箭节点，避免在 timeScale=0 时 scheduleOnce 不执行
@@ -190,6 +219,8 @@ export class Arrow extends Component {
         const direction = new Vec3();
         Vec3.subtract(direction, currentPos, this.lastPos);
         if (direction.length() > 0.1) {
+            direction.normalize();
+            this.currentDirection.set(direction);
             const angle = Math.atan2(direction.y, direction.x) * 180 / Math.PI;
             this.node.setRotationFromEuler(0, 0, angle);
         }

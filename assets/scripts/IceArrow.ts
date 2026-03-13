@@ -27,7 +27,7 @@ export class IceArrow extends Component {
     private direction: Vec3 = new Vec3(); // 飞行方向（归一化）
     private travelDistance: number = 0; // 总飞行距离
     private traveledDistance: number = 0; // 已飞行距离
-    private onHitCallback: ((damage: number, hitPos: Vec3, enemy: Node) => void) | null = null;
+    private onHitCallback: ((damage: number, hitPos: Vec3, enemy: Node, hitDirection: Vec3) => void) | null = null;
     private isFlying: boolean = false;
     private gameManager: GameManager | null = null;
     private hitEnemies: Set<Node> = new Set(); // 已命中的敌人集合，避免重复伤害
@@ -37,9 +37,9 @@ export class IceArrow extends Component {
      * @param startPos 起始位置
      * @param targetNode 目标节点（用于计算初始方向）
      * @param damage 伤害值
-     * @param onHit 命中回调函数
+     * @param onHit 命中回调函数（参数：伤害值，命中位置，敌人节点，受击方向）
      */
-    init(startPos: Vec3, targetNode: Node, damage: number, onHit?: (damage: number, hitPos: Vec3, enemy: Node) => void) {
+    init(startPos: Vec3, targetNode: Node, damage: number, onHit?: (damage: number, hitPos: Vec3, enemy: Node, hitDirection: Vec3) => void) {
         this.startPos = startPos.clone();
         this.damage = damage;
         this.onHitCallback = onHit || null;
@@ -151,7 +151,9 @@ export class IceArrow extends Component {
 
                 // 调用命中回调，让冰塔结算伤害（每个敌人都算一次伤害）
                 if (this.onHitCallback) {
-                    this.onHitCallback(this.damage, hitPos, enemy);
+                    // 使用冰箭飞行方向作为受击方向
+                    const hitDirection = this.direction.clone().normalize();
+                    this.onHitCallback(this.damage, hitPos, enemy, hitDirection);
                 }
             }
         }

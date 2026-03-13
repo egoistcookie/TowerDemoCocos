@@ -26,16 +26,16 @@ export class GreenOrb extends Component {
     private isFlying: boolean = false;
     private gameManager: GameManager | null = null;
     private targetNode: Node = null!;
-    private onHitCallback: ((damage: number) => void) | null = null;
+    private onHitCallback: ((damage: number, hitDirection: Vec3) => void) | null = null;
 
     /**
      * 初始化绿色法球
      * @param startPos 起始位置
      * @param targetNode 目标节点（用于计算初始方向）
      * @param damage 伤害值
-     * @param onHit 命中回调函数
+     * @param onHit 命中回调函数（参数：伤害值，受击方向）
      */
-    init(startPos: Vec3, targetNode: Node, damage: number, onHit?: (damage: number) => void) {
+    init(startPos: Vec3, targetNode: Node, damage: number, onHit?: (damage: number, hitDirection: Vec3) => void) {
         this.startPos = startPos.clone();
         this.targetNode = targetNode;
         this.damage = damage;
@@ -164,9 +164,12 @@ export class GreenOrb extends Component {
         // 获取命中位置
         const hitPos = this.node.worldPosition.clone();
 
+        // 计算受击方向：沿法球飞行方向
+        const hitDirection = this.direction.clone().normalize();
+
         // 调用命中回调
         if (this.onHitCallback) {
-            this.onHitCallback(this.damage);
+            this.onHitCallback(this.damage, hitDirection);
         }
 
         // 播放爆炸特效

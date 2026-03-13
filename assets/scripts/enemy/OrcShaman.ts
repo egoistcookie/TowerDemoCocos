@@ -273,12 +273,12 @@ export class OrcShaman extends Enemy {
             AudioManager.Instance.playSFX(this.attackSound);
         }
 
-        // 初始化法球，设置命中回调
+        // 初始化法球，设置命中回调（带受击方向）
         orbScript.init(
             startPos,
             targetNode,
             this.attackDamage,
-            (damage: number) => {
+            (damage: number, hitDirection: Vec3) => {
                 // 检查目标是否仍然有效
                 if (targetNode && targetNode.isValid && targetNode.active) {
                     const towerScript = targetNode.getComponent('Arrower') as any;
@@ -295,7 +295,7 @@ export class OrcShaman extends Enemy {
                     const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
                     
                     if (targetScript && targetScript.takeDamage) {
-                        targetScript.takeDamage(damage);
+                        targetScript.takeDamage(damage, hitDirection);
                     } else {
                         // 目标无效，清除目标
                         this.currentTarget = null!;

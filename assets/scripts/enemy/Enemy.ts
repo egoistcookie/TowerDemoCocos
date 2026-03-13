@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip, Animation, AnimationState, view, UIOpacity } from 'cc';
+import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip, Animation, AnimationState, view, UIOpacity, LabelOutline } from 'cc';
 import { GameManager } from '../GameManager';
 import { GameState } from '../GameState';
 import { HealthBar } from '../HealthBar';
@@ -129,6 +129,8 @@ export class Enemy extends Component {
     private cachedTargetComponent: any = null; // 缓存的目标组件（避免重复getComponent）
     private lastComponentCheckTime: number = 0; // 上次组件检查时间
     private readonly COMPONENT_CHECK_INTERVAL: number = 0.1; // 组件检查间隔（秒）
+    // 最近一次受击方向（世界坐标系下的力方向，用于伤害跳字反方向飘动）
+    private lastHitDirection: Vec3 | null = null;
     
     // 对象池相关：预制体名称（用于对象池回收）
     public prefabName: string = "Orc"; // 默认值，子类可以重写
@@ -414,6 +416,10 @@ export class Enemy extends Component {
         this.dialogLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         this.dialogLabel.verticalAlign = Label.VerticalAlign.CENTER;
         this.dialogLabel.overflow = Label.Overflow.RESIZE_HEIGHT;
+        // 黑色描边
+        const outline = labelNode.addComponent(LabelOutline);
+        outline.color = new Color(0, 0, 0, 255);
+        outline.width = 2;
 
         // 初始设置为完全显示
         this.dialogNode.active = true;
@@ -2164,7 +2170,13 @@ export class Enemy extends Component {
         const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || churchScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
         
         if (targetScript && targetScript.takeDamage) {
-            targetScript.takeDamage(this.attackDamage);
+            // 计算受击方向：从敌人指向目标
+            const hitDir = new Vec3();
+            Vec3.subtract(hitDir, this.currentTarget.worldPosition, this.node.worldPosition);
+            if (hitDir.length() > 0.001) {
+                hitDir.normalize();
+            }
+            targetScript.takeDamage(this.attackDamage, hitDir);
             
             // 检查目标是否仍然存活，特别是石墙
             if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
@@ -2192,13 +2204,32 @@ export class Enemy extends Component {
         }
     }
 
-    takeDamage(damage: number) {
+    takeDamage(damage: number, hitDirection?: Vec3) {
         if (this.isDestroyed) {
             return;
         }
 
-        // 显示伤害数字
-        this.showDamageNumber(damage);
+        // 记录最近一次受击方向（标准化后的力方向）
+        if (hitDirection && hitDirection.length() > 0.001) {
+            if (!this.lastHitDirection) {
+                this.lastHitDirection = new Vec3();
+            }
+            this.lastHitDirection.set(hitDirection);
+            this.lastHitDirection.normalize();
+        }
+
+        // 调试日志：敌人受击信息
+        console.info('[Enemy.takeDamage]', this.unitName || this.node.name,
+            'rawDamage:', damage,
+            'hitDirection:', hitDirection ? `${hitDirection.x.toFixed(2)},${hitDirection.y.toFixed(2)}` : 'null',
+            'lastHitDirection:', this.lastHitDirection ? `${this.lastHitDirection.x.toFixed(2)},${this.lastHitDirection.y.toFixed(2)}` : 'null');
+
+        // 10% 概率触发暴击，实际伤害加成
+        const isCritical = Math.random() < 0.1;
+        const finalDamage = isCritical ? Math.floor(damage * 1.5) : damage;
+
+        // 显示伤害数字（根据是否暴击与受击方向控制表现）
+        this.showDamageNumber(finalDamage, isCritical, hitDirection);
         
         // 被攻击时停止移动
         this.stopMoving();
@@ -2206,7 +2237,7 @@ export class Enemy extends Component {
         // 播放受击动画
         this.playHitAnimation();
 
-        this.currentHealth -= damage;
+        this.currentHealth -= finalDamage;
 
         // 更新血条
         if (this.healthBar) {
@@ -2279,7 +2310,7 @@ export class Enemy extends Component {
             sprite.color = new Color(0, 255, 0, 150); // 绿色，半透明
         }
 
-        // 添加文字标签显示治疗量（四舍五入保留个位数）
+        // 添加文字标签显示治疗量（四舍五入保留个位数，黑边绿字）
         const labelNode = new Node('HealLabel');
         labelNode.setParent(healEffectNode);
         labelNode.setPosition(0, 0, 0);
@@ -2288,6 +2319,9 @@ export class Enemy extends Component {
         label.string = `+${roundedAmount}`;
         label.fontSize = 20;
         label.color = Color.GREEN;
+        const outline = labelNode.addComponent(LabelOutline);
+        outline.color = new Color(0, 0, 0, 255);
+        outline.width = 2;
         
         const labelUITransform = labelNode.addComponent(UITransform);
         if (labelUITransform) {
@@ -2356,20 +2390,21 @@ export class Enemy extends Component {
         }
     }
 
-    showDamageNumber(damage: number) {
+    showDamageNumber(damage: number, isCritical: boolean = false, hitDirection?: Vec3) {
         // 创建伤害数字节点
         let damageNode: Node;
         if (this.damageNumberPrefab) {
             damageNode = instantiate(this.damageNumberPrefab);
         } else {
-            // 如果没有预制体，创建简单的Label节点
             damageNode = new Node('DamageNumber');
-            const label = damageNode.addComponent(Label);
-            label.string = `-${Math.floor(damage)}`;
-            label.fontSize = 20;
-            label.color = Color.WHITE;
         }
-        
+
+        // 如果预制体上自带 DamageNumber 组件（包含自己的上飘逻辑），先移除，避免与当前自定义飘动冲突
+        const builtinDamageComp = damageNode.getComponent(DamageNumber);
+        if (builtinDamageComp) {
+            damageNode.removeComponent(DamageNumber);
+        }
+
         // 添加到Canvas或场景
         const canvas = find('Canvas');
         if (canvas) {
@@ -2377,41 +2412,88 @@ export class Enemy extends Component {
         } else {
             damageNode.setParent(this.node.scene);
         }
-        
-        // 设置位置（在敌人上方）
-        damageNode.setWorldPosition(this.node.worldPosition.clone().add3f(0, 30, 0));
-        
-        // 如果有DamageNumber组件，设置伤害值
-        const damageScript = damageNode.getComponent(DamageNumber);
-        if (damageScript) {
-            damageScript.setDamage(damage);
-        } else {
-            // 如果没有组件，手动添加动画
-            const label = damageNode.getComponent(Label);
-            if (label) {
-                const startPos = damageNode.position.clone();
-                const endPos = startPos.clone();
-                endPos.y += 50;
-                
-                tween(damageNode)
-                    .to(1.0, { position: endPos })
-                    .parallel(
-                        tween().to(1.0, {}, {
-                            onUpdate: (target, ratio) => {
-                                const color = label.color.clone();
-                                color.a = 255 * (1 - ratio);
-                                label.color = color;
-                            }
-                        })
-                    )
-                    .call(() => {
-                        if (damageNode && damageNode.isValid) {
-                            damageNode.destroy();
-                        }
-                    })
-                    .start();
+
+        // 起始位置：在敌人上方一点
+        const startPos = this.node.worldPosition.clone();
+        startPos.y += 30;
+        damageNode.setWorldPosition(startPos);
+
+        // 查找或创建 Label
+        let label: Label | null = damageNode.getComponent(Label);
+        if (!label) {
+            const labelsInChildren = damageNode.getComponentsInChildren(Label);
+            if (labelsInChildren && labelsInChildren.length > 0) {
+                label = labelsInChildren[0];
             }
         }
+        if (!label) {
+            label = damageNode.addComponent(Label);
+            label.fontSize = 20;
+        }
+
+        // 文字内容与样式
+        const baseDamageText = `-${Math.floor(damage)}`;
+        label.string = isCritical ? `${baseDamageText}!` : baseDamageText;
+        label.color = isCritical ? new Color(255, 0, 0, 255) : new Color(255, 255, 255, 255);
+
+        // 黑色描边（使用非弃用 API）
+        let outline = label.node.getComponent(LabelOutline);
+        if (!outline) {
+            outline = label.node.addComponent(LabelOutline);
+        }
+        (label as any).outlineColor = new Color(0, 0, 0, 255);
+        (label as any).outlineWidth = 2;
+
+        // 暴击放大（略小一点，避免过于夸张）
+        if (isCritical) {
+            label.fontSize = label.fontSize * 1.2;
+        }
+
+        // 飘动方向：沿箭矢/攻击方向飘动（与受击方向一致）
+        const floatDir = new Vec3();
+        const sourceDir = hitDirection && hitDirection.length() > 0.001
+            ? hitDirection
+            : (this.lastHitDirection && this.lastHitDirection.length() > 0.001 ? this.lastHitDirection : null);
+
+        if (sourceDir) {
+            floatDir.set(sourceDir);
+            floatDir.normalize();
+        } else {
+            // 如果没有记录受击方向，默认向上
+            floatDir.set(0, 1, 0);
+        }
+
+        // 飘动距离缩短一半
+        const floatDistance = isCritical ? 40 : 25;
+        const offset = new Vec3();
+        Vec3.scaleAndAdd(offset, startPos, floatDir, floatDistance);
+        const endWorldPos = offset;
+
+        // 调试日志：伤害数字飘动方向与位置
+        console.info('[Enemy.showDamageNumber]', this.unitName || this.node.name,
+            'damage:', damage,
+            'isCritical:', isCritical,
+            'hitDirection:', hitDirection ? `${hitDirection.x.toFixed(2)},${hitDirection.y.toFixed(2)}` : 'null',
+            'usedSourceDir:', sourceDir ? `${sourceDir.x.toFixed(2)},${sourceDir.y.toFixed(2)}` : 'null',
+            'floatDir:', `${floatDir.x.toFixed(2)},${floatDir.y.toFixed(2)}`,
+            'startPos:', `${startPos.x.toFixed(1)},${startPos.y.toFixed(1)}`,
+            'endPos:', `${endWorldPos.x.toFixed(1)},${endWorldPos.y.toFixed(1)}`);
+
+        // 渐隐飘动动画
+        const uiOpacity = damageNode.getComponent(UIOpacity) || damageNode.addComponent(UIOpacity);
+        uiOpacity.opacity = 255;
+
+        tween(damageNode)
+            .to(0.6, { worldPosition: endWorldPos }, { easing: 'sineOut' })
+            .parallel(
+                tween(uiOpacity).to(0.6, { opacity: 0 })
+            )
+            .call(() => {
+                if (damageNode && damageNode.isValid) {
+                    damageNode.destroy();
+                }
+            })
+            .start();
     }
 
     die() {
