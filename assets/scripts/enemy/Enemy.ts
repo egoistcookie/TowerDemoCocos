@@ -1358,6 +1358,13 @@ export class Enemy extends Component {
     }
 
     // 恢复默认精灵帧
+    restoreDefaultSprite() {
+        if (this.sprite && this.defaultSpriteFrame) {
+            this.sprite.spriteFrame = this.defaultSpriteFrame;
+        }
+    }
+
+    // 恢复默认精灵帧
 
     protected attack() {
         // 性能监控：开始计时

@@ -1493,7 +1493,7 @@ export class Role extends Component {
                     height: actualDisplayHeight
                 };
                 
-                console.log(`[Role] 移动动画 - UITransform: (${uiTransform.width}, ${uiTransform.height}), 节点缩放: (${this.node.scale.x.toFixed(2)}, ${this.node.scale.y.toFixed(2)}), SpriteFrame rect: (${rect.width}, ${rect.height}), 实际显示大小: (${actualDisplayWidth.toFixed(2)}, ${actualDisplayHeight.toFixed(2)}), 单位名称=${this.unitName || '未知'}`);
+                // console.log(`[Role] 移动动画 - UITransform: (${uiTransform.width}, ${uiTransform.height}), 节点缩放: (${this.node.scale.x.toFixed(2)}, ${this.node.scale.y.toFixed(2)}), SpriteFrame rect: (${rect.width}, ${rect.height}), 实际显示大小: (${actualDisplayWidth.toFixed(2)}, ${actualDisplayHeight.toFixed(2)}), 单位名称=${this.unitName || '未知'}`);
             }
         }
 

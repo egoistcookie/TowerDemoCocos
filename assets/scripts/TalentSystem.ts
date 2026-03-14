@@ -230,8 +230,8 @@ export class TalentSystem extends Component {
         
         // 标签配置
         const tabs = [
-            { id: 'talents', name: '天赋升级' },
-            { id: 'units', name: '单位详情' }
+            { id: 'talents', name: '全体升级' },
+            { id: 'units', name: '单位升级' }
         ];
         
         // 创建标签按钮（水平居中）

@@ -250,11 +250,11 @@ export class BuffCardPopup extends Component {
             const rerollLabelTransform = rerollLabelNode.addComponent(UITransform);
             rerollLabelTransform.setContentSize(140, 50);
             const rerollLabel = rerollLabelNode.addComponent(Label);
-            // 两行文字：主文案 + “（观看视频）”
-            rerollLabel.string = '再抽一次\n（观看视频）';
+            // 两行文字：主文案 + "（观看视频）"
+            rerollLabel.string = '再抽一次\n（必得UR）';
             rerollLabel.fontSize = 20;
-            // 文本为白色，配合黑色描边，保证在视频图标上的可读性
-            rerollLabel.color = new Color(255, 255, 255, 255);
+            // 文本颜色使用UR边框颜色（紫金色），配合黑色描边，保证在视频图标上的可读性
+            rerollLabel.color = new Color(255, 100, 255, 255);
             rerollLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
             rerollLabel.verticalAlign = Label.VerticalAlign.CENTER;
 
@@ -295,11 +295,11 @@ export class BuffCardPopup extends Component {
             const getAllLabelTransform = getAllLabelNode.addComponent(UITransform);
             getAllLabelTransform.setContentSize(140, 50);
             const getAllLabel = getAllLabelNode.addComponent(Label);
-            // 两行文字：主文案 + “（观看视频）”
+            // 两行文字：主文案 + "（观看视频）"
             getAllLabel.string = '全部获取\n（观看视频）';
             getAllLabel.fontSize = 20;
-            // 文本为白色，配合黑色描边，保证在视频图标上的可读性
-            getAllLabel.color = new Color(255, 255, 255, 255);
+            // 文本颜色使用金色（与SSR卡片边框相同），配合黑色描边，保证在视频图标上的可读性
+            getAllLabel.color = new Color(255, 215, 0, 255);
             getAllLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
             getAllLabel.verticalAlign = Label.VerticalAlign.CENTER;
 

@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Button, Label, find, director, UITransform, Color, Graphics, tween, Vec3, UIOpacity, Sprite, SpriteFrame, Prefab, instantiate, resources, assetManager, sys } from 'cc';
+import { _decorator, Component, Node, Button, Label, find, director, UITransform, Color, Graphics, tween, Vec3, UIOpacity, Sprite, SpriteFrame, Prefab, instantiate, resources, assetManager, sys, view, macro } from 'cc';
 import { GameManager as GameManagerClass } from './GameManager';
 import { CountdownPopup } from './CountdownPopup';
 // 导入TalentSystem，用于管理天赋系统和单位卡片
@@ -11,6 +11,7 @@ import { CheckInManager } from './CheckInManager';
 import { GamePopup } from './GamePopup';
 import { WeChatShareManager } from './WeChatShareManager';
 import { LevelPassRateLabel } from './LevelPassRateLabel';
+import { UnitConfigManager } from './UnitConfigManager';
 
 const { ccclass, property } = _decorator;
 
@@ -2149,6 +2150,638 @@ export class UIManager extends Component {
                 gameOverPanel.active = false;
             }
         }
+        
+        // 7. 检查是否是第一次从结算页返回主页，显示天赋强化提示
+        console.log('[UIManager.onExitGameClick] 准备调用checkAndShowTalentHint');
+        if (this.gameManager) {
+            const mvpUnit = (this.gameManager as any).lastMVPUnit;
+            console.log('[UIManager.onExitGameClick] gameManager存在，lastMVPUnit:', mvpUnit);
+        } else {
+            console.warn('[UIManager.onExitGameClick] gameManager不存在');
+        }
+        this.checkAndShowTalentHint();
+    }
+    
+    /**
+     * 检查并显示首次返回主页的天赋强化提示
+     */
+    private checkAndShowTalentHint() {
+        console.log('[UIManager.checkAndShowTalentHint] 开始检查是否显示天赋提示');
+        // 检查是否已经显示过提示
+        const hasShownHint = sys.localStorage.getItem('TowerDemo_FirstTalentHintShown');
+        console.log('[UIManager.checkAndShowTalentHint] hasShownHint:', hasShownHint);
+        if (hasShownHint === '1') {
+            console.log('[UIManager.checkAndShowTalentHint] 已经显示过提示，不再显示');
+            return; // 已经显示过，不再显示
+        }
+        
+        // 检查是否有MVP/SVP单位信息
+        if (!this.gameManager) {
+            console.warn('[UIManager.checkAndShowTalentHint] gameManager不存在，无法显示提示');
+            return;
+        }
+        
+        const mvpUnit = (this.gameManager as any).lastMVPUnit;
+        console.log('[UIManager.checkAndShowTalentHint] mvpUnit:', mvpUnit);
+        if (!mvpUnit || !mvpUnit.unitName) {
+            console.warn('[UIManager.checkAndShowTalentHint] mvpUnit不存在或没有unitName，不显示提示');
+            return; // 没有MVP/SVP单位，不显示提示
+        }
+        
+        console.log('[UIManager.checkAndShowTalentHint] 所有检查通过，准备显示提示对话框');
+        // 标记已显示过提示
+        try {
+            sys.localStorage.setItem('TowerDemo_FirstTalentHintShown', '1');
+            console.log('[UIManager.checkAndShowTalentHint] 已标记首次天赋提示为已显示');
+        } catch (e) {
+            console.warn('[UIManager.checkAndShowTalentHint] 写入首次天赋提示标记失败:', e);
+        }
+        
+        // 延迟显示提示，确保UI已完全切换
+        // 使用setTimeout而不是scheduleOnce，因为组件可能在延迟期间被禁用
+        // 直接在回调中创建对话框，不依赖组件实例
+        console.log('[UIManager.checkAndShowTalentHint] 延迟0.5秒后显示提示对话框，mvpUnit:', mvpUnit);
+        const savedMVPUnit = mvpUnit; // 保存mvpUnit的引用
+        setTimeout(() => {
+            console.log('[UIManager.checkAndShowTalentHint] 延迟结束，直接创建对话框');
+            // 再次检查mvpUnit是否仍然存在
+            if (!savedMVPUnit || !savedMVPUnit.unitName) {
+                console.warn('[UIManager.checkAndShowTalentHint] mvpUnit已失效，无法显示提示对话框');
+                return;
+            }
+            // 直接调用静态方法创建对话框，不依赖组件实例
+            UIManager.showTalentHintDialogStatic(savedMVPUnit);
+        }, 500);
+    }
+    
+    /**
+     * 显示天赋强化提示对话框（静态方法，不依赖组件实例）
+     */
+    private static showTalentHintDialogStatic(mvpUnit: { unitName: string; unitType: string; unitIcon: SpriteFrame | null }) {
+        console.log('[UIManager.showTalentHintDialogStatic] 开始显示天赋提示对话框，mvpUnit:', mvpUnit);
+        const canvas = find('Canvas');
+        if (!canvas) {
+            console.error('[UIManager.showTalentHintDialogStatic] 找不到Canvas节点');
+            return;
+        }
+        console.log('[UIManager.showTalentHintDialogStatic] Canvas节点找到，开始创建对话框');
+        
+        // 创建对话框容器
+        const dialogNode = new Node('TalentHintDialog');
+        dialogNode.setParent(canvas);
+        dialogNode.setSiblingIndex(Number.MAX_SAFE_INTEGER);
+        
+        // 添加UITransform
+        const dialogTransform = dialogNode.addComponent(UITransform);
+        const visibleSize = view.getVisibleSize();
+        dialogTransform.setContentSize(visibleSize.width, visibleSize.height);
+        dialogTransform.setAnchorPoint(0.5, 0.5);
+        dialogNode.setPosition(0, 0, 0);
+        
+        // 创建半透明遮罩背景
+        const maskNode = new Node('Mask');
+        maskNode.setParent(dialogNode);
+        const maskTransform = maskNode.addComponent(UITransform);
+        maskTransform.setContentSize(visibleSize.width, visibleSize.height);
+        maskTransform.setAnchorPoint(0.5, 0.5);
+        maskNode.setPosition(0, 0, 0);
+        const maskGraphics = maskNode.addComponent(Graphics);
+        maskGraphics.fillColor = new Color(0, 0, 0, 180);
+        maskGraphics.rect(-visibleSize.width / 2, -visibleSize.height / 2, visibleSize.width, visibleSize.height);
+        maskGraphics.fill();
+        
+        // 创建对话框内容容器
+        const contentNode = new Node('Content');
+        contentNode.setParent(dialogNode);
+        const contentTransform = contentNode.addComponent(UITransform);
+        const dialogWidth = 600;
+        const dialogHeight = 400;
+        contentTransform.setContentSize(dialogWidth, dialogHeight);
+        contentTransform.setAnchorPoint(0.5, 0.5);
+        contentNode.setPosition(0, 0, 0);
+        
+        // 创建对话框背景
+        const bgNode = new Node('Background');
+        bgNode.setParent(contentNode);
+        const bgTransform = bgNode.addComponent(UITransform);
+        bgTransform.setContentSize(dialogWidth, dialogHeight);
+        bgTransform.setAnchorPoint(0.5, 0.5);
+        bgNode.setPosition(0, 0, 0);
+        const bgGraphics = bgNode.addComponent(Graphics);
+        bgGraphics.fillColor = new Color(40, 40, 60, 240);
+        bgGraphics.roundRect(-dialogWidth / 2, -dialogHeight / 2, dialogWidth, dialogHeight, 10);
+        bgGraphics.fill();
+        bgGraphics.strokeColor = new Color(255, 215, 0, 255);
+        bgGraphics.lineWidth = 3;
+        bgGraphics.roundRect(-dialogWidth / 2, -dialogHeight / 2, dialogWidth, dialogHeight, 10);
+        bgGraphics.stroke();
+        
+        // 创建单位图标区域（左侧）
+        const iconNode = new Node('UnitIcon');
+        iconNode.setParent(contentNode);
+        const iconTransform = iconNode.addComponent(UITransform);
+        iconTransform.setContentSize(150, 150);
+        iconTransform.setAnchorPoint(0.5, 0.5);
+        iconNode.setPosition(-dialogWidth / 2 + 100, 50, 0);
+        
+        // 创建单位图标背景
+        const iconBgNode = new Node('IconBackground');
+        iconBgNode.setParent(iconNode);
+        const iconBgTransform = iconBgNode.addComponent(UITransform);
+        iconBgTransform.setContentSize(150, 150);
+        iconBgTransform.setAnchorPoint(0.5, 0.5);
+        iconBgNode.setPosition(0, 0, 0);
+        const iconBgGraphics = iconBgNode.addComponent(Graphics);
+        iconBgGraphics.fillColor = new Color(60, 60, 80, 255);
+        iconBgGraphics.roundRect(-75, -75, 150, 150, 8);
+        iconBgGraphics.fill();
+        
+        // 创建单位图标Sprite
+        const iconSpriteNode = new Node('IconSprite');
+        iconSpriteNode.setParent(iconNode);
+        const iconSpriteTransform = iconSpriteNode.addComponent(UITransform);
+        iconSpriteTransform.setContentSize(120, 120);
+        iconSpriteTransform.setAnchorPoint(0.5, 0.5);
+        iconSpriteNode.setPosition(0, 0, 0);
+        const iconSprite = iconSpriteNode.addComponent(Sprite);
+        
+        // 创建提示文本区域（右侧）
+        const textNode = new Node('Text');
+        textNode.setParent(contentNode);
+        const textTransform = textNode.addComponent(UITransform);
+        textTransform.setContentSize(350, 250);
+        textTransform.setAnchorPoint(0.5, 0.5);
+        textNode.setPosition(dialogWidth / 2 - 175, 0, 0);
+        
+        const hintLabel = textNode.addComponent(Label);
+        hintLabel.string = `指挥官，虽然刚才您指挥得当，带领我们守住了防线，但是接下来的敌人会更加强悍，我们必须提升自己，才有可能守护住防线。`;
+        hintLabel.fontSize = 18;
+        hintLabel.color = new Color(255, 255, 255, 255);
+        hintLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
+        hintLabel.verticalAlign = Label.VerticalAlign.TOP;
+        hintLabel.enableWrapText = true;
+        hintLabel.overflow = Label.Overflow.RESIZE_HEIGHT;
+        
+        // 创建确认按钮
+        const confirmButtonNode = new Node('ConfirmButton');
+        confirmButtonNode.setParent(contentNode);
+        const confirmButtonTransform = confirmButtonNode.addComponent(UITransform);
+        confirmButtonTransform.setContentSize(200, 50);
+        confirmButtonTransform.setAnchorPoint(0.5, 0.5);
+        confirmButtonNode.setPosition(0, -dialogHeight / 2 + 40, 0);
+        
+        const confirmButtonBg = confirmButtonNode.addComponent(Graphics);
+        confirmButtonBg.fillColor = new Color(100, 150, 255, 255);
+        confirmButtonBg.roundRect(-100, -25, 200, 50, 8);
+        confirmButtonBg.fill();
+        
+        const confirmButton = confirmButtonNode.addComponent(Button);
+        const confirmLabelNode = new Node('Label');
+        confirmLabelNode.setParent(confirmButtonNode);
+        const confirmLabelTransform = confirmLabelNode.addComponent(UITransform);
+        confirmLabelTransform.setContentSize(200, 50);
+        confirmLabelTransform.setAnchorPoint(0.5, 0.5);
+        confirmLabelNode.setPosition(0, 0, 0);
+        const confirmLabel = confirmLabelNode.addComponent(Label);
+        confirmLabel.string = '前往天赋页';
+        confirmLabel.fontSize = 20;
+        confirmLabel.color = new Color(255, 255, 255, 255);
+        confirmLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        confirmLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        
+        // 尝试获取单位图标（使用与loadUnitIconForHint相同的方式）
+        UIManager.loadUnitIconForHintStatic(mvpUnit.unitType, iconSprite);
+        
+        // 跳转到天赋页面的辅助函数（不依赖UIManager组件实例）
+        const switchToTalentPage = () => {
+            console.log('[UIManager.showTalentHintDialogStatic] 开始跳转到天赋页面');
+            const bottomSelectionNode = find('Canvas/BottomSelection');
+            if (!bottomSelectionNode) {
+                console.warn('[UIManager.showTalentHintDialogStatic] 找不到BottomSelection节点');
+                return;
+            }
+            
+            const gameMainPanel = bottomSelectionNode.getChildByName('GameMainPanel');
+            const talentPanel = bottomSelectionNode.getChildByName('TalentPanel');
+            const settingsPanel = bottomSelectionNode.getChildByName('SettingsPanel');
+            
+            // 切换面板显示状态
+            if (gameMainPanel) {
+                gameMainPanel.active = false;
+            }
+            if (talentPanel) {
+                talentPanel.active = true;
+                // 确保天赋面板在最上层
+                talentPanel.setSiblingIndex(bottomSelectionNode.children.length - 1);
+            }
+            if (settingsPanel) {
+                settingsPanel.active = false;
+            }
+            
+            // 隐藏签到宝箱
+            const checkInButtonNode = find('Canvas/CheckInButton') || find('Canvas/BottomSelection/CheckInButton');
+            if (checkInButtonNode) {
+                checkInButtonNode.active = false;
+                console.log('[UIManager.showTalentHintDialogStatic] 已隐藏签到宝箱');
+            }
+            
+            console.log('[UIManager.showTalentHintDialogStatic] 已切换到天赋页面');
+            
+            // 延迟显示第二个指引框（包含第二句话）
+            setTimeout(() => {
+                UIManager.showTalentHintDialogSecond(mvpUnit);
+            }, 500);
+        };
+        
+        // 绑定确认按钮点击事件
+        confirmButton.node.on(Button.EventType.CLICK, () => {
+            console.log('[UIManager.showTalentHintDialogStatic] 确认按钮被点击，关闭对话框并跳转到天赋页');
+            dialogNode.destroy();
+            switchToTalentPage();
+        });
+        
+        // 绑定遮罩点击事件（点击遮罩也关闭并跳转）
+        maskNode.on(Node.EventType.TOUCH_START, () => {
+            console.log('[UIManager.showTalentHintDialogStatic] 遮罩被点击，关闭对话框并跳转到天赋页');
+            dialogNode.destroy();
+            switchToTalentPage();
+        });
+        
+        // 淡入动画
+        const dialogOpacity = dialogNode.addComponent(UIOpacity);
+        dialogOpacity.opacity = 0;
+        tween(dialogOpacity).to(0.3, { opacity: 255 }).start();
+        
+        console.log('[UIManager.showTalentHintDialogStatic] 对话框创建完成');
+    }
+    
+    /**
+     * 显示第二个天赋强化提示对话框（跳转到天赋页后显示，包含第二句话）
+     */
+    private static showTalentHintDialogSecond(mvpUnit: { unitName: string; unitType: string; unitIcon: SpriteFrame | null }) {
+        console.log('[UIManager.showTalentHintDialogSecond] 开始显示第二个天赋提示对话框，mvpUnit:', mvpUnit);
+        const canvas = find('Canvas');
+        if (!canvas) {
+            console.error('[UIManager.showTalentHintDialogSecond] 找不到Canvas节点');
+            return;
+        }
+        console.log('[UIManager.showTalentHintDialogSecond] Canvas节点找到，开始创建对话框');
+        
+        // 创建对话框容器
+        const dialogNode = new Node('TalentHintDialogSecond');
+        dialogNode.setParent(canvas);
+        dialogNode.setSiblingIndex(Number.MAX_SAFE_INTEGER);
+        
+        // 添加UITransform
+        const dialogTransform = dialogNode.addComponent(UITransform);
+        const visibleSize = view.getVisibleSize();
+        dialogTransform.setContentSize(visibleSize.width, visibleSize.height);
+        dialogTransform.setAnchorPoint(0.5, 0.5);
+        dialogNode.setPosition(0, 0, 0);
+        
+        // 创建半透明遮罩背景
+        const maskNode = new Node('Mask');
+        maskNode.setParent(dialogNode);
+        const maskTransform = maskNode.addComponent(UITransform);
+        maskTransform.setContentSize(visibleSize.width, visibleSize.height);
+        maskTransform.setAnchorPoint(0.5, 0.5);
+        maskNode.setPosition(0, 0, 0);
+        const maskGraphics = maskNode.addComponent(Graphics);
+        maskGraphics.fillColor = new Color(0, 0, 0, 180);
+        maskGraphics.rect(-visibleSize.width / 2, -visibleSize.height / 2, visibleSize.width, visibleSize.height);
+        maskGraphics.fill();
+        
+        // 创建对话框内容容器
+        const contentNode = new Node('Content');
+        contentNode.setParent(dialogNode);
+        const contentTransform = contentNode.addComponent(UITransform);
+        const dialogWidth = 600;
+        const dialogHeight = 300;
+        contentTransform.setContentSize(dialogWidth, dialogHeight);
+        contentTransform.setAnchorPoint(0.5, 0.5);
+        contentNode.setPosition(0, 0, 0);
+        
+        // 创建对话框背景
+        const bgNode = new Node('Background');
+        bgNode.setParent(contentNode);
+        const bgTransform = bgNode.addComponent(UITransform);
+        bgTransform.setContentSize(dialogWidth, dialogHeight);
+        bgTransform.setAnchorPoint(0.5, 0.5);
+        bgNode.setPosition(0, 0, 0);
+        const bgGraphics = bgNode.addComponent(Graphics);
+        bgGraphics.fillColor = new Color(40, 40, 60, 240);
+        bgGraphics.roundRect(-dialogWidth / 2, -dialogHeight / 2, dialogWidth, dialogHeight, 10);
+        bgGraphics.fill();
+        bgGraphics.strokeColor = new Color(255, 215, 0, 255);
+        bgGraphics.lineWidth = 3;
+        bgGraphics.roundRect(-dialogWidth / 2, -dialogHeight / 2, dialogWidth, dialogHeight, 10);
+        bgGraphics.stroke();
+        
+        // 创建单位图标区域（左侧）
+        const iconNode = new Node('UnitIcon');
+        iconNode.setParent(contentNode);
+        const iconTransform = iconNode.addComponent(UITransform);
+        iconTransform.setContentSize(150, 150);
+        iconTransform.setAnchorPoint(0.5, 0.5);
+        iconNode.setPosition(-dialogWidth / 2 + 100, 0, 0);
+        
+        // 创建单位图标背景
+        const iconBgNode = new Node('IconBackground');
+        iconBgNode.setParent(iconNode);
+        const iconBgTransform = iconBgNode.addComponent(UITransform);
+        iconBgTransform.setContentSize(150, 150);
+        iconBgTransform.setAnchorPoint(0.5, 0.5);
+        iconBgNode.setPosition(0, 0, 0);
+        const iconBgGraphics = iconBgNode.addComponent(Graphics);
+        iconBgGraphics.fillColor = new Color(60, 60, 80, 255);
+        iconBgGraphics.roundRect(-75, -75, 150, 150, 8);
+        iconBgGraphics.fill();
+        
+        // 创建单位图标Sprite
+        const iconSpriteNode = new Node('IconSprite');
+        iconSpriteNode.setParent(iconNode);
+        const iconSpriteTransform = iconSpriteNode.addComponent(UITransform);
+        iconSpriteTransform.setContentSize(120, 120);
+        iconSpriteTransform.setAnchorPoint(0.5, 0.5);
+        iconSpriteNode.setPosition(0, 0, 0);
+        const iconSprite = iconSpriteNode.addComponent(Sprite);
+        
+        // 创建提示文本区域（右侧）
+        const textNode = new Node('Text');
+        textNode.setParent(contentNode);
+        const textTransform = textNode.addComponent(UITransform);
+        textTransform.setContentSize(350, 200);
+        textTransform.setAnchorPoint(0.5, 0.5);
+        textNode.setPosition(dialogWidth / 2 - 175, 0, 0);
+        
+        const hintLabel = textNode.addComponent(Label);
+        hintLabel.string = `您可以小幅度强化所有单位，或者针对性强化特定单位。`;
+        hintLabel.fontSize = 18;
+        hintLabel.color = new Color(255, 255, 255, 255);
+        hintLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
+        hintLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        hintLabel.enableWrapText = true;
+        hintLabel.overflow = Label.Overflow.RESIZE_HEIGHT;
+        
+        // 创建确认按钮
+        const confirmButtonNode = new Node('ConfirmButton');
+        confirmButtonNode.setParent(contentNode);
+        const confirmButtonTransform = confirmButtonNode.addComponent(UITransform);
+        confirmButtonTransform.setContentSize(200, 50);
+        confirmButtonTransform.setAnchorPoint(0.5, 0.5);
+        confirmButtonNode.setPosition(0, -dialogHeight / 2 + 40, 0);
+        
+        const confirmButtonBg = confirmButtonNode.addComponent(Graphics);
+        confirmButtonBg.fillColor = new Color(100, 150, 255, 255);
+        confirmButtonBg.roundRect(-100, -25, 200, 50, 8);
+        confirmButtonBg.fill();
+        
+        const confirmButton = confirmButtonNode.addComponent(Button);
+        const confirmLabelNode = new Node('Label');
+        confirmLabelNode.setParent(confirmButtonNode);
+        const confirmLabelTransform = confirmLabelNode.addComponent(UITransform);
+        confirmLabelTransform.setContentSize(200, 50);
+        confirmLabelTransform.setAnchorPoint(0.5, 0.5);
+        confirmLabelNode.setPosition(0, 0, 0);
+        const confirmLabel = confirmLabelNode.addComponent(Label);
+        confirmLabel.string = '我知道了';
+        confirmLabel.fontSize = 20;
+        confirmLabel.color = new Color(255, 255, 255, 255);
+        confirmLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        confirmLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        
+        // 尝试获取单位图标（使用与loadUnitIconForHint相同的方式）
+        UIManager.loadUnitIconForHintStatic(mvpUnit.unitType, iconSprite);
+        
+        // 绑定确认按钮点击事件
+        confirmButton.node.on(Button.EventType.CLICK, () => {
+            console.log('[UIManager.showTalentHintDialogSecond] 确认按钮被点击，关闭对话框');
+            dialogNode.destroy();
+        });
+        
+        // 绑定遮罩点击事件（点击遮罩也关闭）
+        maskNode.on(Node.EventType.TOUCH_START, () => {
+            console.log('[UIManager.showTalentHintDialogSecond] 遮罩被点击，关闭对话框');
+            dialogNode.destroy();
+        });
+        
+        // 淡入动画
+        const dialogOpacity = dialogNode.addComponent(UIOpacity);
+        dialogOpacity.opacity = 0;
+        tween(dialogOpacity).to(0.3, { opacity: 255 }).start();
+        
+        console.log('[UIManager.showTalentHintDialogSecond] 对话框创建完成');
+    }
+    
+    /**
+     * 显示天赋强化提示对话框（实例方法，保留用于向后兼容）
+     */
+    private showTalentHintDialog(mvpUnit: { unitName: string; unitType: string; unitIcon: SpriteFrame | null }) {
+        console.log('[UIManager.showTalentHintDialog] 开始显示天赋提示对话框，mvpUnit:', mvpUnit);
+        const canvas = find('Canvas');
+        if (!canvas) {
+            console.error('[UIManager.showTalentHintDialog] 找不到Canvas节点');
+            return;
+        }
+        console.log('[UIManager.showTalentHintDialog] Canvas节点找到，开始创建对话框');
+        
+        // 创建对话框容器
+        const dialogNode = new Node('TalentHintDialog');
+        dialogNode.setParent(canvas);
+        dialogNode.setSiblingIndex(Number.MAX_SAFE_INTEGER);
+        
+        // 添加UITransform
+        const dialogTransform = dialogNode.addComponent(UITransform);
+        const visibleSize = view.getVisibleSize();
+        dialogTransform.setContentSize(visibleSize.width, visibleSize.height);
+        dialogTransform.setAnchorPoint(0.5, 0.5);
+        dialogNode.setPosition(0, 0, 0);
+        
+        // 创建半透明遮罩背景
+        const maskNode = new Node('Mask');
+        maskNode.setParent(dialogNode);
+        const maskTransform = maskNode.addComponent(UITransform);
+        maskTransform.setContentSize(visibleSize.width, visibleSize.height);
+        maskTransform.setAnchorPoint(0.5, 0.5);
+        maskNode.setPosition(0, 0, 0);
+        const maskGraphics = maskNode.addComponent(Graphics);
+        maskGraphics.fillColor = new Color(0, 0, 0, 180);
+        maskGraphics.rect(-visibleSize.width / 2, -visibleSize.height / 2, visibleSize.width, visibleSize.height);
+        maskGraphics.fill();
+        
+        // 创建对话框内容容器
+        const contentNode = new Node('Content');
+        contentNode.setParent(dialogNode);
+        const contentTransform = contentNode.addComponent(UITransform);
+        const dialogWidth = 600;
+        const dialogHeight = 400;
+        contentTransform.setContentSize(dialogWidth, dialogHeight);
+        contentTransform.setAnchorPoint(0.5, 0.5);
+        contentNode.setPosition(0, 0, 0);
+        
+        // 创建对话框背景
+        const bgNode = new Node('Background');
+        bgNode.setParent(contentNode);
+        const bgTransform = bgNode.addComponent(UITransform);
+        bgTransform.setContentSize(dialogWidth, dialogHeight);
+        bgTransform.setAnchorPoint(0.5, 0.5);
+        bgNode.setPosition(0, 0, 0);
+        const bgGraphics = bgNode.addComponent(Graphics);
+        bgGraphics.fillColor = new Color(40, 40, 60, 240);
+        bgGraphics.roundRect(-dialogWidth / 2, -dialogHeight / 2, dialogWidth, dialogHeight, 10);
+        bgGraphics.fill();
+        bgGraphics.strokeColor = new Color(255, 215, 0, 255);
+        bgGraphics.lineWidth = 3;
+        bgGraphics.roundRect(-dialogWidth / 2, -dialogHeight / 2, dialogWidth, dialogHeight, 10);
+        bgGraphics.stroke();
+        
+        // 创建单位图标区域（左侧）
+        const iconNode = new Node('UnitIcon');
+        iconNode.setParent(contentNode);
+        const iconTransform = iconNode.addComponent(UITransform);
+        iconTransform.setContentSize(150, 150);
+        iconTransform.setAnchorPoint(0.5, 0.5);
+        iconNode.setPosition(-dialogWidth / 2 + 100, 50, 0);
+        
+        // 创建单位图标背景
+        const iconBgNode = new Node('IconBackground');
+        iconBgNode.setParent(iconNode);
+        const iconBgTransform = iconBgNode.addComponent(UITransform);
+        iconBgTransform.setContentSize(150, 150);
+        iconBgTransform.setAnchorPoint(0.5, 0.5);
+        iconBgNode.setPosition(0, 0, 0);
+        const iconBgGraphics = iconBgNode.addComponent(Graphics);
+        iconBgGraphics.fillColor = new Color(60, 60, 80, 255);
+        iconBgGraphics.roundRect(-75, -75, 150, 150, 8);
+        iconBgGraphics.fill();
+        
+        // 创建单位图标Sprite
+        const iconSpriteNode = new Node('IconSprite');
+        iconSpriteNode.setParent(iconNode);
+        const iconSpriteTransform = iconSpriteNode.addComponent(UITransform);
+        iconSpriteTransform.setContentSize(120, 120);
+        iconSpriteTransform.setAnchorPoint(0.5, 0.5);
+        iconSpriteNode.setPosition(0, 0, 0);
+        const iconSprite = iconSpriteNode.addComponent(Sprite);
+        
+        // 尝试获取单位图标
+        this.loadUnitIconForHint(mvpUnit.unitType, iconSprite);
+        
+        // 创建文本内容区域（右侧）
+        const textNode = new Node('TextContent');
+        textNode.setParent(contentNode);
+        const textTransform = textNode.addComponent(UITransform);
+        textTransform.setContentSize(dialogWidth - 200, dialogHeight - 100);
+        textTransform.setAnchorPoint(0.5, 0.5);
+        textNode.setPosition(dialogWidth / 2 - 150, 0, 0);
+        
+        // 创建提示文本
+        const hintLabel = textNode.addComponent(Label);
+        hintLabel.string = `指挥官，虽然刚才您指挥得当，带领我们守住了防线，但是接下来的敌人会更加强悍，我们必须提升自己，才有可能守护住防线。\n\n您可以小幅度强化所有单位，或者针对性强化特定单位。`;
+        hintLabel.fontSize = 20;
+        hintLabel.color = new Color(255, 255, 255, 255);
+        hintLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
+        hintLabel.verticalAlign = Label.VerticalAlign.TOP;
+        hintLabel.lineHeight = 28;
+        hintLabel.overflow = Label.Overflow.RESIZE_HEIGHT;
+        
+        // 创建确认按钮
+        const confirmButtonNode = new Node('ConfirmButton');
+        confirmButtonNode.setParent(contentNode);
+        const confirmButtonTransform = confirmButtonNode.addComponent(UITransform);
+        confirmButtonTransform.setContentSize(200, 50);
+        confirmButtonTransform.setAnchorPoint(0.5, 0.5);
+        confirmButtonNode.setPosition(0, -dialogHeight / 2 + 40, 0);
+        
+        // 按钮背景
+        const buttonBgNode = new Node('ButtonBackground');
+        buttonBgNode.setParent(confirmButtonNode);
+        const buttonBgTransform = buttonBgNode.addComponent(UITransform);
+        buttonBgTransform.setContentSize(200, 50);
+        buttonBgTransform.setAnchorPoint(0.5, 0.5);
+        buttonBgNode.setPosition(0, 0, 0);
+        const buttonBgGraphics = buttonBgNode.addComponent(Graphics);
+        buttonBgGraphics.fillColor = new Color(100, 150, 255, 255);
+        buttonBgGraphics.roundRect(-100, -25, 200, 50, 5);
+        buttonBgGraphics.fill();
+        
+        // 按钮文字
+        const buttonLabelNode = new Node('ButtonLabel');
+        buttonLabelNode.setParent(confirmButtonNode);
+        const buttonLabelTransform = buttonLabelNode.addComponent(UITransform);
+        buttonLabelTransform.setContentSize(200, 50);
+        buttonLabelTransform.setAnchorPoint(0.5, 0.5);
+        buttonLabelNode.setPosition(0, 0, 0);
+        const buttonLabel = buttonLabelNode.addComponent(Label);
+        buttonLabel.string = '前往天赋页面';
+        buttonLabel.fontSize = 22;
+        buttonLabel.color = new Color(255, 255, 255, 255);
+        buttonLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        buttonLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        
+        // 添加Button组件
+        const confirmButton = confirmButtonNode.addComponent(Button);
+        confirmButton.node.on(Button.EventType.CLICK, () => {
+            // 关闭对话框
+            if (dialogNode && dialogNode.isValid) {
+                dialogNode.destroy();
+            }
+            // 跳转到天赋页面
+            this.setActivePage('talent');
+        }, this);
+        
+        // 添加点击遮罩关闭功能（可选）
+        maskNode.on(Node.EventType.TOUCH_END, () => {
+            if (dialogNode && dialogNode.isValid) {
+                dialogNode.destroy();
+            }
+            // 跳转到天赋页面
+            this.setActivePage('talent');
+        }, this);
+        
+        // 淡入动画
+        const uiOpacity = dialogNode.addComponent(UIOpacity);
+        uiOpacity.opacity = 0;
+        tween(uiOpacity)
+            .to(0.3, { opacity: 255 })
+            .start();
+    }
+    
+    /**
+     * 为提示对话框加载单位图标
+     */
+    /**
+     * 加载单位图标用于提示（静态方法）
+     */
+    private static loadUnitIconForHintStatic(unitType: string, sprite: Sprite) {
+        if (!unitType || !sprite) {
+            return;
+        }
+        
+        // 尝试通过TalentSystem的方法加载图标
+        const bottomSelectionNode = find('Canvas/BottomSelection');
+        if (bottomSelectionNode) {
+            const talentPanelNode = bottomSelectionNode.getChildByName('TalentPanel');
+            if (talentPanelNode) {
+                const talentSystem = talentPanelNode.getComponent(TalentSystem);
+                if (talentSystem && (talentSystem as any).loadUnitCardIcon) {
+                    (talentSystem as any).loadUnitCardIcon(unitType, sprite);
+                    return;
+                }
+            }
+        }
+        
+        // 备用方案：如果TalentSystem不可用，尝试从UnitConfigManager获取单位信息
+        // 但图标需要从预制体加载，这里暂时留空
+        // 如果加载失败，图标会保持空白，但不影响功能
+        console.warn('[UIManager.loadUnitIconForHintStatic] 无法加载单位图标:', unitType);
+    }
+    
+    /**
+     * 加载单位图标用于提示（实例方法，保留用于向后兼容）
+     */
+    private loadUnitIconForHint(unitType: string, sprite: Sprite) {
+        UIManager.loadUnitIconForHintStatic(unitType, sprite);
     }
     
     /**

@@ -3000,6 +3000,8 @@ export class GameManager extends Component {
 
     // 记录最近一次游戏结果状态，用于结算界面（MVP/SVP 显示）
     private lastGameResultState: GameState | null = null;
+    // 记录MVP/SVP单位信息，用于首次返回主页提示
+    public lastMVPUnit: { unitName: string; unitType: string; unitIcon: SpriteFrame | null } | null = null;
 
     endGame(state: GameState) {
         //console.info(`[GameManager.endGame] 游戏结束，状态: ${state === GameState.Victory ? 'Victory' : state === GameState.Defeat ? 'Defeat' : 'Other'}`);
@@ -3153,8 +3155,16 @@ export class GameManager extends Component {
         const damageStats = DamageStatistics.getInstance();
         damageStats.stopRecording();
         
-        // 创建/更新伤害统计图表
+        // 创建/更新伤害统计图表（会在内部设置MVP单位信息）
+        console.log('[GameManager.showGameResultPanel] 调用createDamageStatsPanel前，lastMVPUnit:', this.lastMVPUnit);
         this.createDamageStatsPanel();
+        console.log('[GameManager.showGameResultPanel] 调用createDamageStatsPanel后，lastMVPUnit:', this.lastMVPUnit);
+        
+        // 如果createDamageStatsPanel没有设置MVP单位（例如没有贡献数据），尝试设置默认MVP单位
+        if (!this.lastMVPUnit) {
+            console.log('[GameManager.showGameResultPanel] lastMVPUnit为空，调用setDefaultMVPUnit');
+            this.setDefaultMVPUnit();
+        }
         
         // 确保UI元素已移动到弹窗中
         this.moveUIElementsToDialog();
@@ -3299,6 +3309,13 @@ export class GameManager extends Component {
             return unit.totalDamage || 0;
         };
         
+        // 判断是否是建筑物的辅助函数
+        const isBuilding = (unit: any): boolean => {
+            const buildingTypes = ['WatchTower', 'IceTower', 'ThunderTower', 'WarAncientTree', 
+                                  'HunterHall', 'SwordsmanHall', 'Church', 'StoneWall'];
+            return buildingTypes.indexOf(unit.unitType) >= 0;
+        };
+        
         const filteredUnits = allUnits.filter(u => getContributionValue(u) > 0);
         // 按贡献值从高到低排序
         filteredUnits.sort((a, b) => getContributionValue(b) - getContributionValue(a));
@@ -3309,6 +3326,28 @@ export class GameManager extends Component {
         topUnits.forEach((u, i) => {
             //console.info(`[GameManager] 第${i + 1}名: ${u.unitName}, 贡献值=${getContributionValue(u)}`);
         });
+        
+        // 查找第一个非建筑物的单位（用于MVP/SVP提示）
+        console.log('[GameManager.createDamageStatsPanel] 开始查找非建筑物单位，总单位数:', filteredUnits.length);
+        let mvpUnitForHint: any = null;
+        for (const unit of filteredUnits) {
+            const isUnitBuilding = isBuilding(unit);
+            console.log(`[GameManager.createDamageStatsPanel] 检查单位: ${unit.unitName} (${unit.unitType}), 是建筑物: ${isUnitBuilding}`);
+            if (!isUnitBuilding) {
+                mvpUnitForHint = unit;
+                console.log(`[GameManager.createDamageStatsPanel] 找到非建筑物单位: ${unit.unitName} (${unit.unitType})`);
+                break;
+            }
+        }
+        
+        // 如果找到了非建筑物单位，保存为MVP单位信息（用于首次返回主页提示）
+        if (mvpUnitForHint) {
+            const isVictory = this.lastGameResultState === GameState.Victory;
+            console.log(`[GameManager.createDamageStatsPanel] 保存MVP单位信息: ${mvpUnitForHint.unitName} (${mvpUnitForHint.unitType}), 胜利: ${isVictory}`);
+            this.saveMVPUnitInfo(mvpUnitForHint, isVictory);
+        } else {
+            console.warn('[GameManager.createDamageStatsPanel] 未找到非建筑物单位，将使用默认MVP单位');
+        }
         
         if (topUnits.length === 0) {
             // 如果没有伤害数据，显示提示
@@ -3322,6 +3361,10 @@ export class GameManager extends Component {
             label.color = new Color(150, 150, 150, 255);
             label.horizontalAlign = Label.HorizontalAlign.CENTER;
             label.verticalAlign = Label.VerticalAlign.CENTER;
+            
+            // 即使没有贡献数据，也尝试设置一个默认的MVP单位（用于首次返回主页提示）
+            console.log('[GameManager.createDamageStatsPanel] 没有贡献数据，调用setDefaultMVPUnit');
+            this.setDefaultMVPUnit();
             return;
         }
         
@@ -3369,6 +3412,8 @@ export class GameManager extends Component {
                 const prefix = isVictory ? 'MVP ' : 'SVP ';
                 displayName = prefix + displayName;
                 name.color = new Color(255, 215, 0, 255);
+                
+                // 注意：MVP/SVP单位信息已在上面统一处理（优先选择非建筑物单位），这里不再重复保存
             } else {
                 name.color = new Color(255, 255, 255, 255);
             }
@@ -3443,6 +3488,88 @@ export class GameManager extends Component {
             contribValueLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
             contribValueLabel.verticalAlign = Label.VerticalAlign.CENTER;
         });
+    }
+    
+    /**
+     * 保存MVP/SVP单位信息，用于首次返回主页提示
+     */
+    private saveMVPUnitInfo(unit: any, isVictory: boolean) {
+        console.log(`[GameManager.saveMVPUnitInfo] 保存MVP单位信息: unitName=${unit.unitName}, unitType=${unit.unitType}, isVictory=${isVictory}`);
+        this.lastMVPUnit = {
+            unitName: unit.unitName || '未知单位',
+            unitType: unit.unitType || '',
+            unitIcon: null // 图标稍后在UIManager中通过TalentSystem获取
+        };
+        console.log(`[GameManager.saveMVPUnitInfo] lastMVPUnit已设置:`, this.lastMVPUnit);
+    }
+    
+    /**
+     * 设置默认的MVP单位（当没有贡献数据时使用）
+     */
+    private setDefaultMVPUnit() {
+        console.log('[GameManager.setDefaultMVPUnit] 开始设置默认MVP单位');
+        // 判断是否是建筑物的辅助函数
+        const isBuildingType = (unitType: string): boolean => {
+            const buildingTypes = ['WatchTower', 'IceTower', 'ThunderTower', 'WarAncientTree', 
+                                  'HunterHall', 'SwordsmanHall', 'Church', 'StoneWall'];
+            return buildingTypes.indexOf(unitType) >= 0;
+        };
+        
+        // 尝试获取第一个上场的非建筑物单位作为默认MVP
+        const activeUnitTypes = this.getActiveUnitTypes();
+        console.log('[GameManager.setDefaultMVPUnit] 当前上场的单位类型:', activeUnitTypes);
+        
+        // 过滤掉建筑物类型
+        const nonBuildingTypes = activeUnitTypes.filter(type => !isBuildingType(type));
+        console.log('[GameManager.setDefaultMVPUnit] 过滤后的非建筑物单位类型:', nonBuildingTypes);
+        
+        if (nonBuildingTypes.length > 0) {
+            // 使用第一个非建筑物单位类型
+            const firstUnitType = nonBuildingTypes[0];
+            console.log(`[GameManager.setDefaultMVPUnit] 使用第一个非建筑物单位类型: ${firstUnitType}`);
+            const unitNode = this.findFirstUnitInstance(firstUnitType);
+            if (unitNode) {
+                // 尝试获取单位信息
+                const roleScript = unitNode.getComponent('Role') as any;
+                const buildScript = unitNode.getComponent('Build') as any;
+                const script = roleScript || buildScript;
+                
+                if (script) {
+                    const configManager = UnitConfigManager.getInstance();
+                    const displayInfo = configManager.getUnitDisplayInfo(firstUnitType);
+                    const unitName = displayInfo ? displayInfo.name : (script.unitName || firstUnitType);
+                    
+                    this.lastMVPUnit = {
+                        unitName: unitName,
+                        unitType: firstUnitType,
+                        unitIcon: null
+                    };
+                    console.log(`[GameManager.setDefaultMVPUnit] 从单位实例获取信息: ${unitName} (${firstUnitType})`);
+                    return;
+                }
+            }
+            
+            // 如果找不到单位实例，至少保存单位类型和名称
+            const configManager = UnitConfigManager.getInstance();
+            const displayInfo = configManager.getUnitDisplayInfo(firstUnitType);
+            const unitName = displayInfo ? displayInfo.name : firstUnitType;
+            
+            this.lastMVPUnit = {
+                unitName: unitName,
+                unitType: firstUnitType,
+                unitIcon: null
+            };
+            console.log(`[GameManager.setDefaultMVPUnit] 从配置获取信息: ${unitName} (${firstUnitType})`);
+        } else {
+            // 如果没有任何非建筑物单位，使用默认单位（弓箭手）
+            console.log('[GameManager.setDefaultMVPUnit] 没有非建筑物单位，使用默认单位: 弓箭手');
+            this.lastMVPUnit = {
+                unitName: '弓箭手',
+                unitType: 'Arrower',
+                unitIcon: null
+            };
+        }
+        console.log('[GameManager.setDefaultMVPUnit] 最终设置的lastMVPUnit:', this.lastMVPUnit);
     }
     
     /**
