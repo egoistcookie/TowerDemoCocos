@@ -571,7 +571,7 @@ export class WarAncientTree extends Build {
         tower.active = true;
         
         if (towerScript) {
-            console.info(`[WarAncientTree] 生产弓箭手，最终攻击力=${towerScript.attackDamage}, 生命值=${towerScript.maxHealth}`);
+           //console.info(`[WarAncientTree] 生产弓箭手，最终攻击力=${towerScript.attackDamage}, 生命值=${towerScript.maxHealth}`);
         }
 
         // 添加到生产的Tower列表

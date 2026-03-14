@@ -143,10 +143,10 @@ export class Arrow extends Component {
         }
 
         // 调试日志：箭矢命中方向
-        console.info('[Arrow.hitTarget] hitDirection:', hitDirection, 
-            'currentDirection:', this.currentDirection, 
-            'startPos:', this.startPos, 
-            'targetPos:', this.targetPos);
+        // console.info('[Arrow.hitTarget] hitDirection:', hitDirection, 
+        //     'currentDirection:', this.currentDirection, 
+        //     'startPos:', this.startPos, 
+        //     'targetPos:', this.targetPos);
 
         // 调用命中回调
         if (this.onHitCallback) {

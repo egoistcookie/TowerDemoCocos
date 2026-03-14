@@ -169,7 +169,7 @@ export class UIManager extends Component {
             console.warn('[UIManager.start] 读取 TowerDemo_SkipBgmOnNextHome 失败: ', e);
         }
         if (skipBgmOnce) {
-            console.info('[UIManager.start] 检测到 TowerDemo_SkipBgmOnNextHome=1，本次进入首页不自动播放BGM');
+           //console.info('[UIManager.start] 检测到 TowerDemo_SkipBgmOnNextHome=1，本次进入首页不自动播放BGM');
             try {
                 sys.localStorage.setItem('TowerDemo_SkipBgmOnNextHome', '0');
             } catch (e) {
@@ -177,15 +177,15 @@ export class UIManager extends Component {
             }
         }
         const isBgmOn = soundManager ? soundManager.isBgmOn() : null;
-        console.info('[UIManager.start] 准备自动播放首页BGM? isBgmOn =', isBgmOn, 'skipBgmOnce =', skipBgmOnce);
+       //console.info('[UIManager.start] 准备自动播放首页BGM? isBgmOn =', isBgmOn, 'skipBgmOnce =', skipBgmOnce);
         if (soundManager && isBgmOn && !skipBgmOnce) {
-            console.info('[UIManager.start] 条件满足，调用 soundManager.playMenuBgm()');
+           //console.info('[UIManager.start] 条件满足，调用 soundManager.playMenuBgm()');
             soundManager.playMenuBgm();
         } else {
-            console.info('[UIManager.start] 不自动播放首页BGM，原因：',
-                !soundManager ? 'soundManager 为空' :
-                !isBgmOn ? 'BGM 开关关闭' :
-                skipBgmOnce ? 'skipBgmOnce = true' : '未知');
+            // console.info('[UIManager.start] 不自动播放首页BGM，原因：',
+            //     !soundManager ? 'soundManager 为空' :
+            //     !isBgmOn ? 'BGM 开关关闭' :
+            //     skipBgmOnce ? 'skipBgmOnce = true' : '未知');
         }
     }
 
@@ -2021,9 +2021,9 @@ export class UIManager extends Component {
         //    如果玩家在设置中关闭了背景音乐，这里确保不会在退出流程中意外重新播放BGM
         const exitSoundManager = SoundManager.getInstance();
         const exitBgmOn = exitSoundManager ? exitSoundManager.isBgmOn() : null;
-        console.info('[UIManager.onExitGameClick] 退出游戏时 BGM 状态 isBgmOn =', exitBgmOn);
+       //console.info('[UIManager.onExitGameClick] 退出游戏时 BGM 状态 isBgmOn =', exitBgmOn);
         if (exitSoundManager && !exitBgmOn) {
-            console.info('[UIManager.onExitGameClick] BGM 已关闭，停止当前BGM并标记下次首页不自动播放');
+           //console.info('[UIManager.onExitGameClick] BGM 已关闭，停止当前BGM并标记下次首页不自动播放');
             const audioMgr = AudioManager.Instance;
             if (audioMgr) {
                 audioMgr.stopBGM();
@@ -2035,9 +2035,9 @@ export class UIManager extends Component {
                 console.warn('[UIManager.onExitGameClick] 写入 TowerDemo_SkipBgmOnNextHome=1 失败: ', e);
             }
         } else {
-            console.info('[UIManager.onExitGameClick] 未写入 Skip 标记，原因：',
-                !exitSoundManager ? 'SoundManager 为空' :
-                exitBgmOn ? 'BGM 开关为开' : '未知');
+            // console.info('[UIManager.onExitGameClick] 未写入 Skip 标记，原因：',
+            //     !exitSoundManager ? 'SoundManager 为空' :
+            //     exitBgmOn ? 'BGM 开关为开' : '未知');
         }
         
         // 清除上一关的所有卡片增幅

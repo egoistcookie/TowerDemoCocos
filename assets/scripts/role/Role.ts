@@ -253,7 +253,7 @@ export class Role extends Component {
     }
 
     start() {
-       console.info(`[Role] start 被调用，单位类型: ${this.constructor.name}`);
+      //console.info(`[Role] start 被调用，单位类型: ${this.constructor.name}`);
         
         // 保存初始属性值（用于对象池回收时恢复）
         // 注意：从配置文件中读取基础值，而不是当前值（当前值可能已被配置管理器修改）
@@ -269,14 +269,14 @@ export class Role extends Component {
                 this._initialAttackDamage = config.baseStats.attackDamage || this.attackDamage;
                 this._initialAttackInterval = config.baseStats.attackInterval || this.attackInterval;
                 this._initialMoveSpeed = config.baseStats.moveSpeed || this.moveSpeed;
-                console.info(`[Role.start] ${unitId} 从配置读取初始值：攻击力=${this._initialAttackDamage}, 生命值=${this._initialMaxHealth}`);
+               //console.info(`[Role.start] ${unitId} 从配置读取初始值：攻击力=${this._initialAttackDamage}, 生命值=${this._initialMaxHealth}`);
             } else {
                 // 如果配置不存在，使用当前值
                 this._initialMaxHealth = this.maxHealth;
                 this._initialAttackDamage = this.attackDamage;
                 this._initialAttackInterval = this.attackInterval;
                 this._initialMoveSpeed = this.moveSpeed;
-                console.info(`[Role.start] ${unitId} 从当前值保存初始值：攻击力=${this._initialAttackDamage}, 生命值=${this._initialMaxHealth}`);
+               //console.info(`[Role.start] ${unitId} 从当前值保存初始值：攻击力=${this._initialAttackDamage}, 生命值=${this._initialMaxHealth}`);
             }
         }
         

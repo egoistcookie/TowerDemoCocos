@@ -282,7 +282,7 @@ export class SwordsmanHall extends Build {
         swordsman.active = true;
         
         if (swordsmanScript) {
-            console.info(`[SwordsmanHall] 生产剑士，最终攻击力=${swordsmanScript.attackDamage}, 生命值=${swordsmanScript.maxHealth}`);
+           //console.info(`[SwordsmanHall] 生产剑士，最终攻击力=${swordsmanScript.attackDamage}, 生命值=${swordsmanScript.maxHealth}`);
         }
 
         // 添加到生产的ElfSwordsman列表

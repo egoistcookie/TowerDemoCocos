@@ -2918,15 +2918,15 @@ export class GameManager extends Component {
         this.lastKillRankFetchAt = now;
         this.lastKillRankPlayerId = playerId;
         const reqSeq = ++this.killRankReqSeq;
-        console.info('[KillRank] 请求开始:', { playerId, url });
+       //console.info('[KillRank] 请求开始:', { playerId, url });
         xhr.onreadystatechange = () => {
             if (xhr.readyState !== 4) return;
             this.killRankFetchInFlight = false;
-            console.info('[KillRank] 请求完成:', { status: xhr.status, statusText: xhr.statusText });
+           //console.info('[KillRank] 请求完成:', { status: xhr.status, statusText: xhr.statusText });
 
             // 如果这不是最新一次请求的回包，直接丢弃（避免退出/切页后旧回包写 UI）
             if (reqSeq !== this.killRankReqSeq) {
-                console.info('[KillRank] 丢弃过期回包:', { reqSeq, latest: this.killRankReqSeq });
+               //console.info('[KillRank] 丢弃过期回包:', { reqSeq, latest: this.killRankReqSeq });
                 return;
             }
             // 回包时再确认仍处于首页（避免退出到战斗/切页后写 UI）
@@ -2934,7 +2934,7 @@ export class GameManager extends Component {
             const bottomSelectionNode2 = find('Canvas/BottomSelection');
             const gameMainPanel2 = bottomSelectionNode2 ? bottomSelectionNode2.getChildByName('GameMainPanel') : null;
             if (!bottomSelectionNode2 || !bottomSelectionNode2.activeInHierarchy || !gameMainPanel2 || !gameMainPanel2.activeInHierarchy) {
-                console.info('[KillRank] 回包时不在首页，忽略写 UI');
+               //console.info('[KillRank] 回包时不在首页，忽略写 UI');
                 return;
             }
 
@@ -2946,7 +2946,7 @@ export class GameManager extends Component {
             }
             try {
                 const rawText = xhr.responseText || '';
-                console.info('[KillRank] responseText(截断):', rawText.slice(0, 300));
+               //console.info('[KillRank] responseText(截断):', rawText.slice(0, 300));
                 const resp = JSON.parse(xhr.responseText || '{}');
                 if (!resp || !resp.success || !resp.data) {
                     console.warn('[KillRank] JSON 结构不符合预期:', resp);
@@ -2955,12 +2955,12 @@ export class GameManager extends Component {
                 }
 
                 const d = resp.data;
-                console.info('[KillRank] data:', {
-                    total_kills: d.total_kills,
-                    surpassed_percent: d.surpassed_percent,
-                    kill_rank: d.kill_rank,
-                    total_players: d.total_players
-                });
+                // console.info('[KillRank] data:', {
+                //     total_kills: d.total_kills,
+                //     surpassed_percent: d.surpassed_percent,
+                //     kill_rank: d.kill_rank,
+                //     total_players: d.total_players
+                // });
                 const toNumber = (v: any, fallback: number) => {
                     const n = typeof v === 'number' ? v : (typeof v === 'string' ? parseFloat(v) : NaN);
                     return Number.isFinite(n) ? n : fallback;
@@ -3022,7 +3022,7 @@ export class GameManager extends Component {
         // 默认不展示经验/等级区域，后续根据本局是否获得经验来决定
         this.showExpSectionInGameOver = false;
 
-        console.info(`[GameManager.showGameResultPanel] start, state=${state}, currentGameExp=${this.currentGameExp}`);
+       //console.info(`[GameManager.showGameResultPanel] start, state=${state}, currentGameExp=${this.currentGameExp}`);
         
         // 消耗体力（每局游戏无论输赢都消耗5点体力）
         if (this.playerDataManager) {
@@ -3232,7 +3232,7 @@ export class GameManager extends Component {
                     child.destroy();
                 }
             }
-            console.info('[GameManager.cleanupGameOverDynamicUI] cleared DamageStatsPanel children');
+           //console.info('[GameManager.cleanupGameOverDynamicUI] cleared DamageStatsPanel children');
         }
         
         // 「关卡奖励」分界线节点不再销毁，始终复用，以保证其 Y 坐标一致
@@ -3267,7 +3267,7 @@ export class GameManager extends Component {
         const panelHeight = Math.max(150, 25 + 3 * (28 + 6) + 20); // 动态计算高度：标题(25) + 3条数据 + 底部间距(20)
         statsTransform.setContentSize(380, panelHeight);
 
-        console.info(`[GameManager.createDamageStatsPanel] ${isNewPanel ? 'create' : 'reuse'} panel, height=${panelHeight}`);
+       //console.info(`[GameManager.createDamageStatsPanel] ${isNewPanel ? 'create' : 'reuse'} panel, height=${panelHeight}`);
         
         // 创建背景
         const statsBg = new Node('StatsBackground');
@@ -3864,10 +3864,10 @@ export class GameManager extends Component {
             const statsHeight2 = statsTransform2 ? Math.max(150, statsTransform2.height) : 150;
             const fixedStatsCenterY = 125;
             damageStatsNode.setPosition(0, fixedStatsCenterY, 0);
-            console.info(`[GameManager.layoutGameOverUI] set DamageStatsPanel y=${fixedStatsCenterY}, height=${statsHeight2}`);
+           //console.info(`[GameManager.layoutGameOverUI] set DamageStatsPanel y=${fixedStatsCenterY}, height=${statsHeight2}`);
         }
         rewardTitleNode.setPosition(0, 0, 0);
-        console.info('[GameManager.layoutGameOverUI] set RewardTitle y=0');
+       //console.info('[GameManager.layoutGameOverUI] set RewardTitle y=0');
 
         // 从分界线下方的一个固定位置开始布局经验区域和按钮，保证与经验无关
         currentY = -40;

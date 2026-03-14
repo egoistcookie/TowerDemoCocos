@@ -268,7 +268,7 @@ export class Church extends Build {
         priest.active = true;
         
         if (priestScript) {
-            console.info(`[Church] 生产牧师，最终攻击力=${(priestScript as any).attackDamage}, 生命值=${(priestScript as any).maxHealth}`);
+           //console.info(`[Church] 生产牧师，最终攻击力=${(priestScript as any).attackDamage}, 生命值=${(priestScript as any).maxHealth}`);
         }
 
         this.producedPriests.push(priest);

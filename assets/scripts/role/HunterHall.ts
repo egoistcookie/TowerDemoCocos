@@ -307,7 +307,7 @@ export class HunterHall extends Build {
         hunter.active = true;
         
         if (hunterScript) {
-            console.info(`[HunterHall] 生产猎手，最终攻击力=${hunterScript.attackDamage}, 生命值=${hunterScript.maxHealth}`);
+           //console.info(`[HunterHall] 生产猎手，最终攻击力=${hunterScript.attackDamage}, 生命值=${hunterScript.maxHealth}`);
         }
 
         // 添加到生产的Hunter列表
