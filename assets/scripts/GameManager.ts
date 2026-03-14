@@ -3498,8 +3498,10 @@ export class GameManager extends Component {
         this.lastMVPUnit = {
             unitName: unit.unitName || '未知单位',
             unitType: unit.unitType || '',
-            unitIcon: null // 图标稍后在UIManager中通过TalentSystem获取
-        };
+            unitIcon: null, // 图标稍后在UIManager中通过TalentSystem获取
+            // 额外记录这局是否胜利，供UI决定提示文案
+            isVictory: isVictory
+        } as any;
         console.log(`[GameManager.saveMVPUnitInfo] lastMVPUnit已设置:`, this.lastMVPUnit);
     }
     
@@ -3557,8 +3559,9 @@ export class GameManager extends Component {
             this.lastMVPUnit = {
                 unitName: unitName,
                 unitType: firstUnitType,
-                unitIcon: null
-            };
+                unitIcon: null,
+                isVictory: this.lastGameResultState === GameState.Victory
+            } as any;
             console.log(`[GameManager.setDefaultMVPUnit] 从配置获取信息: ${unitName} (${firstUnitType})`);
         } else {
             // 如果没有任何非建筑物单位，使用默认单位（弓箭手）
@@ -3566,8 +3569,9 @@ export class GameManager extends Component {
             this.lastMVPUnit = {
                 unitName: '弓箭手',
                 unitType: 'Arrower',
-                unitIcon: null
-            };
+                unitIcon: null,
+                isVictory: this.lastGameResultState === GameState.Victory
+            } as any;
         }
         console.log('[GameManager.setDefaultMVPUnit] 最终设置的lastMVPUnit:', this.lastMVPUnit);
     }
@@ -4900,17 +4904,24 @@ export class GameManager extends Component {
         // 使用单位名称作为唯一标识，确保每种单位只显示一次介绍框
         // 优先使用unitScript.unitName，否则使用unitType
         const uniqueUnitType = unitScript.unitName || unitType;
-        
 
         if (!this.appearedUnitTypes.has(uniqueUnitType)) {
             this.appearedUnitTypes.add(uniqueUnitType);
-            
+
             // 更新调试数组
             this.debugUnitTypes = Array.from(this.appearedUnitTypes);
-            
-            this.showUnitIntro(unitScript);
+
+            // 特殊建筑首次出现时不弹单位介绍框：弓箭手小屋 / 猎手大厅 / 剑士小屋 / 教堂
+            const introBlockedNames = new Set<string>(['弓箭手小屋', '猎手大厅', '剑士小屋', '教堂']);
+            const shouldShowIntro = !introBlockedNames.has(uniqueUnitType);
+
+            if (shouldShowIntro) {
+                this.showUnitIntro(unitScript);
+            }
+
             return true;
         }
+
         return false;
     }
     
@@ -4941,19 +4952,44 @@ export class GameManager extends Component {
             // 从 unitConfig.json 获取单位信息
             const configManager = UnitConfigManager.getInstance();
             // 获取单位ID（优先使用 prefabName，其次使用 unitType）
-            const unitId = unitScript.prefabName || unitScript.unitType || '';
-            const displayInfo = configManager.getUnitDisplayInfo(unitId);
-            
-            // 使用配置文件中的信息
+            const rawUnitId = unitScript.prefabName || unitScript.unitType || '';
+            const displayInfo = configManager.getUnitDisplayInfo(rawUnitId);
+
+            // 使用配置文件中的名称
             const unitName = displayInfo ? displayInfo.name : (unitScript.unitName || '未知单位');
-            const unitDescription = displayInfo ? displayInfo.description : '暂无描述';
-            
+
+            // 单位介绍框中的台词：按关卡从 spawnDialogs 中读取，缺省回退到第1关 / 任何一条
+            let unitDescription = '暂无描述';
+            try {
+                // 获取当前关卡（默认第1关）
+                let level = 1;
+                if (this.uiManager && (this.uiManager as any).getCurrentLevel) {
+                    const currentLevel = (this.uiManager as any).getCurrentLevel();
+                    if (typeof currentLevel === 'number' && !isNaN(currentLevel)) {
+                        level = currentLevel;
+                    }
+                }
+
+                const dialogText = configManager.getUnitSpawnDialog(rawUnitId, level);
+                if (dialogText) {
+                    unitDescription = dialogText;
+                } else if (displayInfo && displayInfo.description) {
+                    // 如果没有按关卡配置，则回退到 displayInfo.description
+                    unitDescription = displayInfo.description;
+                }
+            } catch (e) {
+                // 任意错误都回退到静态描述
+                if (displayInfo && displayInfo.description) {
+                    unitDescription = displayInfo.description;
+                }
+            }
+
             this.unitIntroPopup.show({
                 unitName: unitName,
                 unitDescription: unitDescription,
                 unitIcon: unitIcon,
                 unitType: unitScript.unitType || 'unknown',
-                unitId: unitId  // prefabName，用于识别小精灵等以触发新手教程
+                unitId: rawUnitId  // prefabName，用于识别小精灵等以触发新手教程
             });
         } else {
         }

@@ -1,7 +1,8 @@
-import { _decorator, SpriteFrame, Prefab, Texture2D, AudioClip, Node, Vec3, find, CCString } from 'cc';
+import { _decorator, SpriteFrame, Prefab, Texture2D, AudioClip, Node, Vec3, find, CCString, EventTouch, EventMouse, UITransform, Sprite, SpriteFrame as CCSpriteFrame, resources, Color, Animation, input, Input, Camera, view, UIOpacity, tween } from 'cc';
 import { Role } from './Role';
 import { GameManager, GameState } from '../GameManager';
 import { DamageStatistics } from '../DamageStatistics';
+import type { UnitInfo } from '../UnitInfoPanel';
 const { ccclass, property } = _decorator;
 
 @ccclass('Priest')
@@ -99,10 +100,34 @@ export class Priest extends Role {
     @property({ type: [CCString], override: true, tooltip: "战斗口号数组，牧师的治疗口号" })
     battleSlogans: string[] = ['治疗！治疗！治疗！', '尘归尘！', '圣光指引我!', '愿圣光与你同在！', '慢点打，慢点打！'];
 
+    // 圣光祈祷特效动画帧（显示在魔法阵内部，非必配）
+    @property({ type: [SpriteFrame], tooltip: '圣光祈祷特效动画帧（显示在魔法阵内部，可选）' })
+    holyPrayerEffectFrames: SpriteFrame[] = [];
+
+    // 圣光祈祷相关字段
+    private isHolyPrayerActive: boolean = false;         // 是否正在拖动魔法阵
+    private holyPrayerRadius: number = 100;              // 半径（直径200像素）
+    private holyPrayerDuration: number = 5;              // 持续时间（秒）
+    private holyPrayerTickInterval: number = 0.5;        // 治疗间隔（秒）
+    private currentMagicCircleNode: Node | null = null!; // 当前魔法阵节点
+    private readonly HOLY_PRAYER_MANA_COST: number = 20; // 每次圣光祈祷消耗的蓝量
+
+    /**
+     * 节点启用时：标记拥有技能，让父类创建和更新蓝量条
+     */
+    onEnable() {
+        // 牧师始终拥有技能（圣光祈祷），需要蓝量条和蓝量回复
+        (this as any).hasSkill = true;
+        super.onEnable();
+    }
+
     update(deltaTime: number) {
         if (this.isDestroyed) {
             return;
         }
+
+        // 更新蓝量（每秒回复）
+        this.updateMana(deltaTime);
 
         // 只更新对话框系统，不调用父类的完整update方法（避免移动和攻击逻辑重复执行）
         this.updateDialogSystem(deltaTime);
@@ -270,6 +295,548 @@ export class Priest extends Role {
 
         visit(scene);
         return result;
+    }
+
+    /**
+     * 覆盖显示信息面板，加入圣光祈祷技能按钮
+     */
+    showUnitInfoPanel() {
+        if (!this.unitSelectionManager) {
+            this.findUnitSelectionManager();
+        }
+        if (this.unitSelectionManager) {
+            const unitInfo = this.buildPriestUnitInfo();
+            this.unitSelectionManager.selectUnit(this.node, unitInfo);
+        }
+
+        // 点击其他地方设置移动目标（复用父类逻辑）
+        const canvas = find('Canvas');
+        this.scheduleOnce(() => {
+            if (canvas) {
+                // 创建全局触摸事件处理器
+                this.globalTouchHandler = (event: EventTouch) => {
+                    
+                    // 检查当前单位是否仍被选中
+                    if (this.unitSelectionManager) {
+                        const currentSelectedUnit = this.unitSelectionManager.getCurrentSelectedUnit();
+                        const isSelected = this.unitSelectionManager.isUnitSelected(this.node);
+                        
+                        // 如果选中了其他单位（不是当前单位），移除监听器
+                        if (currentSelectedUnit !== null && currentSelectedUnit !== this.node) {
+                            const canvas = find('Canvas');
+                            if (canvas && this.globalTouchHandler) {
+                                canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
+                            }
+                            this.globalTouchHandler = null!;
+                            return;
+                        }
+                        
+                        // 如果当前单位未被选中，也不执行移动操作
+                        if (!isSelected || currentSelectedUnit === null) {
+                            const canvas = find('Canvas');
+                            if (canvas && this.globalTouchHandler) {
+                                canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
+                            }
+                            this.globalTouchHandler = null!;
+                            return;
+                        }
+                    }
+                    
+                    // 检查点击是否在信息面板上（通过节点名称和路径检查）
+                    const targetNode = event.target as Node;
+                    if (targetNode) {
+                        let currentNode: Node | null = targetNode;
+                        while (currentNode) {
+                            if (currentNode.name === 'UnitInfoPanel' || currentNode.name.includes('UnitInfoPanel')) {
+                                return;
+                            }
+                            const nodePath = currentNode.getPathInHierarchy();
+                            if (nodePath && nodePath.includes('UnitInfoPanel')) {
+                                return;
+                            }
+                            currentNode = currentNode.parent;
+                            if (!currentNode) {
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // 如果正在放置圣光祈祷魔法阵，不执行移动操作
+                    if (this.isHolyPrayerActive) {
+                        return;
+                    }
+                    
+                    // 点击不在信息面板上，设置移动目标
+                    this.setManualMoveTarget(event);
+                };
+                
+                canvas.on(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
+            }
+        }, 0.1);
+    }
+
+    /**
+     * 构建牧师的 UnitInfo（带圣光祈祷技能按钮）
+     */
+    private buildPriestUnitInfo(): UnitInfo {
+        const level = this.level || 1;
+        const upgradeCost = level < 3 ? (10 + (level - 1) * 10) : undefined;
+
+        const currentHealth = (this.currentHealth !== undefined && !isNaN(this.currentHealth) && this.currentHealth >= 0)
+            ? this.currentHealth
+            : (this.maxHealth || 0);
+        const maxHealth = (this.maxHealth !== undefined && !isNaN(this.maxHealth) && this.maxHealth > 0)
+            ? this.maxHealth
+            : 0;
+
+        const unitInfo: UnitInfo = {
+            name: this.unitName || '牧师',
+            level: level,
+            currentHealth: currentHealth,
+            maxHealth: maxHealth,
+            attackDamage: this.attackDamage || 0,
+            populationCost: 1,
+            icon: this.cardIcon || this.defaultSpriteFrame,
+            collisionRadius: this.collisionRadius,
+            attackRange: this.attackRange,
+            attackFrequency: this.attackInterval ? 1.0 / this.attackInterval : 0,
+            moveSpeed: this.moveSpeed,
+            isDefending: this.isDefending,
+            upgradeCost: upgradeCost,
+            onUpgradeClick: level < 3 ? () => {
+                this.onUpgradeClick();
+            } : undefined,
+            onSellClick: () => {
+                this.onSellClick();
+            },
+            onDefendClick: () => {
+                this.onDefendClick();
+            },
+            // 圣光祈祷技能按钮（九宫格第4个格子，UnitInfoPanel 根据 name 判断为牧师并放在索引3）
+            onSkillClick: (event?: EventTouch) => {
+                this.startHolyPrayerPlacement(event);
+            },
+            isSkillActive: false
+        };
+
+        return unitInfo;
+    }
+
+    /**
+     * 开始放置圣光祈祷魔法阵：在鼠标位置出现可拖动的圆形
+     * @param startEvent 来自技能按钮的触摸事件，用于确定初始位置
+     */
+    private startHolyPrayerPlacement(startEvent?: EventTouch) {
+        //console.log'[Priest.startHolyPrayerPlacement] 开始放置圣光祈祷魔法阵，是否带起始事件:', !!startEvent);
+        
+        if (this.isHolyPrayerActive) {
+            //console.log'[Priest.startHolyPrayerPlacement] 已经在放置魔法阵，忽略');
+            return;
+        }
+        this.isHolyPrayerActive = true;
+
+        const canvas = find('Canvas');
+        if (!canvas) {
+            console.error('[Priest.startHolyPrayerPlacement] 找不到Canvas节点');
+            this.isHolyPrayerActive = false;
+            return;
+        }
+
+        const canvasTransform = canvas.getComponent(UITransform);
+        if (!canvasTransform) {
+            console.error('[Priest.startHolyPrayerPlacement] Canvas没有UITransform组件');
+            this.isHolyPrayerActive = false;
+            return;
+        }
+
+        // 创建魔法阵节点
+        const magicNode = new Node('HolyPrayerCircle');
+        const uiTrans = magicNode.addComponent(UITransform);
+        uiTrans.setContentSize(this.holyPrayerRadius * 2, this.holyPrayerRadius * 2);
+        const sprite = magicNode.addComponent(Sprite);
+        sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        sprite.color = new Color(255, 255, 255, 180);
+
+        magicNode.setParent(canvas);
+        this.currentMagicCircleNode = magicNode;
+
+        const updatePositionFromEvent = (event: EventTouch | EventMouse) => {
+            const eventType = (event as any)?.type || 'Unknown';
+            const targetName = ((event as any)?.target && (event as any).target.name) || 'UnknownTarget';
+            const cameraNode = find('Canvas/Camera') || this.node.scene?.getChildByName('Camera');
+            if (!cameraNode) {
+                console.warn('[Priest.startHolyPrayerPlacement] 找不到Camera节点，事件类型:', eventType, '目标节点:', targetName);
+                return;
+            }
+            const camera = cameraNode.getComponent(Camera);
+            if (!camera) {
+                console.warn('[Priest.startHolyPrayerPlacement] Camera节点没有Camera组件，事件类型:', eventType, '目标节点:', targetName);
+                return;
+            }
+            
+            // 统一从事件中获取屏幕坐标（支持触摸和鼠标）
+            // EventTouch / EventMouse 都有 getLocation 方法
+            // 这里用 any 避免类型限制
+            const anyEvent: any = event as any;
+            const loc = anyEvent.getLocation ? anyEvent.getLocation() : anyEvent.getLocationInView?.();
+            if (!loc) {
+                console.warn('[Priest.startHolyPrayerPlacement] 事件没有位置信息，无法更新魔法阵位置，事件类型:', eventType, '目标节点:', targetName);
+                return;
+            }
+            const screenPos = new Vec3(loc.x, loc.y, 0);
+            const worldPos = new Vec3();
+            camera.screenToWorld(screenPos, worldPos);
+            worldPos.z = 0;
+            
+            // 转换为Canvas本地坐标
+            const localPos = canvasTransform.convertToNodeSpaceAR(worldPos);
+            magicNode.setPosition(localPos);
+
+            // console.log'[Priest.startHolyPrayerPlacement] 更新魔法阵位置',
+                // '事件类型:', eventType,
+                // '目标节点:', targetName,
+                // '屏幕坐标:', screenPos,
+                // '世界坐标:', worldPos,
+                // '本地坐标:', localPos);
+        };
+
+        // 如果有来自技能按钮的起始事件，立即根据该事件设置一次位置
+        if (startEvent) {
+            try {
+                updatePositionFromEvent(startEvent);
+            } catch (e) {
+                console.warn('[Priest.startHolyPrayerPlacement] 根据起始事件更新位置失败:', e);
+            }
+        }
+
+        const onTouchMove = (event: EventTouch) => {
+            if (!this.isHolyPrayerActive || !magicNode.isValid) {
+                //console.log'[Priest.startHolyPrayerPlacement] onTouchMove 被忽略，isHolyPrayerActive =', this.isHolyPrayerActive, 'magicNode.isValid =', magicNode.isValid);
+                return;
+            }
+            updatePositionFromEvent(event);
+        };
+
+        const finishTouchAndCast = (event: EventTouch | null) => {
+            if (event) {
+                // 防止事件继续传递到弓箭手等单位的点击/移动逻辑，导致交互冲突
+                (event as any).propagationStopped = true;
+            }
+
+            // 取消 Canvas 上的事件监听（与 on 中的捕获阶段参数保持一致）
+            (canvas as any).off(Node.EventType.TOUCH_MOVE, onTouchMove, this, true);
+            (canvas as any).off(Node.EventType.TOUCH_END, onTouchEnd, this, true);
+            (canvas as any).off(Node.EventType.TOUCH_CANCEL, onTouchCancel, this, true);
+            (canvas as any).off(Node.EventType.MOUSE_MOVE, onMouseMove, this, true);
+            (canvas as any).off(Node.EventType.MOUSE_UP, onMouseUp, this, true);
+
+            if (!this.isHolyPrayerActive || !magicNode.isValid) {
+                console.warn('[Priest.startHolyPrayerPlacement] 魔法阵状态无效，取消施放',
+                    'isHolyPrayerActive =', this.isHolyPrayerActive,
+                    'magicNode.isValid =', magicNode.isValid);
+                this.isHolyPrayerActive = false;
+                if (magicNode && magicNode.isValid) {
+                    magicNode.destroy();
+                }
+                this.currentMagicCircleNode = null!;
+                return;
+            }
+
+            // 使用当前魔法阵的世界坐标作为最终落点
+            const worldPos = magicNode.worldPosition.clone();
+
+            // 施放治疗效果
+            this.castHolyPrayer(worldPos, magicNode);
+
+            // 在 castHolyPrayer 中处理魔法阵的渐隐和销毁
+            this.isHolyPrayerActive = false;
+        };
+
+        const onTouchEnd = (event: EventTouch) => {
+            // 正常的触摸松手
+            finishTouchAndCast(event);
+        };
+
+        const onTouchCancel = (event: EventTouch) => {
+            // 在手机上，手指滑出屏幕/系统中断触摸时会触发 TOUCH_CANCEL
+            // 这里也按松手处理，避免“魔法阵停在那儿但不释放治疗”的情况
+            finishTouchAndCast(event);
+        };
+
+        const onMouseMove = (event: EventMouse) => {
+            if (!this.isHolyPrayerActive || !magicNode.isValid) {
+                //console.log'[Priest.startHolyPrayerPlacement] onMouseMove 被忽略，isHolyPrayerActive =', this.isHolyPrayerActive, 'magicNode.isValid =', magicNode.isValid);
+                return;
+            }
+            updatePositionFromEvent(event);
+        };
+
+        const onMouseUp = (event: EventMouse) => {
+            //console.log'[Priest.startHolyPrayerPlacement] 鼠标抬起，准备施放治疗');
+
+            // 防止事件继续传递到弓箭手等单位的点击/移动逻辑，导致交互冲突
+            (event as any).propagationStopped = true;
+
+            (canvas as any).off(Node.EventType.MOUSE_MOVE, onMouseMove, this, true);
+            (canvas as any).off(Node.EventType.MOUSE_UP, onMouseUp, this, true);
+            (canvas as any).off(Node.EventType.TOUCH_MOVE, onTouchMove, this, true);
+            (canvas as any).off(Node.EventType.TOUCH_END, onTouchEnd, this, true);
+
+            if (!this.isHolyPrayerActive || !magicNode.isValid) {
+                console.warn('[Priest.startHolyPrayerPlacement] 魔法阵状态无效，取消施放（鼠标）',
+                    'isHolyPrayerActive =', this.isHolyPrayerActive,
+                    'magicNode.isValid =', magicNode.isValid);
+                this.isHolyPrayerActive = false;
+                if (magicNode && magicNode.isValid) {
+                    magicNode.destroy();
+                }
+                this.currentMagicCircleNode = null!;
+                return;
+            }
+
+            // 直接使用当前魔法阵的世界坐标，不再重新计算
+            const worldPos = magicNode.worldPosition.clone();
+            //console.log'[Priest.startHolyPrayerPlacement] 魔法阵最终世界坐标(鼠标):', worldPos);
+
+            this.castHolyPrayer(worldPos, magicNode);
+
+            this.isHolyPrayerActive = false;
+        };
+
+        // 使用 Canvas 节点监听拖动和松开事件（捕获阶段），避免被单位自己的事件拦截
+        // 这样即使拖动经过弓箭手等单位，只要在 Canvas 范围内，事件都会先经过这里
+        (canvas as any).on(Node.EventType.TOUCH_MOVE, onTouchMove, this, true);
+        (canvas as any).on(Node.EventType.TOUCH_END, onTouchEnd, this, true);
+        (canvas as any).on(Node.EventType.TOUCH_CANCEL, onTouchCancel, this, true);
+        (canvas as any).on(Node.EventType.MOUSE_MOVE, onMouseMove, this, true);
+        (canvas as any).on(Node.EventType.MOUSE_UP, onMouseUp, this, true);
+
+        // 加载魔法阵贴图（mofazhen1.png）
+        resources.load('textures/mofazhen1/spriteFrame', CCSpriteFrame, (err, sf) => {
+            if (err) {
+                console.error('[Priest.startHolyPrayerPlacement] 加载圣光祈祷魔法阵贴图失败:', err);
+                return;
+            }
+            if (sprite && sprite.node && sprite.node.isValid) {
+                sprite.spriteFrame = sf;
+                //console.log'[Priest.startHolyPrayerPlacement] 魔法阵贴图加载成功');
+            }
+        });
+    }
+
+    /**
+     * 在指定位置施放圣光祈祷：范围持续治疗 + 牧师自身动画 + 魔法阵渐隐特效
+     */
+    private castHolyPrayer(centerWorldPos: Vec3, magicNode?: Node | null) {
+        //console.log'[Priest.castHolyPrayer] 开始施放圣光祈祷，中心位置:', centerWorldPos);
+
+        // 先尝试消耗蓝量（每次祈祷消耗20点蓝量），蓝量不足时取消施放
+        if (!this.consumeMana(this.HOLY_PRAYER_MANA_COST)) {
+            //console.log'[Priest.castHolyPrayer] 蓝量不足，无法施放圣光祈祷，当前蓝量：', (this as any).currentMana);
+            if (magicNode && magicNode.isValid) {
+                magicNode.destroy();
+                if (this.currentMagicCircleNode === magicNode) {
+                    this.currentMagicCircleNode = null!;
+                }
+            }
+            return;
+        }
+        
+        // 播放牧师自身的圣光祈祷动画（需要在预制体的 Animation 里配置对应状态名）
+        const anim = this.node.getComponent(Animation);
+        if (anim) {
+            if (anim.getState('HolyPrayer')) {
+                anim.play('HolyPrayer');
+                //console.log'[Priest.castHolyPrayer] 播放圣光祈祷动画');
+            } else {
+                //console.log'[Priest.castHolyPrayer] 未找到HolyPrayer动画状态，跳过动画播放');
+            }
+        } else {
+            //console.log'[Priest.castHolyPrayer] 牧师节点没有Animation组件，跳过动画播放');
+        }
+
+        // 范围治疗：5秒，每0.5秒一次
+        const ticks = Math.floor(this.holyPrayerDuration / this.holyPrayerTickInterval);
+        const healPerTick = Math.round((this.attackDamage || 0) / 4);
+        const radius = this.holyPrayerRadius;
+
+        //console.log('[Priest.castHolyPrayer] 治疗参数 - 总次数:', ticks, '每次治疗量:', healPerTick, '半径:', radius, '攻击力:', this.attackDamage);
+
+        for (let i = 0; i < ticks; i++) {
+            const delayTime = i * this.holyPrayerTickInterval;
+            this.scheduleOnce(() => {
+                // 分次治疗时不再逐条打印日志，以避免在单位密集（例如大量弓箭手）时造成卡顿
+                this.healAlliesInCircle(centerWorldPos, radius, healPerTick);
+            }, delayTime);
+        }
+
+        // 魔法阵渐隐 + 内部特效
+        if (magicNode && magicNode.isValid) {
+            // 渐隐：从 50% 不透明度到 0%，总时长 10 秒
+            const uiOpacity = magicNode.getComponent(UIOpacity) || magicNode.addComponent(UIOpacity);
+            uiOpacity.opacity = 128;
+
+            tween(uiOpacity)
+                .to(10, { opacity: 0 })
+                .call(() => {
+                    //console.log'[Priest.castHolyPrayer] 魔法阵渐隐结束，销毁节点');
+                    if (magicNode && magicNode.isValid) {
+                        magicNode.destroy();
+                    }
+                    if (this.currentMagicCircleNode === magicNode) {
+                        this.currentMagicCircleNode = null!;
+                    }
+                })
+                .start();
+
+            // 在魔法阵内部播放牧师配置的圣光祈祷动画帧（如果有配置）
+            if (this.holyPrayerEffectFrames && this.holyPrayerEffectFrames.length > 0) {
+                const effectNode = new Node('HolyPrayerEffect');
+                effectNode.setParent(magicNode);
+                effectNode.setPosition(0, 0, 0);
+
+                const effectTransform = effectNode.addComponent(UITransform);
+                const circleSize = magicNode.getComponent(UITransform)?.contentSize;
+                if (circleSize) {
+                    // 稍微比魔法阵小一点
+                    effectTransform.setContentSize(circleSize.width * 0.8, circleSize.height * 0.8);
+                }
+
+                const effectSprite = effectNode.addComponent(Sprite);
+                effectSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+
+                const frames = this.holyPrayerEffectFrames;
+                const totalDuration = 10; // 与渐隐时间一致
+                const frameCount = frames.length;
+                const frameDuration = totalDuration / frameCount;
+
+                let frameIndex = 0;
+                effectSprite.spriteFrame = frames[frameIndex];
+
+                // 使用 schedule 周期切换帧，在3秒内播完一遍
+                this.schedule(
+                    () => {
+                        if (!effectNode.isValid || !magicNode.isValid) {
+                            return;
+                        }
+                        frameIndex++;
+                        if (frameIndex >= frameCount) {
+                            frameIndex = frameCount - 1; // 停在最后一帧
+                        }
+                        effectSprite.spriteFrame = frames[frameIndex];
+                    },
+                    frameDuration,
+                    frameCount - 1,
+                    frameDuration
+                );
+            } else {
+                //console.log'[Priest.castHolyPrayer] 未配置 holyPrayerEffectFrames，不在魔法阵内部播放额外特效');
+            }
+        }
+    }
+
+    /**
+     * 治疗魔法阵范围内的所有友军
+     */
+    private healAlliesInCircle(centerWorldPos: Vec3, radius: number, healAmount: number) {
+        // 这里只打印一次汇总日志即可，避免对每个单位、多次tick都刷日志导致卡顿
+        //console.log'[Priest.healAlliesInCircle] 开始治疗，中心:', centerWorldPos, '半径:', radius, '治疗量:', healAmount);
+        
+        const scene = this.node.scene;
+        if (!scene || healAmount <= 0) {
+            console.warn('[Priest.healAlliesInCircle] 场景无效或治疗量<=0，取消治疗');
+            return;
+        }
+
+        let healedCount = 0;
+        const visitNode = (node: Node) => {
+            if (!node || !node.isValid || !node.active) {
+                return;
+            }
+
+            // 只考虑友军单位和建筑物
+            // 单位：Arrower / Hunter / ElfSwordsman / Priest / Role
+            // 建筑物：Build 及其子类（SwordsmanHall / HunterHall / WarAncientTree / Church / IceTower / WatchTower / ThunderTower / StoneWall 等）
+            const arrower = node.getComponent('Arrower') as any;
+            const hunter = node.getComponent('Hunter') as any;
+            const swordsman = node.getComponent('ElfSwordsman') as any;
+            const priest = node.getComponent('Priest') as any;
+            const role = node.getComponent('Role') as any;
+            const buildBase = node.getComponent('Build') as any;
+            const swordsmanHall = node.getComponent('SwordsmanHall') as any;
+            const hunterHall = node.getComponent('HunterHall') as any;
+            const warAncientTree = node.getComponent('WarAncientTree') as any;
+            const church = node.getComponent('Church') as any;
+            const iceTower = node.getComponent('IceTower') as any;
+            const watchTower = node.getComponent('WatchTower') as any;
+            const thunderTower = node.getComponent('ThunderTower') as any;
+            const stoneWall = node.getComponent('StoneWall') as any;
+
+            const script =
+                arrower ||
+                hunter ||
+                swordsman ||
+                priest ||
+                role ||
+                buildBase ||
+                swordsmanHall ||
+                hunterHall ||
+                warAncientTree ||
+                church ||
+                iceTower ||
+                watchTower ||
+                thunderTower ||
+                stoneWall;
+
+            if (script) {
+                const unitWorldPos = node.worldPosition;
+                const distance = Vec3.distance(unitWorldPos, centerWorldPos);
+                
+                if (distance <= radius) {
+                    const maxHealth = script.maxHealth ?? 0;
+                    let currentHealth = 0;
+                    if (script.getHealth && typeof script.getHealth === 'function') {
+                        currentHealth = script.getHealth();
+                    } else if (script.currentHealth !== undefined) {
+                        currentHealth = script.currentHealth;
+                    }
+                    
+                    if (maxHealth > 0 && currentHealth < maxHealth) {
+                        if (script.heal && typeof script.heal === 'function') {
+                            script.heal(healAmount);
+                            healedCount++;
+                            // 单位很多时逐个打印会造成性能问题，这里去掉详细日志
+
+                            // 记录治疗贡献
+                            try {
+                                const damageStats = DamageStatistics.getInstance();
+                                const unitTypeNameMap = DamageStatistics.getUnitTypeNameMap();
+                                const unitType = this.constructor.name; // 'Priest'
+                                let unitName: string;
+                                if (this.unitName && this.unitName.trim() !== '') {
+                                    unitName = this.unitName;
+                                } else {
+                                    unitName = unitTypeNameMap.get(unitType) || '牧师';
+                                }
+                                damageStats.recordHeal(unitType, unitName, healAmount);
+                            } catch (e) {
+                                console.error('[Priest.healAlliesInCircle] 记录治疗贡献失败:', e);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 递归遍历子节点
+            for (const child of node.children) {
+                visitNode(child);
+            }
+        };
+
+        // 从场景根节点开始遍历
+        visitNode(scene);
+        
+        //console.log'[Priest.healAlliesInCircle] 本次治疗完成，共治疗', healedCount, '个单位');
     }
 
     /**

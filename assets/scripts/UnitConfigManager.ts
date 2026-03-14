@@ -10,6 +10,10 @@ export interface UnitConfig {
         description: string;
     };
     displayStats: Record<string, any>;
+    /**
+     * 出场台词配置：键为关卡号（字符串形式，如 "1"、"2"...），值为对应关卡的出场台词
+     */
+    spawnDialogs?: Record<string, string>;
 }
 
 /**
@@ -141,6 +145,48 @@ export class UnitConfigManager {
         }
 
         return config.displayInfo || null;
+    }
+
+    /**
+     * 获取单位在指定关卡的出场台词
+     * - 优先使用当前关卡号对应的配置
+     * - 如果未配置当前关卡，则回退使用第1关的出场台词
+     * - 如果连第1关也没有配置，则使用 spawnDialogs 中任意一个（通常是第一个）
+     */
+    public getUnitSpawnDialog(unitId: string, level: number): string | null {
+        const config = this.getUnitConfig(unitId);
+        if (!config || !config.spawnDialogs) {
+            return null;
+        }
+
+        const levelKey = String(level);
+        const dialogs = config.spawnDialogs;
+
+        // 1. 当前关卡有专门配置
+        if (dialogs[levelKey]) {
+            return dialogs[levelKey];
+        }
+
+        // 2. 没有当前关卡，则优先回退到第1关
+        if (dialogs['1']) {
+            return dialogs['1'];
+        }
+
+        // 3. 仍然没有，就返回配置中的第一个台词
+        const keys = Object.keys(dialogs);
+        if (keys.length > 0) {
+            const firstKey = keys.sort((a, b) => {
+                const na = parseInt(a, 10);
+                const nb = parseInt(b, 10);
+                if (isNaN(na) || isNaN(nb)) {
+                    return a.localeCompare(b);
+                }
+                return na - nb;
+            })[0];
+            return dialogs[firstKey] || null;
+        }
+
+        return null;
     }
 
     /**

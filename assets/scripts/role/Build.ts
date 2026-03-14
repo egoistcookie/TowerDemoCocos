@@ -380,7 +380,7 @@ export class Build extends Component {
     }
 
     /**
-     * 恢复血量（由小精灵调用）
+     * 恢复血量（由小精灵、牧师等调用）
      */
     protected heal(amount: number) {
         if (this.isDestroyed) {
@@ -408,6 +408,66 @@ export class Build extends Component {
                 maxHealth: this.maxHealth
             });
         }
+
+        // 显示与角色一致的治疗飘字效果（黑边绿字）
+        if (actualHeal > 0) {
+            this.showHealEffect(actualHeal);
+        }
+    }
+
+    /**
+     * 显示治疗特效（黑边绿字的 +X 飘字），与角色一致
+     */
+    protected showHealEffect(amount: number) {
+        // 创建+号特效节点
+        const healNode = new Node('HealEffect');
+        const canvas = find('Canvas');
+        if (canvas) {
+            healNode.setParent(canvas);
+        } else if (this.node.scene) {
+            healNode.setParent(this.node.scene);
+        } else {
+            healNode.setParent(this.node.parent);
+        }
+
+        // 设置位置（在建筑物上方）
+        const startPos = this.node.worldPosition.clone();
+        startPos.y += 50;
+        healNode.setWorldPosition(startPos);
+
+        // 添加Label组件显示+号（黑边绿字）
+        const label = healNode.addComponent(Label);
+        label.string = `+${Math.floor(amount)}`;
+        label.fontSize = 20;
+        label.color = Color.GREEN;
+
+        // 黑色描边
+        const outline = healNode.addComponent(LabelOutline);
+        outline.color = new Color(0, 0, 0, 255);
+        outline.width = 2;
+
+        // 添加UITransform
+        const uiTransform = healNode.addComponent(UITransform);
+        uiTransform.setContentSize(40, 30);
+
+        // 动画：向上移动并淡出
+        const endPos = startPos.clone();
+        endPos.y += 30; // 向上移动30像素
+
+        const uiOpacity = healNode.getComponent(UIOpacity) || healNode.addComponent(UIOpacity);
+        uiOpacity.opacity = 255;
+
+        tween(healNode)
+            .to(0.5, { worldPosition: endPos })
+            .parallel(
+                tween(uiOpacity).to(0.5, { opacity: 0 })
+            )
+            .call(() => {
+                if (healNode && healNode.isValid) {
+                    healNode.destroy();
+                }
+            })
+            .start();
     }
 
     protected die() {

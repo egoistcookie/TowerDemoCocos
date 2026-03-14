@@ -1,8 +1,10 @@
-import { _decorator, SpriteFrame, Prefab, Texture2D, AudioClip, Vec3, Node, instantiate, find } from 'cc';
+import { _decorator, SpriteFrame, Prefab, Texture2D, AudioClip, Vec3, Node, instantiate, find, sys, EventTouch } from 'cc';
 import { Role } from './Role';
 import { AudioManager } from '../AudioManager';
 import { Arrow } from '../Arrow';
 import { Arrow2 } from '../Arrow2';
+import { UnitInfo } from '../UnitInfoPanel';
+import { PlayerDataManager } from '../PlayerDataManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('Arrower')
@@ -104,22 +106,58 @@ export class Arrower extends Role {
     // 3级专用：强化版箭矢预制体（Arrow2）
     @property({ type: Prefab })
     level3ArrowPrefab: Prefab = null!;
+    
+    // 技能相关属性
+    private readonly PENETRATE_ARROW_MANA_COST: number = 10; // 穿透箭消耗蓝量
+    private isPenetrateArrowEnabled: boolean = false; // 穿透箭开关（每个弓箭手独立，默认关闭）
 
     battleSlogans: string[] = ['箭如雨下！', '射击！射击！射击！', '瞄准，射击！', '弓弦紧绷射天狼!', '箭似流星！','射箭！射箭！射箭！', 'Biu! Biu! Biu!'];
 
     /**
+     * 重写父类的checkSkill方法，检查是否有穿透箭技能
+     * 技能状态由isPenetrateArrowEnabled控制，每个弓箭手独立
+     */
+    protected checkSkill() {
+        // 技能状态由isPenetrateArrowEnabled控制，如果开启则hasSkill为true
+        this.hasSkill = this.isPenetrateArrowEnabled;
+    }
+    
+    /**
      * 重写父类的createArrow：
      * - 1、2级：使用普通箭矢逻辑（父类实现）
-     * - 3级：使用 Arrow2 预制体，直线弹道，穿透第一个敌人后继续飞行100像素
+     * - 3级或拥有技能：使用 Arrow2 预制体，直线弹道，穿透第一个敌人后继续飞行100像素
+     * - 有技能时：检查蓝量，有蓝自动使用穿透箭，没蓝使用普通箭
      */
     protected createArrow() {
-        // 等级小于3，保持原有逻辑
+        // 检查是否有技能且蓝量足够
+        const usePenetrateArrow = this.hasSkill && this.hasEnoughMana(this.PENETRATE_ARROW_MANA_COST);
+        
+        // 如果有技能且蓝量足够，使用穿透箭
+        if (usePenetrateArrow && this.level3ArrowPrefab) {
+            // 消耗蓝量
+            this.consumeMana(this.PENETRATE_ARROW_MANA_COST);
+            // 使用穿透箭逻辑
+            this.createPenetrateArrow();
+            return;
+        }
+        
+        // 等级小于3或没有技能，保持原有逻辑
         if (this.level < 3 || !this.level3ArrowPrefab) {
             // 使用父类的普通箭矢逻辑
             // @ts-ignore 通过索引访问以避免编译器对protected的限制提示
             super['createArrow']();
             return;
         }
+        
+        // 3级但没有技能或蓝量不足，使用普通箭
+        // @ts-ignore
+        super['createArrow']();
+    }
+    
+    /**
+     * 创建穿透箭（使用Arrow2预制体）
+     */
+    private createPenetrateArrow() {
 
         if (!this.currentTarget || this.isDestroyed) {
             return;
@@ -212,6 +250,205 @@ export class Arrower extends Role {
                 }
             }
         );
+    }
+
+    /**
+     * 构建弓箭手专用的 UnitInfo（包含穿透箭技能）
+     */
+    private buildArrowerUnitInfo(): UnitInfo {
+        // 计算升级费用：1到2级是10金币，此后每次升级多10金币
+        const upgradeCost = this.level < 3 ? (10 + (this.level - 1) * 10) : undefined;
+        
+        // 确保生命值有效
+        const currentHealth = (this.currentHealth !== undefined && !isNaN(this.currentHealth) && this.currentHealth >= 0) 
+            ? this.currentHealth 
+            : (this.maxHealth || 0);
+        const maxHealth = (this.maxHealth !== undefined && !isNaN(this.maxHealth) && this.maxHealth > 0) 
+            ? this.maxHealth 
+            : 0;
+        
+        // 获取当前技能状态（每个弓箭手独立）
+        const isSkillActive = this.isPenetrateArrowEnabled;
+
+        const unitInfo: UnitInfo = {
+            name: this.unitName || '角色',
+            level: this.level,
+            currentHealth: currentHealth,
+            maxHealth: maxHealth,
+            attackDamage: this.attackDamage,
+            populationCost: 1,
+            icon: this.cardIcon || this.defaultSpriteFrame,
+            collisionRadius: this.collisionRadius,
+            attackRange: this.attackRange,
+            attackFrequency: 1.0 / this.attackInterval,
+            moveSpeed: this.moveSpeed,
+            isDefending: this.isDefending,
+            upgradeCost: upgradeCost,
+            onUpgradeClick: this.level < 3 ? () => {
+                this.onUpgradeClick();
+            } : undefined,
+            onSellClick: () => {
+                this.onSellClick();
+            },
+            onDefendClick: () => {
+                this.onDefendClick();
+            },
+            onSkillClick: () => {
+                // 切换技能状态（每个弓箭手独立）
+                this.isPenetrateArrowEnabled = !this.isPenetrateArrowEnabled;
+                
+                // 更新技能状态
+                this.hasSkill = this.isPenetrateArrowEnabled;
+                
+                // 如果技能激活，创建蓝量条；否则隐藏
+                if (this.isPenetrateArrowEnabled) {
+                    if (!this.manaBarNode || !this.manaBarNode.isValid) {
+                        this.createManaBar();
+                    } else {
+                        this.manaBarNode.active = true;
+                        // 确保蓝条出现时血条也同时可见
+                        if (this.healthBarNode && this.healthBarNode.isValid) {
+                            this.healthBarNode.active = true;
+                        }
+                    }
+                } else {
+                    if (this.manaBarNode && this.manaBarNode.isValid) {
+                        this.manaBarNode.active = false;
+                    }
+                }
+                
+                // 刷新面板显示（更新按钮状态）
+                if (this.unitSelectionManager) {
+                    const unitInfoPanel = (this.unitSelectionManager as any).unitInfoPanel;
+                    if (unitInfoPanel) {
+                        // 更新unitInfo的技能状态
+                        const updatedUnitInfo: UnitInfo = {
+                            ...this.buildArrowerUnitInfo(),
+                            isSkillActive: this.isPenetrateArrowEnabled
+                        };
+                        unitInfoPanel.updateButtons(updatedUnitInfo);
+                    }
+                }
+            },
+            isSkillActive: isSkillActive
+        };
+
+        return unitInfo;
+    }
+
+    /**
+     * 重写 showUnitInfoPanel 方法，添加技能按钮
+     */
+    showUnitInfoPanel() {
+        // 显示单位信息面板和范围
+        if (!this.unitSelectionManager) {
+            this.findUnitSelectionManager();
+        }
+        if (this.unitSelectionManager) {
+            const unitInfo: UnitInfo = this.buildArrowerUnitInfo();
+            this.unitSelectionManager.selectUnit(this.node, unitInfo);
+        }
+
+        // 点击其他地方设置移动目标
+        const canvas = find('Canvas');
+        this.scheduleOnce(() => {
+            if (canvas) {
+                // 创建全局触摸事件处理器
+                this.globalTouchHandler = (event: EventTouch) => {
+                    
+                    // 检查当前单位是否仍被选中
+                    // 注意：globalTouchHandler只有在单位被选中时才会注册
+                    // 但如果选中状态在onGlobalTouchEnd中被清除，这里检查可能返回false
+                    // 所以我们需要检查：如果getCurrentSelectedUnit()不为null且不是当前单位，说明选中了其他单位，应该移除监听器
+                    if (this.unitSelectionManager) {
+                        const currentSelectedUnit = this.unitSelectionManager.getCurrentSelectedUnit();
+                        const isSelected = this.unitSelectionManager.isUnitSelected(this.node);
+                        
+                        
+                        // 如果选中了其他单位（不是当前单位），移除监听器
+                        if (currentSelectedUnit !== null && currentSelectedUnit !== this.node) {
+                            const canvas = find('Canvas');
+                            if (canvas && this.globalTouchHandler) {
+                                canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
+                            }
+                            this.globalTouchHandler = null!;
+                            return;
+                        }
+                        
+                        // 如果当前单位未被选中，也不执行移动操作
+                        // 或者如果没有任何选中（currentSelectedUnit为null），也不执行移动操作
+                        if (!isSelected || currentSelectedUnit === null) {
+                            // 移除监听器，因为单位已不再被选中
+                            const canvas = find('Canvas');
+                            if (canvas && this.globalTouchHandler) {
+                                canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
+                            }
+                            this.globalTouchHandler = null!;
+                            return;
+                        }
+                    }
+                    
+                    // 检查点击是否在信息面板上（通过节点名称和路径检查）
+                    const targetNode = event.target as Node;
+                    if (targetNode) {
+                        // 检查目标节点或其父节点是否是信息面板
+                        let currentNode: Node | null = targetNode;
+                        while (currentNode) {
+                            // 检查节点名称是否包含 UnitInfoPanel（信息面板的节点名称）
+                            if (currentNode.name === 'UnitInfoPanel' || currentNode.name.includes('UnitInfoPanel')) {
+                                // 点击在信息面板上，不设置移动目标
+                                return;
+                            }
+                            // 检查节点的路径是否包含 UnitInfoPanel
+                            const nodePath = currentNode.getPathInHierarchy();
+                            if (nodePath && nodePath.includes('UnitInfoPanel')) {
+                                // 点击在信息面板上，不设置移动目标
+                                return;
+                            }
+                            currentNode = currentNode.parent;
+                            // 如果到达根节点，停止检查
+                            if (!currentNode) {
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // 点击不在信息面板上，设置移动目标
+                    this.setManualMoveTarget(event);
+                };
+                
+                canvas.on(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
+            }
+        }, 0.1);
+    }
+    
+    /**
+     * 重写防御按钮逻辑，确保刷新面板时仍保留穿透箭技能按钮
+     */
+    onDefendClick(event?: EventTouch) {
+        if (event) {
+            event.propagationStopped = true;
+        }
+        
+        // 切换防御状态（沿用父类逻辑）
+        this.isDefending = !this.isDefending;
+        
+        if (this.isDefending) {
+            // 如果进入防御状态，清除手动移动目标并停止移动
+            this.manualMoveTarget = null!;
+            this.isManuallyControlled = false;
+            this.stopMoving();
+        } else {
+            // 如果取消防御状态，清除手动移动目标，让单位进入正常索敌模式
+            this.manualMoveTarget = null!;
+            this.isManuallyControlled = false;
+        }
+        
+        // 更新单位信息面板（刷新按钮显示，保留穿透箭）
+        if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            const unitInfo: UnitInfo = this.buildArrowerUnitInfo();
+            this.unitSelectionManager.selectUnit(this.node, unitInfo);
+        }
     }
 
     /**

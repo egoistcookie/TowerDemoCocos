@@ -2314,7 +2314,15 @@ export class UIManager extends Component {
         textNode.setPosition(dialogWidth / 2 - 175, 0, 0);
         
         const hintLabel = textNode.addComponent(Label);
-        hintLabel.string = `指挥官，虽然刚才您指挥得当，带领我们守住了防线，但是接下来的敌人会更加强悍，我们必须提升自己，才有可能守护住防线。`;
+        // 根据本局是否胜利显示不同的提示文案：
+        // - 胜利：强调“指挥得当，守住了防线”，鼓励继续提升
+        // - 失败：只提示“必须提升自己，才有可能守护住防线”
+        const isVictory = (mvpUnit as any).isVictory === true;
+        if (isVictory) {
+            hintLabel.string = `指挥官，虽然刚才您指挥得当，带领我们守住了防线，但是接下来的敌人会更加强悍，我们必须提升自己，才有可能守护住防线。`;
+        } else {
+            hintLabel.string = `指挥官，我们必须提升自己，才有可能守护住防线。`;
+        }
         hintLabel.fontSize = 18;
         hintLabel.color = new Color(255, 255, 255, 255);
         hintLabel.horizontalAlign = Label.HorizontalAlign.LEFT;

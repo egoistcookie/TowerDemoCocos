@@ -3,6 +3,7 @@ import { AudioManager } from '../AudioManager';
 import { GameManager } from '../GameManager';
 import { GameState } from '../GameState';
 import { HealthBar } from '../HealthBar';
+import { ManaBar } from '../ManaBar';
 import { DamageNumber } from '../DamageNumber';
 import { Arrow } from '../Arrow';
 import { UnitSelectionManager } from '../UnitSelectionManager';
@@ -131,6 +132,15 @@ export class Role extends Component {
     protected currentHealth: number = 0;
     protected healthBar: HealthBar = null!;
     protected healthBarNode: Node = null!;
+    
+    // 蓝量系统
+    protected maxMana: number = 100; // 最大蓝量
+    protected currentMana: number = 100; // 当前蓝量
+    protected manaRegenRate: number = 1; // 每秒回复蓝量
+    protected manaRegenTimer: number = 0; // 蓝量回复计时器
+    protected manaBar: ManaBar = null!;
+    protected manaBarNode: Node = null!;
+    protected hasSkill: boolean = false; // 是否拥有技能（从天赋系统获取）
     protected selectionPanel: Node = null!; // 选择面板
     protected isDestroyed: boolean = false;
     protected attackTimer: number = 0;
@@ -322,6 +332,8 @@ export class Role extends Component {
         // 创建血条
         this.createHealthBar();
         
+        // 检查是否有技能（在onEnable中创建蓝量条，因为需要先应用天赋增幅）
+        
         // 初始化对话框系统
         this.initDialogSystem();
         
@@ -442,6 +454,99 @@ export class Role extends Component {
     }
 
     /**
+     * 创建蓝量条（仅在拥有技能时显示）
+     */
+    createManaBar() {
+        if (!this.hasSkill) {
+            return; // 没有技能，不创建蓝量条
+        }
+
+        // 确保在显示蓝条的同时，血条也存在并可见
+        if (!this.healthBarNode || !this.healthBarNode.isValid) {
+            // 如果还没创建血条，先创建血条
+            this.createHealthBar();
+        } else {
+            // 已有血条，则保证它是激活状态
+            this.healthBarNode.active = true;
+        }
+        
+        // 创建蓝量条节点
+        this.manaBarNode = new Node('ManaBar');
+        this.manaBarNode.setParent(this.node);
+        // 蓝量条在血条下方，血条在30位置，蓝量条在25位置（血条高度约4，间距约1）
+        this.manaBarNode.setPosition(0, 25, 0);
+        // 确保蓝量条初始缩放为正数（正常朝向）
+        this.refreshOverheadNodesScale();
+        
+        // 添加ManaBar组件
+        this.manaBar = this.manaBarNode.addComponent(ManaBar);
+        if (this.manaBar) {
+            this.manaBar.setMaxMana(this.maxMana);
+            this.manaBar.setMana(this.currentMana);
+        }
+        
+        // 显示蓝量条
+        this.manaBarNode.active = true;
+    }
+    
+    /**
+     * 检查是否有技能（子类可以重写此方法）
+     * 默认检查PlayerDataManager中是否有技能配置
+     */
+    protected checkSkill() {
+        // 默认没有技能，子类可以重写此方法
+        this.hasSkill = false;
+    }
+    
+    /**
+     * 更新蓝量（每秒回复）
+     */
+    protected updateMana(deltaTime: number) {
+        if (!this.hasSkill || this.isDestroyed) {
+            return;
+        }
+        
+        // 蓝量回复
+        this.manaRegenTimer += deltaTime;
+        if (this.manaRegenTimer >= 1.0) {
+            this.manaRegenTimer = 0;
+            if (this.currentMana < this.maxMana) {
+                this.currentMana = Math.min(this.currentMana + this.manaRegenRate, this.maxMana);
+                if (this.manaBar) {
+                    this.manaBar.setMana(this.currentMana);
+                }
+            }
+        }
+    }
+    
+    /**
+     * 消耗蓝量
+     * @param amount 消耗的蓝量
+     * @returns 是否成功消耗（蓝量足够）
+     */
+    protected consumeMana(amount: number): boolean {
+        if (!this.hasSkill) {
+            return false;
+        }
+        
+        if (this.currentMana >= amount) {
+            this.currentMana -= amount;
+            if (this.manaBar) {
+                this.manaBar.setMana(this.currentMana);
+            }
+            return true;
+        }
+        return false;
+    }
+    
+    /**
+     * 检查是否有足够的蓝量
+     */
+    protected hasEnoughMana(amount: number): boolean {
+        return this.hasSkill && this.currentMana >= amount;
+    }
+    
+    /**
      * 刷新血条/对话框的缩放：
      * - 始终保持文字从左往右（根据角色朝向翻转）
      * - 如果第三段待机动画正在拉宽角色本体，则对血条/对话框做反向补偿（除以1.5），避免被拉宽
@@ -453,6 +558,10 @@ export class Role extends Component {
 
         if (this.healthBarNode && this.healthBarNode.isValid) {
             this.healthBarNode.setScale(overheadScaleX, 1, 1);
+        }
+        // 蓝量条与血条保持一致的方向和补偿
+        if (this.manaBarNode && this.manaBarNode.isValid) {
+            this.manaBarNode.setScale(overheadScaleX, 1, 1);
         }
         if (this.dialogNode && this.dialogNode.isValid) {
             this.dialogNode.setScale(overheadScaleX, 1, 1);
@@ -744,6 +853,9 @@ export class Role extends Component {
             // PerformanceMonitor.endTiming('Role.update', updateStartTime, 5);
             return;
         }
+        
+        // 更新蓝量（每秒回复）
+        this.updateMana(deltaTime);
 
         // 性能监控：单位数量统计和日志输出（降低频率，避免每帧都输出）
         Role.unitCountLogTimer += deltaTime;
@@ -1410,12 +1522,12 @@ export class Role extends Component {
         if (finalDirection.x < 0) {
             // 向左移动，翻转
             this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-            // 血条/对话框保持正常朝向（并在第三段待机拉宽时做反向补偿）
+            // 血条 / 蓝量条 / 对话框保持正常朝向（并在第三段待机拉宽时做反向补偿）
             this.refreshOverheadNodesScale();
         } else {
             // 向右移动，正常朝向
             this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-            // 血条/对话框保持正常朝向（并在第三段待机拉宽时做反向补偿）
+            // 血条 / 蓝量条 / 对话框保持正常朝向（并在第三段待机拉宽时做反向补偿）
             this.refreshOverheadNodesScale();
         }
 
@@ -2298,19 +2410,13 @@ export class Role extends Component {
             if (shouldFlip) {
                 // 水平翻转：scale.x = -1
                 this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-                // 血条需要反向翻转，保持正常朝向
-                if (this.healthBarNode && this.healthBarNode.isValid) {
-                    const healthBarScale = this.healthBarNode.scale.clone();
-                    this.healthBarNode.setScale(-Math.abs(healthBarScale.x), healthBarScale.y, healthBarScale.z);
-                }
+                // 血条 / 蓝量条保持正常朝向
+                this.refreshOverheadNodesScale();
             } else {
                 // 保持原样：scale.x = 1
                 this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-                // 血条保持正常朝向
-                if (this.healthBarNode && this.healthBarNode.isValid) {
-                    const healthBarScale = this.healthBarNode.scale.clone();
-                    this.healthBarNode.setScale(Math.abs(healthBarScale.x), healthBarScale.y, healthBarScale.z);
-                }
+                // 血条 / 蓝量条保持正常朝向
+                this.refreshOverheadNodesScale();
             }
         }
 
@@ -2397,20 +2503,12 @@ export class Role extends Component {
             if (shouldFlip) {
                 // 水平翻转：scale.x = -1
                 this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-                // 血条需要反向翻转，保持正常朝向
-                if (this.healthBarNode && this.healthBarNode.isValid) {
-                    const healthBarScale = this.healthBarNode.scale.clone();
-                    this.healthBarNode.setScale(-Math.abs(healthBarScale.x), healthBarScale.y, healthBarScale.z);
-                }
             } else {
                 // 保持原样：scale.x = 1
                 this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-                // 血条保持正常朝向
-                if (this.healthBarNode && this.healthBarNode.isValid) {
-                    const healthBarScale = this.healthBarNode.scale.clone();
-                    this.healthBarNode.setScale(Math.abs(healthBarScale.x), healthBarScale.y, healthBarScale.z);
-                }
             }
+            // 血条 / 蓝量条保持正常朝向（使用统一的缩放刷新逻辑）
+            this.refreshOverheadNodesScale();
         } else {
             // 没有目标，恢复默认缩放（取消翻转）
             if (this.node && this.node.isValid) {
@@ -2419,6 +2517,10 @@ export class Role extends Component {
             // 恢复血条的正常朝向
             if (this.healthBarNode && this.healthBarNode.isValid) {
                 this.healthBarNode.setScale(1, 1, 1);
+            }
+            // 蓝量条始终保持正向，不随角色翻转
+            if (this.manaBarNode && this.manaBarNode.isValid) {
+                this.manaBarNode.setScale(1, 1, 1);
             }
         }
         
@@ -3438,6 +3540,8 @@ export class Role extends Component {
         
         // 重新初始化状态
         this.currentHealth = this.maxHealth;
+        this.currentMana = this.maxMana; // 重置蓝量
+        this.manaRegenTimer = 0; // 重置蓝量回复计时器
         this.isDestroyed = false;
         this.attackTimer = 0;
         this.targetFindTimer = 0;
@@ -3495,6 +3599,10 @@ export class Role extends Component {
             }
         }
         
+        // 检查是否有技能（在应用天赋增幅后检查）
+        // 注意：技能检查需要在applyTalentEnhancements之后，因为技能可能通过天赋系统激活
+        // 这里先设置一个默认值，子类可以重写checkSkill方法来检查技能
+        
         // 重新初始化对话框系统
         this.initDialogSystem();
         
@@ -3530,6 +3638,30 @@ export class Role extends Component {
         // 应用已保存的增益效果（会更新maxHealth和currentHealth，并再次更新血条）
         this.applyBuffsFromManager();
         //console.info(`[Role.onEnable] ${unitId} 卡片增幅后，攻击力=${this.attackDamage}, 生命值=${this.maxHealth}`);
+        
+        // 应用天赋增幅后，如果有技能，创建蓝量条
+        if (this.hasSkill) {
+            // 如果蓝量条不存在，创建它
+            if (!this.manaBarNode || !this.manaBarNode.isValid) {
+                this.createManaBar();
+            } else {
+                // 如果蓝量条已存在，更新为当前值
+                if (this.manaBar) {
+                    this.manaBar.setMaxMana(this.maxMana);
+                    this.manaBar.setMana(this.currentMana);
+                }
+                this.manaBarNode.active = true;
+                // 确保蓝条出现时血条也同时可见
+                if (this.healthBarNode && this.healthBarNode.isValid) {
+                    this.healthBarNode.active = true;
+                }
+            }
+        } else {
+            // 没有技能，隐藏蓝量条
+            if (this.manaBarNode && this.manaBarNode.isValid) {
+                this.manaBarNode.active = false;
+            }
+        }
         
         // 标记增幅已应用
         this._enhancementsApplied = true;

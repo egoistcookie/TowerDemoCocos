@@ -30,6 +30,7 @@ export interface UnitInfo {
     onSellClick?: () => void; // 回收按钮点击回调
     onRallyPointClick?: () => void; // 集结点设置按钮点击回调
     onDefendClick?: () => void; // 防御按钮点击回调
+    onSkillClick?: (event?: EventTouch) => void; // 技能按钮点击回调（可携带触摸事件）
     // 升级相关
     upgradeCost?: number; // 升级费用（用于显示）
     maxLevel?: number; // 最高等级（用于判断是否满级）
@@ -37,6 +38,8 @@ export interface UnitInfo {
     rallyPoint?: Vec3 | null; // 集结点位置（用于显示）
     // 防御状态
     isDefending?: boolean; // 是否处于防御状态（用于按钮显示）
+    // 技能状态
+    isSkillActive?: boolean; // 技能是否激活（用于按钮显示）
 }
 
 @ccclass('UnitInfoPanel')
@@ -66,6 +69,7 @@ export class UnitInfoPanel extends Component {
     private buttonNormalSprites: Map<number, SpriteFrame> = new Map(); // 按钮正常状态的贴图（按钮索引 -> SpriteFrame）
     private buttonDownSprites: Map<number, SpriteFrame> = new Map(); // 按钮按下状态的贴图（按钮索引 -> SpriteFrame）
     private defendButtonPressed: boolean = false; // 防御按钮是否处于按下状态
+    private skillButtonPressed: boolean = false; // 技能按钮是否处于按下状态
 
     start() {
         this.initPanel();
@@ -357,6 +361,14 @@ export class UnitInfoPanel extends Component {
                     } else {
                         sprite.spriteFrame = spriteFrame; // 临时使用正常贴图，等按下贴图加载后切换
                     }
+                } else if ((buttonIndex === 3 || buttonIndex === 0) && this.skillButtonPressed) {
+                    // 技能按钮且处于按下状态，使用按下贴图（按下贴图会在加载后设置）
+                    const downSprite = this.buttonDownSprites.get(buttonIndex);
+                    if (downSprite) {
+                        sprite.spriteFrame = downSprite;
+                    } else {
+                        sprite.spriteFrame = spriteFrame; // 临时使用正常贴图，等按下贴图加载后切换
+                    }
                 } else {
                     sprite.spriteFrame = spriteFrame;
                 }
@@ -376,6 +388,10 @@ export class UnitInfoPanel extends Component {
                 this.buttonDownSprites.set(buttonIndex, downSpriteFrame);
                 // 如果是防御按钮且处于按下状态，设置按下贴图
                 if (buttonIndex === 1 && this.defendButtonPressed && sprite && sprite.node && sprite.node.isValid) {
+                    sprite.spriteFrame = downSpriteFrame;
+                }
+                // 如果是技能按钮且处于按下状态，设置按下贴图
+                if ((buttonIndex === 3 || buttonIndex === 0) && this.skillButtonPressed && sprite && sprite.node && sprite.node.isValid) {
                     sprite.spriteFrame = downSpriteFrame;
                 }
             }
@@ -667,6 +683,10 @@ export class UnitInfoPanel extends Component {
             return;
         }
 
+        // 每次刷新按钮时，根据当前单位重置状态变量，避免上一个单位的状态串到下一个单位
+        this.defendButtonPressed = unitInfo.isDefending === true;
+        this.skillButtonPressed = unitInfo.isSkillActive === true;
+
         // 清除所有按钮的点击事件和隐藏所有按钮
         for (let i = 0; i < this.buttonNodes.length; i++) {
             const buttonNode = this.buttonNodes[i];
@@ -684,7 +704,8 @@ export class UnitInfoPanel extends Component {
             }
         }
 
-        // 设置集结点按钮（位置：左上角，索引0）
+        // 左上角格子（索引0）：建筑物显示「集结点」，弓箭手显示「穿透箭」
+        // 1）集结点按钮（建筑物专用）
         if (unitInfo.onRallyPointClick && this.buttonNodes[0]) {
             const rallyButton = this.buttonNodes[0];
             rallyButton.active = true;
@@ -815,6 +836,129 @@ export class UnitInfoPanel extends Component {
         }
 
         // 训练小精灵按钮已移除，训练改为由生命之树自动进行
+
+        // 设置技能按钮
+        // 当前位置说明（九宫格索引，从0开始）：
+        // 0: 第一行第一列（建筑：集结点；弓箭手：穿透箭；牧师：圣光祈祷）
+        // 1: 第一行第二列（防御）
+        // 2: 第一行第三列（升级）
+        // 3: 第二行第一列（预留，将来可扩展其他技能）
+        //
+        // 穿透箭技能按钮：与集结点共用同一格（索引0），仅非牧师单位使用（当前为弓箭手）
+        // 为避免与集结点冲突，这里要求没有 onRallyPointClick 且不是牧师时才使用
+        if (!unitInfo.onRallyPointClick && unitInfo.onSkillClick && unitInfo.name !== '牧师' && this.buttonNodes[0]) {
+            const skillButton = this.buttonNodes[0];
+            skillButton.active = true;
+
+            // 根据技能状态设置初始按下状态
+            this.skillButtonPressed = unitInfo.isSkillActive === true;
+
+            // 加载技能按钮贴图（弓箭手：穿透箭）
+            const normalIcon = 'chuantou.png';
+            const downIcon = 'chuantou_down.png';
+            this.loadButtonSprite(0, normalIcon, downIcon);
+
+            // 如果贴图已经加载，立即设置正确的状态
+            const sprite = this.buttonSprites.get(0);
+            if (sprite && sprite.node && sprite.node.isValid) {
+                if (this.skillButtonPressed) {
+                    const downSprite = this.buttonDownSprites.get(0);
+                    if (downSprite) {
+                        sprite.spriteFrame = downSprite;
+                    }
+                } else {
+                    const normalSprite = this.buttonNormalSprites.get(0);
+                    if (normalSprite) {
+                        sprite.spriteFrame = normalSprite;
+                    }
+                }
+            }
+
+            // 穿透箭是“开关型”技能，需要点击后保持高亮状态，再次点击关闭
+            // TOUCH_START：仅做按下反馈（临时视觉）
+            skillButton.on(Node.EventType.TOUCH_START, () => {
+                const sprite = this.buttonSprites.get(0);
+                if (sprite && sprite.node && sprite.node.isValid) {
+                    const downSprite = this.buttonDownSprites.get(0);
+                    if (downSprite) {
+                        sprite.spriteFrame = downSprite;
+                    }
+                }
+            });
+
+            // TOUCH_END：真正切换开关状态并更新贴图，同时触发技能回调
+            skillButton.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
+                // 切换技能按钮的按下状态
+                this.skillButtonPressed = !this.skillButtonPressed;
+
+                const sprite = this.buttonSprites.get(0);
+                if (sprite && sprite.node && sprite.node.isValid) {
+                    if (this.skillButtonPressed) {
+                        const downSprite = this.buttonDownSprites.get(0);
+                        if (downSprite) {
+                            sprite.spriteFrame = downSprite;
+                        }
+                    } else {
+                        const normalSprite = this.buttonNormalSprites.get(0);
+                        if (normalSprite) {
+                            sprite.spriteFrame = normalSprite;
+                        }
+                    }
+                }
+
+                if (unitInfo.onSkillClick) {
+                    unitInfo.onSkillClick(event);
+                }
+            });
+        }
+
+        // 牧师专用圣光祈祷技能按钮：放在第二行第一列（索引3），不与集结点/穿透箭冲突
+        if (unitInfo.onSkillClick && unitInfo.name === '牧师' && this.buttonNodes[3]) {
+            const holyButton = this.buttonNodes[3];
+            holyButton.active = true;
+
+            // 圣光祈祷是一次性技能，这里不需要持久高亮，仅在按下时显示按下态
+            this.skillButtonPressed = false;
+
+            // 加载圣光祈祷按钮贴图（shengg.png）
+            this.loadButtonSprite(3, 'shengg.png', 'shengg.png');
+
+            const sprite = this.buttonSprites.get(3);
+            if (sprite && sprite.node && sprite.node.isValid) {
+                const normalSprite = this.buttonNormalSprites.get(3);
+                if (normalSprite) {
+                    sprite.spriteFrame = normalSprite;
+                }
+            }
+
+            holyButton.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+                this.skillButtonPressed = true;
+
+                const sprite = this.buttonSprites.get(3);
+                if (sprite && sprite.node && sprite.node.isValid) {
+                    const downSprite = this.buttonDownSprites.get(3) || this.buttonNormalSprites.get(3);
+                    if (downSprite) {
+                        sprite.spriteFrame = downSprite;
+                    }
+                }
+
+                if (unitInfo.onSkillClick) {
+                    unitInfo.onSkillClick(event);
+                }
+            });
+
+            holyButton.on(Node.EventType.TOUCH_END, () => {
+                this.skillButtonPressed = false;
+
+                const sprite = this.buttonSprites.get(3);
+                if (sprite && sprite.node && sprite.node.isValid) {
+                    const normalSprite = this.buttonNormalSprites.get(3);
+                    if (normalSprite) {
+                        sprite.spriteFrame = normalSprite;
+                    }
+                }
+            });
+        }
 
         // 设置回收按钮（位置：右下，索引8）
         if (unitInfo.onSellClick && this.buttonNodes[8]) {
