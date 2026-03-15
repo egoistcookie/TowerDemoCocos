@@ -70,7 +70,7 @@ export class GameManager extends Component {
     private gameState: GameState = GameState.Ready;
     private gameTime: number = 0; // 已防御时间（累积时间，从0开始）
     private crystalScript: Crystal = null!;
-    private gold: number = 20; // 初始金币
+    private gold: number = 30; // 初始金币
     private wood: number = 50; // 初始木材（提升到 50）
     private population: number = 0; // 当前人口
     private maxPopulation: number = 10; // 人口上限
@@ -4409,7 +4409,7 @@ export class GameManager extends Component {
         
         // 重置基础数值
         this.gameTime = 0;
-        this.gold = 20;              // 初始金币固定为 20
+        this.gold = 30;              // 初始金币固定为 30
         this.wood = 50;              // 初始木材固定为 50
         this.population = 0;
         this.currentGameExp = 0;

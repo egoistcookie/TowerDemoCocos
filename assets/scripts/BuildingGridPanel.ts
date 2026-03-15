@@ -324,9 +324,13 @@ export class BuildingGridPanel extends Component {
             // 额外保险：如果节点已经被移动到远离当前格子的位置，认为该格子不再被占用
             const center = this.gridToWorld(gridX, gridY);
             if (center) {
-                const distance = Vec3.distance(center, node.worldPosition);
+                // 性能优化：使用平方距离比较
+                const dx = node.worldPosition.x - center.x;
+                const dy = node.worldPosition.y - center.y;
+                const distanceSq = dx * dx + dy * dy;
+                const cellSizeSq = this.cellSize * this.cellSize;
                 // 距离大于一个格子的尺寸，说明不是这个格子里的建筑，清除占用
-                if (distance > this.cellSize) {
+                if (distanceSq > cellSizeSq) {
                     cell.occupied = false;
                     cell.buildingNode = null;
                     return false;

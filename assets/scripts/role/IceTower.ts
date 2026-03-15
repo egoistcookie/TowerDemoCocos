@@ -420,27 +420,6 @@ export class IceTower extends Build {
     }
 
     /**
-     * 覆盖die：冰塔占用两个石墙网格，需要同时释放上方网格
-     */
-    protected die() {
-        // 先释放上方网格，再交给父类释放下方网格等通用逻辑
-        if (!this.gridPanel) {
-            this.findGridPanel();
-        }
-        const panel: any = this.gridPanel;
-        if (panel && this.gridX >= 0 && this.gridY >= 0) {
-            if (typeof panel.gridHeight === 'number' &&
-                this.gridY + 1 < panel.gridHeight &&
-                panel.releaseGrid && typeof panel.releaseGrid === 'function') {
-                panel.releaseGrid(this.gridX, this.gridY + 1);
-            }
-        }
-
-        // 调用父类实现（会释放下方网格，并处理其它通用逻辑）
-        super.die();
-    }
-
-    /**
      * 升级按钮点击事件（参考Role的升级机制）
      */
     protected onUpgradeClick(event?: EventTouch) {
@@ -644,11 +623,16 @@ export class IceTower extends Build {
             }
         }
 
-        // 处理攻击逻辑
+        // 处理攻击逻辑（性能优化：使用平方距离比较）
         if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
-            const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
+            const myPos = this.node.worldPosition;
+            const targetPos = this.currentTarget.worldPosition;
+            const dx = targetPos.x - myPos.x;
+            const dy = targetPos.y - myPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            const attackRangeSq = this.attackRange * this.attackRange;
             
-            if (distance <= this.attackRange) {
+            if (distanceSq <= attackRangeSq) {
                 if (this.attackTimer >= this.attackInterval) {
                     if (this.gameManager && this.gameManager.getGameState() === GameState.Playing) {
                         this.attack();

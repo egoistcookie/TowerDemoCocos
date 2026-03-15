@@ -128,8 +128,13 @@ export class GreenOrb extends Component {
         // 检查是否命中目标（提前命中）
         if (this.targetNode && this.targetNode.isValid && this.targetNode.active) {
             const targetPos = this.targetNode.worldPosition;
-            const distance = Vec3.distance(currentPos, targetPos);
-            if (distance < 30) { // 命中判定半径
+            // 性能优化：使用平方距离比较
+            const dx = targetPos.x - currentPos.x;
+            const dy = targetPos.y - currentPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            const hitRadius = 30;
+            const hitRadiusSq = hitRadius * hitRadius;
+            if (distanceSq < hitRadiusSq) { // 命中判定半径
                 this.hitTarget();
                 return;
             }

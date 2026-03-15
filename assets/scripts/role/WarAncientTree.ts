@@ -180,10 +180,15 @@ export class WarAncientTree extends Build {
             this.findTarget();
         }
 
-        // 攻击逻辑
+        // 攻击逻辑（性能优化：使用平方距离比较）
         if (this.currentTarget && this.attackTimer >= this.attackInterval) {
-            const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
-            if (distance <= this.attackRange) {
+            const myPos = this.node.worldPosition;
+            const targetPos = this.currentTarget.worldPosition;
+            const dx = targetPos.x - myPos.x;
+            const dy = targetPos.y - myPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            const attackRangeSq = this.attackRange * this.attackRange;
+            if (distanceSq <= attackRangeSq) {
                 this.attack();
                 this.attackTimer = 0;
             } else {
@@ -258,16 +263,20 @@ export class WarAncientTree extends Build {
 
         const enemies = enemiesNode.children || [];
         let nearestEnemy: Node = null!;
-        let minDistance = Infinity;
+        let minDistanceSq = this.attackRange * this.attackRange;
 
         for (const enemy of enemies) {
                 if (enemy && enemy.active && enemy.isValid) {
                     // 获取敌人脚本，支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
                     const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any || enemy.getComponent('TrollSpearman') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
-                        const distance = Vec3.distance(this.node.worldPosition, enemy.worldPosition);
-                        if (distance <= this.attackRange && distance < minDistance) {
-                            minDistance = distance;
+                        const myPos2 = this.node.worldPosition;
+                        const enemyPos = enemy.worldPosition;
+                        const dx2 = enemyPos.x - myPos2.x;
+                        const dy2 = enemyPos.y - myPos2.y;
+                        const distanceSq2 = dx2 * dx2 + dy2 * dy2;
+                        if (distanceSq2 <= minDistanceSq) {
+                            minDistanceSq = distanceSq2;
                             nearestEnemy = enemy;
                         }
                     }

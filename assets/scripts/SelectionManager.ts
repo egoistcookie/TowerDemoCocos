@@ -244,8 +244,13 @@ export class SelectionManager extends Component {
 
         // 如果之前有选中的单位，检测到拖拽时清除之前的选择（开始新的选择）
         if (this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedSwordsmen.length > 0 || this.selectedPriests.length > 0) {
-            const dragDistance = Vec3.distance(this.startPos, this.currentPos);
-            if (dragDistance > 5) { // 检测到拖拽（移动超过5像素）
+            // 性能优化：使用平方距离比较
+            const dx1 = this.currentPos.x - this.startPos.x;
+            const dy1 = this.currentPos.y - this.startPos.y;
+            const dragDistanceSq1 = dx1 * dx1 + dy1 * dy1;
+            const dragThreshold1 = 5;
+            const dragThresholdSq1 = dragThreshold1 * dragThreshold1;
+            if (dragDistanceSq1 > dragThresholdSq1) { // 检测到拖拽（移动超过5像素）
                 this.clearSelection();
             }
         }
@@ -301,14 +306,18 @@ export class SelectionManager extends Component {
 
         // 最后更新一次选中的防御单位（确保拖拽结束时也更新）
         // 检查是否有足够的拖动距离（避免点击被误判为拖动）
-        const dragDistance = Vec3.distance(this.startPos, this.currentPos);
+        const dx2 = this.currentPos.x - this.startPos.x;
+        const dy2 = this.currentPos.y - this.startPos.y;
+        const dragDistanceSq2 = dx2 * dx2 + dy2 * dy2;
         
         // 记录拖拽开始前是否有选中的单位（包括防御单位、女猎手、精灵剑士和牧师）
         const hadPreviousSelection = this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedSwordsmen.length > 0 || this.selectedPriests.length > 0;
         
         
         // 如果是拖拽选择，更新选中的单位
-        if (dragDistance > 10) { // 至少拖动10像素才认为是有效的选择
+        const dragThreshold2 = 10;
+        const dragThresholdSq2 = dragThreshold2 * dragThreshold2;
+        if (dragDistanceSq2 > dragThresholdSq2) { // 至少拖动10像素才认为是有效的选择
             this.updateSelectedTowers();
             
             // 框选完成后，显示多选信息面板

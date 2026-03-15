@@ -352,9 +352,14 @@ export class HunterHall extends Build {
                             }
                             
                             const currentPos = hunter.worldPosition;
-                            const distance = Vec3.distance(currentPos, targetPos);
+                            // 性能优化：使用平方距离比较
+                            const dx = targetPos.x - currentPos.x;
+                            const dy = targetPos.y - currentPos.y;
+                            const distanceSq = dx * dx + dy * dy;
+                            const arriveThreshold = 10;
+                            const arriveThresholdSq = arriveThreshold * arriveThreshold;
                             
-                            if (distance <= 10) {
+                            if (distanceSq <= arriveThresholdSq) {
                                 // 到达目标位置，停止移动
                                 if (hunterScript.stopMoving) {
                                     hunterScript.stopMoving();
@@ -446,14 +451,16 @@ export class HunterHall extends Build {
     hasUnitAtPosition(position: Vec3, radius: number): boolean {
         const minDistance = radius * 2; // 最小距离（两个半径）
 
-        // 检查与水晶的碰撞
+        // 检查与水晶的碰撞（使用平方距离比较）
         const crystal = find('Crystal');
         if (crystal && crystal.isValid && crystal.active) {
-            const distance = Vec3.distance(position, crystal.worldPosition);
             const crystalRadius = 50;
             // 使用安全距离，确保不会重叠
             const minDistance = (radius + crystalRadius) * 1.1;
-            if (distance < minDistance) {
+            const dx0 = crystal.worldPosition.x - position.x;
+            const dy0 = crystal.worldPosition.y - position.y;
+            const distanceSq0 = dx0 * dx0 + dy0 * dy0;
+            if (distanceSq0 < minDistance * minDistance) {
                 return true;
             }
         }
@@ -485,12 +492,14 @@ export class HunterHall extends Build {
                     if (hunterScript && hunterScript.isAlive && hunterScript.isAlive()) {
                         // 获取Hunter的实时位置（包括正在移动的Hunter）
                         const hunterPos = hunter.worldPosition;
-                        const distance = Vec3.distance(position, hunterPos);
+                        const dx1 = hunterPos.x - position.x;
+                        const dy1 = hunterPos.y - position.y;
+                        const distanceSq1 = dx1 * dx1 + dy1 * dy1;
                         const otherRadius = hunterScript.collisionRadius || radius;
                         // 使用1.2倍的安全距离，确保不会重叠（和Hunter的checkCollisionAtPosition保持一致）
-                        const minDistance = (radius + otherRadius) * 1.2;
+                        const minDistance1 = (radius + otherRadius) * 1.2;
                         
-                        if (distance < minDistance) {
+                        if (distanceSq1 < minDistance1 * minDistance1) {
                             // 检查是否是自己生产的Hunter
                             let isProducedHunter = false;
                             for (const producedHunter of this.producedHunters) {
@@ -534,11 +543,13 @@ export class HunterHall extends Build {
                 if (hall && hall.isValid && hall.active && hall !== this.node) {
                     const hallScript = hall.getComponent('HunterHall') as any;
                     if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
-                        const distance = Vec3.distance(position, hall.worldPosition);
+                        const dx2 = hall.worldPosition.x - position.x;
+                        const dy2 = hall.worldPosition.y - position.y;
+                        const distanceSq2 = dx2 * dx2 + dy2 * dy2;
                         const hallRadius = 50; // 猎手大厅的半径
                         // 使用安全距离，确保不会重叠
-                        const minDistance = (radius + hallRadius) * 1.1;
-                        if (distance < minDistance) {
+                        const minDistance2 = (radius + hallRadius) * 1.1;
+                        if (distanceSq2 < minDistance2 * minDistance2) {
                             return true;
                         }
                     }
@@ -554,11 +565,13 @@ export class HunterHall extends Build {
                 if (enemy && enemy.isValid && enemy.active) {
                     const enemyScript = enemy.getComponent('Enemy') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
-                        const distance = Vec3.distance(position, enemy.worldPosition);
+                        const dx3 = enemy.worldPosition.x - position.x;
+                        const dy3 = enemy.worldPosition.y - position.y;
+                        const distanceSq3 = dx3 * dx3 + dy3 * dy3;
                         const enemyRadius = 30;
                         // 使用安全距离，确保不会重叠
-                        const minDistance = (radius + enemyRadius) * 1.1;
-                        if (distance < minDistance) {
+                        const minDistance3 = (radius + enemyRadius) * 1.1;
+                        if (distanceSq3 < minDistance3 * minDistance3) {
                             return true;
                         }
                     }

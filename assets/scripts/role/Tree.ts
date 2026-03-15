@@ -104,8 +104,12 @@ export class Tree extends Component {
 
             const wisp = node.getComponent(Wisp);
             if (wisp && node.active && node.isValid) {
-                const dist = Vec3.distance(treeWorldPos, node.worldPosition);
-                if (dist <= this.wispDetectRadius) {
+                // 性能优化：使用平方距离比较
+                const dx = node.worldPosition.x - treeWorldPos.x;
+                const dy = node.worldPosition.y - treeWorldPos.y;
+                const distSq = dx * dx + dy * dy;
+                const detectRadiusSq = this.wispDetectRadius * this.wispDetectRadius;
+                if (distSq <= detectRadiusSq) {
                     found = true;
                     return;
                 }

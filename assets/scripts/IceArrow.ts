@@ -100,13 +100,8 @@ export class IceArrow extends Component {
         // 标记冰箭已命中，后续不再参与碰撞检测
         this.isFlying = false;
 
-        // 在命中点执行范围效果
+        // 在命中点执行范围效果（范围内所有受伤单位都减速并显示寒气特效）
         this.applyAreaDamageAndSlow(hitPos);
-
-        // 为主命中目标创建寒气特效（视觉效果中心仍然跟随某个敌人）
-        if (enemy && enemy.isValid) {
-            this.createColdEffect(enemy);
-        }
 
         // 延迟销毁冰箭节点
         this.scheduleOnce(() => {
@@ -148,6 +143,8 @@ export class IceArrow extends Component {
 
                 // 对范围内敌人应用减速
                 this.applySlowDown(enemy);
+                // 为范围内每一个受影响的敌人创建减速寒气特效
+                this.createColdEffect(enemy);
 
                 // 调用命中回调，让冰塔结算伤害（每个敌人都算一次伤害）
                 if (this.onHitCallback) {

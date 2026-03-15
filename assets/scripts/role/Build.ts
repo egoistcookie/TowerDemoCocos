@@ -1202,15 +1202,19 @@ export class Build extends Component {
                 
                 if (isFriendly) {
                     const unitPos = unit.worldPosition;
-                    const distance = Vec3.distance(rallyPoint, unitPos);
+                    // 性能优化：使用平方距离比较
+                    const dx = unitPos.x - rallyPoint.x;
+                    const dy = unitPos.y - rallyPoint.y;
+                    const distanceSq = dx * dx + dy * dy;
+                    const checkRadiusSq = checkRadius * checkRadius;
                     
                     // 只考虑在检查半径内的单位
-                    if (distance <= checkRadius) {
+                    if (distanceSq <= checkRadiusSq) {
                         nearbyFriends.push({
                             node: unit,
                             pos: unitPos,
-                            distance: distance
-                        });
+                            distanceSq: distanceSq
+                        } as any);
                     }
                 }
             }
@@ -1221,8 +1225,8 @@ export class Build extends Component {
             return rallyPoint.clone();
         }
         
-        // 找到最近的友方单位
-        nearbyFriends.sort((a, b) => a.distance - b.distance);
+        // 找到最近的友方单位（根据平方距离排序）
+        nearbyFriends.sort((a, b) => (a as any).distanceSq - (b as any).distanceSq);
         const nearestFriend = nearbyFriends[0];
         
         // 计算从最近友方单位到集结点的方向

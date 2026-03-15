@@ -128,8 +128,13 @@ export class Fireball extends Component {
         // 检查是否命中目标（提前爆炸）
         if (this.targetNode && this.targetNode.isValid) {
             const targetPos = this.targetNode.worldPosition;
-            const distance = Vec3.distance(currentPos, targetPos);
-            if (distance < 20) { // 命中判定半径
+            // 性能优化：使用平方距离比较
+            const dx = targetPos.x - currentPos.x;
+            const dy = targetPos.y - currentPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            const hitRadius = 20;
+            const hitRadiusSq = hitRadius * hitRadius;
+            if (distanceSq < hitRadiusSq) { // 命中判定半径
                 this.explode(currentPos);
                 return;
             }

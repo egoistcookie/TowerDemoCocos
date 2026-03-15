@@ -259,7 +259,7 @@
   "Church": {
     "baseStats": {
       "maxHealth": 120,
-      "buildCost": 30,
+      "buildCost": 1,
       "level": 1,
       "collisionRadius": 50,
       "maxPriestCount": 4,
@@ -271,7 +271,7 @@
     },
     "displayStats": {
       "生命值": 120,
-      "建造成本": "30金币",
+      "建造成本": "1金币",
       "最大生产数量": 4,
       "生产间隔": "2.0秒"
     }
@@ -323,7 +323,7 @@
       "maxHealth": 100,
       "buildCost": 20,
       "attackRange": 250,
-      "attackDamage": 15,
+      "attackDamage": 12,
       "attackInterval": 1.5,
       "goldReward": 2,
       "level": 1,
@@ -347,7 +347,7 @@
       "maxHealth": 100,
       "buildCost": 30,
       "attackRange": 250,
-      "attackDamage": 25,
+      "attackDamage": 24,
       "attackInterval": 1.8,
       "goldReward": 2,
       "level": 1,
@@ -359,7 +359,7 @@
     },
     "displayStats": {
       "生命值": 100,
-      "攻击力": 25,
+      "攻击力": 24,
       "攻击范围": "250像素",
       "攻击间隔": "1.8秒",
       "建造成本": "30金币",

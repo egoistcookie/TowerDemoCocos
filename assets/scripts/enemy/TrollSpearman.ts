@@ -43,7 +43,7 @@ export class TrollSpearman extends Enemy {
 
         const targetPos = this.currentTarget.worldPosition;
         const enemyPos = this.node.worldPosition;
-        const distance = Vec3.distance(enemyPos, targetPos);
+        // 这里只是计算一次距离供后续可能扩展逻辑使用，如需比较再改为平方距离
 
         // 攻击时朝向目标方向
         const direction = new Vec3();

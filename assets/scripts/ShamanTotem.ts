@@ -195,12 +195,15 @@ export class ShamanTotem extends Component {
                 continue;
             }
             
-            // 计算距离
+            // 计算距离（性能优化：使用平方距离比较）
             const enemyPos = enemyNode.worldPosition;
-            const distance = Vec3.distance(totemPos, enemyPos);
+            const dx = enemyPos.x - totemPos.x;
+            const dy = enemyPos.y - totemPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            const healRadiusSq = this.healRadius * this.healRadius;
             
             // 如果在治疗范围内
-            if (distance <= this.healRadius) {
+            if (distanceSq <= healRadiusSq) {
                 // 获取Enemy组件（可能是Enemy或其子类）
                 let enemyScript = enemyNode.getComponent(Enemy) as any;
                 if (!enemyScript) {

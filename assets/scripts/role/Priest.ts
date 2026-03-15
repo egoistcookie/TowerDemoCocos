@@ -157,9 +157,15 @@ export class Priest extends Role {
             
             // 防御状态下，只在治疗范围内治疗，不移动
             if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
-                const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
+                // 性能优化：使用平方距离比较
+                const myPos = this.node.worldPosition;
+                const targetPos = this.currentTarget.worldPosition;
+                const dx = targetPos.x - myPos.x;
+                const dy = targetPos.y - myPos.y;
+                const distanceSq = dx * dx + dy * dy;
+                const attackRangeSq = this.attackRange * this.attackRange;
                 
-                if (distance <= this.attackRange) {
+                if (distanceSq <= attackRangeSq) {
                     // 在治疗范围内，执行治疗
                     this.stopMoving();
                     if (this.attackTimer >= this.attackInterval) {
@@ -193,8 +199,14 @@ export class Priest extends Role {
 
         // 手动移动优先
         if (this.manualMoveTarget) {
-            const distToManual = Vec3.distance(this.node.worldPosition, this.manualMoveTarget);
-            if (distToManual <= 10) {
+            // 性能优化：使用平方距离比较
+            const myPos2 = this.node.worldPosition;
+            const dx2 = this.manualMoveTarget.x - myPos2.x;
+            const dy2 = this.manualMoveTarget.y - myPos2.y;
+            const distToManualSq = dx2 * dx2 + dy2 * dy2;
+            const manualThreshold = 10;
+            const manualThresholdSq = manualThreshold * manualThreshold;
+            if (distToManualSq <= manualThresholdSq) {
                 this.manualMoveTarget = null!;
                 this.isManuallyControlled = false;
                 this.stopMoving();
@@ -210,16 +222,21 @@ export class Priest extends Role {
         }
 
         if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
-            const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
+            const myPos3 = this.node.worldPosition;
+            const targetPos3 = this.currentTarget.worldPosition;
+            const dx3 = targetPos3.x - myPos3.x;
+            const dy3 = targetPos3.y - myPos3.y;
+            const distanceSq3 = dx3 * dx3 + dy3 * dy3;
+            const attackRangeSq3 = this.attackRange * this.attackRange;
 
-            if (distance <= this.attackRange) {
+            if (distanceSq3 <= attackRangeSq3) {
                 // 在治疗范围内
                 this.stopMoving();
                 if (this.attackTimer >= this.attackInterval) {
                     this.healCurrentTarget();
                     this.attackTimer = 0;
                 }
-            } else if (distance <= this.attackRange * 2) {
+            } else if (distanceSq3 <= (this.attackRange * 2) * (this.attackRange * 2)) {
                 // 2倍范围内，向友军移动
                 this.moveTowardsAlly(deltaTime);
             } else {

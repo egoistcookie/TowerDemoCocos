@@ -80,8 +80,11 @@ export class Boomerang extends Component {
             this.targetPos.x += 200;
         }
 
-        // 计算飞行时间（基于距离和速度）
-        const distance = Vec3.distance(this.startPos, this.targetPos);
+        // 计算飞行时间（基于距离和速度）——需要真实距离，这里保留开方
+        const dx = this.targetPos.x - this.startPos.x;
+        const dy = this.targetPos.y - this.startPos.y;
+        const distanceSq = dx * dx + dy * dy;
+        const distance = Math.sqrt(distanceSq);
         if (distance < 0.1) {
             return;
         }

@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, find, Graphics, Color, UITransform, Sprite, SpriteFrame } from 'cc';
+import { _decorator, Component, Node, Vec3, find, Graphics, Color, UITransform, Sprite, SpriteFrame, tween, UIOpacity } from 'cc';
 import { GameManager, GameState } from './GameManager';
 const { ccclass, property } = _decorator;
 
@@ -18,10 +18,16 @@ export class ThunderChain extends Component {
     bounceRange: number = 100; // 弹射范围（像素）
 
     @property(SpriteFrame)
-    lightningTexture: SpriteFrame = null!; // 闪电链贴图（可选）
+    lightningTexture: SpriteFrame = null!; // 闪电链贴图（可选，向后兼容单张贴图）
+
+    @property([SpriteFrame])
+    lightningTextures: SpriteFrame[] = []; // 闪电链贴图数组（支持多张贴图动画）
 
     @property
     textureSegmentCount: number = 5; // 贴图分段数量（在起点和终点之间放置的贴图数量）
+
+    // 闪电链贴图动画总时长：要求在 0.5 秒内把所有贴图播放完
+    private readonly LIGHTNING_DURATION: number = 0.5; // 闪电链播放时间（秒）
 
     private currentTarget: Node = null!; // 当前目标
     private hitEnemies: Set<Node> = new Set(); // 已命中的敌人集合
@@ -129,16 +135,17 @@ export class ThunderChain extends Component {
                     this.attackTarget(nextTargetPos, nextTarget);
                 }, 0.1);
             } else {
-                // 没有找到下一个目标，结束
+                // 没有找到下一个目标，稍等一段时间再整体销毁，
+                // 确保最后一次闪电有足够时间把所有贴图播完（1秒）
                 this.scheduleOnce(() => {
                     this.destroyChain();
-                }, 0.3);
+                }, this.LIGHTNING_DURATION);
             }
         } else {
-            // 达到最大弹射次数，结束
+            // 达到最大弹射次数，同样等待整段闪电贴图动画播放完再销毁
             this.scheduleOnce(() => {
                 this.destroyChain();
-            }, 0.3);
+            }, this.LIGHTNING_DURATION);
         }
     }
 
@@ -181,8 +188,9 @@ export class ThunderChain extends Component {
      * 创建闪电特效
      */
     private createLightningEffect(fromPos: Vec3, toPos: Vec3) {
-        // 如果有贴图，使用贴图方式
-        if (this.lightningTexture) {
+        // 如果有贴图（单张或多张），使用贴图方式
+        const hasTextures = (this.lightningTextures && this.lightningTextures.length > 0) || this.lightningTexture;
+        if (hasTextures) {
             this.createLightningEffectWithTexture(fromPos, toPos);
         } else {
             // 否则使用Graphics绘制
@@ -192,121 +200,130 @@ export class ThunderChain extends Component {
 
     /**
      * 使用贴图创建闪电特效
-     * 创建一个贴图节点，宽度固定30像素，长度等于两点之间的实际距离
+     * 优化：根据距离动态调整贴图长度，支持多张贴图动画，播放时间1秒
      */
     private createLightningEffectWithTexture(fromPos: Vec3, toPos: Vec3) {
-        // 输出起始和结束位置的坐标
-        //console.info(`[ThunderChain] 起始位置 fromPos: (${fromPos.x.toFixed(2)}, ${fromPos.y.toFixed(2)}, ${fromPos.z.toFixed(2)})`);
-        //console.info(`[ThunderChain] 结束位置 toPos: (${toPos.x.toFixed(2)}, ${toPos.y.toFixed(2)}, ${toPos.z.toFixed(2)})`);
-        
         // 计算方向和距离
         const direction = new Vec3();
         Vec3.subtract(direction, toPos, fromPos);
         const distance = direction.length();
         
-        // 如果距离太近（小于20像素），不显示贴图，避免出现原贴图尺寸
+        // 如果距离太近（小于20像素），不显示贴图
         const minDistance = 20;
         if (distance < minDistance) {
-            //console.info(`[ThunderChain] 距离太近 (${distance.toFixed(2)} < ${minDistance})，跳过贴图显示`);
             return;
         }
         
+        // 获取贴图数组（优先使用多张贴图数组，如果没有则使用单张贴图）
+        const textureArray: SpriteFrame[] = [];
+        if (this.lightningTextures && this.lightningTextures.length > 0) {
+            // 过滤掉空值
+            textureArray.push(...this.lightningTextures.filter(t => t !== null));
+        } else if (this.lightningTexture) {
+            textureArray.push(this.lightningTexture);
+        }
+        
+        if (textureArray.length === 0) {
+            console.warn('[ThunderChain] 没有可用的闪电链贴图');
+            return;
+        }
+        
+        // 获取第一张贴图的原始尺寸
+        const firstTexture = textureArray[0];
+        const originalSize = firstTexture.originalSize;
+        /**
+         * 贴图尺寸含义（你的贴图是 200x30，水平方向的闪电）：
+         * - 原始宽度 originalSize.width  = 200：从左到右，是“长度方向”
+         * - 原始高度 originalSize.height = 30 ：上下，是“粗细”
+         *
+         * 显示规则：
+         * - 长度：用塔到敌人的距离 distance 来决定（distance < 宽度 → 截取左侧一部分；distance > 宽度 → 拉伸）；
+         * - 粗细：始终用原始高度 30。
+         *
+         * 因此在 UITransform 中：
+         * - width  = distance（长度）
+         * - height = originalSize.height（粗细）
+         */
+        const originalTextureLength = originalSize.width;
+        const thickness = originalSize.height;
+        const finalTextureLength = distance;
+        
+        // 计算旋转角度，让闪电链从起点指向终点
+        // 贴图是水平方向的（宽度200，高度30），所以贴图的"长度"方向是X轴正方向
+        // 需要旋转到目标方向：从X轴正方向旋转到direction方向
+        const angle = Math.atan2(direction.y, direction.x) * 180 / Math.PI;
+        
         const canvas = find('Canvas');
         const parent = canvas || this.node.scene || this.node.parent;
-        // 原图是沿x轴平放的，计算从x轴正方向到目标方向的角度
-        // 由于Cocos Creator的旋转系统，可能需要调整
-        let angle = Math.atan2(direction.y, direction.x) * 180 / Math.PI;
-        
-        // 尝试不同的角度调整方式（根据实际效果选择）
-        // 如果贴图方向不对，可以尝试：
-        // angle = angle - 90; // 如果贴图原本是垂直向上的
-        // angle = angle + 90; // 如果贴图原本是垂直向下的
-        // angle = -angle; // 如果旋转方向相反
-        
-        // 先尝试不调整，如果方向不对再调整
-        // 如果贴图是沿x轴平放的，标准计算应该是正确的
-        
-        //console.info(`[ThunderChain] 距离: ${distance.toFixed(2)}, 计算角度: ${angle.toFixed(2)}°, 方向向量: (${direction.x.toFixed(2)}, ${direction.y.toFixed(2)})`);
-
-        // 固定宽度为10像素，长度为两点之间的实际距离
-        const textureWidth = 10;
-        const textureLength = distance;
 
         // 创建容器节点（用于管理所有贴图段）
         const containerNode = new Node('LightningContainer');
         containerNode.setParent(parent);
         containerNode.active = true;
-        // 将容器节点位置设置到起点（防御塔位置）
         containerNode.setWorldPosition(fromPos);
         this.chainNodes.push(containerNode);
 
-        // 创建单个贴图节点，从起点到终点
+        // 创建贴图节点
         const lightningNode = new Node('LightningTexture');
         lightningNode.setParent(containerNode);
         lightningNode.active = true;
         
         // 添加UITransform并设置尺寸
         const transform = lightningNode.addComponent(UITransform);
-        // 锚点设置在底部中心 (0.5, 0)，这样贴图会从起点（防御塔位置）延伸到终点
-        transform.setAnchorPoint(0.5, 0);
-        // 设置尺寸：宽度10，长度等于实际距离
-        transform.setContentSize(textureWidth, textureLength);
-
+        // 锚点在左中 (0, 0.5)：起点在贴图左侧中点，长度沿 X 轴正方向延伸
+        transform.setAnchorPoint(0, 0.5);
+        // 宽度 = 距离（长度），高度 = 原始高度（粗细）
+        transform.setContentSize(finalTextureLength, thickness);
+        
         // 添加Sprite组件
         const sprite = lightningNode.addComponent(Sprite);
-        // 重要：先设置sizeMode和其他属性，再设置spriteFrame
-        // 使用 CUSTOM 模式，让贴图按照 UITransform 的尺寸显示
         sprite.sizeMode = Sprite.SizeMode.CUSTOM;
         sprite.type = Sprite.Type.SIMPLE;
         sprite.trim = false;
-        // 然后设置 spriteFrame
-        sprite.spriteFrame = this.lightningTexture;
+        sprite.spriteFrame = firstTexture; // 初始显示第一张贴图
         
-        // 设置节点本地位置为 (0, 0)，因为父节点（容器）已经在起点（防御塔位置）
+        // 设置节点位置（在容器节点内，容器已经在起点位置）
         lightningNode.setPosition(0, 0, 0);
+        
+        // 旋转到目标方向
+        // 注意：Cocos Creator中，Z轴旋转是逆时针的，角度0度对应X轴正方向
+        lightningNode.setRotationFromEuler(0, 0, angle);
 
-        // 设置旋转角度，让贴图指向目标方向
-        lightningNode.setRotationFromEuler(0, 0, angle - 90);
-        
-        // 输出详细日志，帮助调试
-        //console.info(`[ThunderChain] 贴图节点创建 - 尺寸: (${textureWidth}, ${textureLength.toFixed(2)}), sizeMode: ${sprite.sizeMode}, type: ${sprite.type}, trim: ${sprite.trim}`);
-        //console.info(`[ThunderChain] UITransform尺寸: (${transform.width.toFixed(2)}, ${transform.height.toFixed(2)}), 锚点: (${transform.anchorX}, ${transform.anchorY})`);
-        
-        // 使用 scheduleOnce 延迟一帧，确保所有属性都已应用
-        this.scheduleOnce(() => {
-            if (lightningNode && lightningNode.isValid && sprite && sprite.isValid && transform && transform.isValid) {
-                // 再次确认尺寸和位置
-                transform.setContentSize(textureWidth, textureLength);
-                lightningNode.setPosition(0, 0, 0);
-                // 再次确认Sprite属性
-                sprite.sizeMode = Sprite.SizeMode.CUSTOM;
-                sprite.type = Sprite.Type.SIMPLE;
-                sprite.trim = false;
-                // 强制刷新 Sprite
-                sprite.enabled = false;
-                sprite.enabled = true;
-                
-                // 输出验证日志
-                //console.info(`[ThunderChain] 延迟后验证 - UITransform尺寸: (${transform.width.toFixed(2)}, ${transform.height.toFixed(2)}), sizeMode: ${sprite.sizeMode}`);
-                
-                // 检查是否使用了原图尺寸（如果spriteFrame存在，检查其原始尺寸）
-                if (sprite.spriteFrame) {
-                    const originalSize = sprite.spriteFrame.originalSize;
-                    //console.info(`[ThunderChain] 原图尺寸: (${originalSize.width}, ${originalSize.height})`);
-                    // 如果UITransform的尺寸和原图尺寸相同，说明可能使用了原图尺寸
-                    if (Math.abs(transform.width - originalSize.width) < 1 && Math.abs(transform.height - originalSize.height) < 1) {
-                        console.warn(`[ThunderChain] 警告：检测到可能使用了原图尺寸！UITransform: (${transform.width}, ${transform.height}), 原图: (${originalSize.width}, ${originalSize.height})`);
+        // 如果有多张贴图，在 LIGHTNING_DURATION（0.5 秒）内播放完所有贴图
+        if (textureArray.length > 1) {
+            const frameDuration = this.LIGHTNING_DURATION / textureArray.length; // 每张贴图的播放时间
+            let currentFrameIndex = 0;
+
+            // console.log(`[ThunderChain] 多贴图动画开始，总数 ${textureArray.length}，frameDuration=${frameDuration.toFixed(3)}s`);
+
+            // 初始化显示第 0 帧
+            sprite.spriteFrame = textureArray[0];
+            // console.log(`[ThunderChain] 多贴图动画切换到第 1 帧 / 总数 ${textureArray.length}`);
+            currentFrameIndex = 1;
+
+            // 使用 schedule 按固定间隔切换剩余帧
+            if (currentFrameIndex < textureArray.length) {
+                const maxIndex = textureArray.length;
+                this.schedule(() => {
+                    if (!lightningNode.isValid || !sprite.isValid) {
+                        return;
                     }
-                }
+                    if (currentFrameIndex >= maxIndex) {
+                        return;
+                    }
+                    sprite.spriteFrame = textureArray[currentFrameIndex];
+                    // console.log(`[ThunderChain] 多贴图动画切换到第 ${currentFrameIndex + 1} 帧 / 总数 ${textureArray.length}`);
+                    currentFrameIndex++;
+                }, frameDuration, maxIndex - 2, frameDuration);
             }
-        }, 0);
+        }
 
-        // 淡出并销毁
+        // 1秒后淡出并销毁
         this.scheduleOnce(() => {
             if (containerNode && containerNode.isValid) {
                 containerNode.destroy();
             }
-        }, 0.2);
+        }, this.LIGHTNING_DURATION);
     }
 
     /**

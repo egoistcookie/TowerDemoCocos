@@ -49,7 +49,10 @@ export class ThunderTower extends Build {
     thunderChainPrefab: Prefab = null!; // 闪电链预制体
 
     @property(SpriteFrame)
-    lightningTexture: SpriteFrame = null!; // 闪电链贴图（可选，如果有贴图则使用贴图作为攻击轨迹）
+    lightningTexture: SpriteFrame = null!; // 闪电链贴图（可选，向后兼容单张贴图）
+
+    @property([SpriteFrame])
+    lightningTextures: SpriteFrame[] = []; // 闪电链贴图数组（支持多张贴图动画）
 
     @property(AudioClip)
     shootSound: AudioClip = null!; // 闪电射出时的音效
@@ -434,27 +437,6 @@ export class ThunderTower extends Build {
     }
 
     /**
-     * 覆盖die：雷塔占用两个石墙网格，需要同时释放上方网格
-     */
-    protected die() {
-        // 先释放上方网格，再交给父类释放下方网格等通用逻辑
-        if (!this.gridPanel) {
-            this.findGridPanel();
-        }
-        const panel: any = this.gridPanel;
-        if (panel && this.gridX >= 0 && this.gridY >= 0) {
-            if (typeof panel.gridHeight === 'number' &&
-                this.gridY + 1 < panel.gridHeight &&
-                panel.releaseGrid && typeof panel.releaseGrid === 'function') {
-                panel.releaseGrid(this.gridX, this.gridY + 1);
-            }
-        }
-
-        // 调用父类实现（会释放下方网格，并处理其它通用逻辑）
-        super.die();
-    }
-
-    /**
      * 升级按钮点击事件（参考Role的升级机制）
      */
     protected onUpgradeClick(event?: EventTouch) {
@@ -660,11 +642,16 @@ export class ThunderTower extends Build {
             }
         }
 
-        // 处理攻击逻辑
+        // 处理攻击逻辑（使用平方距离比较提高性能）
         if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
-            const distance = Vec3.distance(this.node.worldPosition, this.currentTarget.worldPosition);
+            const myPos = this.node.worldPosition;
+            const targetPos = this.currentTarget.worldPosition;
+            const dx = targetPos.x - myPos.x;
+            const dy = targetPos.y - myPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            const attackRangeSq = this.attackRange * this.attackRange;
             
-            if (distance <= this.attackRange) {
+            if (distanceSq <= attackRangeSq) {
                 if (this.attackTimer >= this.attackInterval) {
                     if (this.gameManager && this.gameManager.getGameState() === GameState.Playing) {
                         this.attack();
@@ -781,8 +768,10 @@ export class ThunderTower extends Build {
             thunderChainScript = chainNode.addComponent(ThunderChain);
         }
 
-        // 设置闪电链贴图（如果有）
-        if (this.lightningTexture) {
+        // 设置闪电链贴图（优先使用多张贴图数组，如果没有则使用单张贴图）
+        if (this.lightningTextures && this.lightningTextures.length > 0) {
+            thunderChainScript.lightningTextures = this.lightningTextures;
+        } else if (this.lightningTexture) {
             thunderChainScript.lightningTexture = this.lightningTexture;
         }
 
