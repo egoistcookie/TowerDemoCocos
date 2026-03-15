@@ -2357,8 +2357,15 @@ export class UIManager extends Component {
         confirmLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         confirmLabel.verticalAlign = Label.VerticalAlign.CENTER;
         
-        // 尝试获取单位图标（使用与loadUnitIconForHint相同的方式）
-        UIManager.loadUnitIconForHintStatic(mvpUnit.unitType, iconSprite);
+        // 尝试获取单位图标：优先使用mvpUnit中已提供的unitIcon，如果没有则通过TalentSystem加载
+        if (mvpUnit.unitIcon) {
+            // 直接使用已提供的图标（最可靠的方式）
+            iconSprite.spriteFrame = mvpUnit.unitIcon;
+            console.log('[UIManager.showTalentHintDialogSecond] 使用mvpUnit.unitIcon直接设置图标');
+        } else {
+            // 如果没有提供图标，尝试通过TalentSystem加载
+            UIManager.loadUnitIconForHintStatic(mvpUnit.unitType, iconSprite);
+        }
         
         // 跳转到天赋页面的辅助函数（不依赖UIManager组件实例）
         const switchToTalentPage = () => {
@@ -2558,8 +2565,15 @@ export class UIManager extends Component {
         confirmLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         confirmLabel.verticalAlign = Label.VerticalAlign.CENTER;
         
-        // 尝试获取单位图标（使用与loadUnitIconForHint相同的方式）
-        UIManager.loadUnitIconForHintStatic(mvpUnit.unitType, iconSprite);
+        // 尝试获取单位图标：优先使用mvpUnit中已提供的unitIcon，如果没有则通过TalentSystem加载
+        if (mvpUnit.unitIcon) {
+            // 直接使用已提供的图标（最可靠的方式）
+            iconSprite.spriteFrame = mvpUnit.unitIcon;
+            console.log('[UIManager.showTalentHintDialogSecond] 使用mvpUnit.unitIcon直接设置图标');
+        } else {
+            // 如果没有提供图标，尝试通过TalentSystem加载
+            UIManager.loadUnitIconForHintStatic(mvpUnit.unitType, iconSprite);
+        }
         
         // 绑定确认按钮点击事件
         confirmButton.node.on(Button.EventType.CLICK, () => {

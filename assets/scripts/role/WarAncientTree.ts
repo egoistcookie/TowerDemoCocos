@@ -560,6 +560,15 @@ export class WarAncientTree extends Build {
                 towerScript.prefabName = 'Arrower';
             }
             
+            // 默认开启穿透箭技能（在节点激活前设置，避免触发不必要的更新）
+            if (typeof towerScript.isPenetrateArrowEnabled === 'boolean') {
+                towerScript.isPenetrateArrowEnabled = true;
+                // 更新技能状态
+                if (typeof towerScript.hasSkill === 'boolean') {
+                    towerScript.hasSkill = true;
+                }
+            }
+            
             // 检查单位是否首次出现
             if (this.gameManager) {
                 const unitType = towerScript.unitType || 'Arrower';
@@ -569,6 +578,23 @@ export class WarAncientTree extends Build {
         
         // 现在激活节点，只触发一次 onEnable()
         tower.active = true;
+        
+        // 节点激活后，确保穿透箭技能已正确初始化（创建蓝条等）
+        if (towerScript && typeof towerScript.isPenetrateArrowEnabled === 'boolean' && towerScript.isPenetrateArrowEnabled) {
+            // 延迟一帧确保 onEnable 已执行完毕
+            this.scheduleOnce(() => {
+                if (towerScript && towerScript.node && towerScript.node.isValid) {
+                    // 触发技能状态更新，确保蓝条和面板正确显示
+                    if (typeof towerScript.hasSkill === 'boolean') {
+                        towerScript.hasSkill = true;
+                    }
+                    // 如果 checkSkill 方法存在，调用它来更新技能状态
+                    if (typeof towerScript.checkSkill === 'function') {
+                        towerScript.checkSkill();
+                    }
+                }
+            }, 0);
+        }
         
         if (towerScript) {
            //console.info(`[WarAncientTree] 生产弓箭手，最终攻击力=${towerScript.attackDamage}, 生命值=${towerScript.maxHealth}`);

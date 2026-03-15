@@ -2,6 +2,7 @@ import { _decorator, SpriteFrame, Prefab, Texture2D, AudioClip, Node, Vec3, find
 import { Role } from './Role';
 import { GameManager, GameState } from '../GameManager';
 import { DamageStatistics } from '../DamageStatistics';
+import { AudioManager } from '../AudioManager';
 import type { UnitInfo } from '../UnitInfoPanel';
 const { ccclass, property } = _decorator;
 
@@ -53,6 +54,9 @@ export class Priest extends Role {
 
     @property({ type: AudioClip, override: true })
     hitSound: AudioClip = null!;
+
+    @property({ type: AudioClip, tooltip: "圣光祈祷技能音效" })
+    holyPrayerSound: AudioClip = null!;
 
     @property({ type: Texture2D, override: true })
     attackAnimationTexture: Texture2D = null!;
@@ -641,6 +645,14 @@ export class Priest extends Role {
             }
             return;
         }
+
+        // 播放圣光祈祷音效（1.5倍音量，使用专用节点避免被其他音效打断）
+        if (this.holyPrayerSound && AudioManager.Instance) {
+            AudioManager.Instance.playHolyPrayerSFX(this.holyPrayerSound, 1.5);
+        }
+
+        // 播放牧师自身的攻击动画（释放祈祷时的动作）
+        this.playAttackAnimation();
         
         // 播放牧师自身的圣光祈祷动画（需要在预制体的 Animation 里配置对应状态名）
         const anim = this.node.getComponent(Animation);
@@ -672,21 +684,29 @@ export class Priest extends Role {
 
         // 魔法阵渐隐 + 内部特效
         if (magicNode && magicNode.isValid) {
-            // 渐隐：从 50% 不透明度到 0%，总时长 10 秒
+            // 魔法阵透明度变化：
+            // 前2秒：从100%透明度（255）到50%透明度（128）
+            // 后8秒：保持10%透明度（26）直到治疗结束
             const uiOpacity = magicNode.getComponent(UIOpacity) || magicNode.addComponent(UIOpacity);
-            uiOpacity.opacity = 128;
+            uiOpacity.opacity = 255; // 初始100%透明度
 
+            // 前2秒：从100%到50%
             tween(uiOpacity)
-                .to(10, { opacity: 0 })
-                .call(() => {
-                    //console.log'[Priest.castHolyPrayer] 魔法阵渐隐结束，销毁节点');
-                    if (magicNode && magicNode.isValid) {
-                        magicNode.destroy();
-                    }
-                    if (this.currentMagicCircleNode === magicNode) {
-                        this.currentMagicCircleNode = null!;
-                    }
-                })
+                .to(2, { opacity: 128 })
+                .then(
+                    // 后8秒：保持10%透明度
+                    tween(uiOpacity)
+                        .to(8, { opacity: 26 })
+                        .call(() => {
+                            //console.log'[Priest.castHolyPrayer] 魔法阵显示结束，销毁节点');
+                            if (magicNode && magicNode.isValid) {
+                                magicNode.destroy();
+                            }
+                            if (this.currentMagicCircleNode === magicNode) {
+                                this.currentMagicCircleNode = null!;
+                            }
+                        })
+                )
                 .start();
 
             // 在魔法阵内部播放牧师配置的圣光祈祷动画帧（如果有配置）
@@ -706,25 +726,47 @@ export class Priest extends Role {
                 effectSprite.sizeMode = Sprite.SizeMode.CUSTOM;
 
                 const frames = this.holyPrayerEffectFrames;
-                const totalDuration = 10; // 与渐隐时间一致
+                const animationDuration = 2; // 动画帧2秒播放完毕
                 const frameCount = frames.length;
-                const frameDuration = totalDuration / frameCount;
+                const frameDuration = animationDuration / frameCount;
 
                 let frameIndex = 0;
                 effectSprite.spriteFrame = frames[frameIndex];
 
-                // 使用 schedule 周期切换帧，在3秒内播完一遍
-                this.schedule(
-                    () => {
-                        if (!effectNode.isValid || !magicNode.isValid) {
-                            return;
+                // 动画帧透明度：从100%到50%
+                const effectOpacity = effectNode.addComponent(UIOpacity);
+                effectOpacity.opacity = 255; // 初始100%透明度
+
+                // 动画帧在2秒内从100%透明度到50%透明度
+                tween(effectOpacity)
+                    .to(2, { opacity: 128 })
+                    .call(() => {
+                        // 2秒后隐藏动画帧节点
+                        if (effectNode && effectNode.isValid) {
+                            effectNode.destroy();
                         }
-                        frameIndex++;
-                        if (frameIndex >= frameCount) {
-                            frameIndex = frameCount - 1; // 停在最后一帧
-                        }
+                    })
+                    .start();
+
+                // 使用 schedule 周期切换帧，在2秒内播完
+                let isAnimationComplete = false;
+                const frameUpdateCallback = () => {
+                    if (!effectNode.isValid || !magicNode.isValid || isAnimationComplete) {
+                        return;
+                    }
+                    frameIndex++;
+                    if (frameIndex >= frameCount) {
+                        // 动画播放完毕，停止切换帧
+                        isAnimationComplete = true;
+                        frameIndex = frameCount - 1; // 停在最后一帧
+                    }
+                    if (effectSprite && effectSprite.node && effectSprite.node.isValid) {
                         effectSprite.spriteFrame = frames[frameIndex];
-                    },
+                    }
+                };
+
+                this.schedule(
+                    frameUpdateCallback,
                     frameDuration,
                     frameCount - 1,
                     frameDuration

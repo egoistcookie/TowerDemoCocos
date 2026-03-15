@@ -27,6 +27,9 @@ export class AudioManager extends Component {
     
     // 音效节点最大数量
     private readonly MAX_SFX_NODES: number = 10;
+
+    // 专用祈祷音效节点（不会被其他音效占用）
+    private holyPrayerSFXNode: Node | null = null;
     
     /**
      * 获取单例实例（只在场景中查找，找不到则打印日志并返回 null）
@@ -128,6 +131,9 @@ export class AudioManager extends Component {
         
         // 初始化音效节点池
         this.initSFXNodes();
+        
+        // 初始化专用祈祷音效节点
+        this.initHolyPrayerSFXNode();
     }
     
     /**
@@ -144,6 +150,21 @@ export class AudioManager extends Component {
             audioSource.volume = this.sfxVolume;
             this.sfxNodes.push(sfxNode);
         }
+    }
+
+    /**
+     * 初始化专用祈祷音效节点（不会被其他音效占用）
+     */
+    private initHolyPrayerSFXNode(): void {
+        if (!this.node || !this.node.isValid) {
+            return;
+        }
+        this.holyPrayerSFXNode = new Node('HolyPrayerSFX');
+        this.holyPrayerSFXNode.setParent(this.node);
+        this.holyPrayerSFXNode.active = true;
+        const audioSource = this.holyPrayerSFXNode.addComponent(AudioSource);
+        audioSource.loop = false;
+        audioSource.volume = this.sfxVolume;
     }
     
     /**
@@ -238,6 +259,77 @@ export class AudioManager extends Component {
         } else {
         }
     }
+
+    /**
+     * 播放音效（可指定音量倍数）
+     * @param clip 音频资源
+     * @param volumeMultiplier 音量倍数（例如 1.5 表示 1.5 倍音量）
+     */
+    public playSFXWithVolume(clip: AudioClip, volumeMultiplier: number = 1.0): void {
+        if (!clip) {
+            return;
+        }
+        
+        // 获取可用的音效节点
+        const sfxNode = this.getAvailableSFXNode();
+        if (!sfxNode) {
+            return;
+        }
+        
+        // 播放音效
+        const audioSource = sfxNode.getComponent(AudioSource);
+        if (audioSource) {
+            // 计算最终音量：基础音量 * 倍数，限制在 0-1 范围内
+            const finalVolume = Math.max(0, Math.min(1, this.sfxVolume * volumeMultiplier));
+            audioSource.playOneShot(clip, finalVolume);
+        }
+    }
+
+    /**
+     * 播放祈祷音效（使用专用节点，不会被其他音效打断）
+     * @param clip 音频资源
+     * @param volumeMultiplier 音量倍数（例如 1.5 表示 1.5 倍音量）
+     */
+    public playHolyPrayerSFX(clip: AudioClip, volumeMultiplier: number = 1.0): void {
+        if (!clip) {
+            return;
+        }
+        
+        // 确保专用祈祷音效节点已初始化
+        if (!this.holyPrayerSFXNode || !this.holyPrayerSFXNode.isValid) {
+            this.initHolyPrayerSFXNode();
+        }
+        
+        if (!this.holyPrayerSFXNode || !this.holyPrayerSFXNode.isValid) {
+            console.warn('[AudioManager] playHolyPrayerSFX() failed: holyPrayerSFXNode is invalid');
+            // 如果专用节点创建失败，降级使用普通音效节点
+            this.playSFXWithVolume(clip, volumeMultiplier);
+            return;
+        }
+        
+        // 使用专用节点播放音效
+        const audioSource = this.holyPrayerSFXNode.getComponent(AudioSource);
+        if (audioSource) {
+            // 先停止当前播放（如果有），确保不会被其他音效打断
+            if (audioSource.playing) {
+                audioSource.stop();
+            }
+            
+            // 计算最终音量：基础音量 * 倍数，限制在 0-1 范围内
+            const finalVolume = Math.max(0, Math.min(1, this.sfxVolume * volumeMultiplier));
+            
+            // 在微信小游戏端，使用 clip + play 方式更可靠，而不是 playOneShot
+            // 因为 playOneShot 可能会被其他音效打断
+            audioSource.clip = clip;
+            audioSource.volume = finalVolume;
+            audioSource.loop = false;
+            audioSource.play();
+        } else {
+            console.warn('[AudioManager] playHolyPrayerSFX() failed: audioSource is null');
+            // 降级使用普通音效节点
+            this.playSFXWithVolume(clip, volumeMultiplier);
+        }
+    }
     
     /**
      * 停止所有音效
@@ -278,6 +370,13 @@ export class AudioManager extends Component {
                 audioSource.volume = this.sfxVolume;
             }
         }
+        // 更新专用祈祷音效节点的音量
+        if (this.holyPrayerSFXNode && this.holyPrayerSFXNode.isValid) {
+            const audioSource = this.holyPrayerSFXNode.getComponent(AudioSource);
+            if (audioSource) {
+                audioSource.volume = this.sfxVolume;
+            }
+        }
     }
     
     /**
@@ -306,6 +405,16 @@ export class AudioManager extends Component {
                 this.bgmAudioSource.stop();
             }
             this.stopAllSFX();
+            
+            // 清理专用祈祷音效节点
+            if (this.holyPrayerSFXNode && this.holyPrayerSFXNode.isValid) {
+                const audioSource = this.holyPrayerSFXNode.getComponent(AudioSource);
+                if (audioSource) {
+                    audioSource.stop();
+                }
+                this.holyPrayerSFXNode.destroy();
+                this.holyPrayerSFXNode = null;
+            }
         }
     }
 }

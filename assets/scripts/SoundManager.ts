@@ -19,7 +19,7 @@ export class SoundManager extends Component {
     private gameBgmClip: AudioClip | null = null;
     private isGameBgmLoading: boolean = false;
 
-    // 主菜单背景音乐（resources/sounds/backMusic.mp3）
+    // 主菜单背景音乐（resources/sounds/backMusic2.mp3）
     private menuBgmClip: AudioClip | null = null;
     private isMenuBgmLoading: boolean = false;
 
@@ -212,12 +212,12 @@ export class SoundManager extends Component {
             return;
         }
 
-       //console.info('[SoundManager] loadMenuBgm() start loading resources/sounds/backMusic');
+       //console.info('[SoundManager] loadMenuBgm() start loading resources/sounds/backMusic2');
         this.isMenuBgmLoading = true;
-        resources.load('sounds/backMusic', AudioClip, (err, clip) => {
+        resources.load('sounds/backMusic2', AudioClip, (err, clip) => {
             this.isMenuBgmLoading = false;
             if (err || !clip) {
-                console.error('[SoundManager] 加载主菜单背景音乐 sounds/backMusic 失败:', err);
+                console.error('[SoundManager] 加载主菜单背景音乐 sounds/backMusic2 失败:', err);
                 return;
             }
             this.menuBgmClip = clip;
