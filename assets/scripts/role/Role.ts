@@ -156,6 +156,8 @@ export class Role extends Component {
     protected moveTarget: Node = null!; // 移动目标（敌人）
     protected isPlayingMoveAnimation: boolean = false; // 是否正在播放移动动画
     protected isPlayingIdleAnimation: boolean = false; // 是否正在播放待机动画
+    // 牧师专用：在最近攻击或受击后的这段时间内禁止播放待机动画（秒）
+    protected idleBlockTimer: number = 0;
     protected idleAnimationOriginalSizeMode: number | null = null; // 待机动画前的原始sizeMode（Sprite.SizeMode枚举值）
     protected idleAnimationOriginalSize: { width: number; height: number } | null = null; // 待机动画前的原始尺寸
     protected idleAnimationOriginalTrim: boolean | null = null; // 待机动画前的原始trim设置
@@ -1033,6 +1035,16 @@ export class Role extends Component {
                 Vec3.scaleAndAdd(pushPos, currentPos, pushDirection, pushDistance);
                 const finalPushPos = this.checkCollisionAndAdjust(currentPos, pushPos);
                 this.node.setWorldPosition(finalPushPos);
+            }
+        }
+
+        // 牧师专用：更新“禁止待机动画”的计时器
+        if (this.constructor && this.constructor.name === 'Priest') {
+            if (this.idleBlockTimer > 0) {
+                this.idleBlockTimer -= deltaTime;
+                if (this.idleBlockTimer < 0) {
+                    this.idleBlockTimer = 0;
+                }
             }
         }
 
@@ -2374,6 +2386,11 @@ export class Role extends Component {
             return;
         }
 
+        // 牧师专用：每次攻击开始时，在2秒内禁止播放待机动画
+        if (this.constructor && this.constructor.name === 'Priest') {
+            this.idleBlockTimer = 2;
+        }
+
         // 进入攻击状态时，不允许显示待机口令
         this.clearIdleSloganDialogIfAny();
 
@@ -2547,7 +2564,13 @@ export class Role extends Component {
     /**
      * 检查并播放待机动画（如果配置了待机动画且角色处于非移动、非攻击状态）
      */
-    private checkAndPlayIdleAnimation() {
+    protected checkAndPlayIdleAnimation() {
+        // 牧师专用：在最近攻击或受击后的2秒内不播放待机动画
+        if (this.constructor && this.constructor.name === 'Priest') {
+            if (this.idleBlockTimer > 0) {
+                return;
+            }
+        }
         // 如果正在移动或攻击，不播放待机动画
         if (this.isMoving || this.isPlayingAttackAnimation || this.isPlayingHitAnimation || this.isPlayingDeathAnimation) {
             return;
@@ -3157,6 +3180,11 @@ export class Role extends Component {
             this.lastHitDirection.normalize();
         }
 
+        // 牧师专用：受到攻击后，在2秒内禁止播放待机动画
+        if (this.constructor && this.constructor.name === 'Priest') {
+            this.idleBlockTimer = 2;
+        }
+
         // 10% 概率触发暴击，实际伤害加成
         const isCritical = Math.random() < 0.1;
         const finalDamage = isCritical ? Math.floor(damage * 1.5) : damage;
@@ -3168,6 +3196,19 @@ export class Role extends Component {
         this.playHitAnimation();
 
         this.currentHealth -= finalDamage;
+
+        // 受击口号：弓箭手 / 女猎手 / 精灵剑士 30% 概率喊“我需要治疗！”或“牧师在哪里？”
+        // 只在仍然存活时触发，避免死亡瞬间重复刷语音
+        if (this.currentHealth > 0) {
+            const nameForSlogan = this.unitName || this.constructor.name;
+            if ((nameForSlogan === '弓箭手' || nameForSlogan === '女猎手' || nameForSlogan === '精灵剑士')
+                && Math.random() < 0.3) {
+                const healSlogans = ['我需要治疗！', '牧师在哪里？'];
+                const idx = Math.floor(Math.random() * healSlogans.length);
+                const text = healSlogans[idx];
+                this.createDialog(text, false);
+            }
+        }
 
         // 更新血条
         if (this.healthBar) {

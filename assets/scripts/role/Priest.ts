@@ -116,6 +116,10 @@ export class Priest extends Role {
     private currentMagicCircleNode: Node | null = null!; // 当前魔法阵节点
     private readonly HOLY_PRAYER_MANA_COST: number = 20; // 每次圣光祈祷消耗的蓝量
 
+    // 自动圣光祈祷相关字段
+    private autoHolyPrayerTimer: number = 0;                  // 自动祈祷计时器
+    private readonly AUTO_HOLY_PRAYER_INTERVAL: number = 10;  // 自动祈祷间隔（秒）
+
     /**
      * 节点启用时：标记拥有技能，让父类创建和更新蓝量条
      */
@@ -128,6 +132,14 @@ export class Priest extends Role {
     update(deltaTime: number) {
         if (this.isDestroyed) {
             return;
+        }
+
+        // 更新牧师专用的“禁止待机动画”计时器
+        if (this.idleBlockTimer > 0) {
+            this.idleBlockTimer -= deltaTime;
+            if (this.idleBlockTimer < 0) {
+                this.idleBlockTimer = 0;
+            }
         }
 
         // 更新蓝量（每秒回复）
@@ -149,6 +161,13 @@ export class Priest extends Role {
         }
 
         this.attackTimer += deltaTime;
+
+        // 自动圣光祈祷计时（只在游戏进行时累计）
+        this.autoHolyPrayerTimer += deltaTime;
+        if (this.autoHolyPrayerTimer >= this.AUTO_HOLY_PRAYER_INTERVAL) {
+            this.autoHolyPrayerTimer = 0;
+            this.tryAutoCastHolyPrayer();
+        }
 
         // 防御状态下，不进行移动，但仍可治疗
         if (this.isDefending) {
@@ -245,6 +264,17 @@ export class Priest extends Role {
         } else {
             // 没有目标
             this.stopMoving();
+        }
+
+        // 牧师脱战后的待机动画检测：完全空闲时尝试播放待机动画
+        if (
+            !this.isMoving &&
+            !this.isPlayingAttackAnimation &&
+            !this.isPlayingHitAnimation &&
+            !this.isPlayingDeathAnimation &&
+            !this.isPlayingIdleAnimation
+        ) {
+            this.checkAndPlayIdleAnimation();
         }
     }
 
@@ -566,8 +596,8 @@ export class Priest extends Role {
             // 使用当前魔法阵的世界坐标作为最终落点
             const worldPos = magicNode.worldPosition.clone();
 
-            // 施放治疗效果
-            this.castHolyPrayer(worldPos, magicNode);
+            // 施放治疗效果（手动释放）
+            this.castHolyPrayer(worldPos, magicNode, false);
 
             // 在 castHolyPrayer 中处理魔法阵的渐隐和销毁
             this.isHolyPrayerActive = false;
@@ -619,7 +649,8 @@ export class Priest extends Role {
             const worldPos = magicNode.worldPosition.clone();
             //console.log'[Priest.startHolyPrayerPlacement] 魔法阵最终世界坐标(鼠标):', worldPos);
 
-            this.castHolyPrayer(worldPos, magicNode);
+            // 手动释放
+            this.castHolyPrayer(worldPos, magicNode, false);
 
             this.isHolyPrayerActive = false;
         };
@@ -647,8 +678,11 @@ export class Priest extends Role {
 
     /**
      * 在指定位置施放圣光祈祷：范围持续治疗 + 牧师自身动画 + 魔法阵渐隐特效
+     * @param centerWorldPos 祈祷中心世界坐标
+     * @param magicNode 魔法阵节点（可选）
+     * @param isAuto 是否为自动释放
      */
-    private castHolyPrayer(centerWorldPos: Vec3, magicNode?: Node | null) {
+    private castHolyPrayer(centerWorldPos: Vec3, magicNode?: Node | null, isAuto: boolean = false) {
         //console.log'[Priest.castHolyPrayer] 开始施放圣光祈祷，中心位置:', centerWorldPos);
 
         // 先尝试消耗蓝量（每次祈祷消耗20点蓝量），蓝量不足时取消施放
@@ -668,8 +702,13 @@ export class Priest extends Role {
             AudioManager.Instance.playHolyPrayerSFX(this.holyPrayerSound, 1.5);
         }
 
-        // 播放牧师自身的攻击动画（释放祈祷时的动作）
-        this.playAttackAnimation();
+        // 播放牧师自身的攻击动画（释放祈祷时的动作，速度减慢一倍 / 三倍）
+        this.playPrayerAttackAnimation();
+        
+        // 自动祈祷时播放固定战斗口号
+        if (isAuto) {
+            this.createDialog('愿圣光庇佑你！', false);
+        }
         
         // 播放牧师自身的圣光祈祷动画（需要在预制体的 Animation 里配置对应状态名）
         const anim = this.node.getComponent(Animation);
@@ -791,6 +830,120 @@ export class Priest extends Role {
             } else {
                 //console.log'[Priest.castHolyPrayer] 未配置 holyPrayerEffectFrames，不在魔法阵内部播放额外特效');
             }
+        }
+    }
+
+    /**
+     * 自动圣光祈祷：每隔固定时间，以最近的受伤友军为中心施放
+     */
+    private tryAutoCastHolyPrayer() {
+        if (this.isDestroyed || this.isHolyPrayerActive) {
+            return;
+        }
+
+        // 查找最近的受伤友军作为中心
+        const center = this.findBestHolyPrayerCenter();
+        if (!center) {
+            return;
+        }
+
+        // 在该位置创建一个魔法阵节点（与手动释放共用视觉效果）
+        const magicNode = this.createHolyPrayerCircleAt(center);
+
+        // 施放圣光祈祷（内部会检查蓝量，不足则直接返回，标记为自动释放）
+        this.castHolyPrayer(center, magicNode, true);
+    }
+
+    /**
+     * 查找用于圣光祈祷的最佳中心点：
+     * 以距离牧师最近的受伤友军为中心
+     */
+    private findBestHolyPrayerCenter(): Vec3 | null {
+        const scene = this.node.scene;
+        if (!scene) {
+            return null;
+        }
+
+        // 使用与寻找治疗目标类似的范围，这里使用 4 倍治疗范围
+        const candidates = this.getFriendlyUnits(true, this.attackRange * 4);
+        if (!candidates || candidates.length === 0) {
+            return null;
+        }
+
+        let nearest: Node | null = null;
+        let minDist = Infinity;
+        const myPos = this.node.worldPosition;
+
+        for (const node of candidates) {
+            const dx = node.worldPosition.x - myPos.x;
+            const dy = node.worldPosition.y - myPos.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < minDist) {
+                minDist = dist;
+                nearest = node;
+            }
+        }
+
+        return nearest ? nearest.worldPosition.clone() : null;
+    }
+
+    /**
+     * 在指定世界坐标创建一个圣光祈祷魔法阵节点（用于自动施放）
+     */
+    private createHolyPrayerCircleAt(centerWorldPos: Vec3): Node | null {
+        const canvas = find('Canvas');
+        if (!canvas) {
+            console.error('[Priest.createHolyPrayerCircleAt] 找不到Canvas节点');
+            return null;
+        }
+        const canvasTransform = canvas.getComponent(UITransform);
+        if (!canvasTransform) {
+            console.error('[Priest.createHolyPrayerCircleAt] Canvas没有UITransform组件');
+            return null;
+        }
+
+        const magicNode = new Node('HolyPrayerCircleAuto');
+        const uiTrans = magicNode.addComponent(UITransform);
+        uiTrans.setContentSize(this.holyPrayerRadius * 2, this.holyPrayerRadius * 2);
+        const sprite = magicNode.addComponent(Sprite);
+        sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        sprite.color = new Color(255, 255, 255, 180);
+
+        magicNode.setParent(canvas);
+
+        // 将世界坐标转换为 Canvas 本地坐标
+        const localPos = canvasTransform.convertToNodeSpaceAR(centerWorldPos);
+        magicNode.setPosition(localPos);
+
+        // 记录当前魔法阵节点，便于后续销毁
+        this.currentMagicCircleNode = magicNode;
+
+        // 加载魔法阵贴图（与手动释放共用）
+        resources.load('textures/mofazhen1/spriteFrame', CCSpriteFrame, (err, sf) => {
+            if (err) {
+                console.error('[Priest.createHolyPrayerCircleAt] 加载圣光祈祷魔法阵贴图失败:', err);
+                return;
+            }
+            if (sprite && sprite.node && sprite.node.isValid) {
+                sprite.spriteFrame = sf;
+            }
+        });
+
+        return magicNode;
+    }
+
+    /**
+     * 仅用于圣光祈祷时的“慢速”攻击动画：
+     * 临时将攻击动画时长加倍，然后调用父类的播放逻辑
+     */
+    private playPrayerAttackAnimation() {
+        const originalDuration = this.attackAnimationDuration;
+        this.attackAnimationDuration = originalDuration * 3;
+        try {
+            super.playAttackAnimation();
+        } finally {
+            // 恢复原始时长，避免影响普通治疗攻击
+            this.attackAnimationDuration = originalDuration;
         }
     }
 
