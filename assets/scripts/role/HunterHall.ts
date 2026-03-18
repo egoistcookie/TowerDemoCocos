@@ -579,6 +579,28 @@ export class HunterHall extends Build {
             }
         }
 
+        // 检查与其他类型友军单位的碰撞（跨类型防重叠）
+        const friendlyContainers: Array<{ nodeName: string; scriptName: string }> = [
+            { nodeName: 'Canvas/Towers', scriptName: 'Arrower' },
+            { nodeName: 'ElfSwordsmans', scriptName: 'ElfSwordsman' },
+            { nodeName: 'Canvas/Towers', scriptName: 'Priest' },
+        ];
+        const crossTypeMinDist = 60; // 跨类型单位最小间距
+        const crossTypeMinDistSq = crossTypeMinDist * crossTypeMinDist;
+        for (const { nodeName, scriptName } of friendlyContainers) {
+            const containerNode = find(nodeName);
+            if (!containerNode) continue;
+            for (const unit of containerNode.children) {
+                if (!unit || !unit.isValid || !unit.active) continue;
+                const unitScript = unit.getComponent(scriptName) as any;
+                if (unitScript && unitScript.isAlive && unitScript.isAlive()) {
+                    const up = unit.worldPosition;
+                    const udx = up.x - position.x, udy = up.y - position.y;
+                    if (udx * udx + udy * udy < crossTypeMinDistSq) return true;
+                }
+            }
+        }
+
         return false;
     }
 

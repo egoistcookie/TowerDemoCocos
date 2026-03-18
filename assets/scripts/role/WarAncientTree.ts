@@ -651,9 +651,10 @@ export class WarAncientTree extends Build {
                             }
                             
                             const currentPos = tower.worldPosition;
-                            const distance = Vec3.distance(currentPos, targetPos);
+                            const mvdx = currentPos.x - targetPos.x, mvdy = currentPos.y - targetPos.y, mvdz = currentPos.z - targetPos.z;
+                            const distanceSq = mvdx * mvdx + mvdy * mvdy + mvdz * mvdz;
                             
-                            if (distance <= 10) {
+                            if (distanceSq <= 10 * 10) {
                                 // 到达目标位置，停止移动
                                 if (towerScript.stopMoving) {
                                     towerScript.stopMoving();
@@ -748,11 +749,12 @@ export class WarAncientTree extends Build {
         // 检查与水晶的碰撞
         const crystal = find('Crystal');
         if (crystal && crystal.isValid && crystal.active) {
-            const distance = Vec3.distance(position, crystal.worldPosition);
+            const crystalPos = crystal.worldPosition;
+            const crdx = position.x - crystalPos.x, crdy = position.y - crystalPos.y, crdz = position.z - crystalPos.z;
             const crystalRadius = 50;
             // 使用安全距离，确保不会重叠
             const minDistance = (radius + crystalRadius) * 1.1;
-            if (distance < minDistance) {
+            if (crdx * crdx + crdy * crdy + crdz * crdz < minDistance * minDistance) {
                 return true;
             }
         }
@@ -770,12 +772,12 @@ export class WarAncientTree extends Build {
                     if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
                         // 获取Tower的实时位置（包括正在移动的Tower）
                         const towerPos = tower.worldPosition;
-                        const distance = Vec3.distance(position, towerPos);
+                        const twdx = position.x - towerPos.x, twdy = position.y - towerPos.y, twdz = position.z - towerPos.z;
                         const otherRadius = towerScript.collisionRadius || radius;
                         // 使用1.2倍的安全距离，确保不会重叠（和Tower的checkCollisionAtPosition保持一致）
                         const minDistance = (radius + otherRadius) * 1.2;
                         
-                        if (distance < minDistance) {
+                        if (twdx * twdx + twdy * twdy + twdz * twdz < minDistance * minDistance) {
                             // 检查是否是自己生产的Tower
                             let isProducedTower = false;
                             for (const producedTower of this.producedTowers) {
@@ -819,11 +821,12 @@ export class WarAncientTree extends Build {
                 if (tree && tree.isValid && tree.active && tree !== this.node) {
                     const treeScript = tree.getComponent('WarAncientTree') as any;
                     if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
-                        const distance = Vec3.distance(position, tree.worldPosition);
+                        const treeWP = tree.worldPosition;
+                        const trdx = position.x - treeWP.x, trdy = position.y - treeWP.y, trdz = position.z - treeWP.z;
                         const treeRadius = 50; // 战争古树的半径
                         // 使用安全距离，确保不会重叠
                         const minDistance = (radius + treeRadius) * 1.1;
-                        if (distance < minDistance) {
+                        if (trdx * trdx + trdy * trdy + trdz * trdz < minDistance * minDistance) {
                             return true;
                         }
                     }
@@ -839,14 +842,37 @@ export class WarAncientTree extends Build {
                 if (enemy && enemy.isValid && enemy.active) {
                     const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
-                        const distance = Vec3.distance(position, enemy.worldPosition);
+                        const enemyWP = enemy.worldPosition;
+                        const emdx = position.x - enemyWP.x, emdy = position.y - enemyWP.y, emdz = position.z - enemyWP.z;
                         const enemyRadius = 30;
                         // 使用安全距离，确保不会重叠
                         const minDistance = (radius + enemyRadius) * 1.1;
-                        if (distance < minDistance) {
+                        if (emdx * emdx + emdy * emdy + emdz * emdz < minDistance * minDistance) {
                             return true;
                         }
                     }
+                }
+            }
+        }
+
+        // 检查与其他类型友军单位的碰撞（跨类型防重叠）
+        const friendlyContainers: Array<{ nodeName: string; scriptName: string }> = [
+            { nodeName: 'Hunters', scriptName: 'Hunter' },
+            { nodeName: 'ElfSwordsmans', scriptName: 'ElfSwordsman' },
+            { nodeName: 'Canvas/Towers', scriptName: 'Priest' },
+        ];
+        const crossTypeMinDist = 60; // 跨类型单位最小间距
+        const crossTypeMinDistSq = crossTypeMinDist * crossTypeMinDist;
+        for (const { nodeName, scriptName } of friendlyContainers) {
+            const containerNode = find(nodeName);
+            if (!containerNode) continue;
+            for (const unit of containerNode.children) {
+                if (!unit || !unit.isValid || !unit.active) continue;
+                const unitScript = unit.getComponent(scriptName) as any;
+                if (unitScript && unitScript.isAlive && unitScript.isAlive()) {
+                    const up = unit.worldPosition;
+                    const udx = up.x - position.x, udy = up.y - position.y;
+                    if (udx * udx + udy * udy < crossTypeMinDistSq) return true;
                 }
             }
         }

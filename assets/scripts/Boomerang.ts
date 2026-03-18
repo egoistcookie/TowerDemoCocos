@@ -220,11 +220,14 @@ export class Boomerang extends Component {
                 const isAlive = enemyScript && typeof enemyScript.isAlive === 'function' && enemyScript.isAlive();
                 
                 if (isAlive) {
-                    // 检查距离
+                    // 检查距离（使用平方距离避免开方运算）
                     const enemyPos = enemy.worldPosition;
-                    const distance = Vec3.distance(centerPos, enemyPos);
+                    const dx = centerPos.x - enemyPos.x;
+                    const dy = centerPos.y - enemyPos.y;
+                    const dz = centerPos.z - enemyPos.z;
+                    const distanceSq = dx * dx + dy * dy + dz * dz;
                     
-                    if (distance <= range) {
+                    if (distanceSq <= range * range) {
                         nearbyEnemies.push(enemy);
                     }
                 }
@@ -250,7 +253,11 @@ export class Boomerang extends Component {
 
         for (const enemy of enemies) {
             if (enemy && enemy.isValid) {
-                const distance = Vec3.distance(currentPos, enemy.worldPosition);
+                const ep = enemy.worldPosition;
+                const edx = currentPos.x - ep.x;
+                const edy = currentPos.y - ep.y;
+                const edz = currentPos.z - ep.z;
+                const distance = edx * edx + edy * edy + edz * edz;
                 
                 if (distance < minDistance) {
                     minDistance = distance;
@@ -411,8 +418,12 @@ export class Boomerang extends Component {
             
             // 检查是否返回女猎手手中
             if (this.ownerNode && this.ownerNode.isValid) {
-                const distanceToOwner = Vec3.distance(currentPos, this.ownerNode.worldPosition);
-                if (distanceToOwner < 20) {
+                const ownerPos = this.ownerNode.worldPosition;
+                const odx = currentPos.x - ownerPos.x;
+                const ody = currentPos.y - ownerPos.y;
+                const odz = currentPos.z - ownerPos.z;
+                const distanceToOwner = odx * odx + ody * ody + odz * odz;
+                if (distanceToOwner < 20 * 20) {
                     // 返回完成
                     this.returnComplete();
                     return;
@@ -487,10 +498,13 @@ export class Boomerang extends Component {
         // 检查是否命中目标
         if (this.targetNode && this.targetNode.isValid && this.targetNode.active) {
             const currentTargetPos = this.targetNode.worldPosition;
-            const distance = Vec3.distance(currentPos, currentTargetPos);
+            const dx = currentPos.x - currentTargetPos.x;
+            const dy = currentPos.y - currentTargetPos.y;
+            const dz = currentPos.z - currentTargetPos.z;
+            const distanceSq = dx * dx + dy * dy + dz * dz;
             
-            // 如果距离足够近，认为命中
-            if (distance < 30) {
+            // 如果距离足够近，认为命中（使用平方距离避免开方运算）
+            if (distanceSq < 30 * 30) {
                 this.hitTarget();
                 return;
             }

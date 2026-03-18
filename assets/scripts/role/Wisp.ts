@@ -174,10 +174,12 @@ export class Wisp extends Role {
 
         // 如果有维修目标
         if (this.repairTarget) {
-            const distance = Vec3.distance(this.node.worldPosition, this.repairTarget.worldPosition);
+            const repairWP = this.repairTarget.worldPosition, selfWP = this.node.worldPosition;
+            const rpdx = selfWP.x - repairWP.x, rpdy = selfWP.y - repairWP.y, rpdz = selfWP.z - repairWP.z;
+            const distanceSq = rpdx * rpdx + rpdy * rpdy + rpdz * rpdz;
             
             // 如果在维修范围内
-            if (distance <= this.repairRange) {
+            if (distanceSq <= this.repairRange * this.repairRange) {
                 // 不要设置 isMoving = false，让父类的移动逻辑继续工作
                 this.isRepairing = true;
                 
@@ -186,7 +188,7 @@ export class Wisp extends Role {
                     this.healTimer = 0;
                     this.repairBuilding();
                 }
-            } else if (distance <= this.searchRange) {
+            } else if (distanceSq <= this.searchRange * this.searchRange) {
                 // 如果在搜索范围内但不在维修范围内，移动到目标附近
                 this.isRepairing = true;
                 this.moveToRepairTarget(this.repairTarget, deltaTime);
@@ -217,7 +219,7 @@ export class Wisp extends Role {
         ];
 
         let nearestTarget: Node = null!;
-        let minDistance = Infinity;
+        let minDistanceSq = Infinity;
 
         for (const containerPath of containers) {
             const container = this.findNodeByPath(containerPath);
@@ -238,9 +240,11 @@ export class Wisp extends Role {
                 const maxHealth = buildingScript.maxHealth || buildingScript.getMaxHealth?.();
                 
                 if (currentHealth !== undefined && maxHealth !== undefined && currentHealth < maxHealth) {
-                    const distance = Vec3.distance(this.node.worldPosition, building.worldPosition);
-                    if (distance <= this.searchRange && distance < minDistance) {
-                        minDistance = distance;
+                    const bldWP = building.worldPosition, wispSelf = this.node.worldPosition;
+                    const bldx = wispSelf.x - bldWP.x, bldy = wispSelf.y - bldWP.y, bldz = wispSelf.z - bldWP.z;
+                    const distSq = bldx * bldx + bldy * bldy + bldz * bldz;
+                    if (distSq <= this.searchRange * this.searchRange && distSq < minDistanceSq) {
+                        minDistanceSq = distSq;
                         nearestTarget = building;
                     }
                 }
@@ -755,9 +759,10 @@ export class Wisp extends Role {
                 if (tree && tree.isValid && tree.active) {
                     const treeScript = tree.getComponent('WarAncientTree') as any;
                     if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
-                        const distance = Vec3.distance(targetPos, tree.worldPosition);
+                        const treeWP = tree.worldPosition;
+                        const trdx = targetPos.x - treeWP.x, trdy = targetPos.y - treeWP.y, trdz = targetPos.z - treeWP.z;
                         // 如果距离建筑物很近（10像素以内），立即依附
-                        if (distance <= attachRange) {
+                        if (trdx * trdx + trdy * trdy + trdz * trdz <= attachRange * attachRange) {
                             // 依附到建筑物
                             this.attachToBuilding(tree);
                             return true;
@@ -789,9 +794,10 @@ export class Wisp extends Role {
                 if (well && well.isValid && well.active) {
                     const wellScript = well.getComponent('MoonWell') as any;
                     if (wellScript && wellScript.isAlive && wellScript.isAlive()) {
-                        const distance = Vec3.distance(targetPos, well.worldPosition);
+                        const wellWP = well.worldPosition;
+                        const wldx = targetPos.x - wellWP.x, wldy = targetPos.y - wellWP.y, wldz = targetPos.z - wellWP.z;
                         // 如果距离建筑物很近（10像素以内），立即依附
-                        if (distance <= attachRange) {
+                        if (wldx * wldx + wldy * wldy + wldz * wldz <= attachRange * attachRange) {
                             // 依附到建筑物
                             this.attachToBuilding(well);
                             return true;
@@ -848,8 +854,9 @@ export class Wisp extends Role {
                 if (tree && tree.isValid && tree.active) {
                     const treeScript = tree.getComponent('WarAncientTree') as any;
                     if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
-                        const distance = Vec3.distance(wispPos, tree.worldPosition);
-                        if (distance <= attachRange) {
+                        const tree2WP = tree.worldPosition;
+                        const tr2dx = wispPos.x - tree2WP.x, tr2dy = wispPos.y - tree2WP.y, tr2dz = wispPos.z - tree2WP.z;
+                        if (tr2dx * tr2dx + tr2dy * tr2dy + tr2dz * tr2dz <= attachRange * attachRange) {
                             // 与战争古树重叠，自动依附
                             this.attachToBuilding(tree);
                             return;
@@ -870,8 +877,9 @@ export class Wisp extends Role {
                 if (well && well.isValid && well.active) {
                     const wellScript = well.getComponent('MoonWell') as any;
                     if (wellScript && wellScript.isAlive && wellScript.isAlive()) {
-                        const distance = Vec3.distance(wispPos, well.worldPosition);
-                        if (distance <= attachRange) {
+                        const well2WP = well.worldPosition;
+                        const wl2dx = wispPos.x - well2WP.x, wl2dy = wispPos.y - well2WP.y, wl2dz = wispPos.z - well2WP.z;
+                        if (wl2dx * wl2dx + wl2dy * wl2dy + wl2dz * wl2dz <= attachRange * attachRange) {
                             // 与月亮井重叠，自动依附
                             this.attachToBuilding(well);
                             return;

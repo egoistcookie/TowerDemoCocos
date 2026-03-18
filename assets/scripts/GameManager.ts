@@ -604,11 +604,13 @@ export class GameManager extends Component {
     private executeReviveOnce() {
         if (this.reviveUsedThisRun) return;
 
-        // 埋点：复活也算一次操作
+        // 埋点：复活也算一次操作（游戏结束后 isRecording 已停止，需强制写入并恢复记录）
         try {
             if (this.analyticsManager) {
                 const gt = this.getGameTime ? this.getGameTime() : 0;
-                this.analyticsManager.recordOperation(OperationType.REVIVE, gt, { mode: 'rewarded_video' });
+                this.analyticsManager.recordOperationForce(OperationType.REVIVE, gt, { mode: 'rewarded_video' });
+                // 恢复记录状态，使复活后的游戏操作继续被记录
+                this.analyticsManager.resumeRecording();
             }
         } catch (e) {
             // 忽略埋点异常

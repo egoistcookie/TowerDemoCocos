@@ -54,6 +54,7 @@ export interface AnalyticsData {
     finalGold: number;             // 最终金币数
     finalPopulation: number;       // 最终人口数
     killCount: number;             // 击杀数
+    reviveCount?: number;          // 复活次数（成功复活，建议由 operations 里统计）
     unitLevels?: Record<string, number>; // 各单位强化等级（unitId -> level）
     sessionId?: number;            // 选卡实时埋点会话ID（首次选卡创建，结束时回填）
 }
@@ -178,6 +179,28 @@ export class AnalyticsManager extends Component {
     }
 
     /**
+     * 恢复记录（用于复活后继续记录游戏操作）
+     */
+    public resumeRecording() {
+        this.isRecording = true;
+        console.log('[AnalyticsManager] 恢复记录（复活）');
+    }
+
+    /**
+     * 强制记录操作（不受 isRecording 状态限制，用于复活等特殊时机）
+     */
+    public recordOperationForce(type: OperationType, gameTime: number, details?: any) {
+        const record: OperationRecord = {
+            type,
+            timestamp: Date.now(),
+            gameTime,
+            details
+        };
+        this.operations.push(record);
+        console.log(`[AnalyticsManager] 强制记录操作: ${type}, 游戏时间: ${gameTime.toFixed(1)}s`);
+    }
+
+    /**
      * 选卡实时上报：
      * - 首次选卡会创建 game_sessions 记录（sessionId）
      * - 每次选卡写入 card_selection_events，并更新 card_selection_summary 聚合表
@@ -263,6 +286,7 @@ export class AnalyticsManager extends Component {
             finalGold,
             finalPopulation,
             killCount,
+            reviveCount: this.operations.reduce((acc, op) => acc + (op?.type === OperationType.REVIVE ? 1 : 0), 0),
             unitLevels,
             sessionId: this.sessionId || undefined
         };
@@ -297,6 +321,7 @@ export class AnalyticsManager extends Component {
                     finalPopulation: analyticsData.finalPopulation,
                     killCount: analyticsData.killCount,
                     operationCount: this.operations.length,
+                    reviveCount: analyticsData.reviveCount || 0,
                     operationsJson: JSON.stringify(this.operations)
                 };
                 await this.sendJson(this.SESSION_END_URL, endPayload);

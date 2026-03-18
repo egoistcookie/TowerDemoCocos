@@ -287,7 +287,9 @@ export class Priest extends Role {
         let minDist = Infinity;
 
         for (const node of candidates) {
-            const dist = Vec3.distance(this.node.worldPosition, node.worldPosition);
+            const np = node.worldPosition, sp = this.node.worldPosition;
+            const ndx = sp.x - np.x, ndy = sp.y - np.y, ndz = sp.z - np.z;
+            const dist = ndx * ndx + ndy * ndy + ndz * ndz;
             if (dist < minDist) {
                 minDist = dist;
                 nearest = node;
@@ -319,8 +321,10 @@ export class Priest extends Role {
 
             const script = arrower || hunter || swordsman || priest;
             if (script) {
-                const dist = Vec3.distance(this.node.worldPosition, node.worldPosition);
-                if (dist <= maxDistance) {
+                const np2 = node.worldPosition, sp2 = this.node.worldPosition;
+                const n2dx = sp2.x - np2.x, n2dy = sp2.y - np2.y, n2dz = sp2.z - np2.z;
+                const dist = n2dx * n2dx + n2dy * n2dy + n2dz * n2dz;
+                if (dist <= maxDistance * maxDistance) {
                     let currentHealth = 0;
                     let maxHealth = 0;
 
@@ -1002,9 +1006,10 @@ export class Priest extends Role {
 
             if (script) {
                 const unitWorldPos = node.worldPosition;
-                const distance = Vec3.distance(unitWorldPos, centerWorldPos);
+                const udx = unitWorldPos.x - centerWorldPos.x, udy = unitWorldPos.y - centerWorldPos.y, udz = unitWorldPos.z - centerWorldPos.z;
+                const distanceSq = udx * udx + udy * udy + udz * udz;
                 
-                if (distance <= radius) {
+                if (distanceSq <= radius * radius) {
                     const maxHealth = script.maxHealth ?? 0;
                     let currentHealth = 0;
                     if (script.getHealth && typeof script.getHealth === 'function') {
@@ -1062,9 +1067,10 @@ export class Priest extends Role {
 
         const towerPos = this.node.worldPosition.clone();
         const targetPos = this.currentTarget.worldPosition;
-        const distance = Vec3.distance(towerPos, targetPos);
+        const atdx = towerPos.x - targetPos.x, atdy = towerPos.y - targetPos.y, atdz = towerPos.z - targetPos.z;
+        const distanceSq = atdx * atdx + atdy * atdy + atdz * atdz;
 
-        if (distance <= this.attackRange) {
+        if (distanceSq <= this.attackRange * this.attackRange) {
             this.stopMoving();
             return;
         }

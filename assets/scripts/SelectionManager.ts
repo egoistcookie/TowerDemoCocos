@@ -484,11 +484,14 @@ export class SelectionManager extends Component {
                     }
                 }
                 
-                // 检查女猎手是否在点击位置附近
+                // 检查女猎手是否在点击位置附近（平方距离）
                 const hunterPos = hunterNode.worldPosition;
-                const distance = Vec3.distance(hunterPos, worldPos);
+                const hdx = hunterPos.x - worldPos.x;
+                const hdy = hunterPos.y - worldPos.y;
+                const hdz = hunterPos.z - worldPos.z;
+                const distanceSq = hdx * hdx + hdy * hdy + hdz * hdz;
                 
-                if (distance <= 100) { // 点击范围扩大到100像素
+                if (distanceSq <= 100 * 100) { // 点击范围扩大到100像素
                     return hunterScript;
                 }
             }
@@ -500,8 +503,10 @@ export class SelectionManager extends Component {
                     const hunterScript = node.getComponent('Hunter') as any;
                     if (hunterScript) {
                         const hunterPos = node.worldPosition;
-                        const distance = Vec3.distance(hunterPos, worldPos);
-                        if (distance <= 100) {
+                        const h2dx = hunterPos.x - worldPos.x;
+                        const h2dy = hunterPos.y - worldPos.y;
+                        const h2dz = hunterPos.z - worldPos.z;
+                        if (h2dx * h2dx + h2dy * h2dy + h2dz * h2dz <= 100 * 100) {
                             return hunterScript;
                         }
                     }
@@ -1157,9 +1162,13 @@ export class SelectionManager extends Component {
                 if (tree && tree.isValid && tree.active) {
                     const treeScript = tree.getComponent('WarAncientTree') as any;
                     if (treeScript && treeScript.isAlive && treeScript.isAlive()) {
-                        const distance = Vec3.distance(worldPos, tree.worldPosition);
+                        const treeWorldPos = tree.worldPosition;
+                        const tdx = worldPos.x - treeWorldPos.x;
+                        const tdy = worldPos.y - treeWorldPos.y;
+                        const tdz = worldPos.z - treeWorldPos.z;
+                        const distanceSq = tdx * tdx + tdy * tdy + tdz * tdz;
                         const collisionRadius = treeScript.collisionRadius || 50;
-                        if (distance <= collisionRadius) {
+                        if (distanceSq <= collisionRadius * collisionRadius) {
                             return tree;
                         }
                     }

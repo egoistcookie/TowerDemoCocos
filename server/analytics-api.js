@@ -96,6 +96,13 @@ app.post('/api/analytics/report', async (req, res) => {
             // 约定：会话通常在首次选卡创建；如果不存在则忽略，不影响原有上报
             if (data.sessionId) {
                 try {
+                    // revive_count：优先使用前端显式提供的 reviveCount，兜底从 operations 里统计 'revive'
+                    const reviveCount =
+                        typeof data.reviveCount === 'number' && !Number.isNaN(data.reviveCount)
+                            ? Math.max(0, Math.floor(data.reviveCount))
+                            : Array.isArray(data.operations)
+                                ? data.operations.filter(op => op && op.type === 'revive').length
+                                : 0;
                     await connection.execute(
                         `UPDATE game_sessions
                          SET end_time = ?,
@@ -106,6 +113,7 @@ app.post('/api/analytics/report', async (req, res) => {
                              final_population = ?,
                              kill_count = ?,
                              operation_count = ?,
+                             revive_count = ?,
                              operations_json = ?
                          WHERE id = ? AND player_id = ? AND level = ?`,
                         [
@@ -117,6 +125,7 @@ app.post('/api/analytics/report', async (req, res) => {
                             data.finalPopulation || 0,
                             data.killCount || 0,
                             data.operations.length,
+                            reviveCount,
                             operationsJson,
                             data.sessionId,
                             data.playerId,
@@ -331,6 +340,16 @@ app.post('/api/analytics/session/end', async (req, res) => {
             return res.status(400).json({ success: false, message: '缺少 sessionId/playerId/level' });
         }
 
+        // revive_count：优先使用前端显式提供的 reviveCount，兜底从 operationsJson 里统计 "type":"revive"
+        let reviveCount = 0;
+        if (typeof b.reviveCount === 'number' && !Number.isNaN(b.reviveCount)) {
+            reviveCount = Math.max(0, Math.floor(b.reviveCount));
+        } else if (typeof b.operationsJson === 'string' && b.operationsJson) {
+            // 粗略统计即可：避免 JSON.parse 带来的异常/开销（服务端只做兜底）
+            const m = b.operationsJson.match(/"type"\s*:\s*"revive"/g);
+            reviveCount = m ? m.length : 0;
+        }
+
         await pool.execute(
             `UPDATE game_sessions
              SET end_time = ?,
@@ -341,6 +360,7 @@ app.post('/api/analytics/session/end', async (req, res) => {
                  final_population = ?,
                  kill_count = ?,
                  operation_count = ?,
+                 revive_count = ?,
                  operations_json = ?
              WHERE id = ? AND player_id = ? AND level = ?`,
             [
@@ -352,6 +372,7 @@ app.post('/api/analytics/session/end', async (req, res) => {
                 b.finalPopulation || 0,
                 b.killCount || 0,
                 b.operationCount || 0,
+                reviveCount,
                 b.operationsJson || null,
                 sessionId,
                 playerId,

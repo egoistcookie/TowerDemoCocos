@@ -1327,11 +1327,12 @@ export class TowerBuilder extends Component {
             }
         }
 
-        // 检查距离水晶的距离（保留原有逻辑作为备用检查）
+        // 检查距离水晶的距离（保留原有逻辑作为备用检查，使用平方距离）
         const crystalPos = this.targetCrystal.worldPosition;
-        const distance = Vec3.distance(position, crystalPos);
+        const cdx = position.x - crystalPos.x, cdy = position.y - crystalPos.y, cdz = position.z - crystalPos.z;
+        const crystalDistSq = cdx * cdx + cdy * cdy + cdz * cdz;
         
-        if (distance < this.minBuildDistance || distance > this.buildRange) {
+        if (crystalDistSq < this.minBuildDistance * this.minBuildDistance || crystalDistSq > this.buildRange * this.buildRange) {
             return false;
         }
 
@@ -1340,8 +1341,9 @@ export class TowerBuilder extends Component {
         const towers = this.towerContainer?.children || [];
         for (const tower of towers) {
             if (tower.active) {
-                const towerDistance = Vec3.distance(position, tower.worldPosition);
-                if (towerDistance < 60) { // 弓箭手之间的最小距离
+                const tp = tower.worldPosition;
+                const tdx = position.x - tp.x, tdy = position.y - tp.y, tdz = position.z - tp.z;
+                if (tdx * tdx + tdy * tdy + tdz * tdz < 60 * 60) { // 弓箭手之间的最小距离
                     return false;
                 }
             }
@@ -1351,8 +1353,9 @@ export class TowerBuilder extends Component {
         const warAncients = this.warAncientTreeContainer?.children || [];
         for (const tree of warAncients) {
             if (tree.active) {
-                const treeDistance = Vec3.distance(position, tree.worldPosition);
-                if (treeDistance < 80) { // 战争古树之间的最小距离（稍大一些）
+                const wp = tree.worldPosition;
+                const wdx = position.x - wp.x, wdy = position.y - wp.y, wdz = position.z - wp.z;
+                if (wdx * wdx + wdy * wdy + wdz * wdz < 80 * 80) { // 战争古树之间的最小距离（稍大一些）
                     return false;
                 }
             }
@@ -1362,8 +1365,9 @@ export class TowerBuilder extends Component {
         const hunterHalls = this.hunterHallContainer?.children || [];
         for (const hall of hunterHalls) {
             if (hall.active) {
-                const hallDistance = Vec3.distance(position, hall.worldPosition);
-                if (hallDistance < 80) { // 猎手大厅之间的最小距离
+                const hp = hall.worldPosition;
+                const hdx = position.x - hp.x, hdy = position.y - hp.y, hdz = position.z - hp.z;
+                if (hdx * hdx + hdy * hdy + hdz * hdz < 80 * 80) { // 猎手大厅之间的最小距离
                     return false;
                 }
             }
@@ -1373,8 +1377,9 @@ export class TowerBuilder extends Component {
         const churches = this.churchContainer?.children || [];
         for (const c of churches) {
             if (c.active) {
-                const d = Vec3.distance(position, c.worldPosition);
-                if (d < 80) { // 教堂之间/与其他建筑的最小距离
+                const cp = c.worldPosition;
+                const chdx = position.x - cp.x, chdy = position.y - cp.y, chdz = position.z - cp.z;
+                if (chdx * chdx + chdy * chdy + chdz * chdz < 80 * 80) { // 教堂之间/与其他建筑的最小距离
                     return false;
                 }
             }
@@ -1384,8 +1389,9 @@ export class TowerBuilder extends Component {
         const stoneWalls = this.stoneWallContainer?.children || [];
         for (const wall of stoneWalls) {
             if (wall.active) {
-                const wallDistance = Vec3.distance(position, wall.worldPosition);
-                if (wallDistance < 80) { // 其他建筑物与石墙的最小距离
+                const swp = wall.worldPosition;
+                const swdx = position.x - swp.x, swdy = position.y - swp.y, swdz = position.z - swp.z;
+                if (swdx * swdx + swdy * swdy + swdz * swdz < 80 * 80) { // 其他建筑物与石墙的最小距离
                     return false;
                 }
             }
@@ -2776,9 +2782,10 @@ export class TowerBuilder extends Component {
             for (const child of container.children) {
                 if (!child.active) continue;
                 
-                // 检查建筑物是否在点击位置附近（考虑碰撞半径）
-                const distance = Vec3.distance(worldPos, child.worldPosition);
-                if (distance < 50) { // 50像素的点击范围
+                // 检查建筑物是否在点击位置附近（考虑碰撞半径，使用平方距离）
+                const cp = child.worldPosition;
+                const bdx = worldPos.x - cp.x, bdy = worldPos.y - cp.y, bdz = worldPos.z - cp.z;
+                if (bdx * bdx + bdy * bdy + bdz * bdz < 50 * 50) { // 50像素的点击范围
                     return child;
                 }
             }

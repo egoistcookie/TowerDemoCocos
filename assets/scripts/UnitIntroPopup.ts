@@ -195,8 +195,30 @@ export class UnitIntroPopup extends Component {
         if (towerBuilderNode) {
             const towerBuilder = towerBuilderNode.getComponent('TowerBuilder') as any;
             if (towerBuilder) {
+                // 清除 TowerBuilder 上的 previewTower 虚影
+                if (towerBuilder.previewTower && towerBuilder.previewTower.isValid) {
+                    towerBuilder.previewTower.destroy();
+                    towerBuilder.previewTower = null;
+                }
                 // 直接关闭建筑物选择面板（立即隐藏，不等待动画）
                 this.hideBuildingPanelImmediately();
+            }
+        }
+
+        // 清除 BuildingSelectionPanel 上的 dragPreview 虚影
+        // 优先通过 TowerBuilder.buildingPanel 直接访问，避免节点路径不稳定
+        if (towerBuilderNode) {
+            const towerBuilder = towerBuilderNode.getComponent('TowerBuilder') as any;
+            if (towerBuilder && towerBuilder.buildingPanel && typeof towerBuilder.buildingPanel.clearDragPreview === 'function') {
+                towerBuilder.buildingPanel.clearDragPreview();
+            }
+        }
+        // 兜底：通过节点名查找
+        const bspNode = find('BuildingSelectionPanel');
+        if (bspNode) {
+            const bsp = bspNode.getComponent('BuildingSelectionPanel') as any;
+            if (bsp && typeof bsp.clearDragPreview === 'function') {
+                bsp.clearDragPreview();
             }
         }
     }
