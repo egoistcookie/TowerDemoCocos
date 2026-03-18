@@ -1,5 +1,6 @@
 import { _decorator, Component, Node, Sprite, Label, Button, find, UITransform, Vec3, tween, Color, UIOpacity, Graphics, view, SpriteFrame, resources, LabelOutline } from 'cc';
 import { BuffManager } from './BuffManager';
+import { AnalyticsManager, OperationType, CardSelectionItem } from './AnalyticsManager';
 const { ccclass, property } = _decorator;
 
 /**
@@ -529,6 +530,26 @@ export class BuffCardPopup extends Component {
      * 执行全部获取逻辑
      */
     private executeGetAll() {
+        // 埋点：全部获取 = 本次选中 cardData.length 张（通常为3张），实时上报
+        try {
+            const analytics = AnalyticsManager.getInstance();
+            const gameTime = this.gameManager && this.gameManager.getGameTime ? this.gameManager.getGameTime() : 0;
+            const cards: CardSelectionItem[] = this.cardData.map((c) => ({
+                unitId: c.unitId,
+                rarity: c.rarity,
+                buffType: c.buffType,
+                buffValue: c.buffValue
+            }));
+            analytics.recordOperation(OperationType.SELECT_BUFF_CARD, gameTime, {
+                mode: 'get_all',
+                selectedCount: cards.length,
+                cards
+            });
+            analytics.reportCardSelection('get_all', cards, gameTime);
+        } catch (e) {
+            // 忽略埋点异常
+        }
+
         // 应用所有三张卡片的增益效果
         for (let i = 0; i < this.cardData.length; i++) {
             this.applyBuff(this.cardData[i]);
@@ -901,6 +922,31 @@ export class BuffCardPopup extends Component {
         }
         
         const cardData = this.cardData[index];
+
+        // 埋点：记录操作 + 实时上报选卡（首次选卡会创建会话记录，后续只更新选卡信息表）
+        try {
+            const analytics = AnalyticsManager.getInstance();
+            const gameTime = this.gameManager && this.gameManager.getGameTime ? this.gameManager.getGameTime() : 0;
+            analytics.recordOperation(OperationType.SELECT_BUFF_CARD, gameTime, {
+                mode: 'single',
+                selectedCount: 1,
+                unitId: cardData.unitId,
+                rarity: cardData.rarity,
+                buffType: cardData.buffType,
+                buffValue: cardData.buffValue
+            });
+
+            const item: CardSelectionItem = {
+                unitId: cardData.unitId,
+                rarity: cardData.rarity,
+                buffType: cardData.buffType,
+                buffValue: cardData.buffValue
+            };
+            // 异步实时上报，不阻塞游戏流程
+            analytics.reportCardSelection('single', [item], gameTime);
+        } catch (e) {
+            // 忽略埋点异常，不影响游戏流程
+        }
         
         // 应用增益效果
         this.applyBuff(cardData);

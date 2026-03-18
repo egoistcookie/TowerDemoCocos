@@ -1516,7 +1516,7 @@ export class UIManager extends Component {
     }
 
     /**
-     * 新手教程：建造按钮高亮闪烁 5 秒（高亮->还原循环），提示玩家点击建造
+     * 新手教程：建造按钮高亮闪烁更长时间（约 10 秒，高亮->还原循环），提示玩家点击建造
      * 进入第一关时调用
      */
     highlightBuildButtonForTutorial() {
@@ -1544,7 +1544,7 @@ export class UIManager extends Component {
             }
         };
 
-        // 高亮 0.5s -> 还原 0.5s，循环 5 次，共 5 秒
+        // 高亮 0.5s -> 还原 0.5s，循环 10 次，共约 10 秒
         const blink = () => {
             setHighlight();
             this.scheduleOnce(() => {
@@ -1552,13 +1552,13 @@ export class UIManager extends Component {
                 setRestore();
             }, 0.5);
         };
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 10; i++) {
             this.scheduleOnce(() => blink(), i * 1.0);
         }
         this.scheduleOnce(() => {
             if (!btnNode.isValid) return;
             setRestore();
-        }, 5.0);
+        }, 10.0);
     }
 
     onRestartButtonClick() {

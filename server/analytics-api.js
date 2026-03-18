@@ -64,7 +64,7 @@ app.post('/api/analytics/report', async (req, res) => {
         await connection.beginTransaction();
         
         try {
-            // 1. 插入游戏记录
+            // 1. 插入游戏记录（原有逻辑：结束时整包上报）
             const operationsJson = JSON.stringify(data.operations);
             // 新增：将各单位强化等级信息作为JSON一起入库（例如 { Arrower: 15, StoneWall: 44 }）
             const unitLevelsJson = data.unitLevels ? JSON.stringify(data.unitLevels) : null;
@@ -91,6 +91,42 @@ app.post('/api/analytics/report', async (req, res) => {
             );
             
             const recordId = insertResult.insertId;
+
+            // 1.1 可选：如果前端带了 sessionId，则在游戏结束时回填 game_sessions（选卡实时埋点用）
+            // 约定：会话通常在首次选卡创建；如果不存在则忽略，不影响原有上报
+            if (data.sessionId) {
+                try {
+                    await connection.execute(
+                        `UPDATE game_sessions
+                         SET end_time = ?,
+                             result = ?,
+                             defend_time = ?,
+                             current_wave = ?,
+                             final_gold = ?,
+                             final_population = ?,
+                             kill_count = ?,
+                             operation_count = ?,
+                             operations_json = ?
+                         WHERE id = ? AND player_id = ? AND level = ?`,
+                        [
+                            data.endTime,
+                            data.result,
+                            data.defendTime,
+                            data.currentWave,
+                            data.finalGold || 0,
+                            data.finalPopulation || 0,
+                            data.killCount || 0,
+                            data.operations.length,
+                            operationsJson,
+                            data.sessionId,
+                            data.playerId,
+                            data.level
+                        ]
+                    );
+                } catch (e) {
+                    console.warn('[Analytics] 回填 game_sessions 失败（将忽略，不影响主流程）:', e?.message || e);
+                }
+            }
             
             // 2. 更新玩家统计
             await connection.execute(
@@ -165,6 +201,168 @@ app.post('/api/analytics/report', async (req, res) => {
             error: error.message,
             timestamp: Date.now()
         });
+    }
+});
+
+/**
+ * 选卡实时埋点：创建/获取会话
+ * POST /api/analytics/session/start
+ * body: { playerId, level, startTime? }
+ * return: { sessionId }
+ */
+app.post('/api/analytics/session/start', async (req, res) => {
+    try {
+        const { playerId, level, startTime } = req.body || {};
+        if (!playerId || !level) {
+            return res.status(400).json({ success: false, message: '缺少 playerId 或 level' });
+        }
+
+        const st = typeof startTime === 'number' && !isNaN(startTime) ? startTime : Date.now();
+        const [result] = await pool.execute(
+            `INSERT INTO game_sessions (player_id, level, start_time)
+             VALUES (?, ?, ?)`,
+            [playerId, level, st]
+        );
+
+        res.json({ success: true, sessionId: result.insertId });
+    } catch (error) {
+        console.error('[Analytics] session/start 失败:', error);
+        res.status(500).json({ success: false, message: '服务器内部错误', error: error.message });
+    }
+});
+
+/**
+ * 选卡实时埋点：上报一次选卡（会写入 events，并更新 summary 聚合表）
+ * POST /api/analytics/session/card-select
+ * body: {
+ *   sessionId?, playerId, level,
+ *   selectionMode: 'single'|'get_all',
+ *   selectedCount: number,
+ *   cards: [{ unitId, rarity, buffType?, buffValue? }],
+ *   eventTime?, gameTime?
+ * }
+ * 若 sessionId 不传，则会自动创建会话（等价于“首次选卡创建游戏与玩家记录”）。
+ */
+app.post('/api/analytics/session/card-select', async (req, res) => {
+    const startTime = Date.now();
+    try {
+        const body = req.body || {};
+        const playerId = body.playerId;
+        const level = body.level;
+        let sessionId = body.sessionId;
+        const selectionMode = body.selectionMode;
+        const selectedCount = body.selectedCount;
+        const cards = Array.isArray(body.cards) ? body.cards : [];
+        const eventTime = typeof body.eventTime === 'number' && !isNaN(body.eventTime) ? body.eventTime : Date.now();
+        const gameTime = typeof body.gameTime === 'number' && !isNaN(body.gameTime) ? body.gameTime : null;
+
+        if (!playerId || !level || !selectionMode || !selectedCount || cards.length === 0) {
+            return res.status(400).json({ success: false, message: '缺少必要参数' });
+        }
+
+        const connection = await pool.getConnection();
+        await connection.beginTransaction();
+        try {
+            // 1) 首次选卡：如果没有 sessionId，则创建会话
+            if (!sessionId) {
+                const [ins] = await connection.execute(
+                    `INSERT INTO game_sessions (player_id, level, start_time)
+                     VALUES (?, ?, ?)`,
+                    [playerId, level, eventTime]
+                );
+                sessionId = ins.insertId;
+            }
+
+            // 2) 写入选卡明细事件
+            const cardsJson = JSON.stringify(cards);
+            await connection.execute(
+                `INSERT INTO card_selection_events (
+                    session_id, player_id, level, event_time, game_time, selection_mode, selected_count, cards_json
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [sessionId, playerId, level, eventTime, gameTime, selectionMode, selectedCount, cardsJson]
+            );
+
+            // 3) 更新选卡汇总（按 session + unit 聚合）
+            for (const c of cards) {
+                if (!c || !c.unitId) continue;
+                const rarity = c.rarity || null;
+                await connection.execute(
+                    `INSERT INTO card_selection_summary (
+                        session_id, player_id, level, unit_id, rarity, pick_times, pick_amount, last_pick_time
+                     ) VALUES (?, ?, ?, ?, ?, 1, 1, ?)
+                     ON DUPLICATE KEY UPDATE
+                        rarity = COALESCE(VALUES(rarity), rarity),
+                        pick_times = pick_times + 1,
+                        pick_amount = pick_amount + 1,
+                        last_pick_time = VALUES(last_pick_time)`,
+                    [sessionId, playerId, level, c.unitId, rarity, eventTime]
+                );
+            }
+
+            await connection.commit();
+            connection.release();
+
+            res.json({
+                success: true,
+                sessionId,
+                processingTime: Date.now() - startTime
+            });
+        } catch (err) {
+            await connection.rollback();
+            connection.release();
+            throw err;
+        }
+    } catch (error) {
+        console.error('[Analytics] session/card-select 失败:', error);
+        res.status(500).json({ success: false, message: '服务器内部错误', error: error.message });
+    }
+});
+
+/**
+ * 选卡实时埋点：会话结束回填（用于“游戏结束时更新操作记录/防御时间/杀敌数等字段”）
+ * POST /api/analytics/session/end
+ * body: { sessionId, playerId, level, endTime, result, defendTime, currentWave, finalGold, finalPopulation, killCount, operationCount, operationsJson? }
+ */
+app.post('/api/analytics/session/end', async (req, res) => {
+    try {
+        const b = req.body || {};
+        const { sessionId, playerId, level } = b;
+        if (!sessionId || !playerId || !level) {
+            return res.status(400).json({ success: false, message: '缺少 sessionId/playerId/level' });
+        }
+
+        await pool.execute(
+            `UPDATE game_sessions
+             SET end_time = ?,
+                 result = ?,
+                 defend_time = ?,
+                 current_wave = ?,
+                 final_gold = ?,
+                 final_population = ?,
+                 kill_count = ?,
+                 operation_count = ?,
+                 operations_json = ?
+             WHERE id = ? AND player_id = ? AND level = ?`,
+            [
+                b.endTime || Date.now(),
+                b.result || null,
+                b.defendTime || 0,
+                b.currentWave || 0,
+                b.finalGold || 0,
+                b.finalPopulation || 0,
+                b.killCount || 0,
+                b.operationCount || 0,
+                b.operationsJson || null,
+                sessionId,
+                playerId,
+                level
+            ]
+        );
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('[Analytics] session/end 失败:', error);
+        res.status(500).json({ success: false, message: '服务器内部错误', error: error.message });
     }
 });
 

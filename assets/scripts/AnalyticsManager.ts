@@ -27,6 +27,7 @@ export enum OperationType {
     RECYCLE_BUILDING = 'recycle_building',           // 回收建筑
     SELECT_BUFF_CARD = 'select_buff_card',           // 选择增益卡片
     USE_TALENT_POINT = 'use_talent_point',           // 使用天赋点
+    REVIVE = 'revive',                               // 复活（失败结算页看视频复活）
 }
 
 /**
@@ -54,6 +55,15 @@ export interface AnalyticsData {
     finalPopulation: number;       // 最终人口数
     killCount: number;             // 击杀数
     unitLevels?: Record<string, number>; // 各单位强化等级（unitId -> level）
+    sessionId?: number;            // 选卡实时埋点会话ID（首次选卡创建，结束时回填）
+}
+
+export type CardSelectionMode = 'single' | 'get_all';
+export interface CardSelectionItem {
+    unitId: string;
+    rarity?: string;
+    buffType?: string;
+    buffValue?: number;
 }
 
 /**
@@ -70,9 +80,13 @@ export class AnalyticsManager extends Component {
     private gameStartTime: number = 0;                // 游戏开始时间
     private isRecording: boolean = false;             // 是否正在记录
     private playerDataManager: PlayerDataManager | null = null; // 玩家数据管理器（用于获取单位强化信息）
+    private sessionId: number | null = null;          // 选卡实时埋点会话ID（首次选卡创建）
     
     // 服务器配置
     private readonly SERVER_URL = 'https://www.egoistcookie.top/api/analytics/report';
+    private readonly SESSION_START_URL = 'https://www.egoistcookie.top/api/analytics/session/start';
+    private readonly CARD_SELECT_URL = 'https://www.egoistcookie.top/api/analytics/session/card-select';
+    private readonly SESSION_END_URL = 'https://www.egoistcookie.top/api/analytics/session/end';
     
     /**
      * 获取单例实例
@@ -132,6 +146,7 @@ export class AnalyticsManager extends Component {
         this.operations = [];
         this.gameStartTime = Date.now();
         this.isRecording = true;
+        this.sessionId = null;
         console.log(`[AnalyticsManager] 开始记录关卡 ${level}`);
     }
     
@@ -160,6 +175,53 @@ export class AnalyticsManager extends Component {
         
         this.operations.push(record);
         console.log(`[AnalyticsManager] 记录操作: ${type}, 游戏时间: ${gameTime.toFixed(1)}s`);
+    }
+
+    /**
+     * 选卡实时上报：
+     * - 首次选卡会创建 game_sessions 记录（sessionId）
+     * - 每次选卡写入 card_selection_events，并更新 card_selection_summary 聚合表
+     */
+    public async reportCardSelection(mode: CardSelectionMode, cards: CardSelectionItem[], gameTimeSeconds?: number): Promise<void> {
+        try {
+            if (!this.isRecording) return;
+            if (!cards || cards.length === 0) return;
+
+            if (!this.sessionId) {
+                this.sessionId = await this.startSessionIfNeeded();
+            }
+
+            const payload = {
+                sessionId: this.sessionId || undefined,
+                playerId: this.playerId,
+                level: this.currentLevel,
+                selectionMode: mode,
+                selectedCount: cards.length,
+                cards,
+                eventTime: Date.now(),
+                gameTime: typeof gameTimeSeconds === 'number' && !isNaN(gameTimeSeconds) ? Math.floor(gameTimeSeconds) : undefined
+            };
+
+            await this.sendJson(this.CARD_SELECT_URL, payload);
+        } catch (e) {
+            console.warn('[AnalyticsManager] reportCardSelection 失败（忽略，不影响游戏）:', e);
+        }
+    }
+
+    private async startSessionIfNeeded(): Promise<number | null> {
+        try {
+            const payload = {
+                playerId: this.playerId,
+                level: this.currentLevel,
+                startTime: Date.now()
+            };
+            const resp = await this.sendJson(this.SESSION_START_URL, payload);
+            const sid = resp && typeof resp.sessionId === 'number' ? resp.sessionId : null;
+            return sid;
+        } catch (e) {
+            console.warn('[AnalyticsManager] startSessionIfNeeded 失败（忽略）:', e);
+            return null;
+        }
     }
     
     /**
@@ -201,7 +263,8 @@ export class AnalyticsManager extends Component {
             finalGold,
             finalPopulation,
             killCount,
-            unitLevels
+            unitLevels,
+            sessionId: this.sessionId || undefined
         };
         
         // 转换为JSON字符串
@@ -217,7 +280,32 @@ export class AnalyticsManager extends Component {
         });
         
         // 发送到服务器
-        return this.sendToServer(jsonData);
+        const ok = await this.sendToServer(jsonData);
+
+        // 如果存在 sessionId，则在结束时回填会话信息（满足“游戏结束时更新操作记录、防御时间、杀敌数等字段”）
+        if (this.sessionId) {
+            try {
+                const endPayload = {
+                    sessionId: this.sessionId,
+                    playerId: this.playerId,
+                    level: this.currentLevel,
+                    endTime: analyticsData.endTime,
+                    result: analyticsData.result,
+                    defendTime: analyticsData.defendTime,
+                    currentWave: analyticsData.currentWave,
+                    finalGold: analyticsData.finalGold,
+                    finalPopulation: analyticsData.finalPopulation,
+                    killCount: analyticsData.killCount,
+                    operationCount: this.operations.length,
+                    operationsJson: JSON.stringify(this.operations)
+                };
+                await this.sendJson(this.SESSION_END_URL, endPayload);
+            } catch (e) {
+                console.warn('[AnalyticsManager] session/end 回填失败（忽略）:', e);
+            }
+        }
+
+        return ok;
     }
     
     /**
@@ -260,6 +348,38 @@ export class AnalyticsManager extends Component {
             console.error('[AnalyticsManager] 发送数据异常:', error);
             return false;
         }
+    }
+
+    /**
+     * 发送JSON并解析返回（用于 session / card-select）
+     */
+    private async sendJson(url: string, data: any): Promise<any> {
+        const jsonData = JSON.stringify(data);
+        return new Promise<any>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.timeout = 5000; // 5秒超时
+
+            xhr.onreadystatechange = () => {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        try {
+                            resolve(xhr.responseText ? JSON.parse(xhr.responseText) : {});
+                        } catch (e) {
+                            resolve({});
+                        }
+                    } else {
+                        reject(new Error(`HTTP ${xhr.status} ${xhr.statusText}`));
+                    }
+                }
+            };
+
+            xhr.onerror = () => reject(new Error('network error'));
+            xhr.ontimeout = () => reject(new Error('timeout'));
+
+            xhr.open('POST', url, true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.send(jsonData);
+        });
     }
     
     /**

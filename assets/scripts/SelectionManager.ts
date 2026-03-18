@@ -24,6 +24,8 @@ export class SelectionManager extends Component {
     private selectedPriests: Priest[] = []; // 选中的牧师数组
     private camera: Camera = null!; // 相机引用
     private globalTouchHandler: ((event: EventTouch) => void) | null = null!; // 全局触摸事件处理器
+    private touchStartTime: number = 0; // 本次触摸开始时间
+    private hasActiveTouchStart: boolean = false;     // 是否收到对应的TOUCH_START（用于过滤不完整事件序列）
 
     start() {
         // 查找Canvas
@@ -181,8 +183,10 @@ export class SelectionManager extends Component {
         
         this.startPos = worldPos.clone();
         this.currentPos = worldPos.clone();
-        // 不立即开始选择，等待触摸移动超过一定距离
+        // 不立即开始选择，等待“长按 + 移动”
         this.isSelecting = false;
+        this.touchStartTime = Date.now();
+        this.hasActiveTouchStart = true;
 
 
         // 不立即显示选择框，等待触摸移动
@@ -201,6 +205,10 @@ export class SelectionManager extends Component {
      * 触摸移动
      */
     onTouchMove(event: EventTouch) {
+        // 如果没有对应的 TOUCH_START（例如某些单位自己的点击逻辑只监听了 END），则不处理框选逻辑
+        if (!this.hasActiveTouchStart) {
+            return;
+        }
         // 优先检查是否在建造模式下（如果是，完全不处理）
         const buildingMode = this.isBuildingMode();
         
@@ -227,10 +235,14 @@ export class SelectionManager extends Component {
             // 计算移动距离
             const deltaX = Math.abs(this.currentPos.x - this.startPos.x);
             const deltaY = Math.abs(this.currentPos.y - this.startPos.y);
-            
-            // 只有当移动距离超过一定阈值时才开始选择
+
+            // 只有当“按住时间足够长 + 移动距离超过一定阈值”时才开始框选
             const SELECTION_THRESHOLD = 20; // 选择阈值，单位：像素
-            if (deltaX > SELECTION_THRESHOLD || deltaY > SELECTION_THRESHOLD) {
+            const LONG_PRESS_THRESHOLD_MS = 600; // 长按阈值（毫秒），适当延长，降低误触
+            const pressDuration = Date.now() - this.touchStartTime;
+
+            if (pressDuration >= LONG_PRESS_THRESHOLD_MS &&
+                (deltaX > SELECTION_THRESHOLD || deltaY > SELECTION_THRESHOLD)) {
                 this.isSelecting = true;
                 // 显示选择框
                 if (this.selectionBox && this.selectionBox.isValid) {
@@ -238,7 +250,8 @@ export class SelectionManager extends Component {
                     this.selectionBox.setWorldPosition(this.startPos);
                 }
             } else {
-                return; // 移动距离太小，不处理选择
+                // 未达到长按或移动距离阈值，不进入框选模式
+                return;
             }
         }
 
@@ -267,7 +280,9 @@ export class SelectionManager extends Component {
      * 触摸结束
      */
     onTouchEnd(event: EventTouch) {
-        
+        // 本次触摸序列结束
+        this.hasActiveTouchStart = false;
+
         // 检查是否有选中的单位（防御塔、女猎手或精灵剑士）
         const hasSelectedUnits = this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedSwordsmen.length > 0 || this.selectedPriests.length > 0;
         
@@ -749,6 +764,7 @@ export class SelectionManager extends Component {
             this.globalTouchHandler = null!;
         }
     }
+
 
 
     /**

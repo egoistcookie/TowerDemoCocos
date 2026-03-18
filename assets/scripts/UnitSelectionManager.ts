@@ -41,9 +41,22 @@ export class UnitSelectionManager extends Component {
            //console.info('[UnitSelectionManager.onGlobalTouchEnd] 没有选中任何单位，直接返回');
             return;
         }
+
+        // 如果本次触摸是明显的拖拽（例如用于框选），则不在触摸结束时清除选择，避免多选面板一闪而过
+        const startPos = event.getStartLocation();
+        const endPos = event.getLocation();
+        const dx = endPos.x - startPos.x;
+        const dy = endPos.y - startPos.y;
+        const dragDistanceSq = dx * dx + dy * dy;
+        const DRAG_THRESHOLD = 15; // 拖拽阈值（像素）
+        const dragThresholdSq = DRAG_THRESHOLD * DRAG_THRESHOLD;
+        if (dragDistanceSq > dragThresholdSq) {
+           //console.info('[UnitSelectionManager.onGlobalTouchEnd] 检测到拖拽结束（例如框选），不清除选择');
+            return;
+        }
         
         // 检查点击位置是否在当前选中的单位上
-        const touchLocation = event.getLocation();
+        const touchLocation = endPos;
         const cameraNode = find('Canvas/Camera');
         if (!cameraNode) {
             return;

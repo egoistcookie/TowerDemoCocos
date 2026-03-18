@@ -18,7 +18,7 @@ import { WarAncientTree } from './role/WarAncientTree';
 import { ForestGridPanel } from './ForestGridPanel';
 import { SoundManager } from './SoundManager';
 import { BuffManager } from './BuffManager';
-import { AnalyticsManager } from './AnalyticsManager';
+import { AnalyticsManager, OperationType } from './AnalyticsManager';
 import { PlayerProfilePopup } from './PlayerProfilePopup';
 const { ccclass, property } = _decorator;
 
@@ -603,6 +603,16 @@ export class GameManager extends Component {
      */
     private executeReviveOnce() {
         if (this.reviveUsedThisRun) return;
+
+        // 埋点：复活也算一次操作
+        try {
+            if (this.analyticsManager) {
+                const gt = this.getGameTime ? this.getGameTime() : 0;
+                this.analyticsManager.recordOperation(OperationType.REVIVE, gt, { mode: 'rewarded_video' });
+            }
+        } catch (e) {
+            // 忽略埋点异常
+        }
 
         this.reviveUsedThisRun = true;
         this.hideReviveButton();

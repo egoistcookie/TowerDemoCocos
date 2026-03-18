@@ -286,6 +286,72 @@ ORDER BY level;
 -- ORDER BY total_count DESC;
 
 -- ============================================
+-- 选卡实时埋点：游戏会话 + 选卡信息表
+-- 目标：
+-- 1) 首次选卡创建“游戏与玩家记录”（game_sessions）
+-- 2) 第二次及往后的选卡只更新“选卡信息表”（card_selection_summary），并可选记录明细（card_selection_events）
+-- 3) 游戏结束时更新会话字段：操作记录（operations_json）、防御时间、杀敌数等
+-- 4) 复活也算一次操作（可在 operations_json 里体现，同时 revive_count 字段单独统计）
+-- ============================================
+
+-- 游戏会话表：一局游戏（可从首次选卡开始创建，也可从开局创建）
+CREATE TABLE IF NOT EXISTS game_sessions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '会话ID（本局游戏）',
+    player_id VARCHAR(100) NOT NULL COMMENT '玩家ID',
+    level INT NOT NULL COMMENT '关卡数',
+    start_time BIGINT NOT NULL COMMENT '开始时间戳（毫秒）',
+    end_time BIGINT DEFAULT NULL COMMENT '结束时间戳（毫秒）',
+    result ENUM('success', 'fail') DEFAULT NULL COMMENT '游戏结果：success-通关，fail-失败',
+    defend_time INT DEFAULT 0 COMMENT '已防御时间（秒）',
+    current_wave INT DEFAULT 0 COMMENT '结束时波次',
+    final_gold INT DEFAULT 0 COMMENT '结束时金币',
+    final_population INT DEFAULT 0 COMMENT '结束时人口',
+    kill_count INT DEFAULT 0 COMMENT '击杀数',
+    operation_count INT DEFAULT 0 COMMENT '操作次数（可从 operations_json.length 写入）',
+    revive_count INT DEFAULT 0 COMMENT '复活次数（成功复活）',
+    operations_json TEXT DEFAULT NULL COMMENT '操作序列JSON字符串（结束时写入）',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_session_player_level (player_id, level),
+    INDEX idx_session_start_time (start_time),
+    INDEX idx_session_end_time (end_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='游戏会话（用于选卡实时埋点/结束回填）';
+
+-- 选卡汇总表：按 session + card 聚合（第二次及以后只需要更新这张表即可）
+CREATE TABLE IF NOT EXISTS card_selection_summary (
+    session_id BIGINT NOT NULL COMMENT '会话ID',
+    player_id VARCHAR(100) NOT NULL COMMENT '玩家ID（冗余，便于查询）',
+    level INT NOT NULL COMMENT '关卡数（冗余）',
+    unit_id VARCHAR(100) NOT NULL COMMENT '卡片单位ID',
+    rarity VARCHAR(10) DEFAULT NULL COMMENT '稀有度（R/SR/SSR/UR，可选）',
+    pick_times INT DEFAULT 0 COMMENT '被选择次数（选到一次+1；全部获取则每张+1）',
+    pick_amount INT DEFAULT 0 COMMENT '被选择数量（目前与 pick_times 一致，预留将来“选多张同卡”的扩展）',
+    last_pick_time BIGINT DEFAULT NULL COMMENT '最后一次选择时间戳（毫秒）',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (session_id, unit_id),
+    INDEX idx_css_player (player_id),
+    INDEX idx_css_level (level),
+    INDEX idx_css_last_pick_time (last_pick_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='选卡信息汇总（按会话聚合）';
+
+-- 选卡明细表：每次选卡记录一行（可选，便于回溯“每次选了什么/选了多少”）
+CREATE TABLE IF NOT EXISTS card_selection_events (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '事件ID',
+    session_id BIGINT NOT NULL COMMENT '会话ID',
+    player_id VARCHAR(100) NOT NULL COMMENT '玩家ID（冗余）',
+    level INT NOT NULL COMMENT '关卡数（冗余）',
+    event_time BIGINT NOT NULL COMMENT '事件时间戳（毫秒）',
+    game_time INT DEFAULT NULL COMMENT '游戏内时间（秒，取整）',
+    selection_mode VARCHAR(20) NOT NULL COMMENT '选择模式：single/get_all',
+    selected_count INT NOT NULL COMMENT '本次选择卡片数量（1或3）',
+    cards_json TEXT NOT NULL COMMENT '本次选择的卡片列表JSON（包含 unitId/rarity/buffType/buffValue 等）',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_cse_session_time (session_id, event_time),
+    INDEX idx_cse_player (player_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='选卡明细事件表（每次选卡一条）';
+
+-- ============================================
 -- 数据库连接配置说明
 -- ============================================
 -- 主机: www.egoistcookie.top (或 localhost)
