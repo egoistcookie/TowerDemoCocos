@@ -156,7 +156,7 @@ export class Role extends Component {
     protected moveTarget: Node = null!; // 移动目标（敌人）
     protected isPlayingMoveAnimation: boolean = false; // 是否正在播放移动动画
     protected isPlayingIdleAnimation: boolean = false; // 是否正在播放待机动画
-    // 牧师专用：在最近攻击或受击后的这段时间内禁止播放待机动画（秒）
+    // 在最近攻击或受击后的这段时间内禁止播放待机动画（秒）
     protected idleBlockTimer: number = 0;
     protected idleAnimationOriginalSizeMode: number | null = null; // 待机动画前的原始sizeMode（Sprite.SizeMode枚举值）
     protected idleAnimationOriginalSize: { width: number; height: number } | null = null; // 待机动画前的原始尺寸
@@ -1038,13 +1038,11 @@ export class Role extends Component {
             }
         }
 
-        // 牧师专用：更新“禁止待机动画”的计时器
-        if (this.constructor && this.constructor.name === 'Priest') {
-            if (this.idleBlockTimer > 0) {
-                this.idleBlockTimer -= deltaTime;
-                if (this.idleBlockTimer < 0) {
-                    this.idleBlockTimer = 0;
-                }
+        // 更新“禁止待机动画”的计时器（攻击/受击后短暂停播待机动画）
+        if (this.idleBlockTimer > 0) {
+            this.idleBlockTimer -= deltaTime;
+            if (this.idleBlockTimer < 0) {
+                this.idleBlockTimer = 0;
             }
         }
 
@@ -2386,10 +2384,8 @@ export class Role extends Component {
             return;
         }
 
-        // 牧师专用：每次攻击开始时，在2秒内禁止播放待机动画
-        if (this.constructor && this.constructor.name === 'Priest') {
-            this.idleBlockTimer = 2;
-        }
+        // 每次攻击开始时，在2秒内禁止播放待机动画
+        this.idleBlockTimer = 2;
 
         // 进入攻击状态时，不允许显示待机口令
         this.clearIdleSloganDialogIfAny();
@@ -2565,11 +2561,9 @@ export class Role extends Component {
      * 检查并播放待机动画（如果配置了待机动画且角色处于非移动、非攻击状态）
      */
     protected checkAndPlayIdleAnimation() {
-        // 牧师专用：在最近攻击或受击后的2秒内不播放待机动画
-        if (this.constructor && this.constructor.name === 'Priest') {
-            if (this.idleBlockTimer > 0) {
-                return;
-            }
+        // 在最近攻击或受击后的这段时间内不播放待机动画
+        if (this.idleBlockTimer > 0) {
+            return;
         }
         // 如果正在移动或攻击，不播放待机动画
         if (this.isMoving || this.isPlayingAttackAnimation || this.isPlayingHitAnimation || this.isPlayingDeathAnimation) {
@@ -3180,10 +3174,8 @@ export class Role extends Component {
             this.lastHitDirection.normalize();
         }
 
-        // 牧师专用：受到攻击后，在2秒内禁止播放待机动画
-        if (this.constructor && this.constructor.name === 'Priest') {
-            this.idleBlockTimer = 2;
-        }
+        // 受到攻击后，在2秒内禁止播放待机动画
+        this.idleBlockTimer = 2;
 
         // 10% 概率触发暴击，实际伤害加成
         const isCritical = Math.random() < 0.1;

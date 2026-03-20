@@ -249,7 +249,9 @@ export class FeedbackPopup extends Component {
         contentNode.setParent(viewNode);
         const listTr = contentNode.addComponent(UITransform);
         listTr.setContentSize(w - 40, h - 300);
-        contentNode.setPosition(0, (h - 300) / 2, 0);
+        // ScrollView 内部默认采用居中锚点时，content 初始位置应为 0；
+        // 渲染时会根据 viewH 与 contentH 重新精确对齐，避免滚动到边界后“卡住”。
+        contentNode.setPosition(0, 0, 0);
         this.listContent = contentNode;
 
         const sv = svNode.addComponent(ScrollView);
@@ -314,11 +316,19 @@ export class FeedbackPopup extends Component {
         }
 
         const w = this.listContent.getComponent(UITransform)?.width || 600;
+        const viewH = this.scrollView?.view?.getComponent(UITransform)?.height || 400;
         const itemW = w - 20;
         const itemH = 140;
         const gap = 16;
 
-        let y = -20;
+        // content 居中锚点时，对齐策略：让 content 顶部与 view 顶部重合
+        // contentPosY + contentH/2 = viewH/2  => contentPosY = (viewH - contentH)/2
+        const contentH = Math.max((itemH + gap) * items.length + 40, viewH);
+        this.listContent.getComponent(UITransform)?.setContentSize(w, contentH);
+        this.listContent.setPosition(0, (viewH - contentH) / 2, 0);
+
+        // 从 content 顶部向下铺排 item（坐标系 y 向上为正）
+        let y = contentH / 2 - itemH / 2 - 20;
         for (const it of items) {
             const itemNode = new Node(`Feedback_${it.id}`);
             itemNode.setParent(this.listContent);
@@ -367,11 +377,6 @@ export class FeedbackPopup extends Component {
             agreeCnt.string = `${it.agree_count || 0}`;
             disCnt.string = `${it.disagree_count || 0}`;
         }
-
-        // 更新 content 高度
-        const totalH = Math.max((itemH + gap) * items.length + 40, this.scrollView.view.getComponent(UITransform)?.height || 400);
-        this.listContent.getComponent(UITransform)?.setContentSize(w, totalH);
-        this.listContent.setPosition(0, totalH / 2, 0);
     }
 
     private createSmallBtn(parent: Node, text: string, x: number, y: number, color: Color): Button {
@@ -579,7 +584,8 @@ export class FeedbackPopup extends Component {
         const contentNode = new Node('Content');
         contentNode.setParent(viewNode);
         contentNode.addComponent(UITransform).setContentSize(w - 40, h - 300);
-        contentNode.setPosition(0, (h - 300) / 2, 0);
+        // 同 renderList：content 初始位置应为 0，渲染时按 viewH 对齐。
+        contentNode.setPosition(0, 0, 0);
 
         const sv = svNode.addComponent(ScrollView);
         sv.content = contentNode;
@@ -631,7 +637,13 @@ export class FeedbackPopup extends Component {
         const itemW = w - 20;
         const baseH = 90;
         const gap = 12;
-        let y = -20;
+
+        const viewH = this.commentsScroll?.view?.getComponent(UITransform)?.height || 400;
+        const contentH = Math.max((baseH + gap) * items.length + 40, viewH);
+        this.commentsList.getComponent(UITransform)?.setContentSize(w, contentH);
+        this.commentsList.setPosition(0, (viewH - contentH) / 2, 0);
+
+        let y = contentH / 2 - baseH / 2 - 20;
 
         for (const it of items) {
             const n = new Node(`C_${it.id}`);
@@ -659,10 +671,6 @@ export class FeedbackPopup extends Component {
             lb.overflow = Label.Overflow.RESIZE_HEIGHT;
         }
 
-        const viewH = this.commentsScroll.view.getComponent(UITransform)?.height || 400;
-        const totalH = Math.max((baseH + gap) * items.length + 40, viewH);
-        this.commentsList.getComponent(UITransform)?.setContentSize(w, totalH);
-        this.commentsList.setPosition(0, totalH / 2, 0);
     }
 
     private async getJson(path: string): Promise<any> {

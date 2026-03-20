@@ -1066,6 +1066,9 @@ export class Wisp extends Role {
             return;
         }
 
+        // 被攻击后短暂停播待机动画（与 Role/Priest 的 idleBlockTimer 机制保持一致）
+        this.idleBlockTimer = 2;
+
         this.currentHealth -= damage;
 
         // 更新单位信息面板
