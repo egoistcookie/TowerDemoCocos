@@ -12,6 +12,7 @@ import { GamePopup } from './GamePopup';
 import { WeChatShareManager } from './WeChatShareManager';
 import { LevelPassRateLabel } from './LevelPassRateLabel';
 import { UnitConfigManager } from './UnitConfigManager';
+import { FeedbackPopup } from './FeedbackPopup';
 
 const { ccclass, property } = _decorator;
 
@@ -896,6 +897,55 @@ export class UIManager extends Component {
                 }
             }
         }
+
+        // 反馈意见按钮（设置页互动入口）
+        const feedbackItem = new Node('SettingItemFeedback');
+        feedbackItem.setParent(settingsList);
+        // 放在现有开关项的下方
+        const feedbackY = settingStartY - settingNames.length * (settingItemHeight + settingItemSpacing);
+        feedbackItem.setPosition(0, feedbackY, 0);
+
+        const feedbackBg = feedbackItem.addComponent(Graphics);
+        const feedbackWidth = panelWidth * 0.8;
+        feedbackBg.fillColor = new Color(100, 100, 100, 120);
+        feedbackBg.roundRect(-feedbackWidth / 2, -settingItemHeight / 2, feedbackWidth, settingItemHeight, 12);
+        feedbackBg.fill();
+        feedbackBg.lineWidth = 2;
+        feedbackBg.strokeColor = new Color(150, 150, 150, 180);
+        feedbackBg.roundRect(-feedbackWidth / 2, -settingItemHeight / 2, feedbackWidth, settingItemHeight, 12);
+        feedbackBg.stroke();
+
+        const feedbackNameNode = new Node('SettingName');
+        feedbackNameNode.setParent(feedbackItem);
+        feedbackNameNode.setPosition(-feedbackWidth / 4, 0, 0);
+        const feedbackLabel = feedbackNameNode.addComponent(Label);
+        feedbackLabel.string = '反馈意见';
+        feedbackLabel.fontSize = 28;
+        feedbackLabel.color = new Color(255, 255, 255, 255);
+        feedbackLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
+        feedbackLabel.verticalAlign = Label.VerticalAlign.CENTER;
+
+        const feedbackBtnNode = new Node('FeedbackButton');
+        feedbackBtnNode.setParent(feedbackItem);
+        feedbackBtnNode.setPosition(feedbackWidth / 4, 0, 0);
+        feedbackBtnNode.addComponent(UITransform).setContentSize(160, 50);
+        const fbg = feedbackBtnNode.addComponent(Graphics);
+        fbg.fillColor = new Color(80, 160, 255, 255);
+        fbg.roundRect(-80, -25, 160, 50, 10);
+        fbg.fill();
+        const fbtn = feedbackBtnNode.addComponent(Button);
+        const fln = new Node('Label');
+        fln.setParent(feedbackBtnNode);
+        fln.addComponent(UITransform).setContentSize(160, 50);
+        const fl = fln.addComponent(Label);
+        fl.string = '打开';
+        fl.fontSize = 20;
+        fl.color = new Color(255, 255, 255, 255);
+        fl.horizontalAlign = Label.HorizontalAlign.CENTER;
+        fl.verticalAlign = Label.VerticalAlign.CENTER;
+        fbtn.node.on(Button.EventType.CLICK, () => {
+            FeedbackPopup.show();
+        }, this);
         
         // 4. 创建底部标签页按钮容器 - 位于画面最底部
         const buttonContainer = new Node('ButtonContainer');

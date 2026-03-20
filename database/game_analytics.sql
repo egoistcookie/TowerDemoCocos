@@ -352,6 +352,47 @@ CREATE TABLE IF NOT EXISTS card_selection_events (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='选卡明细事件表（每次选卡一条）';
 
 -- ============================================
+-- 玩家反馈：反馈信息表 + 投票表 + 评论表
+-- 说明：
+-- - player_id 作为“外键语义”（不强制 FK 约束，避免线上维护复杂度）
+-- - 投票表用于防止同一玩家对同一条反馈重复投票
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS player_feedback (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '反馈ID',
+    player_id VARCHAR(100) NOT NULL COMMENT '玩家ID',
+    content TEXT NOT NULL COMMENT '反馈内容',
+    agree_count INT DEFAULT 0 COMMENT '赞同数',
+    disagree_count INT DEFAULT 0 COMMENT '不赞同数',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_pf_created_at (created_at),
+    INDEX idx_pf_player (player_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='玩家反馈信息表';
+
+CREATE TABLE IF NOT EXISTS player_feedback_votes (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '投票ID',
+    feedback_id BIGINT NOT NULL COMMENT '反馈ID',
+    player_id VARCHAR(100) NOT NULL COMMENT '投票玩家ID',
+    vote ENUM('agree', 'disagree') NOT NULL COMMENT '投票类型',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    UNIQUE KEY uk_feedback_player (feedback_id, player_id),
+    INDEX idx_pfv_feedback (feedback_id),
+    INDEX idx_pfv_player (player_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='玩家反馈投票表（去重）';
+
+CREATE TABLE IF NOT EXISTS player_feedback_comments (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '评论ID',
+    feedback_id BIGINT NOT NULL COMMENT '反馈ID',
+    player_id VARCHAR(100) NOT NULL COMMENT '评论玩家ID',
+    content TEXT NOT NULL COMMENT '评论内容',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_pfc_feedback (feedback_id),
+    INDEX idx_pfc_created_at (created_at),
+    INDEX idx_pfc_player (player_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='玩家反馈评论表';
+
+-- ============================================
 -- 数据库连接配置说明
 -- ============================================
 -- 主机: www.egoistcookie.top (或 localhost)

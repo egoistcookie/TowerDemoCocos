@@ -917,6 +917,173 @@ app.get('/api/analytics/player/:playerId/profile', async (req, res) => {
     }
 });
 
+/**
+ * ============================
+ * 玩家反馈（设置页互动）
+ * ============================
+ */
+
+// 提交反馈
+// POST /api/feedback/create
+// POST /api/analytics/feedback/create
+// body: { playerId, content }
+async function handleFeedbackCreate(req, res) {
+    try {
+        const { playerId, content } = req.body || {};
+        if (!playerId || !content || typeof content !== 'string' || content.trim().length === 0) {
+            return res.status(400).json({ success: false, message: '缺少 playerId 或 content' });
+        }
+        const text = content.trim().slice(0, 2000);
+        const [result] = await pool.execute(
+            `INSERT INTO player_feedback (player_id, content) VALUES (?, ?)`,
+            [playerId, text]
+        );
+        res.json({ success: true, feedbackId: result.insertId });
+    } catch (error) {
+        console.error('[Feedback] create 失败:', error);
+        res.status(500).json({ success: false, message: '服务器内部错误', error: error.message });
+    }
+}
+app.post('/api/feedback/create', handleFeedbackCreate);
+app.post('/api/analytics/feedback/create', handleFeedbackCreate);
+
+// 获取反馈列表（全量按时间倒序，默认取前100条）
+// GET /api/feedback/list?limit=100
+// GET /api/analytics/feedback/list?limit=100
+async function handleFeedbackList(req, res) {
+    try {
+        let limit = parseInt(req.query.limit);
+        if (isNaN(limit) || limit <= 0) limit = 100;
+        limit = Math.min(limit, 200);
+
+        const [rows] = await pool.execute(
+            `SELECT id, player_id, content, agree_count, disagree_count, created_at
+             FROM player_feedback
+             ORDER BY created_at DESC
+             LIMIT ${limit}`
+        );
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        console.error('[Feedback] list 失败:', error);
+        res.status(500).json({ success: false, message: '服务器内部错误', error: error.message });
+    }
+}
+app.get('/api/feedback/list', handleFeedbackList);
+app.get('/api/analytics/feedback/list', handleFeedbackList);
+
+// 投票（赞同/不赞同，单玩家单反馈只能投一次；重复投票返回已投票）
+// POST /api/feedback/vote
+// POST /api/analytics/feedback/vote
+// body: { playerId, feedbackId, vote: 'agree'|'disagree' }
+async function handleFeedbackVote(req, res) {
+    const startTime = Date.now();
+    try {
+        const { playerId, feedbackId, vote } = req.body || {};
+        const fid = parseInt(feedbackId);
+        if (!playerId || isNaN(fid) || fid <= 0 || (vote !== 'agree' && vote !== 'disagree')) {
+            return res.status(400).json({ success: false, message: '参数错误' });
+        }
+
+        const conn = await pool.getConnection();
+        await conn.beginTransaction();
+        try {
+            // 尝试插入投票记录（去重）
+            const [ins] = await conn.execute(
+                `INSERT INTO player_feedback_votes (feedback_id, player_id, vote)
+                 VALUES (?, ?, ?)`,
+                [fid, playerId, vote]
+            );
+
+            // 计数+1
+            if (vote === 'agree') {
+                await conn.execute(
+                    `UPDATE player_feedback SET agree_count = agree_count + 1 WHERE id = ?`,
+                    [fid]
+                );
+            } else {
+                await conn.execute(
+                    `UPDATE player_feedback SET disagree_count = disagree_count + 1 WHERE id = ?`,
+                    [fid]
+                );
+            }
+
+            await conn.commit();
+            conn.release();
+
+            res.json({ success: true, processingTime: Date.now() - startTime });
+        } catch (e) {
+            await conn.rollback();
+            conn.release();
+
+            // 重复投票（唯一键冲突）
+            if (e && e.code === 'ER_DUP_ENTRY') {
+                return res.json({ success: true, duplicate: true, message: '已投票' });
+            }
+            throw e;
+        }
+    } catch (error) {
+        console.error('[Feedback] vote 失败:', error);
+        res.status(500).json({ success: false, message: '服务器内部错误', error: error.message });
+    }
+}
+app.post('/api/feedback/vote', handleFeedbackVote);
+app.post('/api/analytics/feedback/vote', handleFeedbackVote);
+
+// 提交评论
+// POST /api/feedback/comment
+// POST /api/analytics/feedback/comment
+// body: { playerId, feedbackId, content }
+async function handleFeedbackComment(req, res) {
+    try {
+        const { playerId, feedbackId, content } = req.body || {};
+        const fid = parseInt(feedbackId);
+        if (!playerId || isNaN(fid) || fid <= 0 || !content || typeof content !== 'string' || content.trim().length === 0) {
+            return res.status(400).json({ success: false, message: '参数错误' });
+        }
+        const text = content.trim().slice(0, 2000);
+        const [result] = await pool.execute(
+            `INSERT INTO player_feedback_comments (feedback_id, player_id, content) VALUES (?, ?, ?)`,
+            [fid, playerId, text]
+        );
+        res.json({ success: true, commentId: result.insertId });
+    } catch (error) {
+        console.error('[Feedback] comment 失败:', error);
+        res.status(500).json({ success: false, message: '服务器内部错误', error: error.message });
+    }
+}
+app.post('/api/feedback/comment', handleFeedbackComment);
+app.post('/api/analytics/feedback/comment', handleFeedbackComment);
+
+// 获取评论列表
+// GET /api/feedback/:feedbackId/comments?limit=100
+// GET /api/analytics/feedback/:feedbackId/comments?limit=100
+async function handleFeedbackComments(req, res) {
+    try {
+        const fid = parseInt(req.params.feedbackId);
+        if (isNaN(fid) || fid <= 0) {
+            return res.status(400).json({ success: false, message: '参数错误' });
+        }
+        let limit = parseInt(req.query.limit);
+        if (isNaN(limit) || limit <= 0) limit = 100;
+        limit = Math.min(limit, 200);
+
+        const [rows] = await pool.execute(
+            `SELECT id, feedback_id, player_id, content, created_at
+             FROM player_feedback_comments
+             WHERE feedback_id = ?
+             ORDER BY created_at ASC
+             LIMIT ${limit}`,
+            [fid]
+        );
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        console.error('[Feedback] comments 失败:', error);
+        res.status(500).json({ success: false, message: '服务器内部错误', error: error.message });
+    }
+}
+app.get('/api/feedback/:feedbackId/comments', handleFeedbackComments);
+app.get('/api/analytics/feedback/:feedbackId/comments', handleFeedbackComments);
+
 // 启动服务器
 app.listen(PORT, () => {
     console.log(`游戏埋点API服务已启动，监听端口: ${PORT}`);
