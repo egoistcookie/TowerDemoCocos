@@ -20,6 +20,7 @@ import { SoundManager } from './SoundManager';
 import { BuffManager } from './BuffManager';
 import { AnalyticsManager, OperationType } from './AnalyticsManager';
 import { PlayerProfilePopup } from './PlayerProfilePopup';
+import { WeChatShareManager } from './WeChatShareManager';
 const { ccclass, property } = _decorator;
 
 // 重新导出 GameState 以保持向后兼容
@@ -89,6 +90,8 @@ export class GameManager extends Component {
     // 全局增益卡片图标（在初始化时加载）
     private populationIcon: SpriteFrame | null = null; // 人口增加卡片图标
     private goldIcon: SpriteFrame | null = null; // 金币增加卡片图标
+    private orcRageIntroIcon: SpriteFrame | null = null; // 一档：兽人狂暴介绍框固定图标
+    private orcRageTier2IntroIcon: SpriteFrame | null = null; // 二档：燃血狂暴介绍框固定图标
     
     /**
      * 加载全局增益卡片图标资源
@@ -155,6 +158,7 @@ export class GameManager extends Component {
     // 杀敌排行榜卷轴面板
     private killRankPanelNode: Node | null = null;
     private killRankPanelVisible: boolean = false;
+    private killRankCloseOverlayNode: Node | null = null; // 排行榜全屏关闭层
 
     // 首页杀敌榜缓存（避免出现 "--"）
     private lastKillRankKills: number = 0;
@@ -214,6 +218,72 @@ export class GameManager extends Component {
     private forestLeftNode: Node | null = null;
     private forestRightNode: Node | null = null;
 
+    /**
+     * 微信推荐页相关
+     */
+    private recommendPageManager: any = null;
+
+    /**
+     * 场景加载时，尝试预加载微信推荐页（仅微信小游戏环境生效）
+     */
+    onLoad() {
+        // 仅在微信小游戏环境尝试加载
+        // 注意：引擎环境判断与 API 可用性双保险
+        try {
+            // @ts-ignore
+            const isWechat = sys && (sys as any).platform === (sys as any).Platform.WECHAT_GAME;
+            const canCreate = typeof wx !== 'undefined' && wx && typeof wx.createPageManager === 'function';
+            if (isWechat && canCreate) {
+                // 异步预加载，不影响主流程
+                this.loadWeChatRecommend().catch(() => { /* ignore */ });
+            }
+        } catch {
+            // ignore
+        }
+    }
+
+    /**
+     * 预加载微信官方推荐页
+     */
+    private async loadWeChatRecommend() {
+        // 运行环境与 API 可用性校验
+        // @ts-ignore
+        const isWechat = sys && (sys as any).platform === (sys as any).Platform.WECHAT_GAME;
+        if (!isWechat) return;
+        if (typeof wx === 'undefined' || !wx || typeof wx.createPageManager !== 'function') return;
+
+        try {
+            if (!this.recommendPageManager) {
+                this.recommendPageManager = wx.createPageManager();
+            }
+            await this.recommendPageManager.load({
+                openlink: 'TWFRCqV5WeM2AkMXhKwJ03MhfPOieJfAsvXKUbWvQFQtLyyA5etMPabBehga950uzfZcH3Vi3QeEh41xRGEVFw',
+            });
+        } catch (e) {
+            console.warn('[WeChatRecommend] load failed:', e);
+        }
+    }
+
+    /**
+     * 展示微信官方推荐页（若未加载则先加载）
+     */
+    private async showWeChatRecommend() {
+        // @ts-ignore
+        const isWechat = sys && (sys as any).platform === (sys as any).Platform.WECHAT_GAME;
+        if (!isWechat) return;
+        if (typeof wx === 'undefined' || !wx || typeof wx.createPageManager !== 'function') return;
+
+        try {
+            if (!this.recommendPageManager) {
+                await this.loadWeChatRecommend();
+            }
+            if (this.recommendPageManager && typeof this.recommendPageManager.show === 'function') {
+                await this.recommendPageManager.show();
+            }
+        } catch (e) {
+            console.warn('[WeChatRecommend] show failed:', e);
+        }
+    }
     /**
      * 在结算页创建或更新"升级进度条"，并根据本局战斗的经验变化播放从0到当前进度的动画。
      * @param prevLevel 结算前等级（使用天赋点数量表示等级）
@@ -2123,6 +2193,12 @@ export class GameManager extends Component {
             this.killRankPanelNode = this.createKillRankPanel();
         }
         if (!this.killRankPanelNode) return;
+
+        this.ensureKillRankCloseOverlay();
+        if (this.killRankCloseOverlayNode && this.killRankCloseOverlayNode.isValid) {
+            this.killRankCloseOverlayNode.active = true;
+            this.killRankCloseOverlayNode.setSiblingIndex(Number.MAX_SAFE_INTEGER - 1);
+        }
         
         // 直接显示在预设位置（后续如需动画可再精细化）
         this.killRankPanelNode.active = true;
@@ -2144,7 +2220,35 @@ export class GameManager extends Component {
         
         // 简化为直接隐藏，避免位移后下次无法再次显示的问题
         this.killRankPanelNode.active = false;
+        if (this.killRankCloseOverlayNode && this.killRankCloseOverlayNode.isValid) {
+            this.killRankCloseOverlayNode.active = false;
+        }
         this.killRankPanelVisible = false;
+    }
+
+    /**
+     * 创建排行榜全屏关闭层（点击任意位置关闭）
+     */
+    private ensureKillRankCloseOverlay() {
+        if (this.killRankCloseOverlayNode && this.killRankCloseOverlayNode.isValid) {
+            return;
+        }
+        const canvas = find('Canvas');
+        if (!canvas) return;
+        const vs = view.getVisibleSize();
+        const overlay = new Node('KillRankCloseOverlay');
+        overlay.setParent(canvas);
+        const tr = overlay.addComponent(UITransform);
+        tr.setContentSize(vs.width, vs.height);
+        overlay.setPosition(0, 0, 0);
+        const g = overlay.addComponent(Graphics);
+        g.fillColor = new Color(0, 0, 0, 0);
+        g.rect(-vs.width / 2, -vs.height / 2, vs.width, vs.height);
+        g.fill();
+        overlay.on(Node.EventType.TOUCH_END, () => {
+            this.hideKillRankPanel();
+        }, this);
+        this.killRankCloseOverlayNode = overlay;
     }
     
     /**
@@ -2169,6 +2273,10 @@ export class GameManager extends Component {
         // 居中显示卷轴，整体向上移动 350 像素
         uiTrans.setAnchorPoint(0.5, 0.5);
         panelNode.setPosition(0, 390, 0);
+        // 卷轴内点击任意位置也可关闭（转发按钮会阻断冒泡）
+        panelNode.on(Node.EventType.TOUCH_END, () => {
+            this.hideKillRankPanel();
+        }, this);
         
         // 卷轴背景（上圆下圆 + 中间矩形，偏 parchment 风格）
         const g = panelNode.addComponent(Graphics);
@@ -2202,6 +2310,33 @@ export class GameManager extends Component {
         const titleTrans = titleNode.addComponent(UITransform);
         titleTrans.setContentSize(panelWidth, 40);
         titleNode.setPosition(0, -50, 0);
+
+        // 右上角分享按钮：点击后主动分享当前“超越百分比”文案
+        const shareBtnNode = new Node('KillRankShareButton');
+        shareBtnNode.setParent(panelNode);
+        const shareBtnTrans = shareBtnNode.addComponent(UITransform);
+        shareBtnTrans.setContentSize(55, 55);
+        // 该卷轴以“顶部为 y=0、向下为负”的坐标系绘制，因此顶部区域 y 取负值
+        shareBtnNode.setPosition(panelWidth / 2 - 50, -50, 0);
+
+        // 使用 resources/textures/icon/zhuanfa.png 对应的 SpriteFrame 作为按钮贴图
+        const shareBtnSprite = shareBtnNode.addComponent(Sprite);
+        shareBtnSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        resources.load('textures/icon/zhuanfa/spriteFrame', SpriteFrame, (err, sf) => {
+            if (!err && sf && shareBtnNode.isValid) {
+                shareBtnSprite.spriteFrame = sf;
+            } else if (err) {
+                console.warn('[GameManager] 加载转发按钮贴图失败:', err);
+            }
+        });
+
+        const shareBtn = shareBtnNode.addComponent(Button);
+        shareBtn.transition = Button.Transition.SCALE;
+        shareBtnNode.on(Node.EventType.TOUCH_END, (event: any) => {
+            // 阻断到 panelNode 的 TOUCH_END 冒泡，避免点击转发时关闭排行榜
+            event.propagationStopped = true;
+        }, this);
+        shareBtn.node.on(Button.EventType.CLICK, this.onKillRankShareClick, this);
         
         // 排行内容容器
         const listNode = new Node('KillRankList');
@@ -2230,6 +2365,16 @@ export class GameManager extends Component {
         footerNode.setPosition(0, -panelHeight / 2 - 330, 0);
         
         return panelNode;
+    }
+
+    /**
+     * 排行榜右上角分享按钮：调用现有主动分享方法
+     */
+    private onKillRankShareClick() {
+        const percent = Math.max(0, Math.min(100, this.lastKillRankSurpassedPercent || 0));
+        const title = `我超过了${percent.toFixed(1)}%的玩家，快来一起守护防线！`;
+        const shareManager = WeChatShareManager.getInstance();
+        shareManager.shareAppMessage(title);
     }
     
     /**
@@ -3151,6 +3296,13 @@ export class GameManager extends Component {
                         this.playerDataManager.passLevel(currentLevel);
                         //console.info(`[GameManager.showGameResultPanel] 关卡 ${currentLevel} 已标记为通过`);
                     }
+                }
+                
+                // 胜利时以50%概率展示微信官方推荐页（异步，不阻塞结算UI）
+                if (Math.random() < 0.5) {
+                    this.scheduleOnce(() => {
+                        this.showWeChatRecommend();
+                    }, 0.1);
                 }
             } else if (state === GameState.Defeat) {
                 this.gameOverLabel.string = '失败！';
@@ -5005,6 +5157,49 @@ export class GameManager extends Component {
             });
         } else {
         }
+    }
+
+    /**
+     * 堵门触发“兽人燃血狂暴”时的特殊介绍弹窗
+     */
+    public showOrcBloodRageIntro(onCloseCallback?: () => void, rageTier: number = 1) {
+        this.autoCreateUnitIntroPopup();
+        if (!this.unitIntroPopup) return;
+        const isTier2 = rageTier >= 2;
+        const unitName = isTier2 ? '燃血狂暴' : '兽人狂暴';
+        const unitDescription = isTier2 ? '挡我者死！' : '兽人永不为奴！';
+        const iconPath = isTier2 ? 'textures/orc/kuangbao2/spriteFrame' : 'textures/orc/kuangbao/spriteFrame';
+        const cachedIcon = isTier2 ? this.orcRageTier2IntroIcon : this.orcRageIntroIcon;
+        const showPopup = (icon: SpriteFrame | null) => {
+            this.unitIntroPopup.show({
+                unitName: unitName,
+                unitDescription: unitDescription,
+                unitIcon: icon,
+                unitType: 'OrcWarrior',
+                unitId: 'OrcWarrior',
+                introBorderColor: new Color(255, 60, 60, 255),
+                onCloseCallback: onCloseCallback
+            });
+        };
+
+        if (cachedIcon) {
+            showPopup(cachedIcon);
+            return;
+        }
+
+        resources.load(iconPath, SpriteFrame, (err, spriteFrame) => {
+            if (err || !spriteFrame) {
+                console.warn(`[GameManager] 加载${unitName}介绍贴图失败，使用空图标展示:`, err);
+                showPopup(null);
+                return;
+            }
+            if (isTier2) {
+                this.orcRageTier2IntroIcon = spriteFrame;
+            } else {
+                this.orcRageIntroIcon = spriteFrame;
+            }
+            showPopup(spriteFrame);
+        });
     }
 
     // 金币相关方法

@@ -125,6 +125,16 @@ export class Boss extends Component {
     protected warcryBuffedEnemies: Set<Node> = new Set(); // 被战争咆哮影响的敌人集合
     protected warcryBuffEndTime: Map<Node, number> = new Map(); // 每个敌人的buff结束时间
     protected wasPlayingAttackBeforeWarcry: boolean = false; // 战争咆哮前是否正在攻击
+    protected isBloodRageActive: boolean = false; // 堵门触发：燃血狂暴
+    protected bloodRageBurnTimer: number = 0;
+    protected bloodRageOriginalMaxHealth: number = 0;
+    protected bloodRageOriginalMoveSpeed: number = 0;
+    protected bloodRageOriginalAttackDamage: number = 0;
+    protected bloodRageOriginalAttackInterval: number = 0;
+    protected bloodRageOriginalColor: Color | null = null;
+    protected bloodRagePulsePhase: number = 0;
+    protected bloodRageTier: number = 0;
+    protected readonly BLOOD_RAGE_FAST_BURN_Y: number = 1050;
     
     // 对象池相关：预制体名称（用于对象池回收，子类可直接改这个字符串）
     public prefabName: string = "Boss";
@@ -164,6 +174,7 @@ export class Boss extends Component {
     onEnable() {
         // 清理所有插在身上的武器（箭矢、长矛等）
         this.clearAttachedWeapons();
+        this.restoreBloodRageAttributesIfNeeded();
         
         // 从对象池获取时，重新初始化状态
         this.currentHealth = this.maxHealth;
@@ -178,6 +189,16 @@ export class Boss extends Component {
         this.warcryBuffedEnemies.clear();
         this.warcryBuffEndTime.clear();
         this.wasPlayingAttackBeforeWarcry = false;
+        this.clearBloodRageVisualOnly();
+        this.isBloodRageActive = false;
+        this.bloodRageBurnTimer = 0;
+        this.bloodRageOriginalMaxHealth = 0;
+        this.bloodRageOriginalMoveSpeed = 0;
+        this.bloodRageOriginalAttackDamage = 0;
+        this.bloodRageOriginalAttackInterval = 0;
+        this.bloodRagePulsePhase = 0;
+        this.bloodRageOriginalColor = null;
+        this.bloodRageTier = 0;
         this.isHit = false;
         this.isPlayingAttackAnimation = false;
         this.isPlayingHitAnimation = false;
@@ -360,6 +381,8 @@ export class Boss extends Component {
     // ====== 主更新 ======
 
     update(deltaTime: number) {
+        this.updateBloodRage(deltaTime);
+
         // 如果被销毁，只更新动画，不执行其他逻辑
         if (this.isDestroyed) {
             this.updateAnimation(deltaTime);
@@ -2275,6 +2298,17 @@ export class Boss extends Component {
         }
 
         this.isDestroyed = true;
+        this.restoreBloodRageAttributesIfNeeded();
+        this.clearBloodRageVisualOnly();
+        this.isBloodRageActive = false;
+        this.bloodRageBurnTimer = 0;
+        this.bloodRageOriginalMaxHealth = 0;
+        this.bloodRageOriginalMoveSpeed = 0;
+        this.bloodRageOriginalAttackDamage = 0;
+        this.bloodRageOriginalAttackInterval = 0;
+        this.bloodRagePulsePhase = 0;
+        this.bloodRageOriginalColor = null;
+        this.bloodRageTier = 0;
         
         // 立即停止所有移动和动画
         this.stopAllAnimations();
@@ -2363,6 +2397,7 @@ export class Boss extends Component {
      */
     protected resetEnemyState() {
         this.clearAttachedWeapons();
+        this.restoreBloodRageAttributesIfNeeded();
         
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
@@ -2373,6 +2408,16 @@ export class Boss extends Component {
         this.warcryBuffedEnemies.clear();
         this.warcryBuffEndTime.clear();
         this.wasPlayingAttackBeforeWarcry = false;
+        this.clearBloodRageVisualOnly();
+        this.isBloodRageActive = false;
+        this.bloodRageBurnTimer = 0;
+        this.bloodRageOriginalMaxHealth = 0;
+        this.bloodRageOriginalMoveSpeed = 0;
+        this.bloodRageOriginalAttackDamage = 0;
+        this.bloodRageOriginalAttackInterval = 0;
+        this.bloodRagePulsePhase = 0;
+        this.bloodRageOriginalColor = null;
+        this.bloodRageTier = 0;
         this.isHit = false;
         this.isPlayingAttackAnimation = false;
         this.isPlayingHitAnimation = false;
@@ -2403,6 +2448,114 @@ export class Boss extends Component {
 
     isAlive(): boolean {
         return !this.isDestroyed && this.currentHealth > 0;
+    }
+
+    public enterBloodRage(tier: number = 1) {
+        if (this.isDestroyed) {
+            return;
+        }
+        const targetTier = tier > 1 ? 2 : 1;
+        if (this.isBloodRageActive && this.bloodRageTier >= targetTier) {
+            return;
+        }
+        const wasActive = this.isBloodRageActive;
+        const previousMaxHealth = this.maxHealth;
+        if (!wasActive) {
+            this.isBloodRageActive = true;
+            this.bloodRageBurnTimer = 0;
+            this.bloodRageOriginalMaxHealth = this.maxHealth;
+            this.bloodRageOriginalMoveSpeed = this.moveSpeed;
+            this.bloodRageOriginalAttackDamage = this.attackDamage;
+            this.bloodRageOriginalAttackInterval = this.attackInterval;
+        }
+        this.bloodRageTier = targetTier;
+
+        const healthMul = targetTier >= 2 ? 3 : 2;
+        const moveMul = targetTier >= 2 ? 1.5 : 1.25;
+        const attackMul = targetTier >= 2 ? 3 : 2;
+        const intervalDiv = targetTier >= 2 ? 3 : 2;
+
+        this.maxHealth = this.bloodRageOriginalMaxHealth * healthMul;
+        const healthRatio = previousMaxHealth > 0 ? this.currentHealth / previousMaxHealth : 1;
+        this.currentHealth = Math.min(this.maxHealth, this.maxHealth * healthRatio);
+        this.moveSpeed = this.bloodRageOriginalMoveSpeed * moveMul;
+        this.attackDamage = this.bloodRageOriginalAttackDamage * attackMul;
+        this.attackInterval = this.bloodRageOriginalAttackInterval / intervalDiv;
+
+        if (this.healthBar) {
+            this.healthBar.setMaxHealth(this.maxHealth);
+            this.healthBar.setHealth(this.currentHealth);
+        }
+        this.applyBloodRageVisual();
+    }
+
+    protected updateBloodRage(deltaTime: number) {
+        if (!this.isBloodRageActive || this.isDestroyed) {
+            return;
+        }
+        this.bloodRagePulsePhase += deltaTime * 6;
+        this.updateBloodRagePulseVisual();
+        this.bloodRageBurnTimer += deltaTime;
+        while (this.bloodRageBurnTimer >= 1) {
+            this.bloodRageBurnTimer -= 1;
+            const inFastBurnZone = this.node && this.node.isValid && this.node.worldPosition.y <= this.BLOOD_RAGE_FAST_BURN_Y;
+            const burnRate = inFastBurnZone ? 0.1 : 0.05;
+            const burnDamage = this.maxHealth * burnRate;
+            this.currentHealth -= burnDamage;
+            if (this.healthBar) {
+                this.healthBar.setHealth(this.currentHealth);
+            }
+            if (this.currentHealth <= 0) {
+                this.currentHealth = 0;
+                this.die();
+                return;
+            }
+        }
+    }
+
+    protected applyBloodRageVisual() {
+        if (!this.sprite) return;
+        if (!this.bloodRageOriginalColor) {
+            this.bloodRageOriginalColor = this.sprite.color.clone();
+        }
+        this.bloodRagePulsePhase = 0;
+        this.updateBloodRagePulseVisual();
+    }
+
+    protected updateBloodRagePulseVisual() {
+        if (!this.sprite) return;
+        const base = this.bloodRageOriginalColor || new Color(255, 255, 255, 255);
+        const t = (Math.sin(this.bloodRagePulsePhase) + 1) * 0.5;
+        const minRed = 0.35;
+        const pulse = minRed + (1 - minRed) * t;
+        const r = Math.min(255, Math.floor(base.r + (255 - base.r) * pulse));
+        const g = Math.max(0, Math.floor(base.g * (1 - 0.75 * pulse)));
+        const b = Math.max(0, Math.floor(base.b * (1 - 0.75 * pulse)));
+        this.sprite.color = new Color(r, g, b, base.a);
+    }
+
+    protected clearBloodRageVisualOnly() {
+        if (this.sprite && this.bloodRageOriginalColor) {
+            this.sprite.color = this.bloodRageOriginalColor;
+        }
+    }
+
+    protected restoreBloodRageAttributesIfNeeded() {
+        if (this.bloodRageOriginalMaxHealth > 0) {
+            this.maxHealth = this.bloodRageOriginalMaxHealth;
+        }
+        if (this.bloodRageOriginalMoveSpeed > 0) {
+            this.moveSpeed = this.bloodRageOriginalMoveSpeed;
+        }
+        if (this.bloodRageOriginalAttackDamage > 0) {
+            this.attackDamage = this.bloodRageOriginalAttackDamage;
+        }
+        if (this.bloodRageOriginalAttackInterval > 0) {
+            this.attackInterval = this.bloodRageOriginalAttackInterval;
+        }
+        if (this.currentHealth > this.maxHealth) {
+            this.currentHealth = this.maxHealth;
+        }
     }
 
     /**

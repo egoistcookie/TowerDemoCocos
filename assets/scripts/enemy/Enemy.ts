@@ -153,6 +153,17 @@ export class Enemy extends Component {
     private readonly DIALOG_DURATION: number = 2; // 对话框显示持续时间2秒
     private readonly DIALOG_SLOGANS: string[] = ['兽人万岁！', '打下这条防线！', '为了鲜血与荣耀！', '乌拉！', '为了部落！']; // 进攻口号数组
     
+    // 堵门触发的“燃血狂暴”状态
+    private isBloodRageActive: boolean = false;
+    private bloodRageBurnTimer: number = 0;
+    private bloodRageOriginalMaxHealth: number = 0;
+    private bloodRageOriginalMoveSpeed: number = 0;
+    private bloodRageOriginalAttackDamage: number = 0;
+    private bloodRageOriginalAttackInterval: number = 0;
+    private bloodRageOriginalColor: Color | null = null;
+    private bloodRagePulsePhase: number = 0;
+    private bloodRageTier: number = 0;
+    private readonly BLOOD_RAGE_FAST_BURN_Y: number = 1050;
 
     start() {
         this.currentHealth = this.maxHealth;
@@ -226,6 +237,9 @@ export class Enemy extends Component {
      * 从对象池获取的敌人会调用此方法，而不是start方法
      */
     onEnable() {
+        // 对象池复用时先恢复燃血改写的属性，避免数值叠加
+        this.restoreBloodRageAttributesIfNeeded();
+
         // 从对象池获取时，重新初始化状态
         // 注意：sprite等组件引用在start中已经初始化，这里只需要重置状态
         if (this.sprite && this.defaultSpriteFrame) {
@@ -278,6 +292,9 @@ export class Enemy extends Component {
         
         // 播放待机动画
         this.playIdleAnimation();
+
+        // 对象池复用时重置狂暴状态
+        this.resetBloodRageState();
     }
 
     createHealthBar() {
@@ -346,7 +363,7 @@ export class Enemy extends Component {
         this.dialogLabel.overflow = Label.Overflow.RESIZE_HEIGHT;
         // 黑色描边
         const outline = labelNode.addComponent(LabelOutline);
-        outline.color = new Color(0, 0, 0, 255);
+        this.dialogLabel.outlineColor = new Color(0, 0, 0, 255);
         outline.width = 2;
 
         // 初始设置为完全显示
@@ -464,6 +481,9 @@ export class Enemy extends Component {
     }
 
     update(deltaTime: number) {
+        // 狂暴掉血逻辑：每秒损失当前最大生命值的10%
+        this.updateBloodRage(deltaTime);
+
         // 先更新敌人的战争口号/对话框系统（与我方单位一致，持续在战斗中随机喊话）
         this.updateDialogSystem(deltaTime);
 
@@ -1618,7 +1638,7 @@ export class Enemy extends Component {
         label.fontSize = 20;
         label.color = Color.GREEN;
         const outline = labelNode.addComponent(LabelOutline);
-        outline.color = new Color(0, 0, 0, 255);
+        label.outlineColor = new Color(0, 0, 0, 255);
         outline.width = 2;
         
         const labelUITransform = labelNode.addComponent(UITransform);
@@ -1797,6 +1817,7 @@ export class Enemy extends Component {
         }
 
         this.isDestroyed = true;
+        this.resetBloodRageState();
 
         // 清理对话框
         if (this.dialogNode && this.dialogNode.isValid) {
@@ -1903,6 +1924,134 @@ export class Enemy extends Component {
 
     isAlive(): boolean {
         return !this.isDestroyed && this.currentHealth > 0;
+    }
+
+    /**
+     * 外部调用：进入燃血狂暴（数值翻倍 + 红色泛光 + 持续掉血）
+     */
+    public enterBloodRage(tier: number = 1) {
+        if (this.isDestroyed) {
+            return;
+        }
+        const targetTier = tier > 1 ? 2 : 1;
+        if (this.isBloodRageActive && this.bloodRageTier >= targetTier) {
+            return;
+        }
+
+        const wasActive = this.isBloodRageActive;
+        const previousMaxHealth = this.maxHealth;
+        if (!wasActive) {
+            this.isBloodRageActive = true;
+            this.bloodRageBurnTimer = 0;
+            this.bloodRageOriginalMaxHealth = this.maxHealth;
+            this.bloodRageOriginalMoveSpeed = this.moveSpeed;
+            this.bloodRageOriginalAttackDamage = this.attackDamage;
+            this.bloodRageOriginalAttackInterval = this.attackInterval;
+        }
+        this.bloodRageTier = targetTier;
+
+        const healthMul = targetTier >= 2 ? 3 : 2;
+        const moveMul = targetTier >= 2 ? 1.5 : 1.25;
+        const attackMul = targetTier >= 2 ? 3 : 2;
+        const intervalDiv = targetTier >= 2 ? 3 : 2;
+
+        this.maxHealth = this.bloodRageOriginalMaxHealth * healthMul;
+        const healthRatio = previousMaxHealth > 0 ? this.currentHealth / previousMaxHealth : 1;
+        this.currentHealth = Math.min(this.maxHealth, this.maxHealth * healthRatio);
+        this.moveSpeed = this.bloodRageOriginalMoveSpeed * moveMul;
+        this.attackDamage = this.bloodRageOriginalAttackDamage * attackMul;
+        this.attackInterval = this.bloodRageOriginalAttackInterval / intervalDiv;
+
+        if (this.healthBar) {
+            this.healthBar.setMaxHealth(this.maxHealth);
+            this.healthBar.setHealth(this.currentHealth);
+        }
+
+        this.applyBloodRageVisual();
+    }
+
+    private updateBloodRage(deltaTime: number) {
+        if (!this.isBloodRageActive || this.isDestroyed) {
+            return;
+        }
+        this.bloodRagePulsePhase += deltaTime * 6;
+        this.updateBloodRagePulseVisual();
+
+        this.bloodRageBurnTimer += deltaTime;
+        while (this.bloodRageBurnTimer >= 1) {
+            this.bloodRageBurnTimer -= 1;
+            const inFastBurnZone = this.node && this.node.isValid && this.node.worldPosition.y <= this.BLOOD_RAGE_FAST_BURN_Y;
+            const burnRate = inFastBurnZone ? 0.1 : 0.05;
+            const burnDamage = this.maxHealth * burnRate;
+            this.currentHealth -= burnDamage;
+            if (this.healthBar) {
+                this.healthBar.setHealth(this.currentHealth);
+            }
+            if (this.currentHealth <= 0) {
+                this.currentHealth = 0;
+                this.die();
+                return;
+            }
+        }
+    }
+
+    private applyBloodRageVisual() {
+        if (!this.sprite) return;
+        if (!this.bloodRageOriginalColor) {
+            this.bloodRageOriginalColor = this.sprite.color.clone();
+        }
+        this.bloodRagePulsePhase = 0;
+        this.updateBloodRagePulseVisual();
+    }
+
+    private updateBloodRagePulseVisual() {
+        if (!this.sprite) return;
+        const base = this.bloodRageOriginalColor || new Color(255, 255, 255, 255);
+        const t = (Math.sin(this.bloodRagePulsePhase) + 1) * 0.5;
+        const minRed = 0.35;
+        const pulse = minRed + (1 - minRed) * t;
+        const r = Math.min(255, Math.floor(base.r + (255 - base.r) * pulse));
+        const g = Math.max(0, Math.floor(base.g * (1 - 0.75 * pulse)));
+        const b = Math.max(0, Math.floor(base.b * (1 - 0.75 * pulse)));
+        this.sprite.color = new Color(r, g, b, base.a);
+    }
+
+    private clearBloodRageVisualOnly() {
+        if (this.sprite && this.bloodRageOriginalColor) {
+            this.sprite.color = this.bloodRageOriginalColor;
+        }
+    }
+
+    private restoreBloodRageAttributesIfNeeded() {
+        if (this.bloodRageOriginalMaxHealth > 0) {
+            this.maxHealth = this.bloodRageOriginalMaxHealth;
+        }
+        if (this.bloodRageOriginalMoveSpeed > 0) {
+            this.moveSpeed = this.bloodRageOriginalMoveSpeed;
+        }
+        if (this.bloodRageOriginalAttackDamage > 0) {
+            this.attackDamage = this.bloodRageOriginalAttackDamage;
+        }
+        if (this.bloodRageOriginalAttackInterval > 0) {
+            this.attackInterval = this.bloodRageOriginalAttackInterval;
+        }
+        if (this.currentHealth > this.maxHealth) {
+            this.currentHealth = this.maxHealth;
+        }
+    }
+
+    private resetBloodRageState() {
+        this.restoreBloodRageAttributesIfNeeded();
+        this.clearBloodRageVisualOnly();
+        this.isBloodRageActive = false;
+        this.bloodRageBurnTimer = 0;
+        this.bloodRageOriginalMaxHealth = 0;
+        this.bloodRageOriginalMoveSpeed = 0;
+        this.bloodRageOriginalAttackDamage = 0;
+        this.bloodRageOriginalAttackInterval = 0;
+        this.bloodRagePulsePhase = 0;
+        this.bloodRageOriginalColor = null;
+        this.bloodRageTier = 0;
     }
 
     /**
@@ -2201,6 +2350,7 @@ export class Enemy extends Component {
      * 重置敌人状态（用于对象池回收）
      */
     private resetEnemyState() {
+        this.restoreBloodRageAttributesIfNeeded();
         // 重置所有状态变量
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;

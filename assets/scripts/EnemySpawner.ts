@@ -115,6 +115,25 @@ export class EnemySpawner extends Component {
     // 对象池引用
     private enemyPool: EnemyPool = null!;
 
+    // 堵门检测与燃血狂暴
+    private readonly ORC_BLOCK_CHECK_INTERVAL: number = 2;
+    private readonly ORC_BLOCK_THRESHOLD_SECONDS: number = 20;
+    private readonly ORC_BLOCK_BREAKTHROUGH_Y: number = 1200;
+    private readonly ORC_RAGE_END_BREAKTHROUGH_Y: number = 1050;
+    private readonly ORC_RAGE_END_DELAY_SECONDS: number = 5;
+    private readonly ORC_RAGE_TRIGGER_COOLDOWN_SECONDS: number = 30;
+    private readonly ORC_RAGE_PERSISTENT_GROWTH_FACTOR: number = 1.2;
+    private orcBlockCheckTimer: number = 0;
+    private orcMonitorElapsed: number = 0;
+    private lastOrcBreakthroughTime: number = 0;
+    private hasSpawnedAnyEnemy: boolean = false;
+    private lastOrcBlockTriggerTime: number = -999;
+    private waitingOrcRageIntroClose: boolean = false;
+    private isOrcRageSpawnBuffActive: boolean = false;
+    private orcRageSpawnBuffEndAt: number = -1;
+    private currentOrcRageTier: number = 1;
+    private persistentEnemyGrowthMultiplier: number = 1;
+
     start() {
         // 初始化变量
         this.currentWaveIndex = -1;
@@ -124,6 +143,7 @@ export class EnemySpawner extends Component {
         this.enemiesSpawnedCount = 0;
         this.enemySpawnTimer = 0;
         this.testEnemySpawned = false;
+        this.persistentEnemyGrowthMultiplier = 1;
         
         // 测试模式日志
         if (this.testMode) {
@@ -726,6 +746,7 @@ export class EnemySpawner extends Component {
 
         // 只有在游戏进行中时才处理波次
         this.updateWave(deltaTime);
+        this.updateOrcBlockAndBloodRage(deltaTime);
         
         // 如果最后一波已完成刷新，检查胜利条件
         if (this.isLastWaveCompleted && this.gameManager) {
@@ -1404,6 +1425,11 @@ export class EnemySpawner extends Component {
                 const unitType = enemyScript.unitType || prefabName;
                 this.gameManager.checkUnitFirstAppearance(unitType, enemyScript);
             }
+
+            // 狂暴激活期间，新刷新的所有敌人都进入燃血狂暴
+            if (this.isOrcRageSpawnBuffActive) {
+                this.applyBloodRageToEnemy(enemy, enemyScript, this.currentOrcRageTier);
+            }
         } else {
         }
         
@@ -1458,9 +1484,9 @@ export class EnemySpawner extends Component {
             return;
         }
 
-        const multiplier = this.getLevelMultiplier();
+        const multiplier = this.getLevelMultiplier() * this.persistentEnemyGrowthMultiplier;
         
-        // 如果已经是1.0倍（第一关），不需要调整
+        // 如果已经是1.0倍（第一关且未叠加狂暴成长），不需要调整
         if (multiplier === 1.0) {
             return;
         }
@@ -1493,6 +1519,189 @@ export class EnemySpawner extends Component {
             enemyScript.attackDamage = Math.floor(originalAttackDamage * multiplier);
         }
 
+    }
+
+    /**
+     * 每2秒检测一次堵门：
+     * - 若20秒内没有任何敌人突破到 y<=1200，则触发一档狂暴
+     * - 若无突破时长超过40秒，则升级为二档狂暴
+     * - 狂暴激活后，新刷怪持续携带狂暴，直到有敌人突破到 y<=1200 后再延迟5秒结束
+     */
+    private updateOrcBlockAndBloodRage(deltaTime: number) {
+        this.orcMonitorElapsed += deltaTime;
+        this.orcBlockCheckTimer += deltaTime;
+        if (this.orcBlockCheckTimer < this.ORC_BLOCK_CHECK_INTERVAL) {
+            return;
+        }
+        this.orcBlockCheckTimer = 0;
+
+        const enemiesNode = this.enemyContainer || find('Canvas/Enemies');
+        if (!enemiesNode || !enemiesNode.isValid) {
+            return;
+        }
+
+        let hasBlockBreakthrough = false;
+        let hasRageEndBreakthrough = false;
+        let aliveEnemyCount = 0;
+        const enemies = enemiesNode.children || [];
+        for (const enemy of enemies) {
+            if (!enemy || !enemy.isValid || !enemy.active) continue;
+            const script = this.resolveEnemyScript(enemy);
+            if (!script || (script.isAlive && !script.isAlive())) continue;
+            aliveEnemyCount++;
+            this.hasSpawnedAnyEnemy = true;
+            const y = enemy.worldPosition.y;
+            if (y <= this.ORC_BLOCK_BREAKTHROUGH_Y) hasBlockBreakthrough = true;
+            if (y <= this.ORC_RAGE_END_BREAKTHROUGH_Y) hasRageEndBreakthrough = true;
+        }
+
+        if (hasBlockBreakthrough) {
+            this.lastOrcBreakthroughTime = this.orcMonitorElapsed;
+        }
+
+        if (!this.hasSpawnedAnyEnemy) {
+            return;
+        }
+        if (aliveEnemyCount <= 0) {
+            return;
+        }
+
+        const blockedDuration = this.orcMonitorElapsed - this.lastOrcBreakthroughTime;
+        const inCooldown = this.orcMonitorElapsed - this.lastOrcBlockTriggerTime < this.ORC_RAGE_TRIGGER_COOLDOWN_SECONDS;
+        const desiredTier = blockedDuration > 40 ? 2 : 1;
+
+        if (!this.isOrcRageSpawnBuffActive && blockedDuration >= this.ORC_BLOCK_THRESHOLD_SECONDS && !inCooldown) {
+            console.info(
+                `[EnemySpawner][OrcBlock] 检测到堵门: 无突破时长=${blockedDuration.toFixed(1)}s, 阈值=${this.ORC_BLOCK_THRESHOLD_SECONDS}s, 突破线Y=${this.ORC_BLOCK_BREAKTHROUGH_Y}, rageTier=${desiredTier}`
+            );
+            this.triggerOrcBloodRage(desiredTier);
+        }
+
+        // 一档 -> 二档：无突破持续超过40秒时升级（忽略冷却）
+        if (this.isOrcRageSpawnBuffActive && desiredTier > this.currentOrcRageTier) {
+            this.currentOrcRageTier = desiredTier;
+            this.applyBloodRageToAllActiveEnemies(this.currentOrcRageTier);
+            if (this.gameManager && (this.gameManager as any).showOrcBloodRageIntro) {
+                (this.gameManager as any).showOrcBloodRageIntro(undefined, this.currentOrcRageTier);
+            }
+            console.info(
+                `[EnemySpawner][OrcRage] 升级为二档狂暴: blockedDuration=${blockedDuration.toFixed(1)}s, tier=${this.currentOrcRageTier}`
+            );
+        }
+
+        // 狂暴结束计时：检测到有敌人突入1200以下后，5秒后结束新刷怪狂暴状态
+        if (this.isOrcRageSpawnBuffActive && hasRageEndBreakthrough && this.orcRageSpawnBuffEndAt < 0) {
+            this.orcRageSpawnBuffEndAt = this.orcMonitorElapsed + this.ORC_RAGE_END_DELAY_SECONDS;
+            console.info(
+                `[EnemySpawner][OrcRage] 检测到突入Y<=${this.ORC_RAGE_END_BREAKTHROUGH_Y}，将在${this.ORC_RAGE_END_DELAY_SECONDS}s后结束新刷怪狂暴: endAt=${this.orcRageSpawnBuffEndAt.toFixed(1)}s`
+            );
+        }
+
+        if (this.isOrcRageSpawnBuffActive && this.orcRageSpawnBuffEndAt > 0 && this.orcMonitorElapsed >= this.orcRageSpawnBuffEndAt) {
+            this.isOrcRageSpawnBuffActive = false;
+            this.orcRageSpawnBuffEndAt = -1;
+            this.currentOrcRageTier = 1;
+            console.info(`[EnemySpawner][OrcRage] 新刷怪狂暴状态已结束: now=${this.orcMonitorElapsed.toFixed(1)}s`);
+        }
+    }
+
+    private triggerOrcBloodRage(rageTier: number = 1) {
+        if (this.waitingOrcRageIntroClose) {
+            return;
+        }
+        this.waitingOrcRageIntroClose = true;
+
+        let minPenetrationY = Number.POSITIVE_INFINITY;
+        let countedEnemies = 0;
+        const enemiesNode = this.enemyContainer || find('Canvas/Enemies');
+        if (enemiesNode && enemiesNode.isValid) {
+            for (const enemy of enemiesNode.children) {
+                if (!enemy || !enemy.isValid || !enemy.active) continue;
+                const script = this.resolveEnemyScript(enemy);
+                if (!script || (script.isAlive && !script.isAlive())) continue;
+                countedEnemies++;
+                const y = enemy.worldPosition.y;
+                if (y < minPenetrationY) {
+                    minPenetrationY = y;
+                }
+            }
+        }
+        if (countedEnemies <= 0) {
+            this.waitingOrcRageIntroClose = false;
+            console.info('[EnemySpawner][OrcRage] 取消触发：场上无可统计的存活敌人');
+            return;
+        }
+        const minYText = Number.isFinite(minPenetrationY) ? minPenetrationY.toFixed(1) : 'N/A';
+        console.info(`[EnemySpawner][OrcRage] 触发时全体敌人最低突入Y=${minYText}, counted=${countedEnemies}`);
+
+        const activateRage = () => {
+            this.waitingOrcRageIntroClose = false;
+            this.lastOrcBlockTriggerTime = this.orcMonitorElapsed;
+            this.persistentEnemyGrowthMultiplier *= this.ORC_RAGE_PERSISTENT_GROWTH_FACTOR;
+            this.isOrcRageSpawnBuffActive = true;
+            this.orcRageSpawnBuffEndAt = -1;
+            this.currentOrcRageTier = Math.max(1, rageTier);
+            const affectedCount = this.applyBloodRageToAllActiveEnemies(this.currentOrcRageTier);
+
+            console.info(
+                `[EnemySpawner][OrcRage] 介绍框关闭后开始狂暴: affectedNow=${affectedCount}, tier=${this.currentOrcRageTier}, 后续敌人成长倍率=${this.persistentEnemyGrowthMultiplier.toFixed(3)}, 新刷怪将持续携带狂暴直到触发结束条件`
+            );
+        };
+
+        if (this.gameManager && (this.gameManager as any).showOrcBloodRageIntro) {
+            (this.gameManager as any).showOrcBloodRageIntro(activateRage);
+            console.info('[EnemySpawner][OrcRage] 已展示提示框: "兽人永不为奴！"，等待关闭后启动狂暴');
+            return;
+        }
+        activateRage();
+    }
+
+    private isOrcPrefabName(prefabName: string): boolean {
+        if (!prefabName) return false;
+        const name = prefabName.toLowerCase();
+        return name.includes('orc');
+    }
+
+    private applyBloodRageToEnemy(enemyNode: Node, enemyScript: any, rageTier: number = 1) {
+        if (!enemyNode || !enemyNode.isValid || !enemyScript) return;
+        if (typeof enemyScript.enterBloodRage === 'function') {
+            enemyScript.enterBloodRage(rageTier);
+        }
+    }
+
+    private applyBloodRageToAllActiveEnemies(rageTier: number): number {
+        let affectedCount = 0;
+        const enemiesNode = this.enemyContainer || find('Canvas/Enemies');
+        if (!enemiesNode || !enemiesNode.isValid) {
+            return affectedCount;
+        }
+        for (const enemy of enemiesNode.children) {
+            if (!enemy || !enemy.isValid || !enemy.active) continue;
+            const script = this.resolveEnemyScript(enemy);
+            if (!script || (script.isAlive && !script.isAlive())) continue;
+            this.applyBloodRageToEnemy(enemy, script, rageTier);
+            affectedCount++;
+        }
+        return affectedCount;
+    }
+
+    /**
+     * 解析敌人脚本：优先返回实现了 enterBloodRage 的组件，避免漏掉投矛手等派生类
+     */
+    private resolveEnemyScript(enemyNode: Node): any {
+        if (!enemyNode || !enemyNode.isValid) return null;
+
+        const components = enemyNode.components || [];
+        for (const comp of components) {
+            const c = comp as any;
+            if (c && typeof c.enterBloodRage === 'function') {
+                return c;
+            }
+        }
+
+        return enemyNode.getComponent('Enemy') as any ||
+            enemyNode.getComponent('Boss') as any ||
+            null;
     }
 
     /**

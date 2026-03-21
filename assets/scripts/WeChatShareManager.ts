@@ -11,6 +11,7 @@ export class WeChatShareManager {
     private static instance: WeChatShareManager | null = null;
     private isWeChatPlatform: boolean = false;
     private wx: any = null;
+    private hasCaptureScreenListener: boolean = false;
 
     private constructor() {
         // 检测是否在微信小游戏平台
@@ -49,7 +50,131 @@ export class WeChatShareManager {
         // 监听用户点击右上角菜单的"转发"按钮
         this.onShareAppMessage();
 
+        // 监听用户截屏：截屏后弹出“分享图片”菜单
+        this.initCaptureScreenShare();
+
         console.log('[WeChatShareManager] 转发功能初始化完成');
+    }
+
+    /**
+     * 监听用户截屏，并拉起分享图片菜单
+     * 说明：showShareImageMenu 需要 path；这里按你提供的接入方式先使用空字符串占位。
+     */
+    private initCaptureScreenShare(): void {
+        if (!this.isWeChatPlatform || !this.wx) {
+            return;
+        }
+        if (this.hasCaptureScreenListener) {
+            return;
+        }
+        if (typeof this.wx.onUserCaptureScreen !== 'function') {
+            console.warn('[WeChatShareManager] 当前基础库不支持 onUserCaptureScreen');
+            return;
+        }
+
+        try {
+            this.wx.onUserCaptureScreen(() => {
+                // 优先尝试生成真实截图再分享；失败则回退到空路径
+                this.shareCurrentCanvasImage().catch(() => {
+                    try {
+                        if (typeof this.wx.showShareImageMenu === 'function') {
+                            this.wx.showShareImageMenu({ path: '' });
+                        }
+                    } catch (err) {
+                        console.error('[WeChatShareManager] showShareImageMenu 调用失败:', err);
+                    }
+                });
+            });
+            this.hasCaptureScreenListener = true;
+            console.log('[WeChatShareManager] 截屏分享监听设置成功');
+        } catch (error) {
+            console.error('[WeChatShareManager] onUserCaptureScreen 异常:', error);
+        }
+    }
+
+    /**
+     * 获取小游戏主画布（尽可能返回 Creator 绑定的主 canvas）
+     */
+    private getMainCanvas(): any {
+        try {
+            if (typeof window !== 'undefined') {
+                const w: any = window as any;
+                // Creator 在微信小游戏环境通常会把主画布挂到 window.canvas 或 window.__canvas
+                if (w.canvas) return w.canvas;
+                if (w.__canvas) return w.__canvas;
+            }
+        } catch {
+            // ignore
+        }
+        return null;
+    }
+
+    /**
+     * 将当前主画布导出为临时文件路径（jpg），成功返回 tempFilePath，失败返回 null
+     */
+    public async captureCanvasToTempFile(): Promise<string | null> {
+        if (!this.isWeChatPlatform || !this.wx) {
+            return null;
+        }
+        if (typeof this.wx.canvasToTempFilePath !== 'function') {
+            console.warn('[WeChatShareManager] 当前基础库不支持 canvasToTempFilePath');
+            return null;
+        }
+        const canvas = this.getMainCanvas();
+        if (!canvas || !canvas.width || !canvas.height) {
+            console.warn('[WeChatShareManager] 未获取到主画布或尺寸异常');
+            return null;
+        }
+        const w = canvas.width;
+        const h = canvas.height;
+
+        return new Promise<string | null>((resolve) => {
+            try {
+                this.wx.canvasToTempFilePath({
+                    canvas,
+                    x: 0,
+                    y: 0,
+                    width: w,
+                    height: h,
+                    destWidth: w,
+                    destHeight: h,
+                    fileType: 'jpg',
+                    quality: 1,
+                    success: (res: any) => {
+                        const path = res && (res.tempFilePath || res.filePath);
+                        resolve(path || null);
+                    },
+                    fail: (err: any) => {
+                        console.error('[WeChatShareManager] canvasToTempFilePath 失败:', err);
+                        resolve(null);
+                    }
+                });
+            } catch (error) {
+                console.error('[WeChatShareManager] canvasToTempFilePath 异常:', error);
+                resolve(null);
+            }
+        });
+    }
+
+    /**
+     * 生成当前画布截图并调起分享图片菜单（失败自动降级为空路径）
+     */
+    public async shareCurrentCanvasImage(): Promise<void> {
+        if (!this.isWeChatPlatform || !this.wx) {
+            return;
+        }
+        if (typeof this.wx.showShareImageMenu !== 'function') {
+            console.warn('[WeChatShareManager] 当前基础库不支持 showShareImageMenu');
+            return;
+        }
+        const path = await this.captureCanvasToTempFile();
+        try {
+            this.wx.showShareImageMenu({
+                path: path || ''
+            });
+        } catch (err) {
+            console.error('[WeChatShareManager] showShareImageMenu 调用失败:', err);
+        }
     }
 
     /**
@@ -142,7 +267,7 @@ export class WeChatShareManager {
 
         try {
             this.wx.shareAppMessage({
-                title: title || '塔防游戏 - 快来一起守护水晶！',
+                title: title || '塔防游戏 - 快来一起守护防线！',
                 imageUrlId:  '/skqbGe9TXGxU/UEWkEDqw==', 
                 imageUrl: imageUrl || 'https://mmocgame.qpic.cn/wechatgame/TgkTPtsibUa2coC2FwibibhPdRdleuOkA1SRDc0CIciaayq1zmtQz3Hw5MUCjAWutkCR/0', // 可以设置转发图片的路径，留空则使用默认截图
                 query: query || '',

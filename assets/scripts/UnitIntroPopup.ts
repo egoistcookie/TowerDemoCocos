@@ -23,6 +23,7 @@ export class UnitIntroPopup extends Component {
     private buildButton: Button = null!; // 建造按钮引用
     private maskLayer: Node = null!; // 遮罩层节点
     private lastShownUnitType: string = ''; // 当前显示的介绍框对应的单位类型（用于小精灵关闭后触发新手教程）
+    private currentCloseCallback: (() => void) | null = null; // 弹窗关闭回调（可选）
     
     start() {
         // 尝试多种方式查找GameManager（使用字符串避免循环依赖）
@@ -257,6 +258,9 @@ export class UnitIntroPopup extends Component {
      */
     show(unitInfo: any) {
         if (!this.container) return;
+        this.currentCloseCallback = (unitInfo && typeof unitInfo.onCloseCallback === 'function')
+            ? unitInfo.onCloseCallback
+            : null;
         
         // 退出建造模式并关闭建造面板
         this.exitBuildingMode();
@@ -276,6 +280,8 @@ export class UnitIntroPopup extends Component {
         
         if (unitInfo.unitName && this.unitName) {
             this.unitName.string = unitInfo.unitName;
+            this.unitName.horizontalAlign = Label.HorizontalAlign.CENTER;
+            this.unitName.verticalAlign = Label.VerticalAlign.CENTER;
         }
         
         // 设置单位描述，即使为空字符串也要设置（因为可能是预制体中配置的）
@@ -285,7 +291,12 @@ export class UnitIntroPopup extends Component {
             this.unitDescription.string = unitInfo.unitDescription !== undefined && unitInfo.unitDescription !== null 
                 ? unitInfo.unitDescription 
                 : '暂无描述';
+            this.unitDescription.horizontalAlign = Label.HorizontalAlign.CENTER;
+            this.unitDescription.verticalAlign = Label.VerticalAlign.CENTER;
         }
+
+        // 可选：支持外部传入特殊边框高亮色（如兽人燃血狂暴介绍框）
+        this.applyCustomBorderStyle(unitInfo?.introBorderColor);
         
         // 显示遮罩层（置灰效果）
         this.showMaskLayer();
@@ -305,6 +316,30 @@ export class UnitIntroPopup extends Component {
         this.container.on(Node.EventType.TOUCH_START, this.onTouchStart, this);
         this.container.on(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
         this.container.on(Node.EventType.TOUCH_END, this.onClose, this);
+    }
+
+    /**
+     * 根据传入颜色重绘容器边框（不传则恢复默认蓝色边框）
+     */
+    private applyCustomBorderStyle(borderColor?: Color) {
+        if (!this.container || !this.container.isValid) return;
+        const g = this.container.getComponent(Graphics);
+        const tr = this.container.getComponent(UITransform);
+        if (!g || !tr) return;
+
+        const popupWidth = tr.width;
+        const popupHeight = tr.height;
+        const cornerRadius = 15;
+
+        g.clear();
+        g.fillColor = new Color(0, 0, 0, 200);
+        g.roundRect(-popupWidth / 2, -popupHeight / 2, popupWidth, popupHeight, cornerRadius);
+        g.fill();
+
+        g.strokeColor = borderColor || new Color(100, 200, 255, 255);
+        g.lineWidth = borderColor ? 5 : 3;
+        g.roundRect(-popupWidth / 2, -popupHeight / 2, popupWidth, popupHeight, cornerRadius);
+        g.stroke();
     }
     
     /**
@@ -565,6 +600,15 @@ export class UnitIntroPopup extends Component {
         }
 
         this.lastShownUnitType = '';
+
+        if (this.currentCloseCallback) {
+            try {
+                this.currentCloseCallback();
+            } catch (e) {
+                console.warn('[UnitIntroPopup] 执行关闭回调失败:', e);
+            }
+        }
+        this.currentCloseCallback = null;
 
         // 隐藏弹窗
         this.container.active = false;

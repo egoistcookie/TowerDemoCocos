@@ -443,7 +443,7 @@ export class Build extends Component {
 
         // 黑色描边
         const outline = healNode.addComponent(LabelOutline);
-        outline.color = new Color(0, 0, 0, 255);
+        label.outlineColor = new Color(0, 0, 0, 255);
         outline.width = 2;
 
         // 添加UITransform

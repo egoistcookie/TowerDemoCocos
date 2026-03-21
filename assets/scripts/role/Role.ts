@@ -632,7 +632,7 @@ export class Role extends Component {
 
         // 黑色描边
         const outline = labelNode.addComponent(LabelOutline);
-        outline.color = new Color(0, 0, 0, 255);
+        this.dialogLabel.outlineColor = new Color(0, 0, 0, 255);
         outline.width = 2;
 
         // 初始设置为完全显示
@@ -3281,7 +3281,7 @@ export class Role extends Component {
         label.fontSize = 20;
         label.color = Color.GREEN;
         const outline = healNode.addComponent(LabelOutline);
-        outline.color = new Color(0, 0, 0, 255);
+        label.outlineColor = new Color(0, 0, 0, 255);
         outline.width = 2;
 
         // 添加UITransform
