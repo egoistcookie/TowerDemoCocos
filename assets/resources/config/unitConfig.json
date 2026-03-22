@@ -65,6 +65,27 @@
       "建造成本": "5金币"
     }
   },
+  "Mage": {
+    "baseStats": {
+      "maxHealth": 60,
+      "attackRange": 260,
+      "attackDamage": 16,
+      "attackInterval": 1.2,
+      "buildCost": 5,
+      "level": 1
+    },
+    "displayInfo": {
+      "name": "法师",
+      "description": "现在是哪个笨蛋准备好要挨揍了？"
+    },
+    "displayStats": {
+      "生命值": 60,
+      "攻击力": 16,
+      "攻击范围": "260像素",
+      "攻击间隔": "1.2秒",
+      "建造成本": "5金币"
+    }
+  },
   "Wisp": {
     "baseStats": {
       "maxHealth": 30,
@@ -228,6 +249,26 @@
     "displayInfo": {
       "name": "猎手大厅",
       "description": "训练女猎手的场地"
+    },
+    "displayStats": {
+      "生命值": 100,
+      "建造成本": "30金币",
+      "最大生产数量": 4,
+      "生产间隔": "2.0秒"
+    }
+  },
+  "MageTower": {
+    "baseStats": {
+      "maxHealth": 100,
+      "buildCost": 30,
+      "level": 1,
+      "collisionRadius": 50,
+      "maxMageCount": 4,
+      "productionInterval": 2.0
+    },
+    "displayInfo": {
+      "name": "法师塔",
+      "description": "训练法师的场地"
     },
     "displayStats": {
       "生命值": 100,

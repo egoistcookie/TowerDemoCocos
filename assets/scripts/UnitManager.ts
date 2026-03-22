@@ -23,6 +23,7 @@ export class UnitManager extends Component {
     private iceTowers: Node[] = []; // 冰塔列表
     private thunderTowers: Node[] = []; // 雷塔列表
     private hunters: Node[] = []; // 女猎手列表
+    private mages: Node[] = []; // 法师列表
     private elfSwordsmans: Node[] = []; // 精灵剑士列表
     private crystal: Node = null!;
     
@@ -38,11 +39,13 @@ export class UnitManager extends Component {
     private iceTowersNode: Node = null!; // 冰塔容器节点
     private thunderTowersNode: Node = null!; // 雷塔容器节点
     private huntersNode: Node = null!; // 女猎手容器节点
+    private magesNode: Node = null!; // 法师容器节点
     private elfSwordsmansNode: Node = null!; // 精灵剑士容器节点
     
     // 更新频率控制
     private updateTimer: number = 0;
     private readonly UPDATE_INTERVAL: number = 0.1; // 每0.1秒更新一次单位列表（而不是每帧）
+    private mageDebugLogTimer: number = 0;
     
     static getInstance(): UnitManager | null {
         return UnitManager.instance;
@@ -69,6 +72,7 @@ export class UnitManager extends Component {
         this.iceTowersNode = find('Canvas/IceTowers');
         this.thunderTowersNode = find('Canvas/ThunderTowers');
         this.huntersNode = find('Canvas/Hunters');
+        this.magesNode = find('Canvas/Mages') || find('Mages');
         this.elfSwordsmansNode = find('Canvas/ElfSwordsmans');
         this.crystal = find('Canvas/Crystal');
     }
@@ -78,10 +82,23 @@ export class UnitManager extends Component {
      */
     update(deltaTime: number) {
         this.updateTimer += deltaTime;
+        this.mageDebugLogTimer += deltaTime;
         
         if (this.updateTimer >= this.UPDATE_INTERVAL) {
             this.updateTimer = 0;
             this.updateUnitLists();
+        }
+
+        if (this.mageDebugLogTimer >= 2.0) {
+            this.mageDebugLogTimer = 0;
+            const canvasMages = find('Canvas/Mages');
+            const rootMages = find('Mages');
+            console.info('[UnitManager] mage containers status:',
+                'cached=', this.magesNode ? `${this.magesNode.parent?.name}/${this.magesNode.name}` : 'null',
+                'cachedActiveCount=', this.mages.length,
+                'canvasMagesChildren=', canvasMages?.children?.length || 0,
+                'rootMagesChildren=', rootMages?.children?.length || 0
+            );
         }
     }
     
@@ -200,6 +217,13 @@ export class UnitManager extends Component {
         } else {
             this.hunters = [];
         }
+        if (this.magesNode && this.magesNode.isValid) {
+            this.mages = this.magesNode.children.filter(node =>
+                node && node.isValid && node.active
+            );
+        } else {
+            this.mages = [];
+        }
         
         // 更新精灵剑士列表（从对象池容器直接获取）
         if (this.elfSwordsmansNode && this.elfSwordsmansNode.isValid) {
@@ -245,6 +269,9 @@ export class UnitManager extends Component {
         }
         if (!this.huntersNode || !this.huntersNode.isValid) {
             this.huntersNode = find('Canvas/Hunters');
+        }
+        if (!this.magesNode || !this.magesNode.isValid) {
+            this.magesNode = find('Canvas/Mages') || find('Mages');
         }
         if (!this.elfSwordsmansNode || !this.elfSwordsmansNode.isValid) {
             this.elfSwordsmansNode = find('Canvas/ElfSwordsmans');
@@ -331,6 +358,10 @@ export class UnitManager extends Component {
      */
     getHunters(): Node[] {
         return this.hunters.filter(node => node && node.isValid && node.active);
+    }
+
+    getMages(): Node[] {
+        return this.mages.filter(node => node && node.isValid && node.active);
     }
     
     /**

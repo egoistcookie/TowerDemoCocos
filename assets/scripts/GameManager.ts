@@ -85,6 +85,7 @@ export class GameManager extends Component {
     
     // 单位首次出现相关
     private appearedUnitTypes: Set<string> = new Set();
+    private hasShownLevel2MageTowerUnlockIntro: boolean = false; // 第2关小精灵介绍后，法师塔解锁介绍仅弹一次
     private originalTimeScale: number = 1; // 保存原始时间缩放值
     
     // 全局增益卡片图标（在初始化时加载）
@@ -1018,6 +1019,7 @@ export class GameManager extends Component {
         
         // 每次游戏开始时清空已出现单位类型集合
         this.appearedUnitTypes.clear();
+        this.hasShownLevel2MageTowerUnlockIntro = false;
         this.debugUnitTypes = [];
         
         // 重置本局经验值
@@ -3475,8 +3477,8 @@ export class GameManager extends Component {
         
         // 判断是否是建筑物的辅助函数
         const isBuilding = (unit: any): boolean => {
-            const buildingTypes = ['WatchTower', 'IceTower', 'ThunderTower', 'WarAncientTree', 
-                                  'HunterHall', 'SwordsmanHall', 'Church', 'StoneWall'];
+            const buildingTypes = ['WatchTower', 'IceTower', 'ThunderTower', 'WarAncientTree',
+                                  'HunterHall', 'MageTower', 'SwordsmanHall', 'Church', 'StoneWall'];
             return buildingTypes.indexOf(unit.unitType) >= 0;
         };
         
@@ -3676,13 +3678,13 @@ export class GameManager extends Component {
         console.log('[GameManager.setDefaultMVPUnit] 开始设置默认MVP单位');
         // 判断是否是建筑物的辅助函数
         const isBuildingType = (unitType: string): boolean => {
-            const buildingTypes = ['WatchTower', 'IceTower', 'ThunderTower', 'WarAncientTree', 
-                                  'HunterHall', 'SwordsmanHall', 'Church', 'StoneWall'];
+            const buildingTypes = ['WatchTower', 'IceTower', 'ThunderTower', 'WarAncientTree',
+                                  'HunterHall', 'MageTower', 'SwordsmanHall', 'Church', 'StoneWall'];
             return buildingTypes.indexOf(unitType) >= 0;
         };
         
         // 尝试获取第一个上场的非建筑物单位作为默认MVP
-        const activeUnitTypes = this.getActiveUnitTypes();
+        const activeUnitTypes = this.getActiveUnitTypes().filter(type => type !== 'MageTower');
         console.log('[GameManager.setDefaultMVPUnit] 当前上场的单位类型:', activeUnitTypes);
         
         // 过滤掉建筑物类型
@@ -4452,6 +4454,7 @@ export class GameManager extends Component {
         const unitContainers = [
             'Canvas/Towers',     // 包含Towers和Priests
             'Canvas/Hunters',    // 猎手
+            'Canvas/Mages',      // 法师
             'Canvas/Swordsmen',  // 剑士
             'Canvas/Wisps'       // 小精灵（重要：必须清理）
         ];
@@ -4480,6 +4483,7 @@ export class GameManager extends Component {
         const buildingContainers = [
             'Canvas/WarAncientTrees',
             'Canvas/HunterHalls',
+            'Canvas/MageTowers',
             'Canvas/SwordsmanHalls',
             'Canvas/Churches',
             'Canvas/StoneWalls',
@@ -4580,6 +4584,7 @@ export class GameManager extends Component {
         this.hasShownPopulationLimitWarning = false;
         this.hasShownFirstArrowerDeathPopup = false;
         this.appearedUnitTypes.clear();
+        this.hasShownLevel2MageTowerUnlockIntro = false;
         this.gameState = GameState.Ready;
 
         // 重置水晶（血量和等级）
@@ -4769,7 +4774,7 @@ export class GameManager extends Component {
             // 初始进度 0
             this.updateLoadingProgress(0);
 
-            // 加载步骤: 1) 加载 bundle (20%)  2) 八个预制体 (共 80%，每个 10%)
+                // 加载步骤: 1) 加载 bundle (20%)  2) 九个预制体 (共 80%，线性分配)
             assetManager.loadBundle('prefabs_sub', (err, bundle) => {
                 if (err) {
                     console.error('[GameManager] 加载分包 prefabs_sub 失败:', err);
@@ -4809,55 +4814,63 @@ export class GameManager extends Component {
                     });
                 };
 
-                // 顺序加载八个预制体，全部尝试完后再注入 TowerBuilder
-                const totalSteps = 8;
-                loadPrefab('StoneWall', 1, totalSteps, (stoneWallPrefab) => {
-                    loadPrefab('IceTower', 2, totalSteps, (iceTowerPrefab) => {
-                        loadPrefab('ThunderTower', 3, totalSteps, (thunderTowerPrefab) => {
-                            loadPrefab('WatchTower', 4, totalSteps, (watchTowerPrefab) => {
-                                loadPrefab('WarAncientTree', 5, totalSteps, (warAncientTreePrefab) => {
-                                    loadPrefab('HunterHall', 6, totalSteps, (hunterHallPrefab) => {
-                                        loadPrefab('SwordsmanHall', 7, totalSteps, (swordsmanHallPrefab) => {
-                                            loadPrefab('Church', 8, totalSteps, (churchPrefab) => {
+                // 仅在第二关加载 MageTower，避免拖慢第一关
+                const currentLevelForPrefabLoad = this.getCurrentLevelSafe();
+                const shouldLoadMageTower = currentLevelForPrefabLoad !== 1;
+                // 顺序加载基础建筑预制体；MageTower 仅在第二关追加为第9步
+                const totalSteps = shouldLoadMageTower ? 9 : 8;
+
+                const finalizeInjection = (
+                    stoneWallPrefab: Prefab | null,
+                    iceTowerPrefab: Prefab | null,
+                    thunderTowerPrefab: Prefab | null,
+                    watchTowerPrefab: Prefab | null,
+                    warAncientTreePrefab: Prefab | null,
+                    hunterHallPrefab: Prefab | null,
+                    swordsmanHallPrefab: Prefab | null,
+                    churchPrefab: Prefab | null,
+                    mageTowerPrefab: Prefab | null
+                ) => {
                     try {
                         const towerBuilder = this.findComponentInScene('TowerBuilder') as any;
                         if (towerBuilder) {
                             if (stoneWallPrefab && typeof towerBuilder.setStoneWallPrefab === 'function') {
-                                                            //console.info('[GameManager] 将分包中的 StoneWall 预制体注入 TowerBuilder');
                                 towerBuilder.setStoneWallPrefab(stoneWallPrefab);
                             }
                             if (iceTowerPrefab && typeof towerBuilder.setIceTowerPrefab === 'function') {
-                                                            //console.info('[GameManager] 将分包中的 IceTower 预制体注入 TowerBuilder');
                                 towerBuilder.setIceTowerPrefab(iceTowerPrefab);
                             }
                             if (thunderTowerPrefab && typeof towerBuilder.setThunderTowerPrefab === 'function') {
-                                                            //console.info('[GameManager] 将分包中的 ThunderTower 预制体注入 TowerBuilder');
                                 towerBuilder.setThunderTowerPrefab(thunderTowerPrefab);
                             }
                             if (watchTowerPrefab && typeof towerBuilder.setWatchTowerPrefab === 'function') {
-                                                            //console.info('[GameManager] 将分包中的 WatchTower 预制体注入 TowerBuilder');
                                 towerBuilder.setWatchTowerPrefab(watchTowerPrefab);
                             }
                             if (warAncientTreePrefab && typeof towerBuilder.setWarAncientTreePrefab === 'function') {
-                                                            //console.info('[GameManager] 将分包中的 WarAncientTree 预制体注入 TowerBuilder');
                                 towerBuilder.setWarAncientTreePrefab(warAncientTreePrefab);
                             }
                             if (hunterHallPrefab && typeof towerBuilder.setHunterHallPrefab === 'function') {
-                                                            //console.info('[GameManager] 将分包中的 HunterHall 预制体注入 TowerBuilder');
                                 towerBuilder.setHunterHallPrefab(hunterHallPrefab);
                             }
                             if (swordsmanHallPrefab && typeof towerBuilder.setSwordsmanHallPrefab === 'function') {
-                                                            //console.info('[GameManager] 将分包中的 SwordsmanHall 预制体注入 TowerBuilder');
                                 towerBuilder.setSwordsmanHallPrefab(swordsmanHallPrefab);
                             }
                             if (churchPrefab && typeof towerBuilder.setChurchPrefab === 'function') {
-                                                            //console.info('[GameManager] 将分包中的 Church 预制体注入 TowerBuilder');
                                 towerBuilder.setChurchPrefab(churchPrefab);
                             }
 
-                                                        // 所有预制体注入完成后，更新建筑类型列表
+                            if (shouldLoadMageTower) {
+                                if (mageTowerPrefab && typeof towerBuilder.setMageTowerPrefab === 'function') {
+                                    console.info('[GameManager] non-level1: MageTower prefab loaded, injecting to TowerBuilder');
+                                    towerBuilder.setMageTowerPrefab(mageTowerPrefab as Prefab);
+                                } else {
+                                    console.warn('[GameManager] non-level1: MageTower prefab load failed or TowerBuilder lacks setMageTowerPrefab');
+                                }
+                            } else {
+                                console.info('[GameManager] level1: skip MageTower prefab load');
+                            }
+
                             if (typeof towerBuilder.refreshBuildingTypes === 'function') {
-                                                            //console.info('[GameManager] 刷新建筑类型列表');
                                 towerBuilder.refreshBuildingTypes();
                             }
                         } else {
@@ -4869,13 +4882,32 @@ export class GameManager extends Component {
 
                     this.prefabsSubLoaded = true;
                     this.isLoadingPrefabsSub = false;
-
-                    // 确保进度条拉满，然后关闭加载界面
                     this.updateLoadingProgress(1);
                     this.hideLoadingOverlay();
-
-                                                // 分包加载完毕后，再次调用开始逻辑（这次会直接走内部实现）
                     this._startGameInternal();
+                };
+
+                loadPrefab('StoneWall', 1, totalSteps, (stoneWallPrefab) => {
+                    loadPrefab('IceTower', 2, totalSteps, (iceTowerPrefab) => {
+                        loadPrefab('ThunderTower', 3, totalSteps, (thunderTowerPrefab) => {
+                            loadPrefab('WatchTower', 4, totalSteps, (watchTowerPrefab) => {
+                                loadPrefab('WarAncientTree', 5, totalSteps, (warAncientTreePrefab) => {
+                                    loadPrefab('HunterHall', 6, totalSteps, (hunterHallPrefab) => {
+                                        loadPrefab('SwordsmanHall', 7, totalSteps, (swordsmanHallPrefab) => {
+                                            loadPrefab('Church', 8, totalSteps, (churchPrefab) => {
+                                                if (shouldLoadMageTower) {
+                                                    loadPrefab('MageTower', 9, totalSteps, (mageTowerPrefab) => {
+                                                        finalizeInjection(
+                                                            stoneWallPrefab, iceTowerPrefab, thunderTowerPrefab, watchTowerPrefab,
+                                                            warAncientTreePrefab, hunterHallPrefab, swordsmanHallPrefab, churchPrefab, mageTowerPrefab
+                                                        );
+                                                    });
+                                                } else {
+                                                    finalizeInjection(
+                                                        stoneWallPrefab, iceTowerPrefab, thunderTowerPrefab, watchTowerPrefab,
+                                                        warAncientTreePrefab, hunterHallPrefab, swordsmanHallPrefab, churchPrefab, null
+                                                    );
+                                                }
                                             });
                                         });
                                     });
@@ -4916,15 +4948,11 @@ export class GameManager extends Component {
             //console.info('[GameManager] _startGameInternal() BGM is disabled, skip playing game BGM');
         }
         
+        // 关卡读取必须与埋点解耦，否则 analyticsManager 不存在时会错误回落到第1关
+        let level = this.getCurrentLevelSafe();
+        console.info('[GameManager._startGameInternal] resolved level =', level, 'gameState =', this.gameState);
         // 开始记录埋点数据（如果可用）
-        let level = 1;
         if (this.analyticsManager) {
-            if (this.uiManager && (this.uiManager as any).getCurrentLevel) {
-                const currentLevel = (this.uiManager as any).getCurrentLevel();
-                if (typeof currentLevel === 'number' && !isNaN(currentLevel)) {
-                    level = currentLevel;
-                }
-            }
             this.analyticsManager.startRecording(level);
             this.totalKillCount = 0;
         }
@@ -4971,6 +4999,16 @@ export class GameManager extends Component {
                         this.scheduleOnce(() => {
                             towerBuilder.spawnInitialWarAncientTreeForLevel1();
                         }, 0.05);
+                    }
+
+                    // 第2关额外生成一个初始法师塔（参考自动生成弓箭手小屋）
+                    if (level === 2 && towerBuilder.spawnInitialMageTowerForLevel2) {
+                        this.scheduleOnce(() => {
+                            console.info('[GameManager] trigger spawnInitialMageTowerForLevel2 from start flow');
+                            towerBuilder.spawnInitialMageTowerForLevel2();
+                        }, 0.08);
+                    } else {
+                        console.info('[GameManager] skip initial mage tower spawn in start flow:', 'level=', level, 'hasMethod=', !!towerBuilder?.spawnInitialMageTowerForLevel2);
                     }
                 }, 0);
             }
@@ -5075,12 +5113,12 @@ export class GameManager extends Component {
             // 更新调试数组
             this.debugUnitTypes = Array.from(this.appearedUnitTypes);
 
-            // 特殊建筑首次出现时不弹单位介绍框：弓箭手小屋 / 猎手大厅 / 剑士小屋 / 教堂
-            const introBlockedNames = new Set<string>(['弓箭手小屋', '猎手大厅', '剑士小屋', '教堂']);
+            // 特殊建筑首次出现时不弹单位介绍框：弓箭手小屋 / 猎手大厅 / 法师塔 / 剑士小屋 / 教堂
+            const introBlockedNames = new Set<string>(['弓箭手小屋', '猎手大厅', '法师塔', '剑士小屋', '教堂']);
             const shouldShowIntro = !introBlockedNames.has(uniqueUnitType);
 
             if (shouldShowIntro) {
-                this.showUnitIntro(unitScript);
+                this.showUnitIntro(unitScript, this.getIntroCloseCallback(uniqueUnitType));
             }
 
             return true;
@@ -5093,7 +5131,7 @@ export class GameManager extends Component {
      * 显示单位介绍
      * @param unitScript 单位脚本
      */
-    showUnitIntro(unitScript: any) {
+    showUnitIntro(unitScript: any, onCloseCallback?: (() => void) | null) {
         
         // 自动创建单位介绍弹窗
         this.autoCreateUnitIntroPopup();
@@ -5153,10 +5191,61 @@ export class GameManager extends Component {
                 unitDescription: unitDescription,
                 unitIcon: unitIcon,
                 unitType: unitScript.unitType || 'unknown',
-                unitId: rawUnitId  // prefabName，用于识别小精灵等以触发新手教程
+                unitId: rawUnitId,  // prefabName，用于识别小精灵等以触发新手教程
+                onCloseCallback: onCloseCallback || undefined
             });
         } else {
         }
+    }
+
+    private getIntroCloseCallback(uniqueUnitType: string): (() => void) | null {
+        const level = this.getCurrentLevelSafe();
+        // 第二关：小精灵介绍关闭后，自动弹出法师塔解锁介绍
+        const isWispIntro = uniqueUnitType === '小精灵' || uniqueUnitType === 'Wisp';
+        if (level === 2 && isWispIntro && !this.hasShownLevel2MageTowerUnlockIntro) {
+            this.hasShownLevel2MageTowerUnlockIntro = true;
+            return () => this.showMageTowerUnlockIntro();
+        }
+        return null;
+    }
+
+    private getCurrentLevelSafe(): number {
+        let level = 1;
+        if (this.uiManager && (this.uiManager as any).getCurrentLevel) {
+            const currentLevel = (this.uiManager as any).getCurrentLevel();
+            if (typeof currentLevel === 'number' && !isNaN(currentLevel)) {
+                level = currentLevel;
+            }
+        }
+        // 兜底：避免 this.uiManager 尚未缓存，导致始终回落到第1关
+        if (level === 1) {
+            const uiManagerNode = find('UIManager') || find('UI/UIManager') || find('Canvas/UI/UIManager');
+            const uiManager = uiManagerNode?.getComponent('UIManager') as any;
+            if (uiManager && typeof uiManager.getCurrentLevel === 'function') {
+                const currentLevel = uiManager.getCurrentLevel();
+                if (typeof currentLevel === 'number' && !isNaN(currentLevel)) {
+                    level = currentLevel;
+                }
+            }
+        }
+        return level;
+    }
+
+    private showMageTowerUnlockIntro() {
+        const unitId = 'MageTower';
+        const configManager = UnitConfigManager.getInstance();
+        const displayInfo = configManager.getUnitDisplayInfo(unitId);
+        const towerBuilder = this.findComponentInScene('TowerBuilder') as any;
+        const unitIcon = towerBuilder?.mageTowerIcon || null;
+
+        const pseudoUnitScript: any = {
+            prefabName: unitId,
+            unitType: unitId,
+            unitName: displayInfo?.name || '法师塔',
+            defaultSpriteFrame: unitIcon,
+            cardIcon: unitIcon
+        };
+        this.showUnitIntro(pseudoUnitScript);
     }
 
     /**
@@ -5266,6 +5355,7 @@ export class GameManager extends Component {
         const unitContainers: Record<string, string[]> = {
             'Arrower': ['Canvas/Towers'],
             'Hunter': ['Canvas/Hunters'],
+            'Mage': ['Canvas/Mages'],
             'ElfSwordsman': ['Canvas/Swordsmen'],
             'Priest': ['Canvas/Towers'],
             'WatchTower': ['Canvas/WatchTowers'],
@@ -5273,6 +5363,7 @@ export class GameManager extends Component {
             'ThunderTower': ['Canvas/ThunderTowers'],
             'WarAncientTree': ['Canvas/WarAncientTrees'],
             'HunterHall': ['Canvas/HunterHalls'],
+            'MageTower': ['Canvas/MageTowers'],
             'SwordsmanHall': ['Canvas/SwordsmanHalls'],
             'Church': ['Canvas/Churches'],
         };
@@ -5330,7 +5421,8 @@ export class GameManager extends Component {
      * 生成增益卡片数据（总是生成3张卡片）
      */
     generateBuffCards(isRerollMode: boolean = false): BuffCardData[] {
-        const activeUnitTypes = this.getActiveUnitTypes();
+        // 法师塔不参与增幅卡片池，仅保留法师单位参与
+        const activeUnitTypes = this.getActiveUnitTypes().filter(type => type !== 'MageTower');
         //console.info(`[GameManager] generateBuffCards: 已上场的单位类型数量=${activeUnitTypes.length}, 再抽一次模式=${isRerollMode}`);
         
         const cards: BuffCardData[] = [];
@@ -5491,7 +5583,7 @@ export class GameManager extends Component {
      */
     private getUREligibleUnitTypes(activeUnitTypes: string[]): string[] {
         // 角色类型（继承Role的单位）
-        const roleTypes = ['Arrower', 'Hunter', 'ElfSwordsman', 'Priest'];
+        const roleTypes = ['Arrower', 'Hunter', 'ElfSwordsman', 'Priest', 'Mage'];
         // 防御塔类型
         const towerTypes = ['WatchTower', 'IceTower', 'ThunderTower'];
         
@@ -5567,7 +5659,11 @@ export class GameManager extends Component {
             }
         }
         
-        const buffTypes = Object.keys(buffEffects);
+        let buffTypes = Object.keys(buffEffects);
+        // 法师不提供攻速增幅：仅允许攻击力与移动速度
+        if (unitType === 'Mage') {
+            buffTypes = buffTypes.filter(type => type === 'attackDamage' || type === 'moveSpeed');
+        }
         
         if (buffTypes.length === 0) {
             console.warn(`[GameManager] generateUnitBuffCard: 单位类型 ${unitType} 没有可用的增益效果`);
@@ -5610,8 +5706,10 @@ export class GameManager extends Component {
         const unitContainers: Record<string, string[]> = {
             'Arrower': ['Canvas/Towers', 'Canvas/Arrows', 'Canvas/Units'],
             'Hunter': ['Canvas/Hunters'],
+            'Mage': ['Canvas/Mages'],
             'ElfSwordsman': ['Canvas/Swordsmen'],
             'Priest': ['Canvas/Towers', 'Canvas/Priests'],
+            'MageTower': ['Canvas/MageTowers'],
             'WatchTower': ['Canvas/WatchTowers'],
             'IceTower': ['Canvas/IceTowers'],
             'ThunderTower': ['Canvas/ThunderTowers'],

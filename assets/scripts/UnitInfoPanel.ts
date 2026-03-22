@@ -704,7 +704,7 @@ export class UnitInfoPanel extends Component {
             }
         }
 
-        // 左上角格子（索引0）：建筑物显示「集结点」，弓箭手显示「穿透箭」
+        // 左上角格子（索引0）：建筑物显示「集结点」
         // 1）集结点按钮（建筑物专用）
         if (unitInfo.onRallyPointClick && this.buttonNodes[0]) {
             const rallyButton = this.buttonNodes[0];
@@ -839,14 +839,13 @@ export class UnitInfoPanel extends Component {
 
         // 设置技能按钮
         // 当前位置说明（九宫格索引，从0开始）：
-        // 0: 第一行第一列（建筑：集结点；弓箭手：穿透箭；牧师：圣光祈祷）
+        // 0: 第一行第一列（建筑：集结点；弓箭手：穿透箭）
         // 1: 第一行第二列（防御）
         // 2: 第一行第三列（升级）
-        // 3: 第二行第一列（预留，将来可扩展其他技能）
+        // 3: 第二行第一列（牧师/法师技能位）
         //
-        // 穿透箭技能按钮：与集结点共用同一格（索引0），仅非牧师单位使用（当前为弓箭手）
-        // 为避免与集结点冲突，这里要求没有 onRallyPointClick 且不是牧师时才使用
-        if (!unitInfo.onRallyPointClick && unitInfo.onSkillClick && unitInfo.name !== '牧师' && this.buttonNodes[0]) {
+        // 穿透箭技能按钮：与集结点共用同一格（索引0），仅弓箭手使用
+        if (!unitInfo.onRallyPointClick && unitInfo.onSkillClick && unitInfo.name === '弓箭手' && this.buttonNodes[0]) {
             const skillButton = this.buttonNodes[0];
             skillButton.active = true;
 
@@ -912,16 +911,18 @@ export class UnitInfoPanel extends Component {
             });
         }
 
-        // 牧师专用圣光祈祷技能按钮：放在第二行第一列（索引3），不与集结点/穿透箭冲突
-        if (unitInfo.onSkillClick && unitInfo.name === '牧师' && this.buttonNodes[3]) {
-            const holyButton = this.buttonNodes[3];
-            holyButton.active = true;
+        // 牧师/法师技能按钮：放在第二行第一列（索引3），不与集结点/穿透箭冲突
+        if (unitInfo.onSkillClick && (unitInfo.name === '牧师' || unitInfo.name === '法师') && this.buttonNodes[3]) {
+            const skillButton = this.buttonNodes[3];
+            skillButton.active = true;
 
-            // 圣光祈祷是一次性技能，这里不需要持久高亮，仅在按下时显示按下态
+            // 一次性技能，这里不需要持久高亮，仅在按下时显示按下态
             this.skillButtonPressed = false;
 
-            // 加载圣光祈祷按钮贴图（shengg.png）
-            this.loadButtonSprite(3, 'shengg.png', 'shengg.png');
+            // 牧师使用圣光祈祷图标；法师使用陨石图标（yunshi1/yunshi2）
+            const normalIcon = unitInfo.name === '法师' ? 'yunshi1.png' : 'shengg.png';
+            const downIcon = unitInfo.name === '法师' ? 'yunshi2.png' : 'shengg.png';
+            this.loadButtonSprite(3, normalIcon, downIcon);
 
             const sprite = this.buttonSprites.get(3);
             if (sprite && sprite.node && sprite.node.isValid) {
@@ -931,7 +932,7 @@ export class UnitInfoPanel extends Component {
                 }
             }
 
-            holyButton.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+            skillButton.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
                 this.skillButtonPressed = true;
 
                 const sprite = this.buttonSprites.get(3);
@@ -947,7 +948,7 @@ export class UnitInfoPanel extends Component {
                 }
             });
 
-            holyButton.on(Node.EventType.TOUCH_END, () => {
+            skillButton.on(Node.EventType.TOUCH_END, () => {
                 this.skillButtonPressed = false;
 
                 const sprite = this.buttonSprites.get(3);

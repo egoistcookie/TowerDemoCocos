@@ -1179,6 +1179,7 @@ export class Build extends Component {
         const friendlyContainers = [
             { name: 'Towers', componentNames: ['Arrower', 'Priest'] },
             { name: 'Hunters', componentNames: ['Hunter'] },
+            { name: 'Mages', componentNames: ['Mage'] },
             { name: 'ElfSwordsmans', componentNames: ['ElfSwordsman'] }
         ];
         

@@ -399,6 +399,7 @@ export class Church extends Build {
         const friendlyContainers: Array<{ nodeName: string; scriptName: string }> = [
             { nodeName: 'Canvas/Towers', scriptName: 'Arrower' },
             { nodeName: 'Canvas/Towers', scriptName: 'Priest' },
+            { nodeName: 'Canvas/Mages', scriptName: 'Mage' },
             { nodeName: 'ElfSwordsmans', scriptName: 'ElfSwordsman' },
         ];
         const crossTypeMinDist = 60; // 跨类型单位最小间距

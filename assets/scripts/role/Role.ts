@@ -246,6 +246,7 @@ export class Role extends Component {
     private static cachedCrystalNode: Node | null = null;
     private static cachedTowersNode: Node | null = null;
     private static cachedHuntersNode: Node | null = null;
+    private static cachedMagesNode: Node | null = null;
     private static cachedElfSwordsmansNode: Node | null = null;
     private static cachedEnemiesNode: Node | null = null;
     private static cacheInitialized: boolean = false;
@@ -376,6 +377,7 @@ export class Role extends Component {
         Role.cachedCrystalNode = find('Crystal');
         Role.cachedTowersNode = find('Canvas/Towers');
         Role.cachedHuntersNode = find('Canvas/Hunters');
+        Role.cachedMagesNode = find('Canvas/Mages');
         Role.cachedElfSwordsmansNode = find('Canvas/ElfSwordsmans');
         Role.cachedEnemiesNode = find('Canvas/Enemies');
         
@@ -385,6 +387,7 @@ export class Role extends Component {
             crystal: !!Role.cachedCrystalNode,
             towers: !!Role.cachedTowersNode,
             hunters: !!Role.cachedHuntersNode,
+            mages: !!Role.cachedMagesNode,
             elfSwordsmans: !!Role.cachedElfSwordsmansNode,
             enemies: !!Role.cachedEnemiesNode
         });
@@ -1852,6 +1855,52 @@ export class Role extends Component {
             }
         }
 
+        // 检查与法师的碰撞 - 优先使用 UnitManager，使用平方距离
+        if (this.unitManager) {
+            const mages = this.unitManager.getMages();
+            for (const mage of mages) {
+                if (mage && mage.isValid && mage.active && mage !== this.node) {
+                    const magePos = mage.worldPosition;
+                    const dx = position.x - magePos.x;
+                    const dy = position.y - magePos.y;
+                    const distanceSq = dx * dx + dy * dy;
+                    const otherMageScript = mage.getComponent('Role') as any;
+                    if (!otherMageScript) {
+                        continue;
+                    }
+                    const otherRadius = otherMageScript.collisionRadius ? otherMageScript.collisionRadius : this.collisionRadius;
+                    const minDistance = (this.collisionRadius + otherRadius) * 1.2;
+                    const minDistanceSq = minDistance * minDistance;
+                    if (distanceSq < minDistanceSq) {
+                        return true;
+                    }
+                }
+            }
+        } else {
+            const magesNode = Role.cachedMagesNode;
+            if (magesNode) {
+                const mages = magesNode.children || [];
+                for (const mage of mages) {
+                    if (mage && mage.isValid && mage.active && mage !== this.node) {
+                        const magePos = mage.worldPosition;
+                        const dx = position.x - magePos.x;
+                        const dy = position.y - magePos.y;
+                        const distanceSq = dx * dx + dy * dy;
+                        const otherMageScript = mage.getComponent('Role') as any;
+                        if (!otherMageScript) {
+                            continue;
+                        }
+                        const otherRadius = otherMageScript.collisionRadius ? otherMageScript.collisionRadius : this.collisionRadius;
+                        const minDistance = (this.collisionRadius + otherRadius) * 1.2;
+                        const minDistanceSq = minDistance * minDistance;
+                        if (distanceSq < minDistanceSq) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
         // 检查与敌人的碰撞 - 使用公共敌人获取函数（已优化，使用 UnitManager），使用平方距离
         const enemies = this.getEnemies(true);
         for (const enemy of enemies) {
@@ -2139,6 +2188,35 @@ export class Role extends Component {
             }
         }
 
+        // 检查法师 - 使用 UnitManager 和平方距离
+        if (this.unitManager) {
+            const mages = this.unitManager.getMages();
+            for (const mage of mages) {
+                if (mage && mage.isValid && mage.active && mage !== this.node) {
+                    const magePos = mage.worldPosition;
+                    const dx = currentPos.x - magePos.x;
+                    const dy = currentPos.y - magePos.y;
+                    const distanceSq = dx * dx + dy * dy;
+                    const otherMageScript = mage.getComponent('Role') as any;
+                    if (!otherMageScript) {
+                        continue;
+                    }
+                    const otherRadius = otherMageScript.collisionRadius ? otherMageScript.collisionRadius : this.collisionRadius;
+                    const minDistance = (this.collisionRadius + otherRadius) * 1.2;
+                    const minDistanceSq = minDistance * minDistance;
+                    if (distanceSq < minDistanceSq && distanceSq > 0.01) {
+                        const distance = Math.sqrt(distanceSq);
+                        Vec3.subtract(this.tempVec3_1, currentPos, magePos);
+                        this.tempVec3_1.normalize();
+                        const strength = Math.max(2.0, (minDistance - distance) / minDistance * 3.0);
+                        Vec3.scaleAndAdd(pushForce, pushForce, this.tempVec3_1, strength);
+                        maxPushStrength = Math.max(maxPushStrength, strength);
+                        obstacleCount++;
+                    }
+                }
+            }
+        }
+
         // 检查敌人 - 使用公共敌人获取函数（已优化）和平方距离
         const enemies = this.getEnemies(true, this.collisionRadius * 2);
         for (const enemy of enemies) {
@@ -2268,6 +2346,38 @@ export class Role extends Component {
                         let strength = 1 - (distance / detectionRange);
                         if (distanceSq < minDistanceSq) {
                             strength = 3.0; // 大幅增强避障力
+                        }
+                        Vec3.scaleAndAdd(avoidanceForce, avoidanceForce, this.tempVec3_1, strength);
+                        maxStrength = Math.max(maxStrength, strength);
+                        obstacleCount++;
+                    }
+                }
+            }
+        }
+
+        // 检查法师 - 使用 UnitManager 和平方距离
+        if (this.unitManager) {
+            const mages = this.unitManager.getMages();
+            for (const mage of mages) {
+                if (mage && mage.isValid && mage.active && mage !== this.node) {
+                    const magePos = mage.worldPosition;
+                    const dx = currentPos.x - magePos.x;
+                    const dy = currentPos.y - magePos.y;
+                    const distanceSq = dx * dx + dy * dy;
+                    const otherMageScript = mage.getComponent('Role') as any;
+                    if (!otherMageScript) {
+                        continue;
+                    }
+                    const otherRadius = otherMageScript.collisionRadius ? otherMageScript.collisionRadius : this.collisionRadius;
+                    const minDistance = (this.collisionRadius + otherRadius) * 1.2;
+                    const minDistanceSq = minDistance * minDistance;
+                    if (distanceSq < detectionRangeSq && distanceSq > 0.01) {
+                        const distance = Math.sqrt(distanceSq);
+                        Vec3.subtract(this.tempVec3_1, currentPos, magePos);
+                        this.tempVec3_1.normalize();
+                        let strength = 1 - (distance / detectionRange);
+                        if (distanceSq < minDistanceSq) {
+                            strength = 3.0;
                         }
                         Vec3.scaleAndAdd(avoidanceForce, avoidanceForce, this.tempVec3_1, strength);
                         maxStrength = Math.max(maxStrength, strength);

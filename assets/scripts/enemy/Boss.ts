@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip, view } from 'cc';
+import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip, view, LabelOutline } from 'cc';
 import { GameManager, GameState } from '../GameManager';
 import { HealthBar } from '../HealthBar';
 import { DamageNumber } from '../DamageNumber';
@@ -447,8 +447,9 @@ export class Boss extends Component {
                 const hunterScript = this.currentTarget.getComponent('Hunter') as any;
                 const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
                 const priestScript = this.currentTarget.getComponent('Priest') as any;
+                const mageScript = this.currentTarget.getComponent('Mage') as any;
                 const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-                const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript;
+                const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript;
                 
                 if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
                     // 当前目标已被摧毁，清除目标
@@ -581,8 +582,9 @@ export class Boss extends Component {
             if (tower && tower.active && tower.isValid) {
                 const towerScript = tower.getComponent('Arrower') as any;
                 const priestScript = tower.getComponent('Priest') as any;
-                const characterScript = towerScript || priestScript;
-                // 检查弓箭手或牧师是否存活
+                const mageScript = tower.getComponent('Mage') as any;
+                const characterScript = towerScript || priestScript || mageScript;
+                // 检查弓箭手/牧师/法师是否存活
                 if (characterScript && characterScript.isAlive && characterScript.isAlive()) {
                     const myPos = this.node.worldPosition;
                     const towerPos = tower.worldPosition;
@@ -837,11 +839,12 @@ export class Boss extends Component {
             const hunterScript = this.currentTarget.getComponent('Hunter') as any;
             const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
             const priestScript = this.currentTarget.getComponent('Priest') as any;
+            const mageScript = this.currentTarget.getComponent('Mage') as any;
             const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
             const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
             const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
             const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
-            const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
+            const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
             
             // 如果当前目标仍然存活，保持当前目标不变
             if (targetScript && targetScript.isAlive && targetScript.isAlive()) {
@@ -2092,10 +2095,12 @@ export class Boss extends Component {
             damageNode = instantiate(this.damageNumberPrefab);
         } else {
             damageNode = new Node('DamageNumber');
-            const label = damageNode.addComponent(Label);
-            label.string = `-${Math.floor(damage)}`;
-            label.fontSize = 20;
-            label.color = Color.WHITE;
+        }
+
+        // 与通用敌人一致：移除预制体自带 DamageNumber 组件，避免走红字/特殊样式
+        const builtinDamageComp = damageNode.getComponent(DamageNumber);
+        if (builtinDamageComp) {
+            damageNode.removeComponent(DamageNumber);
         }
         
         // 添加到Canvas或场景
@@ -2109,36 +2114,48 @@ export class Boss extends Component {
         // 设置位置（在敌人上方）
         damageNode.setWorldPosition(this.node.worldPosition.clone().add3f(0, 40, 0));
         
-        // 如果有DamageNumber组件，设置伤害值
-        const damageScript = damageNode.getComponent(DamageNumber);
-        if (damageScript) {
-            damageScript.setDamage(damage);
-        } else {
-            const label = damageNode.getComponent(Label);
-            if (label) {
-                const startPos = damageNode.position.clone();
-                const endPos = startPos.clone();
-                endPos.y += 50;
-                
-                tween(damageNode)
-                    .to(1.0, { position: endPos })
-                    .parallel(
-                        tween().to(1.0, {}, {
-                            onUpdate: (target, ratio) => {
-                                const color = label.color.clone();
-                                color.a = 255 * (1 - ratio);
-                                label.color = color;
-                            }
-                        })
-                    )
-                    .call(() => {
-                        if (damageNode && damageNode.isValid) {
-                            damageNode.destroy();
-                        }
-                    })
-                    .start();
+        // 查找或创建 Label，并统一为白字黑边样式
+        let label: Label | null = damageNode.getComponent(Label);
+        if (!label) {
+            const labelsInChildren = damageNode.getComponentsInChildren(Label);
+            if (labelsInChildren && labelsInChildren.length > 0) {
+                label = labelsInChildren[0];
             }
         }
+        if (!label) {
+            label = damageNode.addComponent(Label);
+            label.fontSize = 20;
+        }
+        label.string = `-${Math.floor(damage)}`;
+        label.color = new Color(255, 255, 255, 255);
+
+        let outline = label.node.getComponent(LabelOutline);
+        if (!outline) {
+            outline = label.node.addComponent(LabelOutline);
+        }
+        (label as any).outlineColor = new Color(0, 0, 0, 255);
+        (label as any).outlineWidth = 2;
+
+        const startPos = damageNode.position.clone();
+        const endPos = startPos.clone();
+        endPos.y += 50;
+        tween(damageNode)
+            .to(1.0, { position: endPos })
+            .parallel(
+                tween().to(1.0, {}, {
+                    onUpdate: (_target, ratio) => {
+                        const c = label!.color.clone();
+                        c.a = 255 * (1 - ratio);
+                        label!.color = c;
+                    }
+                })
+            )
+            .call(() => {
+                if (damageNode && damageNode.isValid) {
+                    damageNode.destroy();
+                }
+            })
+            .start();
     }
 
     // ====== 战争咆哮 Buff 管理 ======

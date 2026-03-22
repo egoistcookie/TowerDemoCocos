@@ -86,10 +86,12 @@ export class TalentSystem extends Component {
         const prefabPaths = [
             'prefabs/Arrower', 
             'prefabs/Hunter',
+            'prefabs/Mage',
             'prefabs/WarAncientTree',
             'prefabs/ElfSwordsman',
             'prefabs/Priest',
             'prefabs/HunterHall',
+            'prefabs/MageTower',
             'prefabs/SwordsmanHall',
             'prefabs/Church',
             'prefabs/StoneWall'
@@ -332,12 +334,14 @@ export class TalentSystem extends Component {
             // 建筑物单位
             { id: 'WarAncientTree', name: '弓箭手小屋', description: '能够训练弓箭手的建筑物，同时拥有远程攻击能力', icon: 'WarAncientTree', unitType: 'BUILDING' },
             { id: 'HunterHall', name: '猎手大厅', description: '能够训练女猎手的建筑物', icon: 'HunterHall', unitType: 'BUILDING' },
+            { id: 'MageTower', name: '法师塔', description: '能够训练法师的建筑物', icon: 'MageTower', unitType: 'BUILDING' },
             { id: 'SwordsmanHall', name: '剑士小屋', description: '能够生产精灵剑士的建筑物，提供强大的近战攻击单位', icon: 'SwordsmanHall', unitType: 'BUILDING' },
             { id: 'Church', name: '教堂', description: '训练牧师的建筑，可以持续生产为友军治疗的辅助单位', icon: 'Church', unitType: 'BUILDING' },
             { id: 'StoneWall', name: '石墙', description: '坚固的石墙，可以阻挡敌人的进攻路线', icon: 'StoneWall', unitType: 'BUILDING' },
             // 角色单位
             { id: 'Arrower', name: '弓箭手', description: '远程攻击单位，能够攻击远处的敌人，射速较快', icon: 'Arrower', unitType: 'CHARACTER' },
             { id: 'Hunter', name: '女猎手', description: '远程攻击单位，投掷回旋镖攻击敌人，回旋镖可以反弹多次', icon: 'Hunter', unitType: 'CHARACTER' },
+            { id: 'Mage', name: '法师', description: '远程法术单位，施展魔法攻击敌人', icon: 'Mage', unitType: 'CHARACTER' },
             { id: 'ElfSwordsman', name: '精灵剑士', description: '近战攻击单位，使用剑进行近距离战斗', icon: 'ElfSwordsman', unitType: 'CHARACTER' },
             { id: 'Priest', name: '牧师', description: '辅助单位，治疗附近受伤的友军', icon: 'Priest', unitType: 'CHARACTER' },
         ];
@@ -955,11 +959,13 @@ export class TalentSystem extends Component {
         const unitTypes = [
             { id: 'WarAncientTree', name: '弓箭手小屋', description: '能够训练弓箭手的建筑物，同时拥有远程攻击能力', icon: 'WarAncientTree', unitType: 'BUILDING' },
             { id: 'HunterHall', name: '猎手大厅', description: '能够训练女猎手的建筑物', icon: 'HunterHall', unitType: 'BUILDING' },
+            { id: 'MageTower', name: '法师塔', description: '能够训练法师的建筑物', icon: 'MageTower', unitType: 'BUILDING' },
             { id: 'SwordsmanHall', name: '剑士小屋', description: '能够生产精灵剑士的建筑物，提供强大的近战攻击单位', icon: 'SwordsmanHall', unitType: 'BUILDING' },
             { id: 'Church', name: '教堂', description: '训练牧师的建筑，可以持续生产为友军治疗的辅助单位', icon: 'Church', unitType: 'BUILDING' },
             { id: 'StoneWall', name: '石墙', description: '坚固的石墙，可以阻挡敌人的进攻路线', icon: 'StoneWall', unitType: 'BUILDING' },
             { id: 'Arrower', name: '弓箭手', description: '远程攻击单位，能够攻击远处的敌人，射速较快', icon: 'Arrower', unitType: 'CHARACTER' },
             { id: 'Hunter', name: '女猎手', description: '远程攻击单位，投掷回旋镖攻击敌人，回旋镖可以反弹多次', icon: 'Hunter', unitType: 'CHARACTER' },
+            { id: 'Mage', name: '法师', description: '远程法术单位，施展魔法攻击敌人', icon: 'Mage', unitType: 'CHARACTER' },
             { id: 'ElfSwordsman', name: '精灵剑士', description: '近战攻击单位，使用剑进行近距离战斗', icon: 'ElfSwordsman', unitType: 'CHARACTER' },
             { id: 'Priest', name: '牧师', description: '辅助单位，治疗附近受伤的友军', icon: 'Priest', unitType: 'CHARACTER' },
         ];
@@ -991,6 +997,8 @@ export class TalentSystem extends Component {
                 'Arrower': 'Arrower',
                 'hunter': 'Hunter',
                 'Hunter': 'Hunter',
+                'mage': 'Mage',
+                'Mage': 'Mage',
                 'war_ancient_tree': 'WarAncientTree',
                 'WarAncientTree': 'WarAncientTree',
                 'elf_swordsman': 'ElfSwordsman',
@@ -999,6 +1007,8 @@ export class TalentSystem extends Component {
                 'Priest': 'Priest',
                 'hunter_hall': 'HunterHall',
                 'HunterHall': 'HunterHall',
+                'mage_tower': 'MageTower',
+                'MageTower': 'MageTower',
                 'swordsman_hall': 'SwordsmanHall',
                 'SwordsmanHall': 'SwordsmanHall',
                 'church': 'Church',
@@ -1175,10 +1185,13 @@ export class TalentSystem extends Component {
             // 角色单位
             'Arrower': 'Arrower',
             'Hunter': 'Hunter',
+            'Mage': 'Mage',
             'ElfSwordsman': 'ElfSwordsman',
             'Priest': 'Priest',
+            // 建筑 / 防御单位
             'WarAncientTree': 'WarAncientTree',
             'HunterHall': 'HunterHall',
+            'MageTower': 'MageTower',
             'SwordsmanHall': 'SwordsmanHall',
             'Church': 'Church',
             'StoneWall': 'StoneWall',

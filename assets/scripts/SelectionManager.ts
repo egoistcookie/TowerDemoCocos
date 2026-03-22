@@ -3,6 +3,7 @@ import { Arrower } from './role/Arrower';
 import { Hunter } from './role/Hunter';
 import { ElfSwordsman } from './role/ElfSwordsman';
 import { Priest } from './role/Priest';
+import { Mage } from './role/Mage';
 const { ccclass, property } = _decorator;
 
 @ccclass('SelectionManager')
@@ -22,6 +23,7 @@ export class SelectionManager extends Component {
     private selectedHunters: Hunter[] = []; // 选中的女猎手数组
     private selectedSwordsmen: ElfSwordsman[] = []; // 选中的精灵剑士数组
     private selectedPriests: Priest[] = []; // 选中的牧师数组
+    private selectedMages: Mage[] = []; // 选中的法师数组
     private camera: Camera = null!; // 相机引用
     private globalTouchHandler: ((event: EventTouch) => void) | null = null!; // 全局触摸事件处理器
     private touchStartTime: number = 0; // 本次触摸开始时间
@@ -196,7 +198,7 @@ export class SelectionManager extends Component {
 
         // 如果之前没有选中的单位，清除之前的选择
         // 如果有选中的单位，保留选择（等待拖拽或点击来决定是重新选择还是移动）
-        if (this.selectedTowers.length === 0 && this.selectedHunters.length === 0 && this.selectedSwordsmen.length === 0 && this.selectedPriests.length === 0) {
+        if (this.selectedTowers.length === 0 && this.selectedHunters.length === 0 && this.selectedSwordsmen.length === 0 && this.selectedPriests.length === 0 && this.selectedMages.length === 0) {
             this.clearSelection();
         }
     }
@@ -256,7 +258,7 @@ export class SelectionManager extends Component {
         }
 
         // 如果之前有选中的单位，检测到拖拽时清除之前的选择（开始新的选择）
-        if (this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedSwordsmen.length > 0 || this.selectedPriests.length > 0) {
+        if (this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedSwordsmen.length > 0 || this.selectedPriests.length > 0 || this.selectedMages.length > 0) {
             // 性能优化：使用平方距离比较
             const dx1 = this.currentPos.x - this.startPos.x;
             const dy1 = this.currentPos.y - this.startPos.y;
@@ -284,7 +286,7 @@ export class SelectionManager extends Component {
         this.hasActiveTouchStart = false;
 
         // 检查是否有选中的单位（防御塔、女猎手或精灵剑士）
-        const hasSelectedUnits = this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedSwordsmen.length > 0 || this.selectedPriests.length > 0;
+        const hasSelectedUnits = this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedSwordsmen.length > 0 || this.selectedPriests.length > 0 || this.selectedMages.length > 0;
         
         // 优先检查是否在建造模式下（如果是，且没有选中单位，完全不处理，让建造系统处理）
         const buildingMode = this.isBuildingMode();
@@ -326,7 +328,7 @@ export class SelectionManager extends Component {
         const dragDistanceSq2 = dx2 * dx2 + dy2 * dy2;
         
         // 记录拖拽开始前是否有选中的单位（包括防御单位、女猎手、精灵剑士和牧师）
-        const hadPreviousSelection = this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedSwordsmen.length > 0 || this.selectedPriests.length > 0;
+        const hadPreviousSelection = this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedSwordsmen.length > 0 || this.selectedPriests.length > 0 || this.selectedMages.length > 0;
         
         
         // 如果是拖拽选择，更新选中的单位
@@ -353,7 +355,7 @@ export class SelectionManager extends Component {
             const clickedBuilding = this.findBuildingAtPosition(worldPos);
             
             // 计算分散位置（包括防御单位、女猎手、精灵剑士和牧师）
-            const allUnits: any[] = [...this.selectedTowers, ...this.selectedHunters, ...this.selectedSwordsmen, ...this.selectedPriests];
+            const allUnits: any[] = [...this.selectedTowers, ...this.selectedHunters, ...this.selectedSwordsmen, ...this.selectedPriests, ...this.selectedMages];
             const formationPositions = this.calculateFormationPositions(worldPos, allUnits);
             
 
@@ -395,6 +397,16 @@ export class SelectionManager extends Component {
                     if ((this.selectedTowers.length + this.selectedHunters.length + this.selectedSwordsmen.length + i) < formationPositions.length) {
                         const targetPos = formationPositions[this.selectedTowers.length + this.selectedHunters.length + this.selectedSwordsmen.length + i];
                         priest.setManualMoveTargetPosition(targetPos);
+                    }
+                }
+            }
+            // 让所有选中的法师移动到各自的分散位置
+            for (let i = 0; i < this.selectedMages.length; i++) {
+                const mage = this.selectedMages[i];
+                if (mage && mage.node && mage.node.isValid) {
+                    const idx = this.selectedTowers.length + this.selectedHunters.length + this.selectedSwordsmen.length + this.selectedPriests.length + i;
+                    if (idx < formationPositions.length) {
+                        mage.setManualMoveTargetPosition(formationPositions[idx]);
                     }
                 }
             }
@@ -756,12 +768,35 @@ export class SelectionManager extends Component {
             }
         }
 
+        // 查找法师（Mages容器）
+        const newSelectedMages: Mage[] = [];
+        const magesNode = find('Canvas/Mages') || find('Mages');
+        if (magesNode) {
+            const mages = magesNode.children || [];
+            for (const mageNode of mages) {
+                if (!mageNode || !mageNode.isValid || !mageNode.active) {
+                    continue;
+                }
+                const mageScript = mageNode.getComponent(Mage) as Mage;
+                if (!mageScript || !mageScript.isAlive || !mageScript.isAlive()) {
+                    continue;
+                }
+                const magePos = mageNode.worldPosition;
+                const inRangeX = magePos.x >= minX && magePos.x <= maxX;
+                const inRangeY = magePos.y >= minY && magePos.y <= maxY;
+                if (inRangeX && inRangeY) {
+                    newSelectedMages.push(mageScript);
+                }
+            }
+        }
+
 
         // 更新选中状态
         this.setSelectedTowers(newSelectedTowers);
         this.setSelectedHunters(newSelectedHunters);
         this.setSelectedSwordsmen(newSelectedSwordsmen);
         this.setSelectedPriests(newSelectedPriests);
+        this.setSelectedMages(newSelectedMages);
         
         // 移除之前注册的移动命令，确保不会自动触发移动
         if (this.globalTouchHandler) {
@@ -812,6 +847,23 @@ export class SelectionManager extends Component {
         for (const priest of this.selectedPriests) {
             if (priest && priest.node && priest.node.isValid) {
                 priest.setHighlight(true);
+            }
+        }
+    }
+
+    /**
+     * 设置选中的法师
+     */
+    setSelectedMages(mages: Mage[]) {
+        for (const mage of this.selectedMages) {
+            if (mage && mage.node && mage.node.isValid) {
+                mage.setHighlight(false);
+            }
+        }
+        this.selectedMages = mages;
+        for (const mage of this.selectedMages) {
+            if (mage && mage.node && mage.node.isValid) {
+                mage.setHighlight(true);
             }
         }
     }
@@ -892,12 +944,14 @@ export class SelectionManager extends Component {
             this.setSelectedHunters([]);
             this.setSelectedSwordsmen([]);
             this.setSelectedPriests([]);
+            this.setSelectedMages([]);
         } else {
             // 建造模式下静默清除，不输出日志
             this.selectedTowers = [];
             this.selectedHunters = [];
             this.selectedSwordsmen = [];
             this.selectedPriests = [];
+            this.selectedMages = [];
             // 取消之前选中的高亮
             for (const tower of this.selectedTowers) {
                 if (tower && tower.node && tower.node.isValid) {
@@ -917,6 +971,11 @@ export class SelectionManager extends Component {
             for (const priest of this.selectedPriests) {
                 if (priest && priest.node && priest.node.isValid) {
                     priest.setHighlight(false);
+                }
+            }
+            for (const mage of this.selectedMages) {
+                if (mage && mage.node && mage.node.isValid) {
+                    mage.setHighlight(false);
                 }
             }
         }
@@ -1093,7 +1152,7 @@ export class SelectionManager extends Component {
             // 检查当前选中的单位
             
             // 计算分散位置（包括防御单位、女猎手、精灵剑士和牧师）
-            const allUnits: any[] = [...this.selectedTowers, ...this.selectedHunters, ...this.selectedSwordsmen, ...this.selectedPriests];
+            const allUnits: any[] = [...this.selectedTowers, ...this.selectedHunters, ...this.selectedSwordsmen, ...this.selectedPriests, ...this.selectedMages];
             const formationPositions = this.calculateFormationPositions(worldPos, allUnits);
             
 
@@ -1132,6 +1191,15 @@ export class SelectionManager extends Component {
                     if ((this.selectedTowers.length + this.selectedHunters.length + this.selectedSwordsmen.length + i) < formationPositions.length) {
                         const targetPos = formationPositions[this.selectedTowers.length + this.selectedHunters.length + this.selectedSwordsmen.length + i];
                         priest.setManualMoveTargetPosition(targetPos);
+                    }
+                }
+            }
+            for (let i = 0; i < this.selectedMages.length; i++) {
+                const mage = this.selectedMages[i];
+                if (mage && mage.node && mage.node.isValid) {
+                    const idx = this.selectedTowers.length + this.selectedHunters.length + this.selectedSwordsmen.length + this.selectedPriests.length + i;
+                    if (idx < formationPositions.length) {
+                        mage.setManualMoveTargetPosition(formationPositions[idx]);
                     }
                 }
             }
@@ -1185,7 +1253,7 @@ export class SelectionManager extends Component {
     getAllSelectedUnitNodes(): Node[] {
         const allNodes: Node[] = [];
         
-        // 按选择顺序添加：弓箭手、女猎手、精灵剑士、牧师
+        // 按选择顺序添加：弓箭手、女猎手、精灵剑士、牧师、法师
         for (const tower of this.selectedTowers) {
             if (tower && tower.node && tower.node.isValid && tower.node.active) {
                 allNodes.push(tower.node);
@@ -1204,6 +1272,11 @@ export class SelectionManager extends Component {
         for (const priest of this.selectedPriests) {
             if (priest && priest.node && priest.node.isValid && priest.node.active) {
                 allNodes.push(priest.node);
+            }
+        }
+        for (const mage of this.selectedMages) {
+            if (mage && mage.node && mage.node.isValid && mage.node.active) {
+                allNodes.push(mage.node);
             }
         }
         

@@ -1,96 +1,162 @@
-import { _decorator, Component, Node, Vec3, find } from 'cc';
-import { GameManager, GameState } from './GameManager';
-import { FireballExplosionEffect } from './FireballExplosionEffect';
-import { UnitManager } from './UnitManager';
-
+import { _decorator, Component, Node, Vec3, Sprite, tween, find } from 'cc';
+import { GameState } from './GameState';
 const { ccclass, property } = _decorator;
 
-/**
- * 火球类
- * - 直线飞行（非弧线）
- * - 在落点造成直径30的范围伤害
- * - 有爆炸特效
- */
-@ccclass('Fireball')
-export class Fireball extends Component {
+@ccclass('Arrow')
+export class Arrow extends Component {
     @property
-    speed: number = 600; // 火球飞行速度（像素/秒）
+    speed: number = 500; // 弓箭飞行速度（像素/秒）
 
     @property
-    damage: number = 15; // 伤害值
+    arcHeight: number = 50; // 抛物线弧度高度（像素）
 
     @property
-    explosionRadius: number = 15; // 爆炸范围半径（直径30，半径15）
+    damage: number = 10; // 伤害值
 
-    private startPos: Vec3 = new Vec3();
-    private direction: Vec3 = new Vec3(); // 飞行方向（归一化）
-    private travelDistance: number = 0; // 总飞行距离
-    private traveledDistance: number = 0; // 已飞行距离
-    private isFlying: boolean = false;
-    private gameManager: GameManager | null = null;
     private targetNode: Node = null!;
-    private unitManager: UnitManager | null = null;
+    private startPos: Vec3 = new Vec3(); 
+    private targetPos: Vec3 = new Vec3();
+    private travelTime: number = 0;
+    private elapsedTime: number = 0;
+    // 命中回调：携带伤害值和箭矢的受力方向（世界坐标系下，从攻击者指向受击者）
+    private onHitCallback: ((damage: number, hitDirection: Vec3) => void) | null = null;
+    private isFlying: boolean = false;
+    private lastPos: Vec3 = new Vec3();
+    private gameManager: any = null; // GameManager引用（使用any避免循环依赖）
+    // 当前飞行方向（每帧更新，用于命中时确定受力方向）
+    private currentDirection: Vec3 = new Vec3();
 
     /**
-     * 初始化火球
+     * 初始化弓箭
      * @param startPos 起始位置
-     * @param targetNode 目标节点（用于计算初始方向）
+     * @param targetNode 目标节点
      * @param damage 伤害值
+     * @param onHit 命中回调函数（参数：伤害值，受力方向）
      */
-    init(startPos: Vec3, targetNode: Node, damage: number) {
+    init(startPos: Vec3, targetNode: Node, damage: number, onHit?: (damage: number, hitDirection: Vec3) => void) {
         this.startPos = startPos.clone();
         this.targetNode = targetNode;
         this.damage = damage;
-        this.traveledDistance = 0;
+        this.onHitCallback = onHit || null;
 
         // 设置初始位置
         this.node.setWorldPosition(this.startPos);
 
-        // 计算初始方向（从起始位置指向目标）
-        let targetPos: Vec3;
-        if (targetNode && targetNode.isValid) {
-            targetPos = targetNode.worldPosition.clone();
+        // 计算目标位置
+        if (this.targetNode && this.targetNode.isValid) {
+            this.targetPos = this.targetNode.worldPosition.clone();
         } else {
             // 如果目标无效，使用起始位置前方
-            targetPos = this.startPos.clone();
-            targetPos.x += 200;
+            this.targetPos = this.startPos.clone();
+            this.targetPos.x += 200;
         }
 
-        // 计算方向向量
-        Vec3.subtract(this.direction, targetPos, this.startPos);
-        const distance = this.direction.length();
-        
-        if (distance < 0.1) {
-            // 距离太近，无法初始化
-            this.scheduleOnce(() => {
-                if (this.node && this.node.isValid) {
-                    this.node.destroy();
-                }
-            }, 0);
+        // 计算飞行时间（基于距离和速度）
+        const dx = this.startPos.x - this.targetPos.x;
+        const dy = this.startPos.y - this.targetPos.y;
+        const distanceSq = dx * dx + dy * dy;
+        if (distanceSq < 0.01) {
             return;
         }
-
-        // 归一化方向
-        this.direction.normalize();
-
-        // 计算总飞行距离：到目标的距离
-        this.travelDistance = distance;
-
-        // 设置初始旋转角度（指向目标）
-        const angle = Math.atan2(this.direction.y, this.direction.x) * 180 / Math.PI;
-        this.node.setRotationFromEuler(0, 0, angle);
-
+        const distance = Math.sqrt(distanceSq);
+        
+        this.travelTime = distance / this.speed;
+        if (this.travelTime <= 0) {
+            return;
+        }
+        
+        this.elapsedTime = 0;
         this.isFlying = true;
+        this.lastPos = this.startPos.clone();
+
+        // 设置初始旋转角度（指向目标），并记录初始飞行方向
+        const initialDirection = new Vec3();
+        Vec3.subtract(initialDirection, this.targetPos, this.startPos);
+        if (initialDirection.length() > 0.1) {
+            initialDirection.normalize();
+            this.currentDirection.set(initialDirection);
+            const angle = Math.atan2(initialDirection.y, initialDirection.x) * 180 / Math.PI;
+            this.node.setRotationFromEuler(0, 0, angle);
+        } else {
+            this.currentDirection.set(1, 0, 0);
+        }
+
     }
 
     /**
-     * 计算直线位置（无抛物线）
-     * @param distance 已飞行距离
+     * 计算抛物线位置
+     * @param ratio 进度比例 (0-1)
      */
-    calculateStraightPosition(distance: number): Vec3 {
+    calculateParabolicPosition(ratio: number): Vec3 {
         const pos = new Vec3();
-        Vec3.scaleAndAdd(pos, this.startPos, this.direction, distance);
+        
+        // 线性插值计算基础位置
+        Vec3.lerp(pos, this.startPos, this.targetPos, ratio);
+        
+        // 添加抛物线高度（使用二次函数模拟重力效果）
+        const arcRatio = 4 * ratio * (1 - ratio); // 0到1再到0的曲线
+        pos.y += this.arcHeight * arcRatio;
+        
         return pos;
+    }
+
+
+    /**
+     * 命中目标
+     */
+    hitTarget() {
+        if (!this.isFlying) {
+            return; // 已经命中过了
+        }
+
+        // 检查目标是否是已死亡的兽人督军
+        if (this.targetNode && this.targetNode.isValid) {
+            const orcScript = this.targetNode.getComponent('OrcWarlord') as any;
+            if (orcScript) {
+                const isAlive = orcScript.isAlive && orcScript.isAlive();
+                if (!isAlive) {
+                    // 目标是已死亡的兽人督军，插在尸体上
+                    const startPos = this.lastPos.clone();
+                    const endPos = this.node.worldPosition.clone();
+                    this.attachToCorpse(this.targetNode, startPos, endPos);
+                    return;
+                }
+            }
+        }
+
+        this.isFlying = false;
+
+        // 计算受力方向（箭矢飞行方向）：优先使用当前飞行方向
+        const hitDirection = new Vec3();
+        if (this.currentDirection.length() > 0.001) {
+            hitDirection.set(this.currentDirection);
+        } else if (this.targetNode && this.targetNode.isValid) {
+            Vec3.subtract(hitDirection, this.targetNode.worldPosition, this.startPos);
+        } else {
+            Vec3.subtract(hitDirection, this.node.worldPosition, this.startPos);
+        }
+        if (hitDirection.length() > 0.001) {
+            hitDirection.normalize();
+        } else {
+            // 回退到默认向下方向
+            hitDirection.set(0, -1, 0);
+        }
+
+        // 调试日志：箭矢命中方向
+        // console.info('[Arrow.hitTarget] hitDirection:', hitDirection, 
+        //     'currentDirection:', this.currentDirection, 
+        //     'startPos:', this.startPos, 
+        //     'targetPos:', this.targetPos);
+
+        // 调用命中回调
+        if (this.onHitCallback) {
+            this.onHitCallback(this.damage, hitDirection);
+        }
+
+        // 立即销毁弓箭节点，避免在 timeScale=0 时 scheduleOnce 不执行
+        if (this.node && this.node.isValid) {
+            this.node.destroy();
+        }
     }
 
     update(deltaTime: number) {
@@ -98,192 +164,249 @@ export class Fireball extends Component {
             return;
         }
 
-        // 检查游戏状态
+        // 检查游戏状态 - 如果GameManager不存在，尝试重新查找（使用字符串避免循环依赖）
         if (!this.gameManager) {
-            this.gameManager = find('GameManager')?.getComponent(GameManager);
+            const gmNode = find('GameManager') || find('Canvas/GameManager');
+            if (gmNode) {
+                this.gameManager = gmNode.getComponent('GameManager' as any);
+            }
         }
         
-        if (this.gameManager) {
+        // 检查游戏状态，如果不是Playing状态，停止飞行
+        if (this.gameManager && this.gameManager.getGameState) {
             const gameState = this.gameManager.getGameState();
             if (gameState !== GameState.Playing) {
+                // 游戏已暂停或结束，停止飞行
                 return;
             }
         }
 
-        // 计算移动距离
-        const moveDistance = this.speed * deltaTime;
-        this.traveledDistance += moveDistance;
-
-        // 计算当前位置
-        const currentPos = this.calculateStraightPosition(this.traveledDistance);
-        this.node.setWorldPosition(currentPos);
-
-        // 检查是否到达目标位置或超过飞行距离
-        if (this.traveledDistance >= this.travelDistance) {
-            // 到达目标位置，爆炸
-            this.explode(currentPos);
-            return;
+        // 更新计时器
+        this.elapsedTime += deltaTime;
+        
+        // 调试：每0.5秒输出一次位置信息
+        if (Math.floor(this.elapsedTime * 2) !== Math.floor((this.elapsedTime - deltaTime) * 2)) {
+            const currentPos = this.calculateParabolicPosition(Math.min(this.elapsedTime / this.travelTime, 1));
         }
-
-        // 检查是否命中目标（提前爆炸）
-        if (this.targetNode && this.targetNode.isValid) {
-            const targetPos = this.targetNode.worldPosition;
-            // 性能优化：使用平方距离比较
-            const dx = targetPos.x - currentPos.x;
-            const dy = targetPos.y - currentPos.y;
-            const distanceSq = dx * dx + dy * dy;
-            const hitRadius = 20;
-            const hitRadiusSq = hitRadius * hitRadius;
-            if (distanceSq < hitRadiusSq) { // 命中判定半径
-                this.explode(currentPos);
-                return;
-            }
-        }
-    }
-
-    /**
-     * 爆炸：造成范围伤害并播放爆炸特效
-     */
-    private explode(explosionPos: Vec3) {
-        if (!this.isFlying) {
-            return; // 已经爆炸过了
-        }
-
-        this.isFlying = false;
-
-        // 获取单位管理器
-        if (!this.unitManager) {
-            this.unitManager = UnitManager.getInstance();
-        }
-
-        // 造成范围伤害
-        this.dealAreaDamage(explosionPos);
-
-        // 播放爆炸特效
-        this.playExplosionEffect(explosionPos);
-
-        // 销毁火球节点
-        this.scheduleOnce(() => {
+        
+        // 如果目标已失效，提前销毁
+        if (this.targetNode && (!this.targetNode.isValid || !this.targetNode.active)) {
             if (this.node && this.node.isValid) {
                 this.node.destroy();
             }
-        }, 0.1);
-    }
-
-    /**
-     * 造成范围伤害
-     */
-    private dealAreaDamage(explosionPos: Vec3) {
-        const radius = this.explosionRadius;
-        const radiusSq = radius * radius;
-
-        // 获取所有我方单位
-        let friendlyUnits: Node[] = [];
-
-        if (this.unitManager) {
-            // 防御塔
-            const towers = this.unitManager.getTowers();
-            friendlyUnits.push(...towers);
-
-            // 弓箭手
-            const towersList = this.unitManager.getTowers();
-            for (const tower of towersList) {
-                const arrowerScript = tower.getComponent('Arrower') as any;
-                if (arrowerScript && arrowerScript.isAlive && arrowerScript.isAlive()) {
-                    friendlyUnits.push(tower);
-                }
-            }
-
-            // 女猎手
-            const hunters = this.unitManager.getHunters();
-            friendlyUnits.push(...hunters);
-
-            // 精灵剑士
-            const swordsmen = this.unitManager.getElfSwordsmans();
-            friendlyUnits.push(...swordsmen);
-
-            // 牧师
-            for (const tower of towersList) {
-                const priestScript = tower.getComponent('Priest') as any;
-                if (priestScript && priestScript.isAlive && priestScript.isAlive()) {
-                    friendlyUnits.push(tower);
-                }
-            }
-        } else {
-            // 降级方案：直接查找节点
-            const towersNode = find('Canvas/Towers');
-            if (towersNode) {
-                friendlyUnits.push(...towersNode.children);
-            }
-
-            const huntersNode = find('Canvas/Hunters');
-            if (huntersNode) {
-                friendlyUnits.push(...huntersNode.children);
-            }
-
-            const swordsmenNode = find('Canvas/ElfSwordsmans');
-            if (swordsmenNode) {
-                friendlyUnits.push(...swordsmenNode.children);
-            }
+            return;
         }
-
-        // 对范围内的所有我方单位造成伤害
-        for (const unit of friendlyUnits) {
-            if (!unit || !unit.isValid || !unit.active) {
-                continue;
-            }
-
-            // 检查单位是否存活
-            const unitScript = unit.getComponent('Arrower') as any ||
-                              unit.getComponent('Hunter') as any ||
-                              unit.getComponent('ElfSwordsman') as any ||
-                              unit.getComponent('Priest') as any ||
-                              unit.getComponent('WatchTower') as any;
-
-            if (!unitScript || !unitScript.isAlive || !unitScript.isAlive()) {
-                continue;
-            }
-
-            // 计算距离
-            const unitPos = unit.worldPosition;
-            const dx = unitPos.x - explosionPos.x;
-            const dy = unitPos.y - explosionPos.y;
-            const distanceSq = dx * dx + dy * dy;
-
-            // 如果在爆炸范围内，造成伤害
-            if (distanceSq <= radiusSq) {
-                if (unitScript.takeDamage && typeof unitScript.takeDamage === 'function') {
-                    // 使用火球飞行方向作为受击方向
-                    const hitDirection = this.direction.clone().normalize();
-                    unitScript.takeDamage(this.damage, hitDirection);
-                }
-            }
-        }
-    }
-
-    /**
-     * 播放爆炸特效
-     */
-    private playExplosionEffect(explosionPos: Vec3) {
-        // 创建爆炸特效节点
-        const explosionNode = new Node('FireballExplosionEffect');
         
-        // 设置父节点
-        const canvas = find('Canvas');
-        const scene = this.node.scene;
-        const parentNode = canvas || scene || this.node.parent;
-        if (parentNode) {
-            explosionNode.setParent(parentNode);
-        } else {
-            explosionNode.setParent(this.node.parent);
+        // 更新目标位置（目标可能在移动）
+        if (this.targetNode && this.targetNode.isValid) {
+            this.targetPos = this.targetNode.worldPosition.clone();
         }
 
-        // 设置位置
-        explosionNode.setWorldPosition(explosionPos);
-        explosionNode.active = true;
+        // 计算当前进度
+        const currentRatio = Math.min(this.elapsedTime / this.travelTime, 1);
+        
+        // 计算当前在抛物线上的位置
+        const currentPos = this.calculateParabolicPosition(currentRatio);
+        
+        // 检查路径上是否有兽人督军尸体
+        if (this.checkForOrcWarlordCorpse(this.lastPos, currentPos)) {
+            return;
+        }
+        
+        this.node.setWorldPosition(currentPos);
+        
+        // 更新旋转角度，使箭头始终指向飞行方向
+        const direction = new Vec3();
+        Vec3.subtract(direction, currentPos, this.lastPos);
+        if (direction.length() > 0.1) {
+            direction.normalize();
+            this.currentDirection.set(direction);
+            const angle = Math.atan2(direction.y, direction.x) * 180 / Math.PI;
+            this.node.setRotationFromEuler(0, 0, angle);
+        }
+        this.lastPos = currentPos.clone();
+        
+        // 检查是否命中目标（使用平方距离比较）
+        if (this.targetNode && this.targetNode.isValid) {
+            const currentTargetPos = this.targetNode.worldPosition;
+            const dx = currentPos.x - currentTargetPos.x;
+            const dy = currentPos.y - currentTargetPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            
+            // 如果距离足够近，认为命中
+            const hitRadius = 30;
+            if (distanceSq < hitRadius * hitRadius) {
+                this.hitTarget();
+                return;
+            }
+        }
+        
+        // 如果飞行完成但未命中目标，销毁弓箭
+        if (currentRatio >= 1) {
+            if (this.node && this.node.isValid) {
+                this.node.destroy();
+            }
+            return;
+        }
+        
+        // 如果飞行时间过长（超过预期时间2倍），销毁弓箭（防止卡住）
+        if (this.elapsedTime > this.travelTime * 2) {
+            if (this.node && this.node.isValid) {
+                this.node.destroy();
+            }
+        }
+    }
+    
+    /**
+     * 递归查找节点
+     * @param node 起始节点
+     * @param name 节点名称
+     * @returns 找到的节点
+     */
+    findNodeRecursive(node: Node, name: string): Node | null {
+        if (node.name === name) {
+            return node;
+        }
+        for (const child of node.children) {
+            const found = this.findNodeRecursive(child, name);
+            if (found) {
+                return found;
+            }
+        }
+        return null;
+    }
 
-        // 添加 FireballExplosionEffect 组件
-        const explosionScript = explosionNode.addComponent(FireballExplosionEffect);
-        explosionScript.init();
+    /**
+     * 检查路径上是否有兽人督军尸体
+     * @param startPos 起始位置
+     * @param endPos 结束位置
+     * @returns 是否命中尸体
+     */
+    checkForOrcWarlordCorpse(startPos: Vec3, endPos: Vec3): boolean {
+        // 查找Enemies容器，使用直接路径
+        const enemiesNode = find('Canvas/Enemies');
+        
+        if (!enemiesNode) {
+            return false;
+        }
+        
+        const enemies = enemiesNode.children || [];
+        
+        for (const enemy of enemies) {
+            if (!enemy || !enemy.isValid) {
+                continue;
+            }
+            
+            // 检查是否是兽人督军
+            const orcScript = enemy.getComponent('OrcWarlord') as any;
+            if (!orcScript) {
+                continue;
+            }
+            
+            // 检查是否已经死亡
+            const isAlive = orcScript.isAlive && orcScript.isAlive();
+            if (!isAlive && enemy.isValid) {
+                // 检查整个飞行路径是否与尸体相交
+                const corpsePos = enemy.worldPosition;
+                const distance = this.getDistanceFromLine(startPos, endPos, corpsePos);
+                
+                // 如果距离小于30像素，认为命中尸体
+                if (distance < 30) {
+                    // 命中尸体，插在尸体身上
+                    this.attachToCorpse(enemy, startPos, endPos);
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * 将箭矢插在尸体身上
+     * @param corpseNode 尸体节点
+     * @param startPos 起始位置
+     * @param endPos 结束位置
+     */
+    attachToCorpse(corpseNode: Node, startPos: Vec3, endPos: Vec3): void {
+        if (!this.node || !this.node.isValid || !corpseNode || !corpseNode.isValid) {
+            return;
+        }
+        
+        // 计算命中点
+        const corpsePos = corpseNode.worldPosition;
+        const hitPos = this.calculateHitPoint(startPos, endPos, corpsePos);
+        
+        // 停止飞行状态
+        this.isFlying = false;
+        
+        // 将箭矢设为尸体的子节点
+        // 这样当尸体被销毁时，箭矢也会被自动销毁
+        this.node.removeFromParent();
+        corpseNode.addChild(this.node);
+        
+        // 设置箭矢位置（转换为局部位置）
+        const localPos = corpseNode.worldPosition.clone();
+        Vec3.subtract(localPos, hitPos, localPos);
+        this.node.setPosition(localPos);
+        
+        // 调整箭矢旋转，使其指向飞行方向
+        const direction = new Vec3();
+        Vec3.subtract(direction, endPos, startPos);
+        if (direction.length() > 0.1) {
+            const angle = Math.atan2(direction.y, direction.x) * 180 / Math.PI;
+            this.node.setRotationFromEuler(0, 0, angle);
+        }
+        
+        // 命中尸体不触发伤害回调
+        // 清除回调，防止后续调用
+        this.onHitCallback = null;
+    }
+
+    /**
+     * 计算命中点
+     * @param startPos 起始位置
+     * @param endPos 结束位置
+     * @param corpsePos 尸体位置
+     * @returns 命中点位置
+     */
+    calculateHitPoint(startPos: Vec3, endPos: Vec3, corpsePos: Vec3): Vec3 {
+        // 计算线段方向
+        const lineDir = Vec3.subtract(new Vec3(), endPos, startPos);
+        const lineLengthSqr = Vec3.lengthSqr(lineDir);
+        
+        if (lineLengthSqr === 0) {
+            return corpsePos.clone();
+        }
+        
+        // 计算投影点
+        const t = Math.max(0, Math.min(1, Vec3.dot(Vec3.subtract(new Vec3(), corpsePos, startPos), lineDir) / lineLengthSqr));
+        const projection = Vec3.add(new Vec3(), startPos, Vec3.multiplyScalar(new Vec3(), lineDir, t));
+        
+        return projection;
+    }
+    
+    /**
+     * 计算点到线段的最短距离
+     * @param lineStart 线段起点
+     * @param lineEnd 线段终点
+     * @param point 点
+     * @returns 最短距离
+     */
+    getDistanceFromLine(lineStart: Vec3, lineEnd: Vec3, point: Vec3): number {
+        const lineDir = Vec3.subtract(new Vec3(), lineEnd, lineStart);
+        const lineLengthSqr = Vec3.lengthSqr(lineDir);
+        
+        if (lineLengthSqr === 0) {
+            // 线段长度为0，直接返回点到起点的距离
+            return Vec3.distance(point, lineStart);
+        }
+        
+        const t = Math.max(0, Math.min(1, Vec3.dot(Vec3.subtract(new Vec3(), point, lineStart), lineDir) / lineLengthSqr));
+        const projection = Vec3.add(new Vec3(), lineStart, Vec3.multiplyScalar(new Vec3(), lineDir, t));
+        
+        // 这里函数需要实际距离值，仍然使用 Vec3.distance
+        return Vec3.distance(point, projection);
     }
 }
+

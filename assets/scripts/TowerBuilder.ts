@@ -5,6 +5,7 @@ import { GamePopup } from './GamePopup';
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { WarAncientTree } from './role/WarAncientTree';
 import { HunterHall } from './role/HunterHall';
+import { MageTower } from './role/MageTower';
 import { StoneWall } from './role/StoneWall';
 import { WatchTower } from './role/WatchTower';
 import { IceTower } from './role/IceTower';
@@ -35,6 +36,12 @@ export class TowerBuilder extends Component {
 
     @property(SpriteFrame)
     hunterHallIcon: SpriteFrame = null!; // 猎手大厅图标
+
+    // 法师塔预制体：由 GameManager 在运行时注入
+    private mageTowerPrefab: Prefab = null!;
+
+    @property(SpriteFrame)
+    mageTowerIcon: SpriteFrame = null!;
 
     // 石墙预制体：已经移动到分包 prefabs_sub，由 GameManager 在运行时注入
     private stoneWallPrefab: Prefab = null!; // 石墙预制体（运行时赋值）
@@ -96,6 +103,9 @@ export class TowerBuilder extends Component {
     hunterHallContainer: Node = null!; // 猎手大厅容器
 
     @property(Node)
+    mageTowerContainer: Node = null!; // 法师塔容器
+
+    @property(Node)
     stoneWallContainer: Node = null!; // 石墙容器
 
     @property(Node)
@@ -126,6 +136,9 @@ export class TowerBuilder extends Component {
 
     @property
     hunterHallCost: number = 10; // 猎手大厅建造成本（10金币）
+
+    @property
+    mageTowerCost: number = 10; // 法师塔建造成本（10金币）
 
     @property
     stoneWallCost: number = 5; // 石墙建造成本（5金币）
@@ -159,6 +172,7 @@ export class TowerBuilder extends Component {
     private initialStoneWallsPlaced: boolean = false; // 是否已生成初始石墙
     private initialWatchTowersPlaced: boolean = false; // 是否已生成初始哨塔
     private initialWarAncientTreePlaced: boolean = false; // 第一关是否已生成初始弓箭手小屋
+    private initialMageTowerPlaced: boolean = false; // 第二关是否已生成初始法师塔
     private hasShownDragTutorialInLevel1: boolean = false; // 第一关是否已显示过拖动建造提示
     
     // 建筑物拖拽相关
@@ -214,6 +228,11 @@ export class TowerBuilder extends Component {
         this.ensureIconsFromPrefabs();
     }
 
+    public setMageTowerPrefab(prefab: Prefab) {
+        this.mageTowerPrefab = prefab;
+        this.ensureIconsFromPrefabs();
+    }
+
     public setSwordsmanHallPrefab(prefab: Prefab) {
         this.swordsmanHallPrefab = prefab;
         // 预制体更新后，尝试从中提取图标
@@ -243,6 +262,7 @@ export class TowerBuilder extends Component {
 
         const buildingTypes: BuildingType[] = [];
         const configManager = UnitConfigManager.getInstance();
+        const currentLevel = this.getCurrentLevelForUnlock();
         
         // 确保配置文件已加载（如果未加载，使用预制体的默认值作为后备）
         if (this.warAncientTreePrefab) {
@@ -275,6 +295,23 @@ export class TowerBuilder extends Component {
                 cost: cost,
                 icon: this.hunterHallIcon || null!,
                 description: '可以生产女猎手单位'
+            });
+        }
+        // 法师塔在第2关及以后解锁
+        if (this.mageTowerPrefab && currentLevel >= 2) {
+            let cost = this.mageTowerCost;
+            if (configManager.isConfigLoaded()) {
+                const configCost = this.getBuildCostFromConfig('MageTower');
+                if (configCost > 0) {
+                    cost = this.getActualBuildCost('MageTower', configCost);
+                }
+            }
+            buildingTypes.push({
+                name: '法师塔',
+                prefab: this.mageTowerPrefab,
+                cost: cost,
+                icon: this.mageTowerIcon || null!,
+                description: '可以训练法师单位'
             });
         }
         // if (this.stoneWallPrefab) {
@@ -345,6 +382,18 @@ export class TowerBuilder extends Component {
         this.buildingPanel.setBuildingTypes(buildingTypes);
     }
 
+    private getCurrentLevelForUnlock(): number {
+        const uiManagerNode = find('UIManager') || find('UI/UIManager') || find('Canvas/UI/UIManager');
+        const uiManager = uiManagerNode?.getComponent('UIManager') as any;
+        if (uiManager && typeof uiManager.getCurrentLevel === 'function') {
+            const level = uiManager.getCurrentLevel();
+            if (typeof level === 'number' && !isNaN(level)) {
+                return level;
+            }
+        }
+        return 1;
+    }
+
     /**
      * 重新开始游戏时重置内部状态，允许重新生成初始石墙和哨塔
      */
@@ -352,6 +401,7 @@ export class TowerBuilder extends Component {
         this.initialStoneWallsPlaced = false;
         this.initialWatchTowersPlaced = false;
         this.initialWarAncientTreePlaced = false;
+        this.initialMageTowerPlaced = false;
 
         // 重置建筑网格占用状态
         if (!this.gridPanel) {
@@ -399,6 +449,7 @@ export class TowerBuilder extends Component {
         this.thunderTowerIcon = extractIconFromPrefab(this.thunderTowerPrefab, this.thunderTowerIcon) as SpriteFrame;
         this.warAncientTreeIcon = extractIconFromPrefab(this.warAncientTreePrefab, this.warAncientTreeIcon) as SpriteFrame;
         this.hunterHallIcon = extractIconFromPrefab(this.hunterHallPrefab, this.hunterHallIcon) as SpriteFrame;
+        this.mageTowerIcon = extractIconFromPrefab(this.mageTowerPrefab, this.mageTowerIcon) as SpriteFrame;
         this.swordsmanHallIcon = extractIconFromPrefab(this.swordsmanHallPrefab, this.swordsmanHallIcon) as SpriteFrame;
         this.churchIcon = extractIconFromPrefab(this.churchPrefab, this.churchIcon) as SpriteFrame;
     }
@@ -457,6 +508,21 @@ export class TowerBuilder extends Component {
                     this.hunterHallContainer.setParent(canvas);
                 } else if (this.node.scene) {
                     this.hunterHallContainer.setParent(this.node.scene);
+                }
+            }
+        }
+
+        if (!this.mageTowerContainer) {
+            const existingTowers = find('MageTowers');
+            if (existingTowers) {
+                this.mageTowerContainer = existingTowers;
+            } else {
+                this.mageTowerContainer = new Node('MageTowers');
+                const canvas = find('Canvas');
+                if (canvas) {
+                    this.mageTowerContainer.setParent(canvas);
+                } else if (this.node.scene) {
+                    this.mageTowerContainer.setParent(this.node.scene);
                 }
             }
         }
@@ -1414,6 +1480,7 @@ export class TowerBuilder extends Component {
         const buildingNameToUnitId: Record<string, string> = {
             '弓箭手小屋': 'WarAncientTree',
             '猎手大厅': 'HunterHall',
+            '法师塔': 'MageTower',
             '石墙': 'StoneWall',
             '哨塔': 'WatchTower',
             '剑士小屋': 'SwordsmanHall',
@@ -1454,6 +1521,8 @@ export class TowerBuilder extends Component {
             this.buildWarAncientTree(worldPosition);
         } else if (building.name === '猎手大厅' || building.prefab === this.hunterHallPrefab) {
             this.buildHunterHall(worldPosition);
+        } else if (building.name === '法师塔' || building.prefab === this.mageTowerPrefab) {
+            this.buildMageTower(worldPosition);
         } else if (building.name === '石墙' || building.prefab === this.stoneWallPrefab) {
             this.buildStoneWall(worldPosition);
         } else if (building.name === '哨塔' || building.prefab === this.watchTowerPrefab) {
@@ -1688,6 +1757,68 @@ export class TowerBuilder extends Component {
             );
         }
 
+    }
+
+    buildMageTower(worldPosition: Vec3, skipCost: boolean = false): boolean {
+        if (!this.mageTowerPrefab) {
+            console.warn('[TowerBuilder.buildMageTower] abort: mageTowerPrefab is null');
+            return false;
+        }
+        const actualCost = this.getActualBuildCost('MageTower');
+        if (this.gameManager && !skipCost) {
+            this.gameManager.spendGold(actualCost);
+        }
+        const buildingPool = BuildingPool.getInstance();
+        let tower: Node | null = null;
+        if (buildingPool) {
+            const stats = buildingPool.getStats();
+            if (!stats['MageTower']) {
+                buildingPool.registerPrefab('MageTower', this.mageTowerPrefab);
+            }
+            tower = buildingPool.get('MageTower');
+        }
+        if (!tower) {
+            tower = instantiate(this.mageTowerPrefab);
+        }
+        const parent = this.mageTowerContainer || this.node;
+        if (parent && !parent.active) {
+            parent.active = true;
+        }
+        tower.setParent(parent);
+        tower.active = true;
+        tower.setPosition(0, 0, 0);
+        tower.setRotationFromEuler(0, 0, 0);
+        tower.setScale(1, 1, 1);
+        tower.setWorldPosition(worldPosition);
+
+        const towerScript = tower.getComponent(MageTower);
+        if (towerScript) {
+            towerScript.prefabName = 'MageTower';
+            const configManager = UnitConfigManager.getInstance();
+            if (configManager.isConfigLoaded()) {
+                (configManager as any).applyConfigToUnit?.('MageTower', towerScript, ['buildCost']);
+            }
+            const talentEffectManager = TalentEffectManager.getInstance();
+            talentEffectManager.applyUnitEnhancements('MageTower', towerScript);
+            talentEffectManager.applyTalentEffects(towerScript);
+            towerScript.buildCost = actualCost;
+            if (this.gridPanel) {
+                const grid = this.gridPanel.worldToGrid(worldPosition);
+                if (grid) {
+                    towerScript.gridX = grid.x;
+                    towerScript.gridY = grid.y;
+                    this.gridPanel.occupyGrid(grid.x, grid.y, tower);
+                }
+            }
+            if (this.gameManager) {
+                const unitType = towerScript.unitType || 'MageTower';
+                this.gameManager.checkUnitFirstAppearance(unitType, towerScript);
+            }
+            console.info('[TowerBuilder.buildMageTower] success:', 'worldPos=', worldPosition.x, worldPosition.y, 'skipCost=', skipCost, 'parent=', parent?.name);
+            return true;
+        }
+        console.warn('[TowerBuilder.buildMageTower] abort: instantiated node missing MageTower component');
+        return false;
     }
 
     /**
@@ -2075,6 +2206,51 @@ export class TowerBuilder extends Component {
         // 初始化赠送建筑：不消耗金币
         this.buildWarAncientTree(worldPos, true);
         this.initialWarAncientTreePlaced = true;
+    }
+
+    /**
+     * 第二关：在建筑物网格第三排第二个位置生成一个初始法师塔
+     */
+    public spawnInitialMageTowerForLevel2() {
+        if (this.initialMageTowerPlaced) {
+            console.info('[TowerBuilder.spawnInitialMageTowerForLevel2] skip: already placed');
+            return;
+        }
+
+        if (!this.gridPanel) {
+            this.findGridPanel();
+        }
+        const panel = this.gridPanel;
+        if (!panel) {
+            console.warn('[TowerBuilder.spawnInitialMageTowerForLevel2] abort: gridPanel not found');
+            return;
+        }
+        console.info('[TowerBuilder.spawnInitialMageTowerForLevel2] start:', 'hasMagePrefab=', !!this.mageTowerPrefab, 'grid=', panel.gridWidth, 'x', panel.gridHeight);
+
+        const candidates = [
+            { x: 1, y: 2 }, // 预期固定位置（第三排第二个）
+            { x: 2, y: 2 }, // 兜底1
+            { x: 1, y: 1 }  // 兜底2
+        ];
+
+        for (const pos of candidates) {
+            if (panel.isGridOccupied(pos.x, pos.y)) {
+                console.info('[TowerBuilder.spawnInitialMageTowerForLevel2] candidate occupied:', pos.x, pos.y);
+                continue;
+            }
+            const worldPos = panel.gridToWorld(pos.x, pos.y);
+            if (!worldPos) {
+                console.warn('[TowerBuilder.spawnInitialMageTowerForLevel2] candidate gridToWorld failed:', pos.x, pos.y);
+                continue;
+            }
+            const built = this.buildMageTower(worldPos, true);
+            console.info('[TowerBuilder.spawnInitialMageTowerForLevel2] try candidate:', pos.x, pos.y, 'built=', built);
+            if (built) {
+                this.initialMageTowerPlaced = true;
+                return;
+            }
+        }
+        console.warn('[TowerBuilder.spawnInitialMageTowerForLevel2] failed: no candidate built');
     }
 
     /**

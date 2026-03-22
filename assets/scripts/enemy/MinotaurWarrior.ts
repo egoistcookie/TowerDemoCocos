@@ -230,6 +230,7 @@ export class MinotaurWarrior extends Boss {
             const roleScript = node.getComponent('Arrower') as any ||
                               node.getComponent('Hunter') as any ||
                               node.getComponent('ElfSwordsman') as any ||
+                              node.getComponent('Mage') as any ||
                               node.getComponent('Priest') as any;
             if (roleScript && roleScript.isAlive && roleScript.isAlive()) {
                 friendlyUnits.push(node);
@@ -269,6 +270,7 @@ export class MinotaurWarrior extends Boss {
             for (const tower of towers) {
                 if (tower && tower.isValid && tower.active) {
                     const roleScript = tower.getComponent('Arrower') as any ||
+                                      tower.getComponent('Mage') as any ||
                                       tower.getComponent('Priest') as any;
                     if (roleScript && roleScript.isAlive && roleScript.isAlive()) {
                         friendlyUnits.push(tower);
@@ -345,6 +347,7 @@ export class MinotaurWarrior extends Boss {
                 const unitScript = unit.getComponent('Arrower') as any ||
                                   unit.getComponent('Hunter') as any ||
                                   unit.getComponent('ElfSwordsman') as any ||
+                                  unit.getComponent('Mage') as any ||
                                   unit.getComponent('Priest') as any ||
                                   unit.getComponent('WatchTower') as any ||
                                   unit.getComponent('IceTower') as any ||
@@ -729,11 +732,12 @@ export class MinotaurWarrior extends Boss {
                 const hunterScript = this.currentTarget.getComponent('Hunter') as any;
                 const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
                 const priestScript = this.currentTarget.getComponent('Priest') as any;
+                const mageScript = this.currentTarget.getComponent('Mage') as any;
                 const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
                 const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
                 const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
                 const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
-                const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
+                const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
                 
                 if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
                     // 当前目标已被摧毁，清除目标
@@ -933,7 +937,8 @@ export class MinotaurWarrior extends Boss {
             if (tower && tower.active && tower.isValid) {
                 const towerScript = tower.getComponent('Arrower') as any;
                 const priestScript = tower.getComponent('Priest') as any;
-                const characterScript = towerScript || priestScript;
+                const mageScript = tower.getComponent('Mage') as any;
+                const characterScript = towerScript || priestScript || mageScript;
                 if (characterScript && characterScript.isAlive && characterScript.isAlive()) {
                     const distance = Vec3.distance(this.node.worldPosition, tower.worldPosition);
                     if (distance <= detectionRange) {

@@ -102,6 +102,7 @@ export class Enemy extends Component {
     protected unitManager: UnitManager = null!; // 单位管理器引用（性能优化）
     protected targetFindTimer: number = 0; // 目标查找计时器
     protected readonly TARGET_FIND_INTERVAL: number = 0.2; // 目标查找间隔（秒），不是每帧都查找
+    // private mageTargetDebugTimer: number = 0; // 法师索敌调试日志节流
     
     // 性能优化：缓存和复用对象
     private cachedWorldPosition: Vec3 = new Vec3(); // 缓存世界位置，避免重复访问
@@ -1476,18 +1477,19 @@ export class Enemy extends Component {
 
         const towerScript = this.currentTarget.getComponent('Arrower') as any;
         const warAncientTreeScript = this.currentTarget.getComponent('WarAncientTree') as any;
-        const hallScript = this.currentTarget.getComponent('HunterHall') as any;
+        const hallScript = this.currentTarget.getComponent('HunterHall') as any || this.currentTarget.getComponent('MageTower') as any;
         const swordsmanHallScript = this.currentTarget.getComponent('SwordsmanHall') as any;
         const churchScript = this.currentTarget.getComponent('Church') as any;
         const priestScript = this.currentTarget.getComponent('Priest') as any;
         const crystalScript = this.currentTarget.getComponent('Crystal') as any;
         const hunterScript = this.currentTarget.getComponent('Hunter') as any;
+        const mageScript = this.currentTarget.getComponent('Mage') as any;
         const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
         const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
         const iceTowerScript = this.currentTarget.getComponent('IceTower') as any; // 添加冰塔支持
         const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any; // 添加雷塔支持
-        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || churchScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
+        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || churchScript || priestScript || crystalScript || hunterScript || mageScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
         
         if (targetScript && targetScript.takeDamage) {
             // 计算受击方向：从敌人指向目标
@@ -2226,6 +2228,31 @@ export class Enemy extends Component {
                 }
             }
         }
+        const magesNode = find('Canvas/Mages') || find('Mages');
+        const beforeMageTargetCount = allTargets.length;
+        if (magesNode) {
+            for (const mage of magesNode.children) {
+                if (mage && mage.active && mage.isValid) {
+                    const mageScript = mage.getComponent('Mage') as any;
+                    if (mageScript && mageScript.isAlive && mageScript.isAlive()) {
+                        allTargets.push(mage);
+                    }
+                }
+            }
+        }
+        // this.mageTargetDebugTimer += this.TARGET_FIND_INTERVAL;
+        // if (this.mageTargetDebugTimer >= 2.0) {
+        //     this.mageTargetDebugTimer = 0;
+            // const addedMageTargets = allTargets.length - beforeMageTargetCount;
+            // console.info(
+            //     '[Enemy.findNearestTarget] mage target scan:',
+            //     'enemy=', this.node?.name,
+            //     'mageContainer=', magesNode ? `${magesNode.parent?.name}/${magesNode.name}` : 'null',
+            //     'mageChildren=', magesNode?.children?.length || 0,
+            //     'addedAliveMages=', addedMageTargets,
+            //     'totalTargets=', allTargets.length
+            // );
+        // }
 
         const swordsmenNode = find('Canvas/ElfSwordsmans');
         if (swordsmenNode) {
@@ -2259,6 +2286,17 @@ export class Enemy extends Component {
                     const hallScript = hall.getComponent('HunterHall') as any;
                     if (hallScript && hallScript.isAlive && hallScript.isAlive()) {
                         allTargets.push(hall);
+                    }
+                }
+            }
+        }
+        const mageTowersNode = find('Canvas/MageTowers');
+        if (mageTowersNode) {
+            for (const tower of mageTowersNode.children) {
+                if (tower && tower.active && tower.isValid) {
+                    const towerScript = tower.getComponent('MageTower') as any;
+                    if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
+                        allTargets.push(tower);
                     }
                 }
             }

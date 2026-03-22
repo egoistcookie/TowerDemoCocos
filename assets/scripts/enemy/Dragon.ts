@@ -2,7 +2,6 @@ import { _decorator, Component, Node, Vec3, SpriteFrame, Prefab, instantiate, fi
 import { Enemy } from './Enemy';
 import { UnitManager } from '../UnitManager';
 import { GameState } from '../GameState';
-import { Fireball } from '../Fireball';
 import { AudioManager } from '../AudioManager';
 
 const { ccclass, property } = _decorator;
@@ -155,7 +154,7 @@ export class Dragon extends Enemy {
 
         const myPos = this.node.worldPosition;
 
-        // 查找所有我方单位：防御塔、弓箭手、女猎手、剑士、牧师、建筑物
+        // 查找所有我方单位：防御塔、弓箭手、女猎手、剑士、牧师、法师、建筑物
         let friendlyUnits: Node[] = [];
 
         if (this.unitManager) {
@@ -179,6 +178,12 @@ export class Dragon extends Enemy {
             // 精灵剑士
             const swordsmen = this.unitManager.getElfSwordsmans();
             friendlyUnits.push(...swordsmen);
+
+            // 法师：UnitManager 可能未提供统一方法，降级到场景容器
+            const magesNode = find('Canvas/Mages');
+            if (magesNode) {
+                friendlyUnits.push(...magesNode.children);
+            }
 
             // 牧师（在Towers容器中）
             for (const tower of towersList) {
@@ -240,6 +245,12 @@ export class Dragon extends Enemy {
             if (thunderTowersNode) {
                 friendlyUnits.push(...thunderTowersNode.children);
             }
+
+            // 法师
+            const magesNode = find('Canvas/Mages');
+            if (magesNode) {
+                friendlyUnits.push(...magesNode.children);
+            }
         }
 
         // 查找最近的我方单位
@@ -252,6 +263,7 @@ export class Dragon extends Enemy {
             const unitScript = unit.getComponent('Arrower') as any ||
                               unit.getComponent('Hunter') as any ||
                               unit.getComponent('ElfSwordsman') as any ||
+                              unit.getComponent('Mage') as any ||
                               unit.getComponent('Priest') as any ||
                               unit.getComponent('WatchTower') as any ||
                               unit.getComponent('IceTower') as any ||
@@ -646,10 +658,14 @@ export class Dragon extends Enemy {
         // 确保节点激活
         fireballNode.active = true;
 
-        // 获取或添加 Fireball 组件
-        let fireballScript = fireballNode.getComponent(Fireball);
+        // 获取或添加火球脚本组件
+        // 说明：项目中 Fireball.ts 实际导出的类名为 Arrow（@ccclass('Arrow')），
+        // 因此这里用字符串方式获取，避免类型为 undefined 导致的 “Type must be non-nil” 报错。
+        let fireballScript = fireballNode.getComponent('Fireball') as any
+                          || fireballNode.getComponent('Arrow') as any;
         if (!fireballScript) {
-            fireballScript = fireballNode.addComponent(Fireball);
+            fireballScript = fireballNode.addComponent('Fireball') as any
+                          || fireballNode.addComponent('Arrow') as any;
         }
 
         // 播放攻击音效

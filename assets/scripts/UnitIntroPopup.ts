@@ -601,17 +601,20 @@ export class UnitIntroPopup extends Component {
 
         this.lastShownUnitType = '';
 
-        if (this.currentCloseCallback) {
-            try {
-                this.currentCloseCallback();
-            } catch (e) {
-                console.warn('[UnitIntroPopup] 执行关闭回调失败:', e);
-            }
-        }
+        const closeCallback = this.currentCloseCallback;
         this.currentCloseCallback = null;
 
-        // 隐藏弹窗
+        // 先隐藏当前弹窗，再异步执行关闭回调，避免回调里新弹窗被本次 hide 立刻关闭
         this.container.active = false;
+        if (closeCallback) {
+            this.scheduleOnce(() => {
+                try {
+                    closeCallback();
+                } catch (e) {
+                    console.warn('[UnitIntroPopup] 执行关闭回调失败:', e);
+                }
+            }, 0);
+        }
     }
     
     /**
