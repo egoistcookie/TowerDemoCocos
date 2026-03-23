@@ -5,7 +5,7 @@ const { ccclass, property } = _decorator;
 @ccclass('ArcaneMissile')
 export class ArcaneMissile extends Component {
     @property
-    speed: number = 180;
+    speed: number = 400;
 
     @property
     baseArcHeight: number = 35;

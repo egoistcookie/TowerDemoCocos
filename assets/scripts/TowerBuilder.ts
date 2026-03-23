@@ -1814,6 +1814,16 @@ export class TowerBuilder extends Component {
                 const unitType = towerScript.unitType || 'MageTower';
                 this.gameManager.checkUnitFirstAppearance(unitType, towerScript);
             }
+
+            // 记录操作（建造法师塔）
+            const analytics = AnalyticsManager.getInstance();
+            if (analytics && this.gameManager) {
+                analytics.recordOperation(
+                    OperationType.BUILD_MAGE_TOWER,
+                    this.gameManager.getGameTime(),
+                    { position: { x: towerScript.gridX, y: towerScript.gridY } }
+                );
+            }
             console.info('[TowerBuilder.buildMageTower] success:', 'worldPos=', worldPosition.x, worldPosition.y, 'skipCost=', skipCost, 'parent=', parent?.name);
             return true;
         }

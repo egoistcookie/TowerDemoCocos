@@ -16,6 +16,7 @@ export enum OperationType {
     BUILD_TREE = 'build_tree',                       // 建造树木
     BUILD_THUNDER_TOWER = 'build_thunder_tower',     // 建造雷塔
     BUILD_ICE_TOWER = 'build_ice_tower',             // 建造冰塔
+    BUILD_MAGE_TOWER = 'build_mage_tower',           // 建造法师塔
     TRAIN_ARROWER = 'train_arrower',                 // 训练弓箭手
     TRAIN_HUNTER = 'train_hunter',                   // 训练女猎手
     TRAIN_SWORDSMAN = 'train_swordsman',             // 训练剑士

@@ -1,15 +1,17 @@
 
 --游戏缓存表
 select * from game_sessions where DATE(created_at) = CURDATE() 
- and player_id not in ('player_1772462826043_800','player_1772466497770_5671','','') order by created_at desc ;
+ and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','') order by created_at desc ;
 select * from game_sessions where DATE(created_at) = CURDATE() -1
- and player_id not in ('player_1772462826043_800','player_1772466497770_5671','','') order by created_at desc ;
+ and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','') order by created_at desc ;
 --查询当天有多少玩家、各玩了几局
-select player_id,count(*) from game_sessions where DATE(created_at) = CURDATE() group by player_id ;
-select player_id,count(*) from game_sessions where DATE(created_at) = CURDATE()-1 group by player_id ;
+select player_id,count(*) from game_sessions where DATE(created_at) = CURDATE()
+ and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','') group by player_id ;
+select player_id,count(*) from game_sessions where DATE(created_at) = CURDATE()-1
+ and player_id not in ('player_1772462826043_800','player_1772466497770_5671','','') group by player_id ;
 --选卡明细表
 select * from card_selection_events where DATE(created_at) = CURDATE()
- and player_id not in ('player_1772462826043_800','player_1772466497770_5671','','') order by created_at desc ;
+ and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','') order by created_at desc ;
 select * from card_selection_events where DATE(created_at) = CURDATE()-1 order by created_at desc ;
 select * from card_selection_events  order by created_at desc ;
 select * from card_selection_events where cards_json like BINARY  '%UR%' order by created_at desc ;
@@ -19,7 +21,7 @@ select * from card_selection_events where selection_mode  like '%get_all%' order
 select * from game_records order by created_at desc;
 select * from game_records where defend_time !=0 order by created_at desc;
 --玩家信息表
-select * from player_statistics where created_at>'20260317' order by created_at desc;
+select * from player_statistics where created_at>'20260322' order by created_at desc;
 select * from player_statistics where player_id like '%player_1774104641493_9000';
 --操作类型统计表
 select * from operation_statistics os ;
@@ -29,6 +31,11 @@ select * from level_statistics;
 select * from card_selection_summary;
 
 --视图-玩家排行榜
+-- player_1772466497770_5671 手机
+-- player_1772462826043_800 家里豆包浏览器
+--  家里开发工具
+-- player_1772530937065_3381 公司360浏览器
+--  公司开发工具
 select * from player_leaderboard ps ;
 --视图-关卡难度分析
 select * from level_difficulty_analysis;
