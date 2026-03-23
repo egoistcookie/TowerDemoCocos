@@ -60,7 +60,8 @@ export interface AnalyticsData {
     sessionId?: number;            // 选卡实时埋点会话ID（首次选卡创建，结束时回填）
 }
 
-export type CardSelectionMode = 'single' | 'get_all';
+// card_selection_events.selection_mode 允许记录更多状态；前端用该类型约束。
+export type CardSelectionMode = 'single' | 'get_all' | 'reroll';
 export interface CardSelectionItem {
     unitId: string;
     rarity?: string;
@@ -81,6 +82,8 @@ export class AnalyticsManager extends Component {
     private operations: OperationRecord[] = [];       // 操作记录列表
     private gameStartTime: number = 0;                // 游戏开始时间
     private isRecording: boolean = false;             // 是否正在记录
+    private isReportingGameData: boolean = false;     // 是否正在上报本局结算数据（并发保护）
+    private hasReportedCurrentGame: boolean = false;  // 本局是否已完成过结算上报（幂等保护）
     private playerDataManager: PlayerDataManager | null = null; // 玩家数据管理器（用于获取单位强化信息）
     private sessionId: number | null = null;          // 选卡实时埋点会话ID（首次选卡创建）
     
@@ -149,6 +152,9 @@ export class AnalyticsManager extends Component {
         this.gameStartTime = Date.now();
         this.isRecording = true;
         this.sessionId = null;
+        // 开新局时重置结算上报状态
+        this.isReportingGameData = false;
+        this.hasReportedCurrentGame = false;
         console.log(`[AnalyticsManager] 开始记录关卡 ${level}`);
     }
     
@@ -226,7 +232,11 @@ export class AnalyticsManager extends Component {
                 gameTime: typeof gameTimeSeconds === 'number' && !isNaN(gameTimeSeconds) ? Math.floor(gameTimeSeconds) : undefined
             };
 
-            await this.sendJson(this.CARD_SELECT_URL, payload);
+            const resp = await this.sendJson(this.CARD_SELECT_URL, payload);
+            // 兜底：若前端本地没有 sessionId，而服务端在 card-select 中自动创建了会话，则回写本地 sessionId
+            if (!this.sessionId && resp && typeof resp.sessionId === 'number') {
+                this.sessionId = resp.sessionId;
+            }
         } catch (e) {
             console.warn('[AnalyticsManager] reportCardSelection 失败（忽略，不影响游戏）:', e);
         }
@@ -259,13 +269,27 @@ export class AnalyticsManager extends Component {
         finalPopulation: number,
         killCount: number
     ): Promise<boolean> {
+        // 本局已上报过：直接忽略，避免同一局重复写入 game_records（例如 success/fail 各触发一次）
+        if (this.hasReportedCurrentGame) {
+            console.warn('[AnalyticsManager] 本局结算已上报，忽略重复上报');
+            return true;
+        }
+
+        // 正在上报中：忽略并发重复触发
+        if (this.isReportingGameData) {
+            console.warn('[AnalyticsManager] 结算上报进行中，忽略重复触发');
+            return false;
+        }
+
         if (!this.isRecording && this.operations.length === 0) {
             console.warn('[AnalyticsManager] 没有可上报的数据');
             return false;
         }
-        
+
+        this.isReportingGameData = true;
         this.stopRecording();
-        
+
+        try {
         // 从玩家数据中获取所有单位的强化等级（例如 Arrower: 15, StoneWall: 44）
         let unitLevels: Record<string, number> = {};
         if (this.playerDataManager) {
@@ -331,7 +355,14 @@ export class AnalyticsManager extends Component {
             }
         }
 
+        if (ok) {
+            this.hasReportedCurrentGame = true;
+        }
+
         return ok;
+        } finally {
+            this.isReportingGameData = false;
+        }
     }
     
     /**

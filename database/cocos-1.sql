@@ -4,20 +4,25 @@ select * from game_sessions where DATE(created_at) = CURDATE()
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','') order by created_at desc ;
 select * from game_sessions where DATE(created_at) = CURDATE() -1
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','') order by created_at desc ;
+select * from game_sessions where player_id='player_1774265446223_9255';
 --查询当天有多少玩家、各玩了几局
 select player_id,count(*) from game_sessions where DATE(created_at) = CURDATE()
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','') group by player_id ;
 select player_id,count(*) from game_sessions where DATE(created_at) = CURDATE()-1
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','','') group by player_id ;
+--统计每天有多少局游戏
+select DATE(created_at),count(*) from game_sessions  group by DATE(created_at) ;
 --选卡明细表
 select * from card_selection_events where DATE(created_at) = CURDATE()
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','') order by created_at desc ;
 select * from card_selection_events where DATE(created_at) = CURDATE()-1 order by created_at desc ;
-select * from card_selection_events  order by created_at desc ;
 select * from card_selection_events where cards_json like BINARY  '%UR%' order by created_at desc ;
 select * from card_selection_events where selection_mode  like '%get_all%' order by created_at desc ;
+--统计每天有多少次抽卡
+select DATE(created_at),count(*) from card_selection_events  group by DATE(created_at) ;
 
 --游戏记录主表
+select * from game_records where player_id='player_1774265446223_9255';
 select * from game_records order by created_at desc;
 select * from game_records where defend_time !=0 order by created_at desc;
 --玩家信息表
@@ -28,7 +33,7 @@ select * from operation_statistics os ;
 --关卡统计表
 select * from level_statistics;
 --选卡汇总表
-select * from card_selection_summary;
+select unit_id,rarity,count(*) from card_selection_summary group by unit_id,rarity;
 
 --视图-玩家排行榜
 -- player_1772466497770_5671 手机

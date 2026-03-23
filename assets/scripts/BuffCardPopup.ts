@@ -503,8 +503,26 @@ export class BuffCardPopup extends Component {
         // 重新生成卡片（通过GameManager）
         const newCards = this.gameManager.generateBuffCards(true); // 传入true表示再抽一次模式
         if (newCards && newCards.length > 0) {
+            const nextCards = newCards.slice(0, 3);
+
+            // 埋点：记录一次“再抽一次”的结果（用于按 reroll 粒度验证 UR 是否真的必得）
+            try {
+                const analytics = AnalyticsManager.getInstance();
+                const gameTime = this.gameManager && this.gameManager.getGameTime ? this.gameManager.getGameTime() : 0;
+                const cards = nextCards.map((c) => ({
+                    unitId: c.unitId,
+                    rarity: c.rarity,
+                    buffType: c.buffType,
+                    buffValue: c.buffValue
+                }));
+                // 不影响主流程：异步实时上报失败也忽略
+                analytics.reportCardSelection('reroll', cards, gameTime);
+            } catch (e) {
+                // ignore
+            }
+
             // 更新卡片数据
-            this.cardData = newCards.slice(0, 3);
+            this.cardData = nextCards;
             // 重置卡片状态
             this.resetCardsState();
             // 更新卡片显示

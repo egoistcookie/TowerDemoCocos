@@ -92,9 +92,26 @@ app.post('/api/analytics/report', async (req, res) => {
             
             const recordId = insertResult.insertId;
 
-            // 1.1 可选：如果前端带了 sessionId，则在游戏结束时回填 game_sessions（选卡实时埋点用）
-            // 约定：会话通常在首次选卡创建；如果不存在则忽略，不影响原有上报
+            // 1.1 回填 game_sessions（选卡实时埋点用）
+            // 优先使用前端传入的 sessionId；若缺失，则兜底匹配该玩家该关卡最近一条未结束会话
+            let targetSessionId = null;
             if (data.sessionId) {
+                targetSessionId = data.sessionId;
+            } else {
+                const [sessionRows] = await connection.execute(
+                    `SELECT id
+                     FROM game_sessions
+                     WHERE player_id = ? AND level = ? AND end_time IS NULL
+                     ORDER BY start_time DESC, id DESC
+                     LIMIT 1`,
+                    [data.playerId, data.level]
+                );
+                if (Array.isArray(sessionRows) && sessionRows.length > 0) {
+                    targetSessionId = sessionRows[0].id;
+                }
+            }
+
+            if (targetSessionId) {
                 try {
                     // revive_count：优先使用前端显式提供的 reviveCount，兜底从 operations 里统计 'revive'
                     const reviveCount =
@@ -127,7 +144,7 @@ app.post('/api/analytics/report', async (req, res) => {
                             data.operations.length,
                             reviveCount,
                             operationsJson,
-                            data.sessionId,
+                            targetSessionId,
                             data.playerId,
                             data.level
                         ]
