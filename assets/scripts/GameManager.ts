@@ -3368,41 +3368,41 @@ export class GameManager extends Component {
         }
 
         // 上报埋点数据（异步，不影响游戏流程）
-        // if (this.analyticsManager) {
-        //     const result: 'success' | 'fail' = state === GameState.Victory ? 'success' : 'fail';
-        //     let currentWave = 0;
-        //     const enemySpawner = this.findComponentInScene('EnemySpawner') as any;
-        //     if (enemySpawner && enemySpawner.getCurrentWaveNumber) {
-        //         const wave = enemySpawner.getCurrentWaveNumber();
-        //         if (typeof wave === 'number' && !isNaN(wave)) {
-        //             currentWave = wave;
-        //         }
-        //     }
+        if (this.analyticsManager) {
+            const result: 'success' | 'fail' = state === GameState.Victory ? 'success' : 'fail';
+            let currentWave = 0;
+            const enemySpawner = this.findComponentInScene('EnemySpawner') as any;
+            if (enemySpawner && enemySpawner.getCurrentWaveNumber) {
+                const wave = enemySpawner.getCurrentWaveNumber();
+                if (typeof wave === 'number' && !isNaN(wave)) {
+                    currentWave = wave;
+                }
+            }
 
-        //     const defendTime = Math.floor(this.gameTime);
-        //     const finalGold = this.gold || 0;
-        //     const finalPopulation = this.population || 0;
-        //     const killCount = this.totalKillCount || 0;
+            const defendTime = Math.floor(this.gameTime);
+            const finalGold = this.gold || 0;
+            const finalPopulation = this.population || 0;
+            const killCount = this.totalKillCount || 0;
 
-        //     this.analyticsManager.reportGameData(
-        //         result,
-        //         defendTime,
-        //         currentWave,
-        //         finalGold,
-        //         finalPopulation,
-        //         killCount
-        //     ).then(success => {
-        //         if (success) {
-        //             console.log('[GameManager] 埋点数据上报成功');
-        //         } else {
-        //             console.warn('[GameManager] 埋点数据上报失败，但不影响游戏');
-        //         }
-        //     }).catch((error) => {
-        //         console.error('[GameManager] 埋点数据上报异常:', error);
-        //     });
-        // } else {
-        //     console.warn('[GameManager] analyticsManager 为空，跳过埋点上报');
-        // }
+            this.analyticsManager.reportGameData(
+                result,
+                defendTime,
+                currentWave,
+                finalGold,
+                finalPopulation,
+                killCount
+            ).then(success => {
+                if (success) {
+                    console.log('[GameManager] 埋点数据上报成功');
+                } else {
+                    console.warn('[GameManager] 埋点数据上报失败，但不影响游戏');
+                }
+            }).catch((error) => {
+                console.error('[GameManager] 埋点数据上报异常:', error);
+            });
+        } else {
+            console.warn('[GameManager] analyticsManager 为空，跳过埋点上报');
+        }
 
         // 更新左上角等级HUD显示状态（会根据gameMainPanel的显示状态自动控制）
         this.updateLevelHud();
