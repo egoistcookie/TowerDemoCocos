@@ -921,7 +921,7 @@ export class UnitInfoPanel extends Component {
             skill2Button.active = true;
 
             // 先用升级按钮贴图占位
-            this.loadButtonSprite(5, 'kongxian1.png', 'kongxian2.png');
+            this.loadButtonSprite(5, 'kongxian2.png', 'kongxian1.png');
 
             const btnComp = skill2Button.getComponent(Button);
             const sprite = this.buttonSprites.get(5);
