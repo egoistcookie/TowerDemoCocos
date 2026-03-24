@@ -31,6 +31,7 @@ export interface UnitInfo {
     onRallyPointClick?: () => void; // 集结点设置按钮点击回调
     onDefendClick?: () => void; // 防御按钮点击回调
     onSkillClick?: (event?: EventTouch) => void; // 技能按钮点击回调（可携带触摸事件）
+    onSkill2Click?: () => void; // 第二技能按钮点击回调（用于弓箭手：调整弓弦）
     // 升级相关
     upgradeCost?: number; // 升级费用（用于显示）
     maxLevel?: number; // 最高等级（用于判断是否满级）
@@ -40,6 +41,9 @@ export interface UnitInfo {
     isDefending?: boolean; // 是否处于防御状态（用于按钮显示）
     // 技能状态
     isSkillActive?: boolean; // 技能是否激活（用于按钮显示）
+    // 第二技能冷却（秒）
+    skill2CooldownRemainingSec?: number; // 剩余冷却时间（秒）
+    skill2CooldownTotalSec?: number; // 总冷却时间（秒）
 }
 
 @ccclass('UnitInfoPanel')
@@ -909,6 +913,59 @@ export class UnitInfoPanel extends Component {
                     unitInfo.onSkillClick(event);
                 }
             });
+        }
+
+        // 弓箭手：调整弓弦松紧度技能（九宫格第六格：索引5 = 第二行第三列）
+        if (unitInfo.name === '弓箭手' && unitInfo.onSkill2Click && this.buttonNodes[5]) {
+            const skill2Button = this.buttonNodes[5];
+            skill2Button.active = true;
+
+            // 先用升级按钮贴图占位
+            this.loadButtonSprite(5, 'kongxian1.png', 'kongxian2.png');
+
+            const btnComp = skill2Button.getComponent(Button);
+            const sprite = this.buttonSprites.get(5);
+            const labelNode = skill2Button.getChildByName('Label');
+            const label = labelNode ? labelNode.getComponent(Label) : null;
+
+            const remaining = Math.max(0, Number(unitInfo.skill2CooldownRemainingSec || 0));
+            const isCoolingDown = remaining > 0.05;
+
+            // 冷却时：按钮不可点 + 灰化 + 显示倒计时
+            if (btnComp) {
+                btnComp.interactable = !isCoolingDown;
+            }
+            if (sprite && sprite.node && sprite.node.isValid) {
+                sprite.color = isCoolingDown ? new Color(140, 140, 140, 255) : Color.WHITE;
+            }
+            if (labelNode && label) {
+                labelNode.active = isCoolingDown;
+                label.string = isCoolingDown ? `${Math.ceil(remaining)}s` : '';
+                label.fontSize = 16;
+                label.color = new Color(255, 245, 200, 255);
+                label.horizontalAlign = Label.HorizontalAlign.CENTER;
+                label.verticalAlign = Label.VerticalAlign.CENTER;
+                labelNode.setPosition(0, 0, 0);
+            }
+
+            // 仅在不冷却时绑定点击
+            if (!isCoolingDown) {
+                skill2Button.on(Node.EventType.TOUCH_START, () => {
+                    const s = this.buttonSprites.get(5);
+                    const down = this.buttonDownSprites.get(5);
+                    if (s && down && s.node && s.node.isValid) {
+                        s.spriteFrame = down;
+                    }
+                });
+                skill2Button.on(Node.EventType.TOUCH_END, () => {
+                    const s = this.buttonSprites.get(5);
+                    const normal = this.buttonNormalSprites.get(5);
+                    if (s && normal && s.node && s.node.isValid) {
+                        s.spriteFrame = normal;
+                    }
+                    unitInfo.onSkill2Click?.();
+                });
+            }
         }
 
         // 牧师/法师技能按钮：放在第二行第一列（索引3），不与集结点/穿透箭冲突

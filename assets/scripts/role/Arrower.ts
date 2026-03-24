@@ -5,6 +5,7 @@ import { Arrow } from '../Arrow';
 import { Arrow2 } from '../Arrow2';
 import { UnitInfo } from '../UnitInfoPanel';
 import { PlayerDataManager } from '../PlayerDataManager';
+import { GamePopup } from '../GamePopup';
 const { ccclass, property } = _decorator;
 
 @ccclass('Arrower')
@@ -103,6 +104,19 @@ export class Arrower extends Role {
     @property({ type: SpriteFrame, override: true })
     unitIcon: SpriteFrame = null!;
 
+    // 首个弓箭手“紧弓弦”互动资源（直接挂在弓箭手预制体上）
+    @property({ type: [SpriteFrame] })
+    bowstringTensionFrames: SpriteFrame[] = []; // 弓弦松紧序列帧（建议从“最松”到“最紧”）
+
+    @property({ type: SpriteFrame })
+    bowstringMoodExcellentIcon: SpriteFrame = null!; // 结算-最佳情绪图
+
+    @property({ type: SpriteFrame })
+    bowstringMoodGoodIcon: SpriteFrame = null!; // 结算-良好情绪图
+
+    @property({ type: SpriteFrame })
+    bowstringMoodBadIcon: SpriteFrame = null!; // 结算-较差情绪图
+
     // 3级专用：强化版箭矢预制体（Arrow2）
     @property({ type: Prefab })
     level3ArrowPrefab: Prefab = null!;
@@ -110,6 +124,14 @@ export class Arrower extends Role {
     // 技能相关属性
     private readonly PENETRATE_ARROW_MANA_COST: number = 10; // 穿透箭消耗蓝量
     private isPenetrateArrowEnabled: boolean = false; // 穿透箭开关（每个弓箭手独立，默认关闭）
+
+    // 弓弦调整技能（九宫格第六格）：30 秒冷却（使用真实时间，暂停不影响冷却计时）
+    private readonly BOWSTRING_SKILL_COOLDOWN_MS: number = 30_000;
+    private bowstringSkillCooldownEndMs: number = 0;
+    private bowstringSkillCooldownLoopId: number | null = null;
+
+    // 当前弓弦松紧带来的攻击倍率（只作用于本弓箭手实例；不叠加，直接覆盖）
+    public bowstringAttackMultiplier: number = 1.0;
 
     battleSlogans: string[] = ['箭如雨下！', '射击！射击！射击！', '瞄准，射击！', '弓弦紧绷射天狼!', '箭似流星！','射箭！射箭！射箭！', 'Biu! Biu! Biu!'];
 
@@ -129,29 +151,49 @@ export class Arrower extends Role {
      * - 有技能时：检查蓝量，有蓝自动使用穿透箭，没蓝使用普通箭
      */
     protected createArrow() {
-        // 检查是否有技能且蓝量足够
-        const usePenetrateArrow = this.hasSkill && this.hasEnoughMana(this.PENETRATE_ARROW_MANA_COST);
-        
-        // 如果有技能且蓝量足够，使用穿透箭
-        if (usePenetrateArrow && this.level3ArrowPrefab) {
-            // 消耗蓝量
-            this.consumeMana(this.PENETRATE_ARROW_MANA_COST);
-            // 使用穿透箭逻辑
-            this.createPenetrateArrow();
-            return;
-        }
-        
-        // 等级小于3或没有技能，保持原有逻辑
-        if (this.level < 3 || !this.level3ArrowPrefab) {
-            // 使用父类的普通箭矢逻辑
-            // @ts-ignore 通过索引访问以避免编译器对protected的限制提示
+        // 用临时 attackDamage 参与本次射击（不持久修改，避免误影响其它弓箭手）
+        const effDamage = this.getEffectiveAttackDamage();
+        this.withTempAttackDamage(effDamage, () => {
+            // 检查是否有技能且蓝量足够
+            const usePenetrateArrow = this.hasSkill && this.hasEnoughMana(this.PENETRATE_ARROW_MANA_COST);
+            
+            // 如果有技能且蓝量足够，使用穿透箭
+            if (usePenetrateArrow && this.level3ArrowPrefab) {
+                // 消耗蓝量
+                this.consumeMana(this.PENETRATE_ARROW_MANA_COST);
+                // 使用穿透箭逻辑
+                this.createPenetrateArrow();
+                return;
+            }
+            
+            // 等级小于3或没有技能，保持原有逻辑
+            if (this.level < 3 || !this.level3ArrowPrefab) {
+                // 使用父类的普通箭矢逻辑
+                // @ts-ignore 通过索引访问以避免编译器对protected的限制提示
+                super['createArrow']();
+                return;
+            }
+            
+            // 3级但没有技能或蓝量不足，使用普通箭
+            // @ts-ignore
             super['createArrow']();
-            return;
+        });
+    }
+
+    private getEffectiveAttackDamage(): number {
+        const base = Number(this.attackDamage) || 0;
+        const m = Number(this.bowstringAttackMultiplier) || 1.0;
+        return Math.max(0, Math.round(base * Math.max(1.0, m)));
+    }
+
+    private withTempAttackDamage(tempDamage: number, fn: () => void) {
+        const old = this.attackDamage;
+        this.attackDamage = tempDamage;
+        try {
+            fn();
+        } finally {
+            this.attackDamage = old;
         }
-        
-        // 3级但没有技能或蓝量不足，使用普通箭
-        // @ts-ignore
-        super['createArrow']();
     }
     
     /**
@@ -275,7 +317,7 @@ export class Arrower extends Role {
             level: this.level,
             currentHealth: currentHealth,
             maxHealth: maxHealth,
-            attackDamage: this.attackDamage,
+            attackDamage: this.getEffectiveAttackDamage(),
             populationCost: 1,
             icon: this.cardIcon || this.defaultSpriteFrame,
             collisionRadius: this.collisionRadius,
@@ -330,10 +372,80 @@ export class Arrower extends Role {
                     }
                 }
             },
+            onSkill2Click: () => {
+                this.onBowstringSkillClick();
+            },
             isSkillActive: isSkillActive
         };
 
+        // 第二技能冷却信息（用于 UI 显示）
+        unitInfo.skill2CooldownTotalSec = this.BOWSTRING_SKILL_COOLDOWN_MS / 1000;
+        unitInfo.skill2CooldownRemainingSec = this.getBowstringSkillCooldownRemainingSec();
+
         return unitInfo;
+    }
+
+    private getBowstringSkillCooldownRemainingSec(): number {
+        const now = Date.now();
+        const remainMs = Math.max(0, (this.bowstringSkillCooldownEndMs || 0) - now);
+        return remainMs / 1000;
+    }
+
+    private clearBowstringSkillCooldownLoop() {
+        if (this.bowstringSkillCooldownLoopId !== null) {
+            clearInterval(this.bowstringSkillCooldownLoopId);
+            this.bowstringSkillCooldownLoopId = null;
+        }
+    }
+
+    private refreshUnitInfoPanelIfSelected() {
+        if (!this.unitSelectionManager) {
+            this.findUnitSelectionManager();
+        }
+        if (!this.unitSelectionManager) {
+            return;
+        }
+        if ((this.unitSelectionManager as any).isUnitSelected && !(this.unitSelectionManager as any).isUnitSelected(this.node)) {
+            return;
+        }
+        const unitInfoPanel = (this.unitSelectionManager as any).unitInfoPanel;
+        if (unitInfoPanel && unitInfoPanel.updateButtons) {
+            const updated = this.buildArrowerUnitInfo();
+            unitInfoPanel.updateButtons(updated);
+        }
+    }
+
+    private onBowstringSkillClick() {
+        console.log(`[BowstringSkill] click t=${Date.now()} uuid=${this.node?.uuid} name=${this.unitName}`);
+        const remaining = this.getBowstringSkillCooldownRemainingSec();
+        if (remaining > 0.05) {
+            // 冷却中直接提示（不触发）
+            GamePopup.showMessage(`技能冷却中：${Math.ceil(remaining)}s`, true, 1.2);
+            this.refreshUnitInfoPanelIfSelected();
+            return;
+        }
+
+        // 启动冷却
+        this.bowstringSkillCooldownEndMs = Date.now() + this.BOWSTRING_SKILL_COOLDOWN_MS;
+        this.refreshUnitInfoPanelIfSelected();
+
+        // 打开小游戏（不会叠加增幅：GameManager 内部用固定 baseKey 覆盖 attackDamage）
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        const gm: any = this.gameManager as any;
+        gm?.openBowstringMiniGameForArrower?.(this);
+
+        // 冷却倒计时 UI 刷新（真实时间，不受暂停影响）
+        this.clearBowstringSkillCooldownLoop();
+        this.bowstringSkillCooldownLoopId = setInterval(() => {
+            const remain = this.getBowstringSkillCooldownRemainingSec();
+            this.refreshUnitInfoPanelIfSelected();
+            if (remain <= 0.01) {
+                this.clearBowstringSkillCooldownLoop();
+                this.refreshUnitInfoPanelIfSelected();
+            }
+        }, 200) as unknown as number;
     }
 
     /**

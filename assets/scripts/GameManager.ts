@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, BlockInputEvents, sys, Texture2D, ImageAsset, Mask } from 'cc';
+import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, BlockInputEvents, sys, Texture2D, ImageAsset, Mask, UIOpacity, LabelOutline } from 'cc';
 // 微信小游戏全局对象声明（避免 TypeScript 报错）
 declare const wx: any;
 import { Crystal } from './role/Crystal';
@@ -79,6 +79,7 @@ export class GameManager extends Component {
     private playerDataManager: PlayerDataManager = null!;
     private hasShownPopulationLimitWarning: boolean = false; // 是否已显示过人口上限提示
     private hasShownFirstArrowerDeathPopup: boolean = false; // 是否已显示过第一个弓箭手死亡提示
+    private hasTriggeredFirstArrowerBowstringMiniGame: boolean = false; // 首个弓箭手“紧弓弦”互动仅触发一次
     // 埋点相关
     private analyticsManager: AnalyticsManager | null = null;
     private totalKillCount: number = 0;
@@ -93,6 +94,23 @@ export class GameManager extends Component {
     private goldIcon: SpriteFrame | null = null; // 金币增加卡片图标
     private orcRageIntroIcon: SpriteFrame | null = null; // 一档：兽人狂暴介绍框固定图标
     private orcRageTier2IntroIcon: SpriteFrame | null = null; // 二档：燃血狂暴介绍框固定图标
+    // “紧弓弦”小游戏运行态
+    private bowstringMiniGameRoot: Node | null = null;
+    private bowstringMiniGameEnergyFill: Graphics | null = null;
+    private bowstringMiniGameNeedle: Graphics | null = null;
+    private bowstringMiniGameAnimSprite: Sprite | null = null;
+    private bowstringMiniGameAnimFrames: SpriteFrame[] = [];
+    private bowstringMiniGameHold: boolean = false;
+    private bowstringMiniGameCycleTime: number = 0;
+    private bowstringMiniGameEnergyValue: number = 0;
+    private bowstringMiniGameFinalized: boolean = false;
+    private bowstringMiniGameTargetArrower: any = null;
+    private bowstringMiniGameRealtimeLoopId: number | null = null;
+    private bowstringMiniGameRealtimeLastMs: number = 0;
+    private bowstringMiniGameInputEnableAtMs: number = 0;
+    private bowstringMiniGameWaitFirstRelease: boolean = false;
+    private bowstringMiniGameIgnoreEndUntilMs: number = 0;
+    private bowstringMiniGameHasStartedHold: boolean = false;
     
     /**
      * 加载全局增益卡片图标资源
@@ -5116,8 +5134,19 @@ export class GameManager extends Component {
             // 特殊建筑首次出现时不弹单位介绍框：弓箭手小屋 / 猎手大厅 / 法师塔 / 剑士小屋 / 教堂
             const introBlockedNames = new Set<string>(['弓箭手小屋', '猎手大厅', '法师塔', '剑士小屋', '教堂']);
             const shouldShowIntro = !introBlockedNames.has(uniqueUnitType);
+            const isFirstArrower = unitType === 'Arrower' || unitScript?.unitType === 'Arrower' || unitScript?.prefabName === 'Arrower' || uniqueUnitType === '弓箭手';
 
-            if (shouldShowIntro) {
+            if (isFirstArrower && shouldShowIntro) {
+                const baseCloseCallback = this.getIntroCloseCallback(uniqueUnitType);
+                this.showUnitIntro(unitScript, () => {
+                    if (baseCloseCallback) {
+                        baseCloseCallback();
+                    }
+                    this.triggerFirstArrowerBowstringFlow(unitScript);
+                });
+            } else if (isFirstArrower) {
+                this.triggerFirstArrowerBowstringFlow(unitScript);
+            } else if (shouldShowIntro) {
                 this.showUnitIntro(unitScript, this.getIntroCloseCallback(uniqueUnitType));
             }
 
@@ -5125,6 +5154,518 @@ export class GameManager extends Component {
         }
 
         return false;
+    }
+
+    /**
+     * 首个弓箭手：延迟触发“紧弓弦”剧情与小游戏
+     */
+    private triggerFirstArrowerBowstringFlow(arrowerScript: any) {
+        if (this.hasTriggeredFirstArrowerBowstringMiniGame) {
+            return;
+        }
+        this.hasTriggeredFirstArrowerBowstringMiniGame = true;
+
+        // 固定 5 秒后出现请求帮助对话
+        const delay = 5;
+        this.scheduleOnce(() => {
+            if (this.gameState !== GameState.Playing) {
+                return;
+            }
+            if (!arrowerScript || !arrowerScript.node || !arrowerScript.node.isValid || !arrowerScript.node.active) {
+                return;
+            }
+            this.showFirstArrowerHelpIntro(arrowerScript);
+        }, delay);
+    }
+
+    private showFirstArrowerHelpIntro(arrowerScript: any) {
+        this.autoCreateUnitIntroPopup();
+        if (!this.unitIntroPopup) {
+            return;
+        }
+        const icon = arrowerScript?.cardIcon || arrowerScript?.defaultSpriteFrame || null;
+        this.unitIntroPopup.show({
+            unitName: '弓箭手',
+            unitDescription: '指挥官，帮我紧一紧弓弦。',
+            unitIcon: icon,
+            unitType: 'Arrower',
+            unitId: 'Arrower',
+            onCloseCallback: () => {
+                // 首次出现流程：不需要“先松开一次”的门闩（否则会出现部分区域点击不触发开始的体感问题）
+                this.showBowstringMiniGame(arrowerScript, false);
+            }
+        });
+    }
+
+    /**
+     * @param requireReleaseGuard 仅当从技能按钮点击触发时为 true，用于吞掉“按钮那一次输入残留”
+     */
+    private showBowstringMiniGame(arrowerScript: any, requireReleaseGuard: boolean = false) {
+        if (this.bowstringMiniGameRoot && this.bowstringMiniGameRoot.isValid) {
+            this.bowstringMiniGameRoot.destroy();
+        }
+
+        const canvas = find('Canvas');
+        if (!canvas) {
+            return;
+        }
+
+        this.bowstringMiniGameTargetArrower = arrowerScript;
+        this.bowstringMiniGameFinalized = false;
+        this.bowstringMiniGameHold = false;
+        this.bowstringMiniGameHasStartedHold = false;
+        this.bowstringMiniGameIgnoreEndUntilMs = 0;
+        this.bowstringMiniGameCycleTime = 0;
+        this.bowstringMiniGameEnergyValue = 0;
+        (this as any).__bowstringLoggedHoldTick = false;
+        this.bowstringMiniGameAnimSprite = null;
+        this.bowstringMiniGameAnimFrames = Array.isArray(arrowerScript?.bowstringTensionFrames)
+            ? (arrowerScript.bowstringTensionFrames as SpriteFrame[]).filter(Boolean)
+            : [];
+        this.clearBowstringRealtimeLoop();
+        this.pauseGame();
+        // 防止“点击技能按钮抬手/点击残留事件”导致立刻进入长按态
+        this.bowstringMiniGameInputEnableAtMs = Date.now() + 180;
+        // 技能按钮触发时，往往当前那次按下还未结束：必须先看到一次 release，才允许开始 hold
+        this.bowstringMiniGameWaitFirstRelease = !!requireReleaseGuard;
+        if (!this.bowstringMiniGameWaitFirstRelease) {
+            // 非技能触发：仍需防止 touch-end + mouse-up 同时到来造成的误结算
+            this.bowstringMiniGameIgnoreEndUntilMs = Date.now() + 120;
+        }
+        console.log(
+            `[BowstringMiniGame] open t=${Date.now()} enableAt=${this.bowstringMiniGameInputEnableAtMs} waitFirstRelease=${this.bowstringMiniGameWaitFirstRelease} requireReleaseGuard=${requireReleaseGuard}`,
+            arrowerScript?.node?.uuid
+        );
+
+        const root = new Node('BowstringMiniGame');
+        root.setParent(canvas);
+        root.setSiblingIndex(Number.MAX_SAFE_INTEGER - 2);
+        this.bowstringMiniGameRoot = root;
+        root.addComponent(BlockInputEvents);
+
+        const rootTr = root.addComponent(UITransform);
+        rootTr.setContentSize(view.getVisibleSize().width * 2, view.getVisibleSize().height * 2);
+        root.setPosition(0, 0, 0);
+
+        const mask = root.addComponent(Graphics);
+        mask.fillColor = new Color(0, 0, 0, 180);
+        const vs = view.getVisibleSize();
+        mask.rect(-vs.width, -vs.height, vs.width * 2, vs.height * 2);
+        mask.fill();
+
+        const panel = new Node('MiniGamePanel');
+        panel.setParent(root);
+        panel.setPosition(0, 0, 0);
+        const panelTr = panel.addComponent(UITransform);
+        panelTr.setContentSize(400, 400);
+        const panelBg = panel.addComponent(Graphics);
+        panelBg.fillColor = new Color(25, 25, 35, 245);
+        panelBg.roundRect(-200, -200, 400, 400, 14);
+        panelBg.fill();
+
+        const titleNode = new Node('Title');
+        titleNode.setParent(panel);
+        titleNode.setPosition(0, 172, 0);
+        titleNode.addComponent(UITransform).setContentSize(360, 32);
+        const title = titleNode.addComponent(Label);
+        title.string = '长按调整弓弦松紧';
+        title.fontSize = 20;
+        title.color = new Color(240, 240, 255, 255);
+        title.horizontalAlign = Label.HorizontalAlign.CENTER;
+        title.verticalAlign = Label.VerticalAlign.CENTER;
+
+        // 左侧：弓弦动态区（序列帧从弓箭手预制体读取）
+        const left = new Node('BowStringAnim');
+        left.setParent(panel);
+        left.setPosition(-105, -8, 0);
+        left.addComponent(UITransform).setContentSize(150, 280);
+        const leftBg = left.addComponent(Graphics);
+        leftBg.fillColor = new Color(48, 48, 68, 255);
+        leftBg.roundRect(-75, -140, 150, 280, 8);
+        leftBg.fill();
+        const animNode = new Node('BowStringAnimSprite');
+        animNode.setParent(left);
+        animNode.setPosition(0, 16, 0);
+        animNode.addComponent(UITransform).setContentSize(126, 210);
+        this.bowstringMiniGameAnimSprite = animNode.addComponent(Sprite);
+        this.bowstringMiniGameAnimSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        if (this.bowstringMiniGameAnimFrames.length > 0) {
+            this.bowstringMiniGameAnimSprite.spriteFrame = this.bowstringMiniGameAnimFrames[0];
+        }
+
+        const leftTipNode = new Node('LeftTip');
+        leftTipNode.setParent(left);
+        leftTipNode.setPosition(0, -118, 0);
+        leftTipNode.addComponent(UITransform).setContentSize(136, 24);
+        const leftTip = leftTipNode.addComponent(Label);
+        leftTip.string = this.bowstringMiniGameAnimFrames.length > 0 ? '弓弦松紧动画' : '未配置弓弦序列帧';
+        leftTip.fontSize = 16;
+        leftTip.color = new Color(180, 190, 220, 255);
+        leftTip.horizontalAlign = Label.HorizontalAlign.CENTER;
+        leftTip.verticalAlign = Label.VerticalAlign.CENTER;
+
+        // 右侧：能量条区
+        const right = new Node('EnergyPanel');
+        right.setParent(panel);
+        right.setPosition(112, -8, 0);
+        right.addComponent(UITransform).setContentSize(150, 280);
+        const rightBg = right.addComponent(Graphics);
+        rightBg.fillColor = new Color(48, 48, 68, 255);
+        rightBg.roundRect(-75, -140, 150, 280, 8);
+        rightBg.fill();
+
+        const barX = -20;
+        const barY = -110;
+        const barW = 40;
+        const barH = 220;
+        const barFrame = new Node('EnergyBarFrame');
+        barFrame.setParent(right);
+        barFrame.addComponent(UITransform).setContentSize(60, 188);
+        const barFrameG = barFrame.addComponent(Graphics);
+        barFrameG.strokeColor = new Color(220, 220, 245, 255);
+        barFrameG.lineWidth = 2;
+        barFrameG.roundRect(barX - 4, barY - 4, barW + 8, barH + 8, 4);
+        barFrameG.stroke();
+
+        const highlightHeight = 28;
+        const hl = new Node('MidHighlight');
+        hl.setParent(right);
+        hl.addComponent(UITransform).setContentSize(64, highlightHeight);
+        const hlg = hl.addComponent(Graphics);
+        hlg.fillColor = new Color(255, 220, 80, 100);
+        hlg.roundRect(barX - 8, -highlightHeight / 2, barW + 16, highlightHeight, 4);
+        hlg.fill();
+
+        // 中间附近的“次优区域”轻微高亮，便于与远离中间区域区分
+        const nearTop = new Node('NearMidTop');
+        nearTop.setParent(right);
+        nearTop.addComponent(UITransform).setContentSize(64, 24);
+        const nearTopG = nearTop.addComponent(Graphics);
+        nearTopG.fillColor = new Color(255, 235, 140, 45);
+        nearTopG.roundRect(barX - 8, 18, barW + 16, 24, 4);
+        nearTopG.fill();
+
+        const nearBottom = new Node('NearMidBottom');
+        nearBottom.setParent(right);
+        nearBottom.addComponent(UITransform).setContentSize(64, 24);
+        const nearBottomG = nearBottom.addComponent(Graphics);
+        nearBottomG.fillColor = new Color(255, 235, 140, 45);
+        nearBottomG.roundRect(barX - 8, -42, barW + 16, 24, 4);
+        nearBottomG.fill();
+
+        const fillNode = new Node('EnergyFill');
+        fillNode.setParent(right);
+        fillNode.addComponent(UITransform).setContentSize(60, 188);
+        this.bowstringMiniGameEnergyFill = fillNode.addComponent(Graphics);
+
+        const needleNode = new Node('EnergyNeedle');
+        needleNode.setParent(right);
+        needleNode.addComponent(UITransform).setContentSize(70, 8);
+        this.bowstringMiniGameNeedle = needleNode.addComponent(Graphics);
+
+        const tipNode = new Node('Tip');
+        tipNode.setParent(panel);
+        tipNode.setPosition(0, -176, 0);
+        tipNode.addComponent(UITransform).setContentSize(360, 28);
+        const tip = tipNode.addComponent(Label);
+        tip.string = '长按屏幕蓄力，松开即确定（中间高亮最佳）';
+        tip.fontSize = 14;
+        tip.color = new Color(208, 216, 245, 255);
+        tip.horizontalAlign = Label.HorizontalAlign.CENTER;
+        tip.verticalAlign = Label.VerticalAlign.CENTER;
+
+        this.refreshBowstringEnergyVisual(barX, barY, barW, barH);
+
+        const onStart = (event?: any) => {
+            const now = Date.now();
+            const type = event?.type || 'unknown';
+            const loc = (event?.getUILocation && event.getUILocation()) || (event?.getLocation && event.getLocation());
+            console.log(
+                `[BowstringMiniGame] onStart t=${now} type=${type} waitFirstRelease=${this.bowstringMiniGameWaitFirstRelease} enableAt=${this.bowstringMiniGameInputEnableAtMs}`,
+                loc ? `x=${Math.round(loc.x)} y=${Math.round(loc.y)}` : ''
+            );
+            if (this.bowstringMiniGameWaitFirstRelease) return;
+            if (now < this.bowstringMiniGameInputEnableAtMs) return;
+            this.bowstringMiniGameHold = true;
+            this.bowstringMiniGameHasStartedHold = true;
+            console.log(`[BowstringMiniGame] hold=true t=${now}`);
+        };
+        const onEnd = (event?: any) => {
+            const now = Date.now();
+            const type = event?.type || 'unknown';
+            console.log(
+                `[BowstringMiniGame] onEnd t=${now} type=${type} hold=${this.bowstringMiniGameHold} waitFirstRelease=${this.bowstringMiniGameWaitFirstRelease}`
+            );
+            // 同一次物理抬手可能同时触发 touch-end + mouse-up：短窗口内忽略重复 end
+            if (now < (this.bowstringMiniGameIgnoreEndUntilMs || 0)) {
+                console.log(`[BowstringMiniGame] end ignored (dup window) t=${now}`);
+                return;
+            }
+            // 第一次 release 仅用于“清空技能按钮那次输入残留”，不触发结算
+            if (this.bowstringMiniGameWaitFirstRelease) {
+                this.bowstringMiniGameWaitFirstRelease = false;
+                this.bowstringMiniGameIgnoreEndUntilMs = now + 120;
+                console.log(`[BowstringMiniGame] first release consumed t=${now}`);
+                return;
+            }
+            // 没有真正开始过长按（hold 从未进入过 true），不允许结算，避免“自动结束/闪一下就没”
+            if (!this.bowstringMiniGameHasStartedHold) {
+                console.log(`[BowstringMiniGame] end ignored (never started hold) t=${now}`);
+                return;
+            }
+            this.finalizeBowstringMiniGame();
+        };
+
+        root.on(Node.EventType.TOUCH_START, onStart, this, true);
+        root.on(Node.EventType.TOUCH_END, onEnd, this, true);
+        root.on(Node.EventType.TOUCH_CANCEL, onEnd, this, true);
+        root.on(Node.EventType.MOUSE_DOWN, onStart, this, true);
+        root.on(Node.EventType.MOUSE_UP, onEnd, this, true);
+        root.on(Node.EventType.MOUSE_LEAVE, onEnd, this, true);
+
+        this.startBowstringRealtimeLoop(barX, barY, barW, barH);
+    }
+
+    /**
+     * 弓箭手技能：打开弓弦松紧小游戏（不受“首次触发”限制）
+     */
+    public openBowstringMiniGameForArrower(arrowerScript: any) {
+        if (!arrowerScript || !arrowerScript.node || !arrowerScript.node.isValid || !arrowerScript.node.active) {
+            return;
+        }
+        // 技能按钮触发：需要“先松开一次”门闩，避免按钮点击残留输入导致立刻开始/立刻结算
+        this.showBowstringMiniGame(arrowerScript, true);
+    }
+
+    private startBowstringRealtimeLoop(barX: number, barY: number, barW: number, barH: number) {
+        this.clearBowstringRealtimeLoop();
+        this.bowstringMiniGameRealtimeLastMs = Date.now();
+        this.bowstringMiniGameRealtimeLoopId = setInterval(() => {
+            if (!this.bowstringMiniGameRoot || !this.bowstringMiniGameRoot.isValid || this.bowstringMiniGameFinalized) {
+                this.clearBowstringRealtimeLoop();
+                return;
+            }
+            const now = Date.now();
+            const dt = Math.max(0, Math.min(0.05, (now - this.bowstringMiniGameRealtimeLastMs) / 1000));
+            this.bowstringMiniGameRealtimeLastMs = now;
+            if (!this.bowstringMiniGameHold) {
+                return;
+            }
+            // 关键日志：确认“未长按却开始”的真实触发点
+            // （只在 hold=true 的第一次 tick 打印一次）
+            if ((this as any).__bowstringLoggedHoldTick !== true) {
+                (this as any).__bowstringLoggedHoldTick = true;
+                console.log(`[BowstringMiniGame] tick-start t=${now} dt=${dt.toFixed(3)} cycle=${this.bowstringMiniGameCycleTime.toFixed(3)}`);
+            }
+            this.bowstringMiniGameCycleTime += dt;
+            while (this.bowstringMiniGameCycleTime >= 4.0) {
+                this.bowstringMiniGameCycleTime -= 4.0;
+            }
+            this.bowstringMiniGameEnergyValue = this.calcBowstringEnergy(this.bowstringMiniGameCycleTime);
+            this.refreshBowstringEnergyVisual(barX, barY, barW, barH);
+        }, 16) as unknown as number;
+    }
+
+    private clearBowstringRealtimeLoop() {
+        if (this.bowstringMiniGameRealtimeLoopId !== null) {
+            clearInterval(this.bowstringMiniGameRealtimeLoopId);
+            this.bowstringMiniGameRealtimeLoopId = null;
+        }
+    }
+
+    private calcBowstringEnergy(t: number): number {
+        // 2.5 秒上升到顶，1.5 秒下降到底（总周期 4 秒）
+        if (t <= 2.5) {
+            return Math.max(0, Math.min(1, t / 2.5));
+        }
+        return Math.max(0, Math.min(1, 1 - (t - 2.5) / 1.5));
+    }
+
+    private refreshBowstringEnergyVisual(barX: number, barY: number, barW: number, barH: number) {
+        if (!this.bowstringMiniGameEnergyFill || !this.bowstringMiniGameNeedle) {
+            return;
+        }
+        const fill = this.bowstringMiniGameEnergyFill;
+        const needle = this.bowstringMiniGameNeedle;
+        fill.clear();
+        needle.clear();
+
+        const h = Math.max(0, Math.min(1, this.bowstringMiniGameEnergyValue)) * barH;
+        fill.fillColor = new Color(90, 205, 255, 255);
+        fill.roundRect(barX, barY, barW, h, 3);
+        fill.fill();
+
+        const y = barY + h;
+        needle.fillColor = new Color(255, 245, 180, 255);
+        needle.roundRect(barX - 14, y - 2, barW + 28, 4, 2);
+        needle.fill();
+
+        // 同步更新左侧弓弦序列帧：按 4 秒完整周期线性映射（避免 2.5 秒提前播到末帧）
+        if (this.bowstringMiniGameAnimSprite && this.bowstringMiniGameAnimFrames.length > 0) {
+            const n = this.bowstringMiniGameAnimFrames.length;
+            const normalized = Math.max(0, Math.min(0.999999, this.bowstringMiniGameCycleTime / 4.0));
+            const idx = Math.min(n - 1, Math.max(0, Math.floor(normalized * n)));
+            this.bowstringMiniGameAnimSprite.spriteFrame = this.bowstringMiniGameAnimFrames[idx];
+        }
+    }
+
+    private finalizeBowstringMiniGame() {
+        if (this.bowstringMiniGameFinalized) {
+            return;
+        }
+        this.bowstringMiniGameFinalized = true;
+        console.log(`[BowstringMiniGame] finalize t=${Date.now()} energy=${this.bowstringMiniGameEnergyValue.toFixed(3)} cycle=${this.bowstringMiniGameCycleTime.toFixed(3)}`);
+        this.bowstringMiniGameHold = false;
+        this.clearBowstringRealtimeLoop();
+
+        const energy = Math.max(0, Math.min(1, this.bowstringMiniGameEnergyValue));
+        const centerDist = Math.abs(energy - 0.5);
+        const isInBestZone = centerDist <= 0.065; // 对齐中间高亮区（约 28/220）
+        const isInGoodZone = centerDist <= 0.16;  // 次优区（明显优于外围，但不算最佳）
+        const score = Math.max(0, 1 - Math.abs(energy - 0.5) / 0.5); // 中点得分最高
+        const multiplier = 1.1 + 0.4 * score; // [1.1, 1.5]
+        const attackBoostPercent = Math.max(0, Math.round((multiplier - 1) * 100));
+
+        const archer = this.bowstringMiniGameTargetArrower;
+        // 一次小游戏：提升全体弓箭手（非递归，定向扫描固定容器，避免性能抖动）
+        try {
+            const visited = new Set<string>();
+            let appliedCount = 0;
+            const containerPaths = [
+                'Canvas/Towers',
+                'Canvas/Units',
+                'Canvas/Archers',
+                'Canvas/Arrowers',
+            ];
+            for (let p = 0; p < containerPaths.length; p++) {
+                const container = find(containerPaths[p]);
+                if (!container || !container.isValid) continue;
+                const children = container.children || [];
+                for (let i = 0; i < children.length; i++) {
+                    const n = children[i];
+                    if (!n || !n.isValid || !n.active) continue;
+                    const a = n.getComponent('Arrower') as any;
+                    if (!a || !a.node || !a.node.isValid || !a.node.active) continue;
+                    const id = a.node.uuid || `${a.node.name}_${i}`;
+                    if (visited.has(id)) continue;
+                    visited.add(id);
+                    a.bowstringAttackMultiplier = multiplier;
+                    appliedCount++;
+                }
+            }
+            // 兜底：确保触发小游戏的那个弓箭手一定被覆盖（即使它临时不在上述容器里）
+            if (archer && archer.node && archer.node.isValid && archer.node.active) {
+                const id = archer.node.uuid || '__current_archer__';
+                if (!visited.has(id)) {
+                    archer.bowstringAttackMultiplier = multiplier;
+                    visited.add(id);
+                    appliedCount++;
+                }
+            }
+            console.log(`[BowstringMiniGame] applyAllArrowersFast multiplier=${multiplier.toFixed(3)} count=${appliedCount}`);
+        } catch (e) {
+            console.warn('[BowstringMiniGame] applyAllArrowersFast failed', e);
+        }
+
+        const root = this.bowstringMiniGameRoot;
+        if (root && root.isValid) {
+            const showPerfect = isInBestZone;
+            if (showPerfect) {
+                const perfectNode = new Node('PerfectText');
+                perfectNode.setParent(root);
+                perfectNode.setPosition(112, 152, 0);
+                perfectNode.addComponent(UITransform).setContentSize(180, 44);
+                const perfectLabel = perfectNode.addComponent(Label);
+                perfectLabel.string = 'Prefect!';
+                perfectLabel.fontSize = 42;
+                perfectLabel.color = new Color(255, 215, 80, 255);
+                perfectLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+                perfectLabel.verticalAlign = Label.VerticalAlign.CENTER;
+                const outline = perfectNode.addComponent(LabelOutline);
+                outline.color = new Color(20, 20, 20, 255);
+                outline.width = 4;
+            }
+            this.fadeOutBowstringMiniGameRoot(0.9, showPerfect ? 0.35 : 0, () => {
+                this.showArrowerThanksIntro(multiplier, attackBoostPercent, archer, isInBestZone, isInGoodZone);
+            });
+            return;
+        }
+
+        this.showArrowerThanksIntro(multiplier, attackBoostPercent, archer, isInBestZone, isInGoodZone);
+        this.bowstringMiniGameRoot = null;
+        this.bowstringMiniGameEnergyFill = null;
+        this.bowstringMiniGameNeedle = null;
+        this.bowstringMiniGameAnimSprite = null;
+        this.bowstringMiniGameAnimFrames = [];
+        this.bowstringMiniGameTargetArrower = null;
+    }
+
+    private fadeOutBowstringMiniGameRoot(durationSec: number, delaySec: number, onDone: () => void) {
+        const root = this.bowstringMiniGameRoot;
+        if (!root || !root.isValid) {
+            onDone();
+            return;
+        }
+        let opacity = root.getComponent(UIOpacity);
+        if (!opacity) {
+            opacity = root.addComponent(UIOpacity);
+        }
+        opacity.opacity = 255;
+        setTimeout(() => {
+            const startMs = Date.now();
+            const loopId = setInterval(() => {
+                const curRoot = this.bowstringMiniGameRoot;
+                if (!curRoot || !curRoot.isValid || !opacity || !opacity.isValid) {
+                    clearInterval(loopId);
+                    onDone();
+                    return;
+                }
+                const t = Math.max(0, Math.min(1, (Date.now() - startMs) / Math.max(0.001, durationSec * 1000)));
+                opacity.opacity = Math.max(0, Math.round(255 * (1 - t)));
+                if (t >= 1) {
+                    clearInterval(loopId);
+                    curRoot.destroy();
+                    this.bowstringMiniGameRoot = null;
+                    this.bowstringMiniGameEnergyFill = null;
+                    this.bowstringMiniGameNeedle = null;
+                    this.bowstringMiniGameAnimSprite = null;
+                    this.bowstringMiniGameAnimFrames = [];
+                    this.bowstringMiniGameTargetArrower = null;
+                    onDone();
+                }
+            }, 16) as unknown as number;
+        }, Math.max(0, delaySec) * 1000);
+    }
+
+    private showArrowerThanksIntro(multiplier: number, attackBoostPercent: number, archer: any, isInBestZone: boolean, isInGoodZone: boolean) {
+        this.autoCreateUnitIntroPopup();
+        if (!this.unitIntroPopup) {
+            return;
+        }
+
+        let description = '谢谢你，指挥官，至少比刚才顺手多了。';
+        let moodIcon: SpriteFrame | null = archer?.bowstringMoodBadIcon || null;
+        if (isInBestZone) {
+            description = '太好了！这个松紧刚刚好！';
+            moodIcon = archer?.bowstringMoodExcellentIcon || moodIcon;
+        } else if (isInGoodZone) {
+            description = '不错！手感回来了不少，多谢指挥官帮忙。';
+            moodIcon = archer?.bowstringMoodGoodIcon || moodIcon;
+        } else {
+            description = '我会努力适应这个松紧度，谢谢指挥官。';
+        }
+
+        const fallbackIcon = archer?.cardIcon || archer?.defaultSpriteFrame || null;
+        this.unitIntroPopup.show({
+            unitName: '弓箭手',
+            unitDescription: description,
+            unitIcon: moodIcon || fallbackIcon,
+            unitType: 'Arrower',
+            unitId: 'Arrower',
+            onCloseCallback: () => {
+                GamePopup.showMessage(`全体弓箭手攻击力提升${attackBoostPercent}%`, true, 2.5);
+            }
+        });
     }
     
     /**
