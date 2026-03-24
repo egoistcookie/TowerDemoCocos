@@ -17,9 +17,7 @@
         "maxHealth": { "value": 20, "desc": "生命值+20%" },
         "moveSpeed": { "value": 8, "desc": "移动速度+8%" }
       },
-      "building": {
-        "maxHealth": { "value": 20, "desc": "生命值+20%" }
-      },
+      "building": {},
       "global": {
         "populationIncrease": { "value": 1, "desc": "人口上限+1" },
         "goldReward": { "value": 10, "desc": "获得10金币" }
@@ -37,9 +35,7 @@
         "maxHealth": { "value": 20, "desc": "生命值+20%" },
         "moveSpeed": { "value": 15, "desc": "移动速度+15%" }
       },
-      "building": {
-        "maxHealth": { "value": 20, "desc": "生命值+20%" }
-      },
+      "building": {},
       "global": {
         "populationIncrease": { "value": 2, "desc": "人口上限+2" },
         "goldReward": { "value": 20, "desc": "获得20金币" }
@@ -57,9 +53,7 @@
         "maxHealth": { "value": 50, "desc": "生命值+50%" },
         "moveSpeed": { "value": 25, "desc": "移动速度+25%" }
       },
-      "building": {
-        "maxHealth": { "value": 50, "desc": "生命值+50%" }
-      },
+      "building": {},
       "global": {
         "populationIncrease": { "value": 4, "desc": "人口上限+4" },
         "goldReward": { "value": 50, "desc": "获得50金币" }

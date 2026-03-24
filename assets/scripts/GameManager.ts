@@ -112,6 +112,10 @@ export class GameManager extends Component {
     private bowstringMiniGameIgnoreEndUntilMs: number = 0;
     private bowstringMiniGameHasStartedHold: boolean = false;
     
+    // 弓弦技能全局冷却（所有弓箭手共享）
+    private bowstringSkillGlobalCooldownEndMs: number = 0;
+    private bowstringSkillCooldownRefreshLoopId: number | null = null;
+    
     /**
      * 加载全局增益卡片图标资源
      */
@@ -5298,7 +5302,7 @@ export class GameManager extends Component {
         leftTipNode.setPosition(0, -118, 0);
         leftTipNode.addComponent(UITransform).setContentSize(136, 24);
         const leftTip = leftTipNode.addComponent(Label);
-        leftTip.string = this.bowstringMiniGameAnimFrames.length > 0 ? '弓弦松紧动画' : '未配置弓弦序列帧';
+        leftTip.string = this.bowstringMiniGameAnimFrames.length > 0 ? '陪伴100年的弓弦' : '弓弦';
         leftTip.fontSize = 16;
         leftTip.color = new Color(180, 190, 220, 255);
         leftTip.horizontalAlign = Label.HorizontalAlign.CENTER;
@@ -5384,7 +5388,12 @@ export class GameManager extends Component {
                 `[BowstringMiniGame] onStart t=${now} type=${type} waitFirstRelease=${this.bowstringMiniGameWaitFirstRelease} enableAt=${this.bowstringMiniGameInputEnableAtMs}`,
                 loc ? `x=${Math.round(loc.x)} y=${Math.round(loc.y)}` : ''
             );
-            if (this.bowstringMiniGameWaitFirstRelease) return;
+            // 仅在保护窗口期拦截“按钮残留输入”；窗口后第一下真实触控应允许直接开始长按
+            if (this.bowstringMiniGameWaitFirstRelease && now < this.bowstringMiniGameInputEnableAtMs) return;
+            if (this.bowstringMiniGameWaitFirstRelease && now >= this.bowstringMiniGameInputEnableAtMs) {
+                this.bowstringMiniGameWaitFirstRelease = false;
+                this.bowstringMiniGameIgnoreEndUntilMs = 0;
+            }
             if (now < this.bowstringMiniGameInputEnableAtMs) return;
             this.bowstringMiniGameHold = true;
             this.bowstringMiniGameHasStartedHold = true;
@@ -5426,6 +5435,58 @@ export class GameManager extends Component {
         this.startBowstringRealtimeLoop(barX, barY, barW, barH);
     }
 
+    /**
+     * 获取弓弦技能全局冷却剩余秒数（所有弓箭手共享）    */
+    public getBowstringSkillGlobalCooldownRemainingSec(): number {
+        const now = Date.now();
+        const remainMs = Math.max(0, (this.bowstringSkillGlobalCooldownEndMs || 0) - now);
+        return remainMs / 1000;
+    }
+
+    /**
+     * 启动弓弦技能全局冷却（所有弓箭手共享）    */
+    public startBowstringSkillGlobalCooldown(cooldownMs: number) {
+        this.bowstringSkillGlobalCooldownEndMs = Date.now() + cooldownMs;
+        this.startBowstringCooldownRefreshLoop();
+    }
+
+    private startBowstringCooldownRefreshLoop() {
+        // 清除旧循环
+        if (this.bowstringSkillCooldownRefreshLoopId !== null) {
+            clearInterval(this.bowstringSkillCooldownRefreshLoopId);
+            this.bowstringSkillCooldownRefreshLoopId = null;
+        }
+        this.bowstringSkillCooldownRefreshLoopId = setInterval(() => {
+            const remain = this.getBowstringSkillGlobalCooldownRemainingSec();
+            // 扫描所有弓箭手，刷新当前被选中的那个的面板
+            this.refreshSelectedArrowerPanel();
+            if (remain <= 0.01) {
+                clearInterval(this.bowstringSkillCooldownRefreshLoopId!);
+                this.bowstringSkillCooldownRefreshLoopId = null;
+                this.refreshSelectedArrowerPanel(); // 冷却结束再刷一次
+            }
+        }, 200) as unknown as number;
+    }
+
+    private refreshSelectedArrowerPanel() {
+        // 找到 UnitSelectionManager，获取当前选中的弓箭手并刷新面板
+        const canvas = find('Canvas');
+        if (!canvas) return;
+        const usmNode = find('Canvas/UnitSelectionManager') || canvas.getChildByName('UnitSelectionManager');
+        if (!usmNode) return;
+        const usm = usmNode.getComponent('UnitSelectionManager') as any;
+        if (!usm) return;
+        const unitInfoPanel = usm.unitInfoPanel;
+        if (!unitInfoPanel || !unitInfoPanel.updateButtons) return;
+        // 获取当前选中单位
+        const selectedUnit = usm.getCurrentSelectedUnit ? usm.getCurrentSelectedUnit() : null;
+        if (!selectedUnit || !selectedUnit.isValid) return;
+        const arrower = selectedUnit.getComponent('Arrower') as any;
+        if (!arrower) return;
+        if (arrower.buildArrowerUnitInfo) {
+            unitInfoPanel.updateButtons(arrower.buildArrowerUnitInfo());
+        }
+    }
     /**
      * 弓箭手技能：打开弓弦松紧小游戏（不受“首次触发”限制）
      */
@@ -5527,6 +5588,9 @@ export class GameManager extends Component {
         const attackBoostPercent = Math.max(0, Math.round((multiplier - 1) * 100));
 
         const archer = this.bowstringMiniGameTargetArrower;
+        // 小游戏结束后启动全局冷却（初始小游戏和技能触发的小游戏都走这里）
+        // GameManager 内部的 startBowstringSkillGlobalCooldown 会自动启动刷新循环
+        this.startBowstringSkillGlobalCooldown(30_000);
         // 一次小游戏：提升全体弓箭手（非递归，定向扫描固定容器，避免性能抖动）
         try {
             const visited = new Set<string>();
@@ -5646,7 +5710,7 @@ export class GameManager extends Component {
         let description = '谢谢你，指挥官，至少比刚才顺手多了。';
         let moodIcon: SpriteFrame | null = archer?.bowstringMoodBadIcon || null;
         if (isInBestZone) {
-            description = '太好了！这个松紧刚刚好！';
+            description = '太好了！这个程度刚刚好！';
             moodIcon = archer?.bowstringMoodExcellentIcon || moodIcon;
         } else if (isInGoodZone) {
             description = '不错！手感回来了不少，多谢指挥官帮忙。';

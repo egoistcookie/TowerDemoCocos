@@ -1,5 +1,6 @@
 
 --游戏缓存表
+select * from game_sessions  order by created_at desc;
 select * from game_sessions where DATE(created_at) = CURDATE() 
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','') order by created_at desc ;
 select * from game_sessions where DATE(created_at) = CURDATE() -1
@@ -23,6 +24,7 @@ select DATE(created_at),count(*) from card_selection_events  group by DATE(creat
 
 --游戏记录主表
 select * from game_records where player_id='player_1774265446223_9255';
+select * from game_records  order by created_at desc;
 select * from game_records where DATE(created_at) = CURDATE()
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','')  order by created_at desc;
 select * from game_records where defend_time !=0 order by created_at desc;

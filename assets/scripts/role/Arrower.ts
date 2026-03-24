@@ -126,9 +126,8 @@ export class Arrower extends Role {
     private isPenetrateArrowEnabled: boolean = false; // 穿透箭开关（每个弓箭手独立，默认关闭）
 
     // 弓弦调整技能（九宫格第六格）：30 秒冷却（使用真实时间，暂停不影响冷却计时）
+    // 冷却状态由 GameManager.bowstringSkillGlobalCooldownEndMs 全局管理，所有弓箭手共享
     private readonly BOWSTRING_SKILL_COOLDOWN_MS: number = 30_000;
-    private bowstringSkillCooldownEndMs: number = 0;
-    private bowstringSkillCooldownLoopId: number | null = null;
 
     // 当前弓弦松紧带来的攻击倍率（只作用于本弓箭手实例；不叠加，直接覆盖）
     public bowstringAttackMultiplier: number = 1.0;
@@ -297,7 +296,7 @@ export class Arrower extends Role {
     /**
      * 构建弓箭手专用的 UnitInfo（包含穿透箭技能）
      */
-    private buildArrowerUnitInfo(): UnitInfo {
+    public buildArrowerUnitInfo(): UnitInfo {
         // 计算升级费用：1到2级是10金币，此后每次升级多10金币
         const upgradeCost = this.level < 3 ? (10 + (this.level - 1) * 10) : undefined;
         
@@ -386,16 +385,15 @@ export class Arrower extends Role {
     }
 
     private getBowstringSkillCooldownRemainingSec(): number {
-        const now = Date.now();
-        const remainMs = Math.max(0, (this.bowstringSkillCooldownEndMs || 0) - now);
-        return remainMs / 1000;
-    }
-
-    private clearBowstringSkillCooldownLoop() {
-        if (this.bowstringSkillCooldownLoopId !== null) {
-            clearInterval(this.bowstringSkillCooldownLoopId);
-            this.bowstringSkillCooldownLoopId = null;
+        // 所有弓箭手共享全局冷却，从 GameManager 读取
+        if (!this.gameManager) {
+            this.findGameManager();
         }
+        const gm: any = this.gameManager as any;
+        if (gm && gm.getBowstringSkillGlobalCooldownRemainingSec) {
+            return gm.getBowstringSkillGlobalCooldownRemainingSec();
+        }
+        return 0;
     }
 
     private refreshUnitInfoPanelIfSelected() {
@@ -425,27 +423,18 @@ export class Arrower extends Role {
             return;
         }
 
-        // 启动冷却
-        this.bowstringSkillCooldownEndMs = Date.now() + this.BOWSTRING_SKILL_COOLDOWN_MS;
-        this.refreshUnitInfoPanelIfSelected();
-
-        // 打开小游戏（不会叠加增幅：GameManager 内部用固定 baseKey 覆盖 attackDamage）
+        // 启动全局冷却（所有弓箭手共享）
         if (!this.gameManager) {
             this.findGameManager();
         }
         const gm: any = this.gameManager as any;
-        gm?.openBowstringMiniGameForArrower?.(this);
+        if (gm && gm.startBowstringSkillGlobalCooldown) {
+            gm.startBowstringSkillGlobalCooldown(this.BOWSTRING_SKILL_COOLDOWN_MS);
+        }
+        this.refreshUnitInfoPanelIfSelected();
 
-        // 冷却倒计时 UI 刷新（真实时间，不受暂停影响）
-        this.clearBowstringSkillCooldownLoop();
-        this.bowstringSkillCooldownLoopId = setInterval(() => {
-            const remain = this.getBowstringSkillCooldownRemainingSec();
-            this.refreshUnitInfoPanelIfSelected();
-            if (remain <= 0.01) {
-                this.clearBowstringSkillCooldownLoop();
-                this.refreshUnitInfoPanelIfSelected();
-            }
-        }, 200) as unknown as number;
+        // 打开小游戏（不会叠加增幅：GameManager 内部用固定 baseKey 覆盖 attackDamage）
+        gm?.openBowstringMiniGameForArrower?.(this);
     }
 
     /**
