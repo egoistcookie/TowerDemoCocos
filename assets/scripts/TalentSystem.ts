@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Button, Label, find, director, UITransform, Color, Graphics, tween, Vec3, UIOpacity, Sprite, SpriteFrame, Prefab, instantiate, assetManager, director as directorModule, resources } from 'cc';
+import { _decorator, Component, Node, Button, Label, find, director, UITransform, Color, Graphics, tween, Vec3, UIOpacity, Sprite, SpriteFrame, Prefab, instantiate, assetManager, director as directorModule, resources, ScrollView, Mask, view } from 'cc';
 import { UnitConfigManager } from './UnitConfigManager';
 import { PlayerDataManager, UnitEnhancement } from './PlayerDataManager';
 const { ccclass, property } = _decorator;
@@ -48,6 +48,26 @@ export class TalentSystem extends Component {
     private prefabSubBundle: any = null;
     // 主包（assets/ 下的默认 bundle，一般名为 "main"）缓存，用于加载 Arrower / Hunter / Priest / ElfSwordsman
     private mainBundle: any = null;
+
+    // =========================
+    // Talent 页滚动（拖拽下拉）
+    // =========================
+    private scrollContentNode: Node | null = null; // 当前需要滚动的 content 容器（随 tab 切换更新）
+    private scrollContentHeight: number = 0; // content 在竖直方向的估算高度，用于计算可滚动范围
+    private scrollDragging: boolean = false;
+    private scrollStartY: number = 0; // TOUCH_START 的屏幕 y
+    private scrollStartContentY: number = 0; // content 容器初始 y
+    private scrollListenersAttached: boolean = false;
+
+    // 调试：滚动窗口尺寸定位用（加节流避免切 tab 时刷屏）
+    private lastTalentScrollDebugTs: number = 0;
+    private debugTalentScroll(tag: string, info: Record<string, any>) {
+        const now = Date.now();
+        if (now - this.lastTalentScrollDebugTs < 800) return;
+        this.lastTalentScrollDebugTs = now;
+        // eslint-disable-next-line no-console
+        console.log(`[TalentSystem][ScrollDebug][${tag}]`, info);
+    }
     
     start() {
         // 初始化玩家数据管理器
@@ -126,6 +146,100 @@ export class TalentSystem extends Component {
         this.scheduleOnce(() => {
             this.createTalentPanelUI();
         }, 0);
+    }
+
+    /**
+     * 判断触摸点是否在按钮上：如果是，则不启动滚动，避免影响点击。
+     * 不使用递归，只用 while 往父节点逐级向上检查。
+     */
+    private isTouchOnButton(targetNode: Node | null): boolean {
+        if (!targetNode) return false;
+        let n: Node | null = targetNode;
+        let guard = 0;
+        while (n && guard < 20) {
+            if (n.getComponent(Button)) return true;
+            n = n.parent;
+            guard++;
+        }
+        return false;
+    }
+
+    private getTalentPanelViewportHeight(): number {
+        const tr = this.talentPanel ? this.talentPanel.getComponent(UITransform) : null;
+        return tr ? tr.contentSize.height : 0;
+    }
+
+    private attachScrollListenersIfNeeded() {
+        if (this.scrollListenersAttached) return;
+        if (!this.talentPanel) return;
+        this.talentPanel.on(Node.EventType.TOUCH_START, this.onTalentPanelTouchStart, this, true);
+        this.talentPanel.on(Node.EventType.TOUCH_MOVE, this.onTalentPanelTouchMove, this, true);
+        this.talentPanel.on(Node.EventType.TOUCH_END, this.onTalentPanelTouchEnd, this, true);
+        this.talentPanel.on(Node.EventType.TOUCH_CANCEL, this.onTalentPanelTouchEnd, this, true);
+        this.scrollListenersAttached = true;
+    }
+
+    private detachScrollListeners() {
+        if (!this.scrollListenersAttached) return;
+        if (!this.talentPanel) return;
+        this.talentPanel.off(Node.EventType.TOUCH_START, this.onTalentPanelTouchStart, this, true);
+        this.talentPanel.off(Node.EventType.TOUCH_MOVE, this.onTalentPanelTouchMove, this, true);
+        this.talentPanel.off(Node.EventType.TOUCH_END, this.onTalentPanelTouchEnd, this, true);
+        this.talentPanel.off(Node.EventType.TOUCH_CANCEL, this.onTalentPanelTouchEnd, this, true);
+        this.scrollListenersAttached = false;
+    }
+
+    private setupVerticalDragScroll(contentNode: Node, contentHeight: number) {
+        this.scrollContentNode = contentNode;
+        this.scrollContentHeight = Math.max(0, contentHeight);
+        this.scrollDragging = false;
+        this.attachScrollListenersIfNeeded();
+    }
+
+    private onTalentPanelTouchStart(event: any) {
+        if (!this.scrollContentNode) return;
+        if (!this.talentPanel || !this.talentPanel.activeInHierarchy) return;
+
+        const targetNode = event?.target as Node | null;
+        if (this.isTouchOnButton(targetNode)) return; // 不在按钮上时才滚动
+
+        const loc = event.getLocation ? event.getLocation() : null;
+        if (!loc) return;
+
+        this.scrollDragging = false;
+        this.scrollStartY = loc.y;
+        this.scrollStartContentY = this.scrollContentNode.position.y;
+    }
+
+    private onTalentPanelTouchMove(event: any) {
+        if (!this.scrollContentNode) return;
+        if (!this.talentPanel || !this.talentPanel.activeInHierarchy) return;
+        const loc = event.getLocation ? event.getLocation() : null;
+        if (!loc) return;
+
+        const dy = loc.y - this.scrollStartY; // 屏幕 y 变化：向下拖（dy<0）时，需要 content 向上（y+）
+        if (!this.scrollDragging) {
+            if (Math.abs(dy) < 8) return; // 小幅移动先当作点击，不打断按钮逻辑
+            this.scrollDragging = true;
+        }
+
+        const viewportH = this.getTalentPanelViewportHeight();
+        const overflow = Math.max(0, this.scrollContentHeight - viewportH);
+
+        // 不强行使用“严格对齐” clamp，避免第一次进入 tab 时出现突跳；
+        // 仅给一个相对当前起点更宽松的范围限制。
+        const minOffset = this.scrollStartContentY - overflow * 1.2;
+        const maxOffset = this.scrollStartContentY + overflow * 1.2;
+
+        const desiredY = this.scrollStartContentY - dy; // dy<0 -> desiredY 增大（向上滚动内容，展示下方）
+        const newY = Math.max(minOffset, Math.min(maxOffset, desiredY));
+
+        this.scrollContentNode.setPosition(this.scrollContentNode.position.x, newY, this.scrollContentNode.position.z);
+        event.propagationStopped = true;
+    }
+
+    private onTalentPanelTouchEnd() {
+        this.scrollDragging = false;
     }
     
     initTalents() {
@@ -317,6 +431,10 @@ export class TalentSystem extends Component {
     }
     
     clearContent() {
+        // 清 tab 时，先断开滚动 content，避免指向已销毁节点导致异常
+        this.scrollContentNode = null;
+        this.scrollDragging = false;
+
         // 销毁除了背景、天赋点显示和标签页之外的所有内容
         for (let child of this.talentPanel.children) {
             if (child.name !== 'Background' && child.name !== 'TalentPointsDisplay' && child.name !== 'TalentTabs') {
@@ -329,6 +447,8 @@ export class TalentSystem extends Component {
     }
     
     createUnitCardsGrid() {
+        this.detachScrollListeners();
+
         // 友方单位列表
         const unitTypes = [
             // 建筑物单位
@@ -356,13 +476,88 @@ export class TalentSystem extends Component {
         const startY = 10; // 稍微向下偏移，避免与顶部标签重叠
         const spacingX = cardWidth + 10; // 卡片宽度 + 间距
         const spacingY = cardHeight + 10; // 卡片高度 + 行间距
-        
-        // 创建卡片容器
-        const cardsContainer = new Node('UnitCardsContainer');
-        cardsContainer.setParent(this.talentPanel);
-        cardsContainer.setPosition(0, 0, 0);
-        // 确保卡片容器处于激活状态
-        cardsContainer.active = true;
+
+        const unitCount = unitTypes.length;
+        const rows = Math.ceil(unitCount / columns);
+
+        const panelTr = this.talentPanel.getComponent(UITransform);
+        const panelH = panelTr ? panelTr.contentSize.height : 0;
+        const vs = view.getVisibleSize();
+
+        // 让裁剪窗口直接对齐屏幕可视区域，避免 TalentPanel/UITransform 在某些预制体/布局下高度异常偏小
+        const viewW = vs.width;
+        const viewH = vs.height;
+        // 修正 ScrollView 放置基准：TalentPanel 的 UITransform 高度在当前预制体里可能很小（例如 50.4），
+        // 但我们将 View 高度扩到屏幕可视区域时，如果仍以 y=0 作为中心锚点，会导致整体“向上挪动一大截”。
+        // 用 (panelH - viewH)/2 让顶部边界尽量保持与原布局一致。
+        // 你希望整体再往上移一点（约 100px）
+        const svY = panelH > 0 ? (panelH - viewH) / 2 + 100 : 0;
+
+        this.debugTalentScroll('units:viewSize', {
+            visibleSize: { w: vs.width, h: vs.height },
+            panelH,
+            viewW,
+            viewH
+        });
+
+        // 列表 ScrollView + Mask（参考 FeedbackPopup 的实现方式）
+        const svNode = new Node('TalentUnitScrollView');
+        svNode.setParent(this.talentPanel);
+        svNode.setPosition(0, svY, 0);
+        const svTr = svNode.addComponent(UITransform);
+        svTr.setContentSize(viewW, viewH);
+        // 把滚动窗口放到页签下方，避免遮挡顶部按钮/点击
+        const tabsNode = this.talentPanel.getChildByName('TalentTabs');
+        if (tabsNode && (tabsNode as any).getSiblingIndex) {
+            try {
+                svNode.setSiblingIndex((tabsNode as any).getSiblingIndex());
+            } catch {
+                // ignore
+            }
+        }
+
+        const viewNode = new Node('View');
+        viewNode.setParent(svNode);
+        const viewTr = viewNode.addComponent(UITransform);
+        viewTr.setContentSize(viewW, viewH);
+        viewNode.addComponent(Mask);
+
+        const contentNode = new Node('Content');
+        contentNode.setParent(viewNode);
+        const contentTr = contentNode.addComponent(UITransform);
+        contentTr.setContentSize(viewW, viewH);
+        contentNode.setPosition(0, 0, 0);
+
+        const sv = svNode.addComponent(ScrollView) as any;
+        sv.content = contentNode;
+        sv.horizontal = false;
+        sv.vertical = true;
+        // 关闭常见回弹/弹性效果，避免“松开后弹回复原”
+        sv.inertia = false;
+        sv.inertiaDuration = 0;
+        sv.elastic = false;
+        sv.elasticEnabled = false;
+        sv.bounceEnabled = false;
+        sv.bounceBackDuration = 0;
+        sv.bounceDuration = 0;
+        sv.overscrollEnabled = false;
+
+        const baseContentHeight = rows <= 1 ? cardHeight : (rows - 1) * spacingY + cardHeight;
+        const padding = 20;
+        const contentHeight = Math.max(viewH, baseContentHeight + padding * 2);
+        const yStart = contentHeight / 2 - padding - cardHeight / 2;
+
+        contentTr.setContentSize(viewW, contentHeight);
+        contentNode.setPosition(0, (viewH - contentHeight) / 2, 0);
+
+        this.debugTalentScroll('units:actualUI', {
+            svNodeSize: { w: svTr.width, h: svTr.height },
+            viewNodeSize: { w: viewTr.width, h: viewTr.height },
+            contentNodeSize: { w: contentTr.width, h: contentTr.height },
+            svNodePos: svNode.getPosition(),
+            viewNodePos: viewNode.getPosition(),
+            contentNodePos: contentNode.getPosition()
+        });
         
         // 创建单位卡片
         for (let i = 0; i < unitTypes.length; i++) {
@@ -371,9 +566,9 @@ export class TalentSystem extends Component {
             const col = i % columns;
             
             const xPos = startX + col * spacingX;
-            const yPos = startY - row * spacingY;
-            
-            this.createUnitCard(unit, xPos, yPos, cardWidth, cardHeight, cardsContainer);
+            const yPos = yStart - row * spacingY;
+
+            this.createUnitCard(unit, xPos, yPos, cardWidth, cardHeight, contentNode);
         }
         
     }
@@ -1647,17 +1842,108 @@ export class TalentSystem extends Component {
     }
     
     createTalentList() {
-        // 天赋列表位置
-        let yPos = 0;
+        // 如果之前遗留过手动拖拽滚动的监听，先关闭以避免与 ScrollView 竞争触摸
+        this.detachScrollListeners();
+
+        // 使用 ScrollView + Mask，实现与“玩家反馈信息列表”一致的可上下滑动列表体验
+        const panelTr = this.talentPanel.getComponent(UITransform);
+        const panelH = panelTr ? panelTr.contentSize.height : 0;
+        const vs = view.getVisibleSize();
+
+        // 优先使用 Background 节点的 UITransform 尺寸，避免 TalentPanel 自身 UITransform 高度在某些预制体/布局下异常偏小
+        const bgNode = this.talentPanel.getChildByName('Background');
+        const bgTr = bgNode ? bgNode.getComponent(UITransform) : null;
+        const bgW = bgTr ? bgTr.contentSize.width : 0;
+        const bgH = bgTr ? bgTr.contentSize.height : 0;
+
+        // 让裁剪窗口直接对齐屏幕可视区域，避免 TalentPanel/UITransform 在某些预制体/布局下高度异常偏小
+        const viewW = vs.width;
+        const viewH = vs.height;
+        // 修正 ScrollView 放置基准：TalentPanel 的 UITransform 高度在当前预制体里可能很小（例如 50.4），
+        // 但我们将 View 高度扩到屏幕可视区域时，如果仍以 y=0 作为中心锚点，会导致整体“向上挪动一大截”。
+        // 用 (panelH - viewH)/2 让顶部边界尽量保持与原布局一致。
+        // 你希望整体再往上移一点（约 100px）
+        const svY = panelH > 0 ? (panelH - viewH) / 2 + 100 : 0;
+
+        // Debug：打印本次滚动窗口的所有关键尺寸来源
+        this.debugTalentScroll('talents:viewSize', {
+            visibleSize: { w: vs.width, h: vs.height },
+            panelH,
+            bgSize: { w: bgW, h: bgH },
+            viewW,
+            viewH,
+            tabsPos: this.talentPanel.getChildByName('TalentTabs')?.getPosition() ?? null
+        });
+
+        const svNode = new Node('TalentScrollView');
+        svNode.setParent(this.talentPanel);
+        svNode.setPosition(0, svY, 0);
+        const svTr = svNode.addComponent(UITransform);
+        svTr.setContentSize(viewW, viewH);
+        // 把滚动窗口放到页签下方，避免遮挡顶部按钮/点击
+        const tabsNode = this.talentPanel.getChildByName('TalentTabs');
+        if (tabsNode && (tabsNode as any).getSiblingIndex) {
+            try {
+                svNode.setSiblingIndex((tabsNode as any).getSiblingIndex());
+            } catch {
+                // ignore
+            }
+        }
+
+        const viewNode = new Node('View');
+        viewNode.setParent(svNode);
+        const viewTr = viewNode.addComponent(UITransform);
+        viewTr.setContentSize(viewW, viewH);
+        viewNode.addComponent(Mask); // 裁剪
+
+        const contentNode = new Node('Content');
+        contentNode.setParent(viewNode);
+        const contentTr = contentNode.addComponent(UITransform);
+        contentTr.setContentSize(viewW, viewH);
+        contentNode.setPosition(0, 0, 0);
+
+        this.debugTalentScroll('talents:actualUI', {
+            svNodeSize: { w: svTr.width, h: svTr.height },
+            viewNodeSize: { w: viewTr.width, h: viewTr.height },
+            contentNodeSize: { w: contentTr.width, h: contentTr.height },
+            svNodePos: svNode.getPosition(),
+            viewNodePos: viewNode.getPosition(),
+            contentNodePos: contentNode.getPosition()
+        });
+
+        const sv = svNode.addComponent(ScrollView) as any;
+        sv.content = contentNode;
+        sv.horizontal = false;
+        sv.vertical = true;
+        // 关闭常见回弹/弹性效果，避免“松开后弹回复原”
+        sv.inertia = false;
+        sv.inertiaDuration = 0;
+        sv.elastic = false;
+        sv.elasticEnabled = false;
+        sv.bounceEnabled = false;
+        sv.bounceBackDuration = 0;
+        sv.bounceDuration = 0;
+        sv.overscrollEnabled = false;
+
+        this.scrollContentNode = contentNode;
+
         const spacing = 30;
-        const talentItemHeight = 50; // 增大天赋项高度
-        
+        const talentItemHeight = 50;
+        const stepY = talentItemHeight + spacing;
+        const talentCount = this.talents.size;
+        const baseContentH = talentCount <= 1 ? talentItemHeight : (talentCount - 1) * stepY + talentItemHeight;
+        const padding = 20;
+        const contentHeight = Math.max(viewH, baseContentH + padding * 2);
+        const yStart = contentHeight / 2 - padding - talentItemHeight / 2;
+
+        let i = 0;
+
         // 遍历所有天赋
         for (let [talentId, talent] of this.talents) {
             // 创建天赋项
             const talentItem = new Node(`Talent_${talentId}`);
-            talentItem.setParent(this.talentPanel);
-            talentItem.setPosition(0, yPos, 0);
+            talentItem.setParent(contentNode);
+            talentItem.setPosition(0, yStart - i * stepY, 0);
             
             // 添加背景
             const background = talentItem.addComponent(Graphics);
@@ -1775,9 +2061,11 @@ export class TalentSystem extends Component {
                 this.upgradeTalent(talentId);
             }, this);
             
-            // 更新y位置（使用新的高度和间距）
-            yPos -= (talentItemHeight + spacing);
+            i++;
         }
+
+        contentTr.setContentSize(viewW, contentHeight);
+        contentNode.setPosition(0, (viewH - contentHeight) / 2, 0);
     }
     
     upgradeTalent(talentId: string) {
