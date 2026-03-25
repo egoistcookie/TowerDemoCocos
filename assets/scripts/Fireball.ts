@@ -109,21 +109,6 @@ export class Arrow extends Component {
             return; // 已经命中过了
         }
 
-        // 检查目标是否是已死亡的兽人督军
-        if (this.targetNode && this.targetNode.isValid) {
-            const orcScript = this.targetNode.getComponent('OrcWarlord') as any;
-            if (orcScript) {
-                const isAlive = orcScript.isAlive && orcScript.isAlive();
-                if (!isAlive) {
-                    // 目标是已死亡的兽人督军，插在尸体上
-                    const startPos = this.lastPos.clone();
-                    const endPos = this.node.worldPosition.clone();
-                    this.attachToCorpse(this.targetNode, startPos, endPos);
-                    return;
-                }
-            }
-        }
-
         this.isFlying = false;
 
         // 计算受力方向（箭矢飞行方向）：优先使用当前飞行方向
@@ -207,12 +192,7 @@ export class Arrow extends Component {
         
         // 计算当前在抛物线上的位置
         const currentPos = this.calculateParabolicPosition(currentRatio);
-        
-        // 检查路径上是否有兽人督军尸体
-        if (this.checkForOrcWarlordCorpse(this.lastPos, currentPos)) {
-            return;
-        }
-        
+
         this.node.setWorldPosition(currentPos);
         
         // 更新旋转角度，使箭头始终指向飞行方向

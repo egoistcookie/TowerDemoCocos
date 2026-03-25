@@ -2,6 +2,8 @@ import { _decorator, Component, Node, Button, Label, find, director, UITransform
 import { UnitConfigManager } from './UnitConfigManager';
 import { PlayerDataManager, UnitEnhancement } from './PlayerDataManager';
 const { ccclass, property } = _decorator;
+// 只在需要排查图标加载问题时打开，默认关闭避免控制台刷屏
+const DEBUG_TALENT_ICON_LOADING = false;
 
 // 天赋类型
 export enum TalentType {
@@ -53,6 +55,7 @@ export class TalentSystem extends Component {
     // Talent 页滚动（拖拽下拉）
     // =========================
     private scrollContentNode: Node | null = null; // 当前需要滚动的 content 容器（随 tab 切换更新）
+    private scrollViewportNode: Node | null = null; // 手动滚动监听挂载的视口节点（避免 tab 按钮抢触摸）
     private scrollContentHeight: number = 0; // content 在竖直方向的估算高度，用于计算可滚动范围
     private scrollDragging: boolean = false;
     private scrollStartY: number = 0; // TOUCH_START 的屏幕 y
@@ -62,11 +65,8 @@ export class TalentSystem extends Component {
     // 调试：滚动窗口尺寸定位用（加节流避免切 tab 时刷屏）
     private lastTalentScrollDebugTs: number = 0;
     private debugTalentScroll(tag: string, info: Record<string, any>) {
-        const now = Date.now();
-        if (now - this.lastTalentScrollDebugTs < 800) return;
-        this.lastTalentScrollDebugTs = now;
-        // eslint-disable-next-line no-console
-        console.log(`[TalentSystem][ScrollDebug][${tag}]`, info);
+        // 已在调试阶段使用日志定位滚动问题；当前需求为移除全部日志输出。
+        // 保留方法与调用点，避免影响滚动逻辑结构。
     }
     
     start() {
@@ -144,6 +144,9 @@ export class TalentSystem extends Component {
         
         // 延迟一帧创建UI，确保所有属性都已设置
         this.scheduleOnce(() => {
+            if (this.talents.size === 0) {
+                this.initTalents();
+            }
             this.createTalentPanelUI();
         }, 0);
     }
@@ -165,34 +168,133 @@ export class TalentSystem extends Component {
     }
 
     private getTalentPanelViewportHeight(): number {
-        const tr = this.talentPanel ? this.talentPanel.getComponent(UITransform) : null;
+        const viewportNode = this.scrollViewportNode || this.talentPanel;
+        const tr = viewportNode ? viewportNode.getComponent(UITransform) : null;
         return tr ? tr.contentSize.height : 0;
+    }
+
+    /**
+     * 计算“ScrollView 真正可视窗口”的高度与中心点（用于避免把整个 Background 当成可滚区域）。
+     * 不改动 item 尺寸，只修正视口（view）大小与位置。
+     */
+    private getScrollViewportBounds(): {
+        viewW: number;
+        viewH: number;
+        svCenterY: number;
+        debug: Record<string, any>;
+    } {
+        const panelTr = this.talentPanel.getComponent(UITransform);
+        const panelH = panelTr.contentSize.height;
+        const vs = view.getVisibleSize();
+
+        const bgNode = this.talentPanel.getChildByName('Background');
+        const bgTr = bgNode ? bgNode.getComponent(UITransform) : null;
+        const bgW = bgTr ? bgTr.contentSize.width : view.getVisibleSize().width;
+        const bgH = bgTr ? bgTr.contentSize.height : panelH;
+
+        // Tabs 可能没有 UITransform，所以改用其子按钮的 UITransform 高度估算
+        const tabsNode = this.talentPanel.getChildByName('TalentTabs');
+        const tabButtonNode = tabsNode ? tabsNode.getChildByName('Tab_talents') || tabsNode.getChildByName('Tab_units') : null;
+        const tabButtonTr = tabButtonNode ? tabButtonNode.getComponent(UITransform) : null;
+        const tabsNodeY = tabsNode ? tabsNode.getPosition().y : 0;
+        const tabsTopY = tabButtonTr ? tabsNodeY + tabButtonTr.contentSize.height / 2 : tabsNodeY;
+
+        const pointsNode = this.talentPanel.getChildByName('TalentPointsDisplay');
+        const pointsTr = pointsNode ? pointsNode.getComponent(UITransform) : null;
+
+        const resetBtnNode = this.talentPanel.getChildByName('TalentPointsDisplay')?.getChildByName('ResetTalentButton') || find('TalentPointsDisplay/ResetTalentButton');
+        const resetBtnTr = resetBtnNode ? resetBtnNode.getComponent(UITransform) : null;
+
+        // 计算 Reset / Points 的 y（累加父节点 position 到 talentPanel 坐标）
+        const getNodeYInTalentPanel = (node: Node | null) => {
+            if (!node) return 0;
+            let y = node.getPosition().y;
+            let p = node.parent;
+            let guard = 0;
+            while (p && p !== this.talentPanel && guard < 20) {
+                y += p.getPosition().y;
+                p = p.parent;
+                guard++;
+            }
+            return y;
+        };
+
+        const resetBtnYInPanel = getNodeYInTalentPanel(resetBtnNode);
+        const pointsYInPanel = getNodeYInTalentPanel(pointsNode);
+        const headerBottomY = resetBtnTr
+            ? resetBtnYInPanel - resetBtnTr.contentSize.height / 2
+            : pointsTr
+                ? pointsYInPanel - pointsTr.contentSize.height / 2
+                : tabsTopY;
+
+        // 用 Background 的高度做面板坐标系的顶底界（panelH 在某些时机会变得很小，比如 50.4）
+        const effectivePanelH = bgH > 0 ? bgH : panelH;
+        const panelTopY = effectivePanelH / 2;
+        const panelBottomY = -effectivePanelH / 2;
+
+        // 默认：在 headerBottomY 下方，撑满到面板底部
+        let scrollTopY = Math.min(headerBottomY, panelTopY);
+        let scrollBottomY = panelBottomY;
+        let viewH = scrollTopY - scrollBottomY;
+
+        // 兜底：如果 viewH 太小（比如 50.4），Mask/ScrollView 可视区域就会极窄，导致“内容只有100px”
+        if (viewH < 200) {
+            // 以屏幕可视区域作为兜底上限；同时按你需求先给 500 左右高度
+            // 这里把兜底目标高度调到 750，继续修复“视口过窄导致滚动内容只显示一小截”的问题
+            const fallbackH = Math.min(vs.height, 750);
+            viewH = Math.max(200, fallbackH);
+            // 让 view 的顶部紧贴 headerBottomY，避免遮挡页签/按钮
+            scrollTopY = headerBottomY;
+            scrollBottomY = scrollTopY - viewH;
+        }
+
+        viewH = Math.max(50, viewH); // 防御：避免非正数导致不滚动
+        const svCenterY = (scrollTopY + scrollBottomY) / 2;
+        const debug = {
+            panelH,
+            panelTopY,
+            panelBottomY,
+            bgW,
+            bgH,
+            tabsNodeY,
+            tabsTopY,
+            pointsYInPanel,
+            headerBottomY,
+            scrollTopY,
+            scrollBottomY,
+            viewH,
+            vsH: vs.height,
+        };
+        return { viewW: bgW, viewH, svCenterY, debug };
     }
 
     private attachScrollListenersIfNeeded() {
         if (this.scrollListenersAttached) return;
-        if (!this.talentPanel) return;
-        this.talentPanel.on(Node.EventType.TOUCH_START, this.onTalentPanelTouchStart, this, true);
-        this.talentPanel.on(Node.EventType.TOUCH_MOVE, this.onTalentPanelTouchMove, this, true);
-        this.talentPanel.on(Node.EventType.TOUCH_END, this.onTalentPanelTouchEnd, this, true);
-        this.talentPanel.on(Node.EventType.TOUCH_CANCEL, this.onTalentPanelTouchEnd, this, true);
+        const targetNode = this.scrollViewportNode || this.talentPanel;
+        if (!targetNode) return;
+        targetNode.on(Node.EventType.TOUCH_START, this.onTalentPanelTouchStart, this, true);
+        targetNode.on(Node.EventType.TOUCH_MOVE, this.onTalentPanelTouchMove, this, true);
+        targetNode.on(Node.EventType.TOUCH_END, this.onTalentPanelTouchEnd, this, true);
+        targetNode.on(Node.EventType.TOUCH_CANCEL, this.onTalentPanelTouchEnd, this, true);
         this.scrollListenersAttached = true;
     }
 
     private detachScrollListeners() {
         if (!this.scrollListenersAttached) return;
-        if (!this.talentPanel) return;
-        this.talentPanel.off(Node.EventType.TOUCH_START, this.onTalentPanelTouchStart, this, true);
-        this.talentPanel.off(Node.EventType.TOUCH_MOVE, this.onTalentPanelTouchMove, this, true);
-        this.talentPanel.off(Node.EventType.TOUCH_END, this.onTalentPanelTouchEnd, this, true);
-        this.talentPanel.off(Node.EventType.TOUCH_CANCEL, this.onTalentPanelTouchEnd, this, true);
+        const targetNode = this.scrollViewportNode || this.talentPanel;
+        if (!targetNode) return;
+        targetNode.off(Node.EventType.TOUCH_START, this.onTalentPanelTouchStart, this, true);
+        targetNode.off(Node.EventType.TOUCH_MOVE, this.onTalentPanelTouchMove, this, true);
+        targetNode.off(Node.EventType.TOUCH_END, this.onTalentPanelTouchEnd, this, true);
+        targetNode.off(Node.EventType.TOUCH_CANCEL, this.onTalentPanelTouchEnd, this, true);
         this.scrollListenersAttached = false;
     }
 
-    private setupVerticalDragScroll(contentNode: Node, contentHeight: number) {
+    private setupVerticalDragScroll(contentNode: Node, contentHeight: number, viewportNode: Node | null) {
         this.scrollContentNode = contentNode;
         this.scrollContentHeight = Math.max(0, contentHeight);
         this.scrollDragging = false;
+        this.scrollViewportNode = viewportNode;
         this.attachScrollListenersIfNeeded();
     }
 
@@ -201,7 +303,14 @@ export class TalentSystem extends Component {
         if (!this.talentPanel || !this.talentPanel.activeInHierarchy) return;
 
         const targetNode = event?.target as Node | null;
-        if (this.isTouchOnButton(targetNode)) return; // 不在按钮上时才滚动
+        const touchOnButton = this.isTouchOnButton(targetNode);
+        if (touchOnButton) {
+            // tab/按钮区域触摸：不触发滚动（减少噪声，仅保留必要的目标命中日志）
+            if (typeof targetNode?.name === 'string' && targetNode.name.startsWith('Tab_')) {
+                this.debugTalentScroll('scroll:touchStart(blocked)', { targetName: targetNode.name });
+            }
+            return; // 不在按钮上时才滚动
+        }
 
         const loc = event.getLocation ? event.getLocation() : null;
         if (!loc) return;
@@ -219,7 +328,9 @@ export class TalentSystem extends Component {
 
         const dy = loc.y - this.scrollStartY; // 屏幕 y 变化：向下拖（dy<0）时，需要 content 向上（y+）
         if (!this.scrollDragging) {
-            if (Math.abs(dy) < 8) return; // 小幅移动先当作点击，不打断按钮逻辑
+            if (Math.abs(dy) < 8) {
+                return; // 小幅移动先当作点击，不打断按钮逻辑
+            }
             this.scrollDragging = true;
         }
 
@@ -243,50 +354,53 @@ export class TalentSystem extends Component {
     }
     
     initTalents() {
-        // 初始化一些基础天赋
-        this.talents.set('attack_damage', {
-            id: 'attack_damage',
-            name: '攻击力提升',
-            description: '提升所有友方单位的攻击力',
-            type: TalentType.ATTACK_DAMAGE,
-            value: 1, // 每级+1%攻击力
-            cost: 1,
-            level: 0,
-            maxLevel: 5
-        });
-        
-        this.talents.set('attack_speed', {
-            id: 'attack_speed',
-            name: '攻击速度提升',
-            description: '提升所有友方单位的攻击速度',
-            type: TalentType.ATTACK_SPEED,
-            value: 5,
-            cost: 1,
-            level: 0,
-            maxLevel: 5
-        });
-        
-        this.talents.set('health', {
-            id: 'health',
-            name: '生命值提升',
-            description: '提升所有友方单位的生命值',
-            type: TalentType.HEALTH,
-            value: 2, // 每级+2%生命值
-            cost: 1,
-            level: 0,
-            maxLevel: 5
-        });
-        
-        this.talents.set('move_speed', {
-            id: 'move_speed',
-            name: '移动速度提升',
-            description: '提升所有友方单位的移动速度',
-            type: TalentType.MOVE_SPEED,
-            value: 5,
-            cost: 1,
-            level: 0,
-            maxLevel: 5
-        });
+        // talents 可能在 UI 创建前尚未初始化，导致 talentCount=0、overflow=0（看起来完全不能滚动）
+        // 所以仅在 talents 为空时填充基础数据；每次 initTalents 都尝试从 PlayerDataManager 同步已保存等级。
+        if (this.talents.size === 0) {
+            this.talents.set('attack_damage', {
+                id: 'attack_damage',
+                name: '攻击力提升',
+                description: '提升所有友方单位的攻击力',
+                type: TalentType.ATTACK_DAMAGE,
+                value: 1, // 每级+1%攻击力
+                cost: 1,
+                level: 0,
+                maxLevel: 5
+            });
+            
+            this.talents.set('attack_speed', {
+                id: 'attack_speed',
+                name: '攻击速度提升',
+                description: '提升所有友方单位的攻击速度',
+                type: TalentType.ATTACK_SPEED,
+                value: 5,
+                cost: 1,
+                level: 0,
+                maxLevel: 5
+            });
+            
+            this.talents.set('health', {
+                id: 'health',
+                name: '生命值提升',
+                description: '提升所有友方单位的生命值',
+                type: TalentType.HEALTH,
+                value: 2, // 每级+2%生命值
+                cost: 1,
+                level: 0,
+                maxLevel: 5
+            });
+            
+            this.talents.set('move_speed', {
+                id: 'move_speed',
+                name: '移动速度提升',
+                description: '提升所有友方单位的移动速度',
+                type: TalentType.MOVE_SPEED,
+                value: 5,
+                cost: 1,
+                level: 0,
+                maxLevel: 5
+            });
+        }
         
         // 从PlayerDataManager加载已保存的天赋等级
         this.loadTalentLevels();
@@ -434,6 +548,9 @@ export class TalentSystem extends Component {
         // 清 tab 时，先断开滚动 content，避免指向已销毁节点导致异常
         this.scrollContentNode = null;
         this.scrollDragging = false;
+        // 清 tab 时，重置滚动监听（避免监听仍挂在已销毁的 view 节点上，导致完全不能滚动）
+        this.detachScrollListeners();
+        this.scrollViewportNode = null;
 
         // 销毁除了背景、天赋点显示和标签页之外的所有内容
         for (let child of this.talentPanel.children) {
@@ -480,25 +597,13 @@ export class TalentSystem extends Component {
         const unitCount = unitTypes.length;
         const rows = Math.ceil(unitCount / columns);
 
-        const panelTr = this.talentPanel.getComponent(UITransform);
-        const panelH = panelTr ? panelTr.contentSize.height : 0;
-        const vs = view.getVisibleSize();
+        const bounds = this.getScrollViewportBounds();
+        const viewW = bounds.viewW;
+        const viewH = bounds.viewH;
+        const svY = bounds.svCenterY;
+        this.debugTalentScroll('scroll:unitViewBounds', bounds.debug);
 
-        // 让裁剪窗口直接对齐屏幕可视区域，避免 TalentPanel/UITransform 在某些预制体/布局下高度异常偏小
-        const viewW = vs.width;
-        const viewH = vs.height;
-        // 修正 ScrollView 放置基准：TalentPanel 的 UITransform 高度在当前预制体里可能很小（例如 50.4），
-        // 但我们将 View 高度扩到屏幕可视区域时，如果仍以 y=0 作为中心锚点，会导致整体“向上挪动一大截”。
-        // 用 (panelH - viewH)/2 让顶部边界尽量保持与原布局一致。
-        // 你希望整体再往上移一点（约 100px）
-        const svY = panelH > 0 ? (panelH - viewH) / 2 + 100 : 0;
-
-        this.debugTalentScroll('units:viewSize', {
-            visibleSize: { w: vs.width, h: vs.height },
-            panelH,
-            viewW,
-            viewH
-        });
+        // 滚动调试默认关闭（避免控制台刷屏）
 
         // 列表 ScrollView + Mask（参考 FeedbackPopup 的实现方式）
         const svNode = new Node('TalentUnitScrollView');
@@ -528,10 +633,38 @@ export class TalentSystem extends Component {
         contentTr.setContentSize(viewW, viewH);
         contentNode.setPosition(0, 0, 0);
 
+        // 触摸命中/拖动的最小化日志：确认 ScrollView 的 viewNode 是否接到了触摸
+        let loggedStart = false;
+        let moveCount = 0;
+        let lastMoveTs = 0;
+        viewNode.on(Node.EventType.TOUCH_START, (e: any) => {
+            if (loggedStart) return;
+            loggedStart = true;
+            const target = e?.target as Node | null;
+            this.debugTalentScroll('scroll:unitTouchStart', {
+                targetName: target?.name,
+                touchY: e?.getLocation?.().y
+            });
+        }, this, true);
+        viewNode.on(Node.EventType.TOUCH_MOVE, (e: any) => {
+            moveCount++;
+            const now = Date.now();
+            if (now - lastMoveTs < 600) return;
+            lastMoveTs = now;
+            const target = e?.target as Node | null;
+            this.debugTalentScroll('scroll:unitTouchMove', {
+                moveCount,
+                targetName: target?.name,
+                touchY: e?.getLocation?.().y
+            });
+        }, this, true);
+
         const sv = svNode.addComponent(ScrollView) as any;
         sv.content = contentNode;
         sv.horizontal = false;
         sv.vertical = true;
+        // 使用内置 ScrollView 滚动
+        sv.enabled = true;
         // 关闭常见回弹/弹性效果，避免“松开后弹回复原”
         sv.inertia = false;
         sv.inertiaDuration = 0;
@@ -544,20 +677,33 @@ export class TalentSystem extends Component {
 
         const baseContentHeight = rows <= 1 ? cardHeight : (rows - 1) * spacingY + cardHeight;
         const padding = 20;
-        const contentHeight = Math.max(viewH, baseContentHeight + padding * 2);
+        const contentHeight = baseContentHeight + padding * 2;
         const yStart = contentHeight / 2 - padding - cardHeight / 2;
+
+        // 仅用于验证是否存在可滚动空间（overflow>0），避免“看起来完全不能滚动”但其实是内容高度不足
+        this.debugTalentScroll('scroll:unitRange', {
+            viewH,
+            contentHeight,
+            overflow: Math.max(0, contentHeight - viewH),
+            rows,
+            unitCount: unitTypes.length
+        });
 
         contentTr.setContentSize(viewW, contentHeight);
         contentNode.setPosition(0, (viewH - contentHeight) / 2, 0);
-
-        this.debugTalentScroll('units:actualUI', {
-            svNodeSize: { w: svTr.width, h: svTr.height },
-            viewNodeSize: { w: viewTr.width, h: viewTr.height },
-            contentNodeSize: { w: contentTr.width, h: contentTr.height },
-            svNodePos: svNode.getPosition(),
-            viewNodePos: viewNode.getPosition(),
-            contentNodePos: contentNode.getPosition()
+        this.debugTalentScroll('scroll:unitAfterSetup', {
+            unitCount: unitTypes.length,
+            viewW,
+            viewH,
+            contentHeight,
+            contentTrH: contentTr?.contentSize?.height,
+            overflow: Math.max(0, contentHeight - viewH),
+            rows,
+            columns
         });
+        // 不启用手动拖拽滚动，交给 ScrollView 处理
+
+        // 滚动调试默认关闭（避免控制台刷屏）
         
         // 创建单位卡片
         for (let i = 0; i < unitTypes.length; i++) {
@@ -1124,8 +1270,6 @@ export class TalentSystem extends Component {
         
         const currentTalentPoints = this.playerDataManager.getTalentPoints();
         if (currentTalentPoints < requiredPoints) {
-            // 显示提示：天赋点不足
-            console.warn(`[TalentSystem] 天赋点不足，需要 ${requiredPoints} 点，当前只有 ${currentTalentPoints} 点`);
             return;
         }
         
@@ -1139,8 +1283,6 @@ export class TalentSystem extends Component {
         // 消耗天赋点（只消耗天赋点，不减少玩家等级）
         this.playerDataManager.useTalentPoint(requiredPoints);
         this.talentPoints = this.playerDataManager.getTalentPoints();
-        
-        console.log(`[TalentSystem] 强化 ${unitId} 的 ${propertyKey}，单位等级 ${currentUnitLevel} -> ${currentUnitLevel + 1}，消耗 ${requiredPoints} 天赋点，剩余 ${this.talentPoints} 点`);
         
         // 更新天赋点显示
         this.updateTalentPointsDisplay();
@@ -1301,7 +1443,7 @@ export class TalentSystem extends Component {
      * @param sprite Sprite组件，用于显示图标
      */
     loadUnitCardIcon(unitId: string, sprite: Sprite) {
-        console.log('[TalentSystem] loadUnitCardIcon called, unitId =', unitId, 'sprite valid =', !!(sprite && sprite.node && sprite.node.isValid));
+        // removed debug logs
         // 根据单位ID构建节点名称
         const nodeName = unitId;
         
@@ -1319,13 +1461,11 @@ export class TalentSystem extends Component {
      */
     private tryGetIconFromUnitScript(unitScript: any, node: Node, sprite: Sprite, unitId: string): boolean {
         if (!unitScript) {
-            console.warn('[TalentSystem] tryGetIconFromUnitScript: unitScript is null, unitId =', unitId);
             return false;
         }
         
         // 1. 优先使用cardIcon
         if (unitScript.cardIcon) {
-            console.log('[TalentSystem] tryGetIconFromUnitScript: use cardIcon for unitId =', unitId);
             sprite.spriteFrame = unitScript.cardIcon;
             return true;
         } else {
@@ -1333,7 +1473,6 @@ export class TalentSystem extends Component {
         
         // 2. 如果没有cardIcon，尝试获取unitIcon
         if (unitScript.unitIcon) {
-            console.log('[TalentSystem] tryGetIconFromUnitScript: use unitIcon for unitId =', unitId);
             sprite.spriteFrame = unitScript.unitIcon;
             return true;
         } else {
@@ -1341,7 +1480,6 @@ export class TalentSystem extends Component {
         
         // 3. 尝试获取defaultSpriteFrame
         if (unitScript.defaultSpriteFrame) {
-            console.log('[TalentSystem] tryGetIconFromUnitScript: use defaultSpriteFrame for unitId =', unitId);
             sprite.spriteFrame = unitScript.defaultSpriteFrame;
             return true;
         } else {
@@ -1351,7 +1489,6 @@ export class TalentSystem extends Component {
         const spriteComponent = node.getComponent(Sprite);
         if (spriteComponent) {
             if (spriteComponent.spriteFrame) {
-                console.log('[TalentSystem] tryGetIconFromUnitScript: use node Sprite.spriteFrame for unitId =', unitId);
                 sprite.spriteFrame = spriteComponent.spriteFrame;
                 return true;
             } else {
@@ -1372,7 +1509,7 @@ export class TalentSystem extends Component {
      * @param sprite Sprite组件
      */
     private tryGetIconFromPrefab(unitId: string, nodeName: string, sprite: Sprite) {
-        console.log('[TalentSystem] tryGetIconFromPrefab enter, unitId =', unitId);
+        // removed debug logs
         // 角色单位 & 建筑 / 防御单位：统一在分包 prefabs_sub 下（assets/prefabs_sub/）
         // 注意：你需要确保这 9 个 prefab 的文件名与这里的 key 一致，并都放在 assets/prefabs_sub/ 下
         const mainPrefabPathMap: Record<string, string> = {}; // 不再从 main bundle 加载
@@ -1394,7 +1531,6 @@ export class TalentSystem extends Component {
 
         // 1. Arrower 优先使用通过 @property 配置的 prefab（编辑器里拖拽一份即可）
         if (unitId === 'Arrower' && this.arrowerPrefab) {
-            console.log('[TalentSystem] tryGetIconFromPrefab: use arrowerPrefab property for Arrower');
             this.loadIconFromPrefabInstance(this.arrowerPrefab, unitId, sprite);
             return;
         }
@@ -1402,7 +1538,6 @@ export class TalentSystem extends Component {
         // 2. 优先从本地缓存取，避免重复加载
         const cachedPrefab = this.unitPrefabCache.get(unitId);
         if (cachedPrefab) {
-            console.log('[TalentSystem] tryGetIconFromPrefab: hit unitPrefabCache for', unitId);
             this.loadIconFromPrefabInstance(cachedPrefab, unitId, sprite);
             return;
         }
@@ -1413,15 +1548,12 @@ export class TalentSystem extends Component {
         // 3A. 主包 main 下的单位（Arrower / Hunter / Priest / ElfSwordsman，路径在 assets/prefabs/ 下）
         const mainPath = mainPrefabPathMap[unitId];
         if (mainPath) {
-            console.log('[TalentSystem] tryGetIconFromPrefab: will load from main bundle, path =', mainPath, 'unitId =', unitId);
             const loadFromMainBundle = (bundle: any) => {
                 bundle.load(mainPath, Prefab, (err: any, loadedPrefab: Prefab) => {
                     if (err || !loadedPrefab) {
-                        console.warn('[TalentSystem] load main prefab failed for', unitId, 'path =', mainPath, 'err =', err);
                         return;
                     }
 
-                    console.log('[TalentSystem] load main prefab success for', unitId, 'path =', mainPath);
                     this.unitPrefabCache.set(unitIdRef, loadedPrefab);
 
                     let validSprite = spriteRef;
@@ -1437,16 +1569,13 @@ export class TalentSystem extends Component {
 
             // 如果主包已经缓存，直接用
             if (this.mainBundle) {
-                console.log('[TalentSystem] tryGetIconFromPrefab: use cached mainBundle');
                 loadFromMainBundle(this.mainBundle);
             } else {
                 // 否则先加载主包（默认名一般为 "main"）
                 assetManager.loadBundle('main', (err, bundle) => {
                     if (err || !bundle) {
-                        console.warn('[TalentSystem] loadBundle("main") failed, err =', err);
                         return;
                     }
-                    console.log('[TalentSystem] loadBundle("main") success');
                     this.mainBundle = bundle;
                     loadFromMainBundle(bundle);
                 });
@@ -1457,18 +1586,15 @@ export class TalentSystem extends Component {
         // 3B. 分包 prefabs_sub 下的单位（WarAncientTree / HunterHall / SwordsmanHall / Church / StoneWall）
         const subName = subPrefabNameMap[unitId];
         if (!subName) {
-            console.warn('[TalentSystem] tryGetIconFromPrefab: unitId not found in any map, unitId =', unitId);
             return;
         }
 
         const loadFromSubBundle = (bundle: any) => {
             bundle.load(subName, Prefab, (err: any, loadedPrefab: Prefab) => {
                 if (err || !loadedPrefab) {
-                    console.warn('[TalentSystem] load sub prefab failed for', unitId, 'name =', subName, 'err =', err);
                     return;
                 }
 
-                console.log('[TalentSystem] load sub prefab success for', unitId, 'name =', subName);
                 this.unitPrefabCache.set(unitIdRef, loadedPrefab);
 
                 let validSprite = spriteRef;
@@ -1484,7 +1610,6 @@ export class TalentSystem extends Component {
 
         // 如果 bundle 已经缓存，直接用
         if (this.prefabSubBundle) {
-            console.log('[TalentSystem] tryGetIconFromPrefab: use cached prefabSubBundle');
             loadFromSubBundle(this.prefabSubBundle);
             return;
         }
@@ -1492,10 +1617,8 @@ export class TalentSystem extends Component {
         // 否则先加载分包，再从分包里加载 prefab
         assetManager.loadBundle('prefabs_sub', (err, bundle) => {
             if (err || !bundle) {
-                console.warn('[TalentSystem] loadBundle("prefabs_sub") failed, err =', err);
                 return;
             }
-            console.log('[TalentSystem] loadBundle("prefabs_sub") success');
             this.prefabSubBundle = bundle;
             loadFromSubBundle(bundle);
         });
@@ -1509,16 +1632,13 @@ export class TalentSystem extends Component {
      */
     private loadIconFromPrefabInstance(prefab: Prefab, unitId: string, sprite: Sprite) {
         if (!prefab) {
-            console.warn('[TalentSystem] loadIconFromPrefabInstance: prefab is null, unitId =', unitId);
             return;
         }
         if (!sprite) {
-            console.warn('[TalentSystem] loadIconFromPrefabInstance: sprite is null, unitId =', unitId);
             return;
         }
         // 检查 sprite 节点是否仍然有效
         if (!sprite.node || !sprite.node.isValid) {
-            console.warn('[TalentSystem] loadIconFromPrefabInstance: sprite node invalid, unitId =', unitId);
             return;
         }
         
@@ -1529,7 +1649,6 @@ export class TalentSystem extends Component {
             if (prefabSprite) {
                 // 如果 spriteFrame 存在，直接使用
                 if (prefabSprite.spriteFrame) {
-                    console.log('[TalentSystem] loadIconFromPrefabInstance: use prefab.data Sprite for unitId =', unitId);
                     sprite.spriteFrame = prefabSprite.spriteFrame;
                     return;
                 }
@@ -1846,34 +1965,14 @@ export class TalentSystem extends Component {
         this.detachScrollListeners();
 
         // 使用 ScrollView + Mask，实现与“玩家反馈信息列表”一致的可上下滑动列表体验
-        const panelTr = this.talentPanel.getComponent(UITransform);
-        const panelH = panelTr ? panelTr.contentSize.height : 0;
-        const vs = view.getVisibleSize();
+        // 用面板内部节点推算真实的“可滚动窗口”，避免视口高度过大导致 overflow=0。
+        const bounds = this.getScrollViewportBounds();
+        const viewW = bounds.viewW;
+        const viewH = bounds.viewH;
+        const svY = bounds.svCenterY;
+        this.debugTalentScroll('scroll:talentViewBounds', bounds.debug);
 
-        // 优先使用 Background 节点的 UITransform 尺寸，避免 TalentPanel 自身 UITransform 高度在某些预制体/布局下异常偏小
-        const bgNode = this.talentPanel.getChildByName('Background');
-        const bgTr = bgNode ? bgNode.getComponent(UITransform) : null;
-        const bgW = bgTr ? bgTr.contentSize.width : 0;
-        const bgH = bgTr ? bgTr.contentSize.height : 0;
-
-        // 让裁剪窗口直接对齐屏幕可视区域，避免 TalentPanel/UITransform 在某些预制体/布局下高度异常偏小
-        const viewW = vs.width;
-        const viewH = vs.height;
-        // 修正 ScrollView 放置基准：TalentPanel 的 UITransform 高度在当前预制体里可能很小（例如 50.4），
-        // 但我们将 View 高度扩到屏幕可视区域时，如果仍以 y=0 作为中心锚点，会导致整体“向上挪动一大截”。
-        // 用 (panelH - viewH)/2 让顶部边界尽量保持与原布局一致。
-        // 你希望整体再往上移一点（约 100px）
-        const svY = panelH > 0 ? (panelH - viewH) / 2 + 100 : 0;
-
-        // Debug：打印本次滚动窗口的所有关键尺寸来源
-        this.debugTalentScroll('talents:viewSize', {
-            visibleSize: { w: vs.width, h: vs.height },
-            panelH,
-            bgSize: { w: bgW, h: bgH },
-            viewW,
-            viewH,
-            tabsPos: this.talentPanel.getChildByName('TalentTabs')?.getPosition() ?? null
-        });
+        // 滚动调试默认关闭（避免控制台刷屏）
 
         const svNode = new Node('TalentScrollView');
         svNode.setParent(this.talentPanel);
@@ -1902,19 +2001,41 @@ export class TalentSystem extends Component {
         contentTr.setContentSize(viewW, viewH);
         contentNode.setPosition(0, 0, 0);
 
-        this.debugTalentScroll('talents:actualUI', {
-            svNodeSize: { w: svTr.width, h: svTr.height },
-            viewNodeSize: { w: viewTr.width, h: viewTr.height },
-            contentNodeSize: { w: contentTr.width, h: contentTr.height },
-            svNodePos: svNode.getPosition(),
-            viewNodePos: viewNode.getPosition(),
-            contentNodePos: contentNode.getPosition()
-        });
+        // 滚动调试默认关闭（避免控制台刷屏）
+
+        // 触摸命中/拖动的最小化日志：确认 ScrollView 的 viewNode 是否接到了触摸
+        let loggedStart = false;
+        let moveCount = 0;
+        let lastMoveTs = 0;
+        viewNode.on(Node.EventType.TOUCH_START, (e: any) => {
+            if (loggedStart) return;
+            loggedStart = true;
+            const target = e?.target as Node | null;
+            this.debugTalentScroll('scroll:talentTouchStart', {
+                targetName: target?.name,
+                touchY: e?.getLocation?.().y,
+                svEnabled: !!svNode.getComponent(ScrollView)
+            });
+        }, this, true);
+        viewNode.on(Node.EventType.TOUCH_MOVE, (e: any) => {
+            moveCount++;
+            const now = Date.now();
+            if (now - lastMoveTs < 600) return;
+            lastMoveTs = now;
+            const target = e?.target as Node | null;
+            this.debugTalentScroll('scroll:talentTouchMove', {
+                moveCount,
+                targetName: target?.name,
+                touchY: e?.getLocation?.().y
+            });
+        }, this, true);
 
         const sv = svNode.addComponent(ScrollView) as any;
         sv.content = contentNode;
         sv.horizontal = false;
         sv.vertical = true;
+        // 使用内置 ScrollView 滚动
+        sv.enabled = true;
         // 关闭常见回弹/弹性效果，避免“松开后弹回复原”
         sv.inertia = false;
         sv.inertiaDuration = 0;
@@ -1925,16 +2046,21 @@ export class TalentSystem extends Component {
         sv.bounceDuration = 0;
         sv.overscrollEnabled = false;
 
-        this.scrollContentNode = contentNode;
-
         const spacing = 30;
         const talentItemHeight = 50;
         const stepY = talentItemHeight + spacing;
         const talentCount = this.talents.size;
         const baseContentH = talentCount <= 1 ? talentItemHeight : (talentCount - 1) * stepY + talentItemHeight;
         const padding = 20;
-        const contentHeight = Math.max(viewH, baseContentH + padding * 2);
+        const contentHeight = baseContentH + padding * 2;
         const yStart = contentHeight / 2 - padding - talentItemHeight / 2;
+
+        this.debugTalentScroll('scroll:talenRange', {
+            viewH,
+            contentHeight,
+            overflow: Math.max(0, contentHeight - viewH),
+            talentCount
+        });
 
         let i = 0;
 
@@ -2066,6 +2192,16 @@ export class TalentSystem extends Component {
 
         contentTr.setContentSize(viewW, contentHeight);
         contentNode.setPosition(0, (viewH - contentHeight) / 2, 0);
+        this.debugTalentScroll('scroll:talenAfterSetup', {
+            talentCount,
+            created: i,
+            viewW,
+            viewH,
+            contentHeight,
+            contentTrH: contentTr?.contentSize?.height,
+            overflow: Math.max(0, contentHeight - viewH)
+        });
+        // 不启用手动拖拽滚动，交给 ScrollView 处理
     }
     
     upgradeTalent(talentId: string) {
@@ -2285,8 +2421,6 @@ export class TalentSystem extends Component {
         const currentTalentPoints = this.playerDataManager.getTalentPoints();
         this.playerDataManager.setTalentPoints(currentTalentPoints + totalUsedPoints);
         this.talentPoints = this.playerDataManager.getTalentPoints();
-        
-        console.log(`[TalentSystem] 重置所有天赋，恢复 ${totalUsedPoints} 天赋点，当前天赋点: ${this.talentPoints}`);
         
         // 更新显示
         this.updateTalentPointsDisplay();
