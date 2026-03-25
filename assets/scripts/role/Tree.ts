@@ -29,6 +29,8 @@ export class Tree extends Component {
         this.growTimer = 0;
         this.woodTimer = 0;
         this.isGrown = false;
+        // 小精灵采木速度整体放慢 5 倍（无论预制体里当前配置是多少）
+        this.woodInterval = Math.max(0.1, this.woodInterval * 5);
     }
 
     update(deltaTime: number) {

@@ -80,6 +80,19 @@ export class GameManager extends Component {
     private hasShownPopulationLimitWarning: boolean = false; // 是否已显示过人口上限提示
     private hasShownFirstArrowerDeathPopup: boolean = false; // 是否已显示过第一个弓箭手死亡提示
     private hasTriggeredFirstArrowerBowstringMiniGame: boolean = false; // 首个弓箭手“紧弓弦”互动仅触发一次
+    private hasShownArrowerNeedPriestDialog: boolean = false; // 一局一次：弓箭手受伤且场上无牧师
+    private hasShownPriestProtectBuildingDialog: boolean = false; // 一局一次：牧师在场且防御建筑掉血
+    private hasShownGoldReach100ArrowerDialog: boolean = false; // 一局一次：金币首次达到100
+    private lastDefenseStructureHealthSnapshot: number = -1; // 防御建筑血量快照（用于检测掉血）
+    private lastBattleDialogDebugLogMs: number = 0; // 动态对话调试日志节流
+    // A 提示触发后：等待玩家点击建造按钮打开建筑选择面板，再高亮“教堂”候选项
+    private pendingHighlightChurchCandidateAfterBuild: boolean = false;
+    // A 提示的“建造按钮高亮”需要可被玩家点击打断；用 token 来取消未完成的 scheduleOnce
+    private buildButtonBattleHintBlinkSeqId: number = 0;
+    private buildButtonBattleHintOriginalScale: Vec3 | null = null;
+    private buildButtonBattleHintOriginalColor: Color | null = null;
+    private buildButtonBattleHintNode: Node | null = null;
+    private lastPendingChurchHighlightDebugLogMs: number = 0;
     // 埋点相关
     private analyticsManager: AnalyticsManager | null = null;
     private totalKillCount: number = 0;
@@ -1043,6 +1056,10 @@ export class GameManager extends Component {
         this.appearedUnitTypes.clear();
         this.hasShownLevel2MageTowerUnlockIntro = false;
         this.debugUnitTypes = [];
+        this.hasShownArrowerNeedPriestDialog = false;
+        this.hasShownPriestProtectBuildingDialog = false;
+        this.hasShownGoldReach100ArrowerDialog = false;
+        this.lastDefenseStructureHealthSnapshot = -1;
         
         // 重置本局经验值
         this.currentGameExp = 0;
@@ -1111,6 +1128,7 @@ export class GameManager extends Component {
         this.autoCreateWaveLabel();
         
         this.updateUI();
+        this.tryTriggerBattleDialogs();
         
         // 在游戏开始前隐藏所有游戏主体相关内容
         this.hideGameElements();
@@ -1673,6 +1691,8 @@ export class GameManager extends Component {
         this.gameTime += deltaTime;
 
         this.updateUI();
+        // 战斗中动态对话检测（内部有日志节流）
+        this.tryTriggerBattleDialogs();
     }
 
     /**
@@ -4607,6 +4627,12 @@ export class GameManager extends Component {
         this.hasShownFirstArrowerDeathPopup = false;
         this.appearedUnitTypes.clear();
         this.hasShownLevel2MageTowerUnlockIntro = false;
+        this.hasShownArrowerNeedPriestDialog = false;
+        this.hasShownPriestProtectBuildingDialog = false;
+        this.hasShownGoldReach100ArrowerDialog = false;
+        this.pendingHighlightChurchCandidateAfterBuild = false;
+        this.buildButtonBattleHintBlinkSeqId++;
+        this.lastDefenseStructureHealthSnapshot = -1;
         this.gameState = GameState.Ready;
 
         // 重置水晶（血量和等级）
@@ -4883,13 +4909,13 @@ export class GameManager extends Component {
 
                             if (shouldLoadMageTower) {
                                 if (mageTowerPrefab && typeof towerBuilder.setMageTowerPrefab === 'function') {
-                                    console.info('[GameManager] non-level1: MageTower prefab loaded, injecting to TowerBuilder');
+                                  //console.info('[GameManager] non-level1: MageTower prefab loaded, injecting to TowerBuilder');
                                     towerBuilder.setMageTowerPrefab(mageTowerPrefab as Prefab);
                                 } else {
                                     console.warn('[GameManager] non-level1: MageTower prefab load failed or TowerBuilder lacks setMageTowerPrefab');
                                 }
                             } else {
-                                console.info('[GameManager] level1: skip MageTower prefab load');
+                              //console.info('[GameManager] level1: skip MageTower prefab load');
                             }
 
                             if (typeof towerBuilder.refreshBuildingTypes === 'function') {
@@ -4972,7 +4998,7 @@ export class GameManager extends Component {
         
         // 关卡读取必须与埋点解耦，否则 analyticsManager 不存在时会错误回落到第1关
         let level = this.getCurrentLevelSafe();
-        console.info('[GameManager._startGameInternal] resolved level =', level, 'gameState =', this.gameState);
+      //console.info('[GameManager._startGameInternal] resolved level =', level, 'gameState =', this.gameState);
         // 开始记录埋点数据（如果可用）
         if (this.analyticsManager) {
             this.analyticsManager.startRecording(level);
@@ -5026,7 +5052,7 @@ export class GameManager extends Component {
                     // 第2关额外生成一个初始法师塔（参考自动生成弓箭手小屋）
                     if (level === 2 && towerBuilder.spawnInitialMageTowerForLevel2) {
                         this.scheduleOnce(() => {
-                            console.info('[GameManager] trigger spawnInitialMageTowerForLevel2 from start flow');
+                          //console.info('[GameManager] trigger spawnInitialMageTowerForLevel2 from start flow');
                             towerBuilder.spawnInitialMageTowerForLevel2();
                         }, 0.08);
                     } else {
@@ -5730,6 +5756,399 @@ export class GameManager extends Component {
                 GamePopup.showMessage(`全体弓箭手攻击力提升${attackBoostPercent}%`, true, 2.5);
             }
         });
+    }
+
+    /**
+     * 战斗中动态单位对话（均为“一局一次”触发）
+     * 要求：不使用递归，只扫描固定容器的一层 children。
+     */
+    private tryTriggerBattleDialogs() {
+        if (this.gameState !== GameState.Playing) {
+            return;
+        }
+        const now = Date.now();
+        const canDebugLog = now - this.lastBattleDialogDebugLogMs >= 1500;
+        this.autoCreateUnitIntroPopup();
+
+        // A 提示触发后，可能在对话弹窗期间就已经打开建造面板；因此这里不依赖 intro popup 是否激活
+        this.tryHighlightChurchCandidateAfterBuild();
+
+        if (this.unitIntroPopup && this.unitIntroPopup.container && this.unitIntroPopup.container.active) {
+            // 已有介绍框在显示时不叠加，下一帧再尝试
+            if (canDebugLog) {
+                console.log('[BattleDialog] skip: intro popup active');
+                this.lastBattleDialogDebugLogMs = now;
+            }
+            return;
+        }
+
+        const priestScript = this.getFirstActiveUnitScriptInContainers(['Canvas/Towers', 'Canvas/Priests'], 'Priest');
+        const hasPriest = !!priestScript;
+        if (canDebugLog) {
+            console.log(
+                `[BattleDialog] tick gold=${this.gold} hasPriest=${hasPriest} shown={A:${this.hasShownArrowerNeedPriestDialog},B:${this.hasShownPriestProtectBuildingDialog},C:${this.hasShownGoldReach100ArrowerDialog}}`
+            );
+        }
+
+        // c. 金额第一次积攒达到100
+        if (!this.hasShownGoldReach100ArrowerDialog && this.gold >= 100) {
+            const arrowerScript = this.getFirstActiveUnitScriptInContainers(['Canvas/Towers', 'Canvas/Arrowers', 'Canvas/Archers'], 'Arrower');
+            if (arrowerScript) {
+                this.showQuickUnitIntro(
+                    arrowerScript,
+                    '弓箭手',
+                    '可以升级生命之树了，我们需要更多的人手！',
+                    'Arrower'
+                );
+                this.hasShownGoldReach100ArrowerDialog = true;
+                this.highlightCrystalForBattleHint();
+                console.log('[BattleDialog][C] triggered: gold reached 100+, arrower found');
+                return;
+            } else if (canDebugLog) {
+                console.log('[BattleDialog][C] blocked: no active Arrower found in target containers');
+            }
+        } else if (!this.hasShownGoldReach100ArrowerDialog && canDebugLog) {
+            console.log(`[BattleDialog][C] waiting: gold=${this.gold} (<100)`);
+        }
+
+        // a. 弓箭手受伤，且场上没有牧师
+        if (!this.hasShownArrowerNeedPriestDialog && !hasPriest) {
+            const injuredArrower = this.getFirstInjuredArrowerInContainers(['Canvas/Towers', 'Canvas/Arrowers', 'Canvas/Archers']);
+            if (injuredArrower) {
+                this.showQuickUnitIntro(
+                    injuredArrower,
+                    '弓箭手',
+                    '指挥官，我开始想念牧师大姐了',
+                    'Arrower'
+                );
+                this.hasShownArrowerNeedPriestDialog = true;
+                this.highlightBuildButtonForBattleHint();
+                this.pendingHighlightChurchCandidateAfterBuild = true;
+                console.log('[BattleDialog][A] triggered: injured Arrower found and no Priest');
+                return;
+            } else if (canDebugLog) {
+                console.log('[BattleDialog][A] blocked: no injured Arrower found');
+            }
+        } else if (!this.hasShownArrowerNeedPriestDialog && hasPriest && canDebugLog) {
+            console.log('[BattleDialog][A] blocked: Priest is present');
+        }
+
+        // b. 牧师在场，且防御塔（含主水晶/防御建筑）血量减少
+        const currentDefenseHp = this.getDefenseStructureHealthSnapshotNoRecursion();
+        if (this.lastDefenseStructureHealthSnapshot < 0) {
+            this.lastDefenseStructureHealthSnapshot = currentDefenseHp;
+            if (canDebugLog) {
+                console.log(`[BattleDialog][B] init snapshot=${currentDefenseHp.toFixed(1)}`);
+                this.lastBattleDialogDebugLogMs = now;
+            }
+            return;
+        }
+        if (canDebugLog) {
+            const prevHp = this.lastDefenseStructureHealthSnapshot;
+            const delta = currentDefenseHp - prevHp;
+            console.log(
+                `[BattleDialog][B] hpSnapshot current=${currentDefenseHp.toFixed(1)} prev=${prevHp.toFixed(1)} delta=${delta.toFixed(1)} hasPriest=${hasPriest}`
+            );
+        }
+        if (
+            !this.hasShownPriestProtectBuildingDialog &&
+            hasPriest &&
+            currentDefenseHp + 0.01 < this.lastDefenseStructureHealthSnapshot
+        ) {
+            this.showQuickUnitIntro(
+                priestScript,
+                '牧师',
+                '指挥官，祈祷唤来的圣灵也能保护建筑物哦',
+                'Priest'
+            );
+            this.hasShownPriestProtectBuildingDialog = true;
+            this.lastDefenseStructureHealthSnapshot = currentDefenseHp;
+            console.log('[BattleDialog][B] triggered: Priest present and defense hp decreased');
+            return;
+        }
+        this.lastDefenseStructureHealthSnapshot = currentDefenseHp;
+        if (canDebugLog) {
+            this.lastBattleDialogDebugLogMs = now;
+        }
+    }
+
+    /**
+     * A 提示触发时：高亮建造按钮（复用第一关教程逻辑）
+     */
+    private highlightBuildButtonForBattleHint() {
+        const btnNode = find('UI/BuildButton') || find('Canvas/UI/BuildButton') || find('BuildButton');
+        if (!btnNode || !btnNode.isValid) return;
+
+        const sprite = btnNode.getComponent(Sprite);
+        this.buildButtonBattleHintNode = btnNode;
+        this.buildButtonBattleHintOriginalScale = btnNode.scale.clone();
+        this.buildButtonBattleHintOriginalColor = sprite ? sprite.color.clone() : null;
+
+        const seqId = ++this.buildButtonBattleHintBlinkSeqId;
+        if (!btnNode.active) btnNode.active = true;
+
+        const origScale = this.buildButtonBattleHintOriginalScale!;
+        const sx = origScale.x;
+        const sy = origScale.y;
+        const sz = origScale.z;
+        const highlightColor = new Color(255, 255, 0, 255);
+
+        const setHighlight = () => {
+            if (this.buildButtonBattleHintBlinkSeqId !== seqId) return;
+            if (!btnNode || !btnNode.isValid) return;
+            btnNode.setScale(sx * 1.2, sy * 1.2, sz);
+            if (sprite && sprite.isValid) sprite.color = highlightColor;
+        };
+
+        const setRestore = () => {
+            if (this.buildButtonBattleHintBlinkSeqId !== seqId) return;
+            if (!btnNode || !btnNode.isValid) return;
+
+            const os = this.buildButtonBattleHintOriginalScale;
+            if (os) btnNode.setScale(os.x, os.y, os.z);
+            if (sprite && sprite.isValid && this.buildButtonBattleHintOriginalColor) {
+                sprite.color = this.buildButtonBattleHintOriginalColor;
+            }
+        };
+
+        // 高亮 0.5s -> 还原 0.5s，循环 10 次（约 10 秒）；玩家打开面板后会立即停止
+        const loops = 10;
+        for (let i = 0; i < loops; i++) {
+            this.scheduleOnce(() => {
+                setHighlight();
+                this.scheduleOnce(() => setRestore(), 0.5);
+            }, i * 1.0);
+        }
+        this.scheduleOnce(() => setRestore(), loops * 1.0);
+    }
+
+    private stopBuildButtonForBattleHint() {
+        // 让未完成的 scheduleOnce 回调全部失效
+        this.buildButtonBattleHintBlinkSeqId++;
+
+        const btnNode = this.buildButtonBattleHintNode;
+        if (!btnNode || !btnNode.isValid) return;
+
+        const os = this.buildButtonBattleHintOriginalScale;
+        if (os) btnNode.setScale(os.x, os.y, os.z);
+
+        const sprite = btnNode.getComponent(Sprite);
+        if (sprite && sprite.isValid && this.buildButtonBattleHintOriginalColor) {
+            sprite.color = this.buildButtonBattleHintOriginalColor;
+        }
+    }
+
+    /**
+     * A 提示触发后：玩家点击建造按钮打开建筑选择面板时，
+     * 高亮建筑物候选框里的“教堂”选项。
+     * 注意：只做一次高亮，避免重复干扰玩家操作。
+     */
+    private tryHighlightChurchCandidateAfterBuild() {
+        if (!this.pendingHighlightChurchCandidateAfterBuild) {
+            return;
+        }
+
+        const panelNode = find('Canvas/BuildingSelectionPanel') || find('BuildingSelectionPanel');
+        if (!panelNode || !panelNode.isValid) {
+            return;
+        }
+
+        // 玩家已打开建造面板：立即停止“建造按钮频闪”，避免干扰操作
+        if (!panelNode.activeInHierarchy) {
+            return;
+        }
+        this.stopBuildButtonForBattleHint();
+
+        const contentNode = panelNode.getChildByName('Content');
+        if (!contentNode || !contentNode.isValid) {
+            return;
+        }
+
+        // 建筑候选项节点命名规则：BuildingItem_${building.name}（教堂）
+        let churchCandidateItem = contentNode.getChildByName('BuildingItem_教堂');
+        if (!churchCandidateItem || !churchCandidateItem.isValid) {
+            // 更鲁棒的兜底：不强依赖固定节点名，避免字面不一致导致找不到
+            const children = contentNode.children || [];
+            for (const c of children) {
+                if (!c || !c.isValid) continue;
+                if (!c.name || typeof c.name !== 'string') continue;
+                if (c.name.startsWith('BuildingItem_') && (c.name.includes('教堂') || c.name.includes('Church'))) {
+                    churchCandidateItem = c;
+                    break;
+                }
+            }
+        }
+
+        if (!churchCandidateItem || !churchCandidateItem.isValid) {
+            const now = Date.now();
+            if (now - this.lastPendingChurchHighlightDebugLogMs >= 1500) {
+                this.lastPendingChurchHighlightDebugLogMs = now;
+                console.log(
+                    '[BattleDialog][A] pending church highlight: cannot find candidate item. ' +
+                    `panelChildren=${(contentNode.children || []).length}`
+                );
+            }
+            return;
+        }
+
+        // 注意：BuildingItem 背景是 Graphics 绘制，直接改 fillColor 可能不重绘，用户看不到变化。
+        // 这里统一用可见性更强的缩放频闪来高亮“教堂”候选项。
+        this.blinkNodeForBattleHint(
+            churchCandidateItem,
+            8,
+            0.35,
+            0.28,
+            1.18,
+            new Color(255, 255, 0, 255)
+        );
+
+        this.pendingHighlightChurchCandidateAfterBuild = false;
+    }
+
+    /**
+     * C 提示触发时：高亮生命之树（Canvas/Crystal）
+     */
+    private highlightCrystalForBattleHint() {
+        const crystalNode = this.crystal && this.crystal.isValid ? this.crystal : find('Canvas/Crystal');
+        if (!crystalNode || !crystalNode.isValid) {
+            return;
+        }
+        this.blinkNodeForBattleHint(crystalNode, 10, 0.5, 0.5, 1.15, new Color(255, 235, 120, 255));
+    }
+
+    /**
+     * 通用频闪高亮：放大 + 着色，再还原（循环）
+     */
+    private blinkNodeForBattleHint(
+        targetNode: Node,
+        loops: number,
+        highlightSec: number,
+        restoreSec: number,
+        scaleMul: number,
+        highlightColor: Color
+    ) {
+        if (!targetNode || !targetNode.isValid || loops <= 0) return;
+        if (!targetNode.active) {
+            targetNode.active = true;
+        }
+        const sprite = targetNode.getComponent(Sprite);
+        const origScale = targetNode.scale.clone();
+        const origColor = sprite ? sprite.color.clone() : new Color(255, 255, 255, 255);
+        const sx = origScale.x;
+        const sy = origScale.y;
+        const sz = origScale.z;
+
+        const setHighlight = () => {
+            if (!targetNode || !targetNode.isValid) return;
+            targetNode.setScale(sx * scaleMul, sy * scaleMul, sz);
+            if (sprite && sprite.isValid) {
+                sprite.color = highlightColor;
+            }
+        };
+        const setRestore = () => {
+            if (!targetNode || !targetNode.isValid) return;
+            targetNode.setScale(sx, sy, sz);
+            if (sprite && sprite.isValid) {
+                sprite.color = origColor;
+            }
+        };
+
+        for (let i = 0; i < loops; i++) {
+            this.scheduleOnce(() => {
+                setHighlight();
+                this.scheduleOnce(() => setRestore(), Math.max(0, highlightSec));
+            }, i * Math.max(0, highlightSec + restoreSec));
+        }
+        this.scheduleOnce(() => setRestore(), loops * Math.max(0, highlightSec + restoreSec));
+    }
+
+    private showQuickUnitIntro(unitScript: any, unitName: string, unitDescription: string, unitId: string) {
+        this.autoCreateUnitIntroPopup();
+        if (!this.unitIntroPopup) {
+            return;
+        }
+        const unitIcon = unitScript?.cardIcon || unitScript?.defaultSpriteFrame || unitScript?.node?.getComponent(Sprite)?.spriteFrame || null;
+        this.unitIntroPopup.show({
+            unitName,
+            unitDescription,
+            unitIcon,
+            unitType: unitId,
+            unitId
+        });
+    }
+
+    private getFirstActiveUnitScriptInContainers(containerPaths: string[], componentName: string): any | null {
+        for (let p = 0; p < containerPaths.length; p++) {
+            const container = find(containerPaths[p]);
+            if (!container || !container.isValid || !container.activeInHierarchy) continue;
+            const children = container.children || [];
+            for (let i = 0; i < children.length; i++) {
+                const node = children[i];
+                if (!node || !node.isValid || !node.active) continue;
+                const script = node.getComponent(componentName) as any;
+                if (script && script.node && script.node.isValid && script.node.active) {
+                    return script;
+                }
+            }
+        }
+        return null;
+    }
+
+    private getFirstInjuredArrowerInContainers(containerPaths: string[]): any | null {
+        for (let p = 0; p < containerPaths.length; p++) {
+            const container = find(containerPaths[p]);
+            if (!container || !container.isValid || !container.activeInHierarchy) continue;
+            const children = container.children || [];
+            for (let i = 0; i < children.length; i++) {
+                const node = children[i];
+                if (!node || !node.isValid || !node.active) continue;
+                const ar = node.getComponent('Arrower') as any;
+                if (!ar || !ar.node || !ar.node.isValid || !ar.node.active) continue;
+                const cur = Number(ar.currentHealth);
+                const max = Number(ar.maxHealth);
+                if (isFinite(cur) && isFinite(max) && max > 0 && cur < max) {
+                    return ar;
+                }
+            }
+        }
+        return null;
+    }
+
+    private readHealthSafe(script: any): number {
+        if (!script) return 0;
+        if (typeof script.getHealth === 'function') {
+            const h = Number(script.getHealth());
+            if (isFinite(h)) return Math.max(0, h);
+        }
+        const h2 = Number(script.currentHealth);
+        if (isFinite(h2)) return Math.max(0, h2);
+        return 0;
+    }
+
+    private getDefenseStructureHealthSnapshotNoRecursion(): number {
+        let total = 0;
+        if (this.crystalScript) {
+            total += this.readHealthSafe(this.crystalScript);
+        }
+        const watchList: Array<{ path: string; comp: string }> = [
+            { path: 'Canvas/WarAncientTrees', comp: 'WarAncientTree' },
+            { path: 'Canvas/WatchTowers', comp: 'WatchTower' },
+            { path: 'Canvas/IceTowers', comp: 'IceTower' },
+            { path: 'Canvas/ThunderTowers', comp: 'ThunderTower' },
+        ];
+        for (let i = 0; i < watchList.length; i++) {
+            const item = watchList[i];
+            const container = find(item.path);
+            if (!container || !container.isValid || !container.activeInHierarchy) continue;
+            const children = container.children || [];
+            for (let j = 0; j < children.length; j++) {
+                const node = children[j];
+                if (!node || !node.isValid || !node.active) continue;
+                const script = node.getComponent(item.comp) as any;
+                total += this.readHealthSafe(script);
+            }
+        }
+        return total;
     }
     
     /**

@@ -764,6 +764,18 @@ export class Crystal extends Component {
                 const unitType = wispScript.unitType || 'Wisp';
                 gm.checkUnitFirstAppearance(unitType, wispScript);
             }
+
+            // 训练完成后：自动前往当前位置左侧 100 像素进行采集
+            // 使用已有手动移动接口，不新增递归/寻路逻辑
+            if (typeof wispScript.setManualMoveTargetPosition === 'function') {
+                const autoTargetPos = new Vec3(spawnPos.x - 100, spawnPos.y, spawnPos.z);
+                this.scheduleOnce(() => {
+                    if (!wispScript || !wispScript.node || !wispScript.node.isValid || !wispScript.node.active) {
+                        return;
+                    }
+                    wispScript.setManualMoveTargetPosition(autoTargetPos);
+                }, 0.05);
+            }
         }
 
         // 重置训练状态

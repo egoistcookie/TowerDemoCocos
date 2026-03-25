@@ -1,5 +1,7 @@
-import { _decorator, AudioClip, SpriteFrame } from 'cc';
+import { _decorator, AudioClip, SpriteFrame, Node } from 'cc';
 import { Boss } from './Boss';
+import { AudioManager } from '../AudioManager';
+import { EnemyPool } from '../EnemyPool';
 
 const { ccclass, property } = _decorator;
 
@@ -8,7 +10,7 @@ export class OrcWarlord extends Boss {
     // ====== OrcWarlord 专属数值与资源配置（通过 override 覆盖 Boss 默认值）======
 
     @property({ override: true })
-    maxHealth: number = 300;
+    maxHealth: number = 400;
 
     @property({ override: true })
     moveSpeed: number = 35;
@@ -112,7 +114,7 @@ export class OrcWarlord extends Boss {
 
     // 低血量战争咆哮相关
     private hasCastLowHealthWarcry: boolean = false; // 是否已经释放过低血量咆哮
-    private readonly LOW_HEALTH_THRESHOLD: number = 0.5; // 50%血量阈值
+    private readonly LOW_HEALTH_THRESHOLD: number = 0.8; // 80%血量阈值
 
     onEnable() {
         super.onEnable();
@@ -191,6 +193,107 @@ export class OrcWarlord extends Boss {
             // 不需要释放低血量咆哮，正常调用父类方法
             super.takeDamage(damage);
         }
+    }
+
+    /**
+     * 重写死亡：战争咆哮已影响的敌人效果不会因督军死亡而立刻移除，保留到原定持续时间结束
+     */
+    die() {
+        const bossThis = this as any;
+        if (bossThis.isDestroyed) {
+            return;
+        }
+
+        bossThis.isDestroyed = true;
+        this.restoreBloodRageAttributesIfNeeded();
+        this.clearBloodRageVisualOnly();
+        this.isBloodRageActive = false;
+        bossThis.bloodRageBurnTimer = 0;
+        bossThis.bloodRageOriginalMaxHealth = 0;
+        bossThis.bloodRageOriginalMoveSpeed = 0;
+        bossThis.bloodRageOriginalAttackDamage = 0;
+        bossThis.bloodRageOriginalAttackInterval = 0;
+        bossThis.bloodRagePulsePhase = 0;
+        bossThis.bloodRageOriginalColor = null;
+        bossThis.bloodRageTier = 0;
+
+        // 立即停止所有移动和动画
+        this.stopAllAnimations();
+
+        // 与基类不同点：不清空战争咆哮 Buff，而是让其自然到时失效
+        try {
+            const nowTimer: number = bossThis.attackTimer || 0;
+            const removals: Array<{ enemy: Node; delayMs: number }> = [];
+            // 复制集合，避免后续修改影响遍历
+            const currentBuffed: Node[] = Array.from((this as any).warcryBuffedEnemies as Set<Node>);
+            for (const enemy of currentBuffed) {
+                if (!enemy || !enemy.isValid) continue;
+                const endTime = (this as any).warcryBuffEndTime.get(enemy) as number | undefined;
+                if (endTime !== undefined) {
+                    const remainSec = Math.max(0, endTime - nowTimer);
+                    removals.push({ enemy, delayMs: Math.round(remainSec * 1000) });
+                }
+            }
+            // 安排在剩余时间结束时，单独移除每个敌人的 Buff
+            for (const { enemy, delayMs } of removals) {
+                setTimeout(() => {
+                    if (!enemy || !enemy.isValid) return;
+                    const enemyScript =
+                        (enemy.getComponent('Enemy') as any) ||
+                        (enemy.getComponent('OrcWarrior') as any) ||
+                        (enemy.getComponent('OrcWarlord') as any) ||
+                        (enemy.getComponent('Boss') as any);
+                    if (enemyScript) {
+                        // 使用基类提供的移除接口
+                        (this as any).removeWarcryBuff(enemy, enemyScript);
+                    }
+                }, delayMs);
+            }
+            // 不再主动 clearAllWarcryBuffs，让超时回调去做逐个还原
+        } catch (e) {
+            // 安全兜底：如果安排失败，不阻断死亡流程
+        }
+
+        // 奖励金币和经验值
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        if (this.gameManager) {
+            this.gameManager.addGold(this.goldReward);
+            this.gameManager.addExperience(this.expReward);
+        }
+
+        // 销毁血条节点
+        if ((this as any).healthBarNode && (this as any).healthBarNode.isValid) {
+            (this as any).healthBarNode.destroy();
+        }
+
+        // 播放死亡音效
+        if (this.deathSound) {
+            AudioManager.Instance.playSFX(this.deathSound);
+        }
+
+        // 优先播放死亡动画
+        this.playDeathAnimation();
+
+        const returnToPool = () => {
+            const enemyPool = EnemyPool.getInstance();
+            if (enemyPool && this.node && this.node.isValid) {
+                if ((this as any).resetEnemyState) {
+                    (this as any).resetEnemyState();
+                }
+                enemyPool.release(this.node, this.prefabName);
+            } else {
+                if (this.node && this.node.isValid) {
+                    this.node.destroy();
+                }
+            }
+        };
+
+        // 与基类保持一致：尸体暂留1分钟后返回对象池
+        setTimeout(() => {
+            returnToPool();
+        }, 60000);
     }
     
     /**
