@@ -60,6 +60,10 @@ export class Arrower extends Role {
     @property({ type: AudioClip, override: true })
     hitSound: AudioClip = null!; // 箭矢击中敌人时的音效
 
+    // 弓弦松紧小游戏：长按时的持续音效（按固定节奏循环触发，资源挂在弓箭手预制体上）
+    @property({ type: AudioClip })
+    bowstringHoldSound: AudioClip = null!;
+
     @property({ type: Texture2D, override: true })
     attackAnimationTexture: Texture2D = null!; // 攻击动画纹理（12帧图片）
 

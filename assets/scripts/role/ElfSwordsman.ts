@@ -90,7 +90,7 @@ export class ElfSwordsman extends Role {
     
     // 单位信息属性
     @property({ override: true })
-    unitName: string = "精灵剑士";
+    unitName: string = "剑士";
     
     @property({ override: true })
     unitDescription: string = "近战攻击单位，使用剑进行近距离战斗。";

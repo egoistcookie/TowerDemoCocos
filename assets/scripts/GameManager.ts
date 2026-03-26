@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, BlockInputEvents, sys, Texture2D, ImageAsset, Mask, UIOpacity, LabelOutline } from 'cc';
+import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, BlockInputEvents, sys, Texture2D, ImageAsset, Mask, UIOpacity, LabelOutline, AudioSource } from 'cc';
 // 微信小游戏全局对象声明（避免 TypeScript 报错）
 declare const wx: any;
 import { Crystal } from './role/Crystal';
@@ -85,10 +85,14 @@ export class GameManager extends Component {
     private hasShownArrowerNeedPriestDialog: boolean = false; // 一局一次：弓箭手受伤且场上无牧师
     private hasShownPriestProtectBuildingDialog: boolean = false; // 一局一次：牧师在场且防御建筑掉血
     private hasShownGoldReach100ArrowerDialog: boolean = false; // 一局一次：金币首次达到100
+    private hasShownPriestSuggestSwordsmanAfterKillDialog: boolean = false; // 一局一次：牧师在场且有友方单位被击杀 -> 提示建造剑士
     private lastDefenseStructureHealthSnapshot: number = -1; // 防御建筑血量快照（用于检测掉血）
+    private lastFriendlyUnitCountSnapshot: number = -1; // 友方单位数量快照（用于检测有单位被击杀）
     private lastBattleDialogDebugLogMs: number = 0; // 动态对话调试日志节流
     // A 提示触发后：等待玩家点击建造按钮打开建筑选择面板，再高亮“教堂”候选项
     private pendingHighlightChurchCandidateAfterBuild: boolean = false;
+    // D 提示触发后：等待玩家点击建造按钮打开建筑选择面板，再高亮“剑士小屋”候选项
+    private pendingHighlightSwordsmanHallCandidateAfterBuild: boolean = false;
     // A 提示的“建造按钮高亮”需要可被玩家点击打断；用 token 来取消未完成的 scheduleOnce
     private buildButtonBattleHintBlinkSeqId: number = 0;
     private buildButtonBattleHintOriginalScale: Vec3 | null = null;
@@ -126,6 +130,7 @@ export class GameManager extends Component {
     private bowstringMiniGameWaitFirstRelease: boolean = false;
     private bowstringMiniGameIgnoreEndUntilMs: number = 0;
     private bowstringMiniGameHasStartedHold: boolean = false;
+    private bowstringMiniGameHoldAudioSource: AudioSource | null = null; // 弓弦小游戏长按音效（循环播放）
 
     // “磨剑”小游戏运行态（剑士：10秒狂点）
     private swordSharpenMiniGameRoot: Node | null = null;
@@ -1091,7 +1096,9 @@ export class GameManager extends Component {
         this.hasShownArrowerNeedPriestDialog = false;
         this.hasShownPriestProtectBuildingDialog = false;
         this.hasShownGoldReach100ArrowerDialog = false;
+        this.hasShownPriestSuggestSwordsmanAfterKillDialog = false;
         this.lastDefenseStructureHealthSnapshot = -1;
+        this.lastFriendlyUnitCountSnapshot = -1;
         
         // 重置本局经验值
         this.currentGameExp = 0;
@@ -4663,8 +4670,10 @@ export class GameManager extends Component {
         this.hasShownPriestProtectBuildingDialog = false;
         this.hasShownGoldReach100ArrowerDialog = false;
         this.pendingHighlightChurchCandidateAfterBuild = false;
+        this.pendingHighlightSwordsmanHallCandidateAfterBuild = false;
         this.buildButtonBattleHintBlinkSeqId++;
         this.lastDefenseStructureHealthSnapshot = -1;
+        this.lastFriendlyUnitCountSnapshot = -1;
         this.gameState = GameState.Ready;
 
         // 重置水晶（血量和等级）
@@ -5280,6 +5289,7 @@ export class GameManager extends Component {
      */
     private showBowstringMiniGame(arrowerScript: any, requireReleaseGuard: boolean = false) {
         if (this.bowstringMiniGameRoot && this.bowstringMiniGameRoot.isValid) {
+            this.stopBowstringHoldLoopSfx();
             this.bowstringMiniGameRoot.destroy();
         }
 
@@ -5296,6 +5306,7 @@ export class GameManager extends Component {
         this.bowstringMiniGameCycleTime = 0;
         this.bowstringMiniGameEnergyValue = 0;
         (this as any).__bowstringLoggedHoldTick = false;
+        this.bowstringMiniGameHoldAudioSource = null;
         this.bowstringMiniGameAnimSprite = null;
         this.bowstringMiniGameAnimFrames = Array.isArray(arrowerScript?.bowstringTensionFrames)
             ? (arrowerScript.bowstringTensionFrames as SpriteFrame[]).filter(Boolean)
@@ -5320,6 +5331,10 @@ export class GameManager extends Component {
         root.setSiblingIndex(Number.MAX_SAFE_INTEGER - 2);
         this.bowstringMiniGameRoot = root;
         root.addComponent(BlockInputEvents);
+
+        // 专用 AudioSource：用于“4秒 mp3 播完后自动循环直到松开”
+        this.bowstringMiniGameHoldAudioSource = root.addComponent(AudioSource);
+        this.bowstringMiniGameHoldAudioSource.loop = true;
 
         const rootTr = root.addComponent(UITransform);
         rootTr.setContentSize(view.getVisibleSize().width * 2, view.getVisibleSize().height * 2);
@@ -5469,8 +5484,14 @@ export class GameManager extends Component {
                 this.bowstringMiniGameIgnoreEndUntilMs = 0;
             }
             if (now < this.bowstringMiniGameInputEnableAtMs) return;
+            // 防止 touch-start + mouse-down 同时触发导致重复进入 hold
+            if (this.bowstringMiniGameHold) {
+                return;
+            }
             this.bowstringMiniGameHold = true;
             this.bowstringMiniGameHasStartedHold = true;
+            // 长按开始：播放并循环，直到松开/结算
+            this.startBowstringHoldLoopSfx();
             console.log(`[BowstringMiniGame] hold=true t=${now}`);
         };
         const onEnd = (event?: any) => {
@@ -5507,6 +5528,48 @@ export class GameManager extends Component {
         root.on(Node.EventType.MOUSE_LEAVE, onEnd, this, true);
 
         this.startBowstringRealtimeLoop(barX, barY, barW, barH);
+    }
+
+    /**
+     * 弓弦小游戏：开始“长按循环音效”
+     * - 音效资源从弓箭手预制体字段 `bowstringHoldSound` 读取
+     * - 使用专用 AudioSource.loop=true，使得 4 秒 mp3 播完后自动重播，直到松开
+     */
+    private startBowstringHoldLoopSfx() {
+        const clip = this.bowstringMiniGameTargetArrower?.bowstringHoldSound;
+        const src = this.bowstringMiniGameHoldAudioSource;
+        if (!clip || !src || !src.node || !src.node.isValid) return;
+
+        // 音量跟随 AudioManager 的 sfxVolume（如果存在）
+        try {
+            const am = AudioManager.Instance;
+            if (am && typeof (am as any).getSFXVolume === 'function') {
+                src.volume = Math.max(0, Math.min(1, Number((am as any).getSFXVolume()) || 0.8));
+            }
+        } catch (e) {
+            // ignore
+        }
+
+        src.clip = clip;
+        if (src.playing) {
+            src.stop();
+        }
+        src.play();
+    }
+
+    /**
+     * 弓弦小游戏：停止“长按循环音效”
+     */
+    private stopBowstringHoldLoopSfx() {
+        const src = this.bowstringMiniGameHoldAudioSource;
+        if (!src || !src.node || !src.node.isValid) return;
+        try {
+            if (src.playing) {
+                src.stop();
+            }
+        } catch (e) {
+            // ignore
+        }
     }
 
     /**
@@ -5653,6 +5716,7 @@ export class GameManager extends Component {
             if (!this.bowstringMiniGameHold) {
                 return;
             }
+
             // 关键日志：确认“未长按却开始”的真实触发点
             // （只在 hold=true 的第一次 tick 打印一次）
             if ((this as any).__bowstringLoggedHoldTick !== true) {
@@ -5718,6 +5782,7 @@ export class GameManager extends Component {
         this.bowstringMiniGameFinalized = true;
         console.log(`[BowstringMiniGame] finalize t=${Date.now()} energy=${this.bowstringMiniGameEnergyValue.toFixed(3)} cycle=${this.bowstringMiniGameCycleTime.toFixed(3)}`);
         this.bowstringMiniGameHold = false;
+        this.stopBowstringHoldLoopSfx();
         this.clearBowstringRealtimeLoop();
 
         const energy = Math.max(0, Math.min(1, this.bowstringMiniGameEnergyValue));
@@ -6090,7 +6155,7 @@ export class GameManager extends Component {
             this.swordSharpenMiniGameAnimPendingCount++;
 
             if (this.swordSharpenMiniGameClickLabel) {
-                this.swordSharpenMiniGameClickLabel.string = `点击：${this.swordSharpenMiniGameClickCount}`;
+                this.swordSharpenMiniGameClickLabel.string = `打磨：${this.swordSharpenMiniGameClickCount}`;
             }
 
             this.tryPlaySwordSharpenAnimQueue();
@@ -6411,6 +6476,7 @@ export class GameManager extends Component {
 
         // A 提示触发后，可能在对话弹窗期间就已经打开建造面板；因此这里不依赖 intro popup 是否激活
         this.tryHighlightChurchCandidateAfterBuild();
+        this.tryHighlightSwordsmanHallCandidateAfterBuild();
 
         if (this.unitIntroPopup && this.unitIntroPopup.container && this.unitIntroPopup.container.active) {
             // 已有介绍框在显示时不叠加，下一帧再尝试
@@ -6425,7 +6491,7 @@ export class GameManager extends Component {
         const hasPriest = !!priestScript;
         if (canDebugLog) {
             console.log(
-                `[BattleDialog] tick gold=${this.gold} hasPriest=${hasPriest} shown={A:${this.hasShownArrowerNeedPriestDialog},B:${this.hasShownPriestProtectBuildingDialog},C:${this.hasShownGoldReach100ArrowerDialog}}`
+                `[BattleDialog] tick gold=${this.gold} hasPriest=${hasPriest} shown={A:${this.hasShownArrowerNeedPriestDialog},B:${this.hasShownPriestProtectBuildingDialog},C:${this.hasShownGoldReach100ArrowerDialog},D:${this.hasShownPriestSuggestSwordsmanAfterKillDialog}}`
             );
         }
 
@@ -6457,7 +6523,7 @@ export class GameManager extends Component {
                 this.showQuickUnitIntro(
                     injuredArrower,
                     '弓箭手',
-                    '指挥官，我开始想念牧师大姐了',
+                    '指挥官，我开始想念牧师大姐了。',
                     'Arrower'
                 );
                 this.hasShownArrowerNeedPriestDialog = true;
@@ -6497,7 +6563,7 @@ export class GameManager extends Component {
             this.showQuickUnitIntro(
                 priestScript,
                 '牧师',
-                '指挥官，祈祷唤来的圣灵也能保护建筑物哦',
+                '指挥官，祈祷唤来的圣灵也能保护建筑物哦。',
                 'Priest'
             );
             this.hasShownPriestProtectBuildingDialog = true;
@@ -6506,6 +6572,36 @@ export class GameManager extends Component {
             return;
         }
         this.lastDefenseStructureHealthSnapshot = currentDefenseHp;
+
+        // d. 牧师在场，且有友方单位被击杀：提示“只有剑士能挡住敌人”，并高亮建造按钮与剑士小屋
+        const currentFriendlyCount = this.getFriendlyUnitCountSnapshotNoRecursion();
+        if (this.lastFriendlyUnitCountSnapshot < 0) {
+            this.lastFriendlyUnitCountSnapshot = currentFriendlyCount;
+            if (canDebugLog) {
+                console.log(`[BattleDialog][D] init snapshot=${currentFriendlyCount}`);
+                this.lastBattleDialogDebugLogMs = now;
+            }
+            return;
+        }
+        if (
+            !this.hasShownPriestSuggestSwordsmanAfterKillDialog &&
+            hasPriest &&
+            currentFriendlyCount < this.lastFriendlyUnitCountSnapshot
+        ) {
+            this.showQuickUnitIntro(
+                priestScript,
+                '牧师',
+                '指挥官，现在只有剑士才能挡住敌人！',
+                'Priest'
+            );
+            this.hasShownPriestSuggestSwordsmanAfterKillDialog = true;
+            this.highlightBuildButtonForBattleHint();
+            this.pendingHighlightSwordsmanHallCandidateAfterBuild = true;
+            this.lastFriendlyUnitCountSnapshot = currentFriendlyCount;
+            console.log('[BattleDialog][D] triggered: Priest present and friendly unit count decreased');
+            return;
+        }
+        this.lastFriendlyUnitCountSnapshot = currentFriendlyCount;
         if (canDebugLog) {
             this.lastBattleDialogDebugLogMs = now;
         }
@@ -6642,6 +6738,114 @@ export class GameManager extends Component {
         );
 
         this.pendingHighlightChurchCandidateAfterBuild = false;
+    }
+
+    /**
+     * D 提示触发后：玩家点击建造按钮打开建筑选择面板时，
+     * 高亮建筑物候选框里的“剑士小屋 / SwordsmanHall”选项。
+     * 注意：只做一次高亮，避免重复干扰玩家操作。
+     */
+    private tryHighlightSwordsmanHallCandidateAfterBuild() {
+        if (!this.pendingHighlightSwordsmanHallCandidateAfterBuild) {
+            return;
+        }
+
+        const panelNode = find('Canvas/BuildingSelectionPanel') || find('BuildingSelectionPanel');
+        if (!panelNode || !panelNode.isValid) {
+            return;
+        }
+        if (!panelNode.activeInHierarchy) {
+            return;
+        }
+        // 玩家已打开建造面板：立即停止“建造按钮频闪”，避免干扰操作
+        this.stopBuildButtonForBattleHint();
+
+        const contentNode = panelNode.getChildByName('Content');
+        if (!contentNode || !contentNode.isValid) {
+            return;
+        }
+
+        // 建筑候选项节点命名规则：BuildingItem_${building.name}
+        let swordsmanHallItem =
+            contentNode.getChildByName('BuildingItem_剑士小屋') ||
+            contentNode.getChildByName('BuildingItem_剑士屋') ||
+            contentNode.getChildByName('BuildingItem_SwordsmanHall') ||
+            null;
+
+        if (!swordsmanHallItem || !swordsmanHallItem.isValid) {
+            // 兜底：不依赖固定节点名，扫描一层 children
+            const children = contentNode.children || [];
+            for (const c of children) {
+                if (!c || !c.isValid) continue;
+                const n = String((c as any).name || '');
+                if (!n.startsWith('BuildingItem_')) continue;
+                // 可能的命名包含：剑士、小屋、兵营、Swordsman
+                if (n.includes('剑士') || n.includes('Swordsman')) {
+                    swordsmanHallItem = c;
+                    break;
+                }
+            }
+        }
+
+        if (!swordsmanHallItem || !swordsmanHallItem.isValid) {
+            return;
+        }
+
+        this.blinkNodeForBattleHint(
+            swordsmanHallItem,
+            8,
+            0.35,
+            0.28,
+            1.18,
+            new Color(255, 255, 0, 255)
+        );
+        this.pendingHighlightSwordsmanHallCandidateAfterBuild = false;
+    }
+
+    /**
+     * 友方单位数量快照（不递归，只扫描固定容器的一层 children）。
+     * 用于检测“有单位被击杀”（数量下降）。
+     */
+    private getFriendlyUnitCountSnapshotNoRecursion(): number {
+        let total = 0;
+
+        // Canvas/Towers 里通常混放 Arrower / Priest（以及可能的其他Role）
+        const towers = find('Canvas/Towers');
+        if (towers && towers.isValid && towers.activeInHierarchy) {
+            const children = towers.children || [];
+            for (let i = 0; i < children.length; i++) {
+                const node = children[i];
+                if (!node || !node.isValid || !node.active) continue;
+                if (node.getComponent('Arrower') || node.getComponent('Priest')) {
+                    total++;
+                }
+            }
+        }
+
+        const watchList: Array<{ path: string; comp: string }> = [
+            { path: 'Canvas/Hunters', comp: 'Hunter' },
+            { path: 'Canvas/Mages', comp: 'Mage' },
+            { path: 'Canvas/Swordsmen', comp: 'ElfSwordsman' },
+            // 兼容：如果未来把 Priest/Arrower 放到独立容器，这里也能统计到
+            { path: 'Canvas/Priests', comp: 'Priest' },
+            { path: 'Canvas/Arrowers', comp: 'Arrower' },
+            { path: 'Canvas/Archers', comp: 'Arrower' },
+        ];
+
+        for (let w = 0; w < watchList.length; w++) {
+            const item = watchList[w];
+            const container = find(item.path);
+            if (!container || !container.isValid || !container.activeInHierarchy) continue;
+            const children = container.children || [];
+            for (let j = 0; j < children.length; j++) {
+                const node = children[j];
+                if (!node || !node.isValid || !node.active) continue;
+                if (node.getComponent(item.comp)) {
+                    total++;
+                }
+            }
+        }
+        return total;
     }
 
     /**
