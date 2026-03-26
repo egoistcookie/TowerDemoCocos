@@ -304,7 +304,7 @@ export class SwordsmanHall extends Build {
             
             // 计算目标位置（只改变x坐标，y坐标不变）
             targetPos = new Vec3(
-                spawnPos.x + directionX * this.moveAwayDistance,
+                spawnPos.x + directionX * this.moveAwayDistance, 
                 spawnPos.y, // y坐标保持不变
                 spawnPos.z
             );

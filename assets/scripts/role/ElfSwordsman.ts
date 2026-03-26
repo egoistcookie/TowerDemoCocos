@@ -1,6 +1,8 @@
 import { _decorator, SpriteFrame, Prefab, Texture2D, AudioClip, Node, Vec3 } from 'cc';
 import { Role } from './Role';
 import { AudioManager } from '../AudioManager';
+import { UnitInfo } from '../UnitInfoPanel';
+import { GamePopup } from '../GamePopup';
 const { ccclass, property } = _decorator;
 
 @ccclass('ElfSwordsman')
@@ -82,7 +84,7 @@ export class ElfSwordsman extends Role {
 
     @property({ override: true })
     collisionRadius: number = 10; // 碰撞半径（像素）
-
+ 
     @property({ type: SpriteFrame, override: true })
     cardIcon: SpriteFrame = null!; // 单位名片图片
     
@@ -96,8 +98,72 @@ export class ElfSwordsman extends Role {
     @property({ type: SpriteFrame, override: true })
     unitIcon: SpriteFrame = null!;
 
+    // === 磨剑小游戏资源（由 GameManager 在弹窗内触发/结算） ===
+    @property({ type: [SpriteFrame] })
+    swordSharpenFrames: SpriteFrame[] = []; // 磨剑动画序列帧（建议从“钝”到“锋利”）
+
+    @property({ type: AudioClip })
+    swordSharpenSound: AudioClip = null!; // 每次磨剑点击音效
+
+    @property({ type: SpriteFrame })
+    swordSharpenMoodExcellentIcon: SpriteFrame = null!; // 结算-最佳情绪图
+
+    @property({ type: SpriteFrame })
+    swordSharpenMoodGoodIcon: SpriteFrame = null!; // 结算-一般情绪图
+
+    @property({ type: SpriteFrame })
+    swordSharpenMoodBadIcon: SpriteFrame = null!; // 结算-最差情绪图
+
+    // 当前磨剑带来的伤害倍率（只作用于本实例；不做叠加，直接覆盖）
+    public swordSharpenDamageMultiplier: number = 1.0;
+    // 为了避免重复叠加，这里缓存“磨剑前”的基准属性（对象池复用时会在 onEnable 重置）
+    private swordSharpenAttackIntervalBase: number = 0;
+    private swordSharpenAttackDamageBase: number = 0;
+
+    onEnable() {
+        // 先让父类完成对象池激活、天赋/卡片增幅等初始化
+        // @ts-ignore
+        super.onEnable?.();
+
+        // 对象池复用时重置磨剑相关基准，避免跨局/跨角色残留
+        this.swordSharpenDamageMultiplier = 1.0;
+        this.swordSharpenAttackIntervalBase = 0;
+        this.swordSharpenAttackDamageBase = 0;
+    }
+
+    /**
+     * 应用磨剑结算后的强化效果：攻击力与攻速（通过修改 attackInterval）
+     * @param damageMultiplier 伤害倍率（如 1.25 表示 +25%）
+     * @param speedPercent 攻速提升百分比（如 20 表示 +20%）
+     */
+    public applySwordSharpenBuff(damageMultiplier: number, speedPercent: number) {
+        const dm = Number(damageMultiplier);
+        this.swordSharpenDamageMultiplier = Number.isFinite(dm) && dm > 0 ? dm : 1.0;
+
+        const sp = Math.max(0, Number(speedPercent) || 0);
+        const speedMultiplier = 1 + sp / 100;
+
+        // 基准只记录一次：后续结算直接覆盖到同一基准之上（不叠加）
+        if (this.swordSharpenAttackIntervalBase <= 0) {
+            this.swordSharpenAttackIntervalBase = this.attackInterval || 1;
+        }
+        if (this.swordSharpenAttackDamageBase <= 0) {
+            this.swordSharpenAttackDamageBase = this.attackDamage || 0;
+        }
+
+        // 直接把增幅写进单位属性：攻击力/攻速面板都会体现（符合“直接增加到攻击力/攻击速度”）
+        this.attackDamage = Math.max(0, Math.round((this.swordSharpenAttackDamageBase || 0) * this.swordSharpenDamageMultiplier));
+        this.attackInterval = (this.swordSharpenAttackIntervalBase || 1) / speedMultiplier;
+
+        // 让攻速提升尽快生效：重新开始计时
+        this.attackTimer = 0;
+    }
+
     
     battleSlogans: string[] = ['为了荣耀！', '为了联盟！', '吃我一剑！', '哈！'];
+
+    // 剑士磨剑技能冷却（全体剑士共享）
+    private readonly SWORD_SHARPEN_SKILL_COOLDOWN_MS: number = 30_000;
 
     /**
      * 重写索敌范围，索敌范围为攻击范围的8倍（特殊处理）
@@ -144,6 +210,105 @@ export class ElfSwordsman extends Role {
     }
 
     /**
+     * 构建剑士专用 UnitInfo（包含“磨剑”技能按钮）
+     */
+    public buildSwordsmanUnitInfo(): UnitInfo {
+        // 计算升级费用：1到2级是10金币，此后每次升级多10金币
+        const upgradeCost = this.level < 3 ? (10 + (this.level - 1) * 10) : undefined;
+
+        const currentHealth = (this.currentHealth !== undefined && !isNaN(this.currentHealth) && this.currentHealth >= 0)
+            ? this.currentHealth
+            : (this.maxHealth || 0);
+        const maxHealth = (this.maxHealth !== undefined && !isNaN(this.maxHealth) && this.maxHealth > 0)
+            ? this.maxHealth
+            : 0;
+
+        const gm: any = this.gameManager;
+        const remaining = gm && typeof gm.getSwordSharpenSkillGlobalCooldownRemainingSec === 'function'
+            ? gm.getSwordSharpenSkillGlobalCooldownRemainingSec()
+            : 0;
+
+        const unitInfo: UnitInfo = {
+            name: '剑士',
+            level: this.level,
+            currentHealth,
+            maxHealth,
+            attackDamage: this.attackDamage,
+            populationCost: 1,
+            icon: this.cardIcon || this.defaultSpriteFrame,
+            collisionRadius: this.collisionRadius,
+            attackRange: this.attackRange,
+            attackFrequency: this.attackInterval ? 1.0 / this.attackInterval : 0,
+            moveSpeed: this.moveSpeed,
+            isDefending: this.isDefending,
+            upgradeCost: upgradeCost,
+            onUpgradeClick: this.level < 3 ? () => this.onUpgradeClick() : undefined,
+            onSellClick: () => this.onSellClick(),
+            onDefendClick: () => this.onDefendClick(),
+            onSkillClick: undefined,
+            onSkill2Click: () => this.onSwordSharpenSkillClick(),
+            skill2CooldownTotalSec: this.SWORD_SHARPEN_SKILL_COOLDOWN_MS / 1000,
+            skill2CooldownRemainingSec: remaining
+        };
+
+        return unitInfo;
+    }
+
+    private refreshUnitInfoPanelIfSelected() {
+        if (!this.unitSelectionManager) {
+            this.findUnitSelectionManager();
+        }
+        if (!this.unitSelectionManager) return;
+        if ((this.unitSelectionManager as any).isUnitSelected && !(this.unitSelectionManager as any).isUnitSelected(this.node)) {
+            return;
+        }
+        const unitInfoPanel = (this.unitSelectionManager as any).unitInfoPanel;
+        if (unitInfoPanel && unitInfoPanel.updateButtons) {
+            unitInfoPanel.updateButtons(this.buildSwordsmanUnitInfo());
+        }
+    }
+
+    private onSwordSharpenSkillClick() {
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        const gm: any = this.gameManager;
+        if (!gm || typeof gm.getSwordSharpenSkillGlobalCooldownRemainingSec !== 'function') {
+            return;
+        }
+        const remaining = gm.getSwordSharpenSkillGlobalCooldownRemainingSec();
+        if (remaining > 0.05) {
+            GamePopup.showMessage(`技能冷却中：${Math.ceil(remaining)}s`, true, 1.2);
+            this.refreshUnitInfoPanelIfSelected();
+            return;
+        }
+
+        if (gm && typeof gm.startSwordSharpenSkillGlobalCooldown === 'function') {
+            gm.startSwordSharpenSkillGlobalCooldown(this.SWORD_SHARPEN_SKILL_COOLDOWN_MS);
+        }
+        this.refreshUnitInfoPanelIfSelected();
+
+        gm?.openSwordSharpenMiniGameForSwordsman?.(this);
+    }
+
+    /**
+     * 重写 showUnitInfoPanel：在原本面板基础上注入“磨剑”技能按钮（九宫格第六格）
+     */
+    showUnitInfoPanel() {
+        super.showUnitInfoPanel();
+        if (!this.unitSelectionManager) {
+            this.findUnitSelectionManager();
+        }
+        if (!this.unitSelectionManager) return;
+
+        const unitInfoPanel = (this.unitSelectionManager as any).unitInfoPanel;
+        if (unitInfoPanel && unitInfoPanel.updateButtons) {
+            // 只更新按钮状态，不重复创建移动监听逻辑
+            unitInfoPanel.updateButtons(this.buildSwordsmanUnitInfo());
+        }
+    }
+
+    /**
      * 重写执行攻击方法，实现近战攻击
      */
     executeAttack() {
@@ -163,6 +328,7 @@ export class ElfSwordsman extends Role {
 
         // 近战攻击：直接对敌人造成伤害，不创建武器
         if (enemyScript && enemyScript.takeDamage) {
+            const effectiveDamage = Math.max(0, Math.round(this.attackDamage || 0));
             // 播放攻击音效
             if (this.attackSound && AudioManager.Instance) {
                 AudioManager.Instance.playSFX(this.attackSound);
@@ -172,9 +338,9 @@ export class ElfSwordsman extends Role {
                 AudioManager.Instance.playSFX(this.hitSound);
             }
             // 直接造成伤害
-            enemyScript.takeDamage(this.attackDamage);
+            enemyScript.takeDamage(effectiveDamage);
             // 记录伤害统计
-            this.recordDamageToStatistics(this.attackDamage);
+            this.recordDamageToStatistics(effectiveDamage);
         }
     }
 }

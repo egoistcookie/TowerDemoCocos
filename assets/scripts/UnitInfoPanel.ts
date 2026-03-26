@@ -915,13 +915,16 @@ export class UnitInfoPanel extends Component {
             });
         }
 
-        // 弓箭手：调整弓弦松紧度技能（九宫格第六格：索引5 = 第二行第三列）
-        if (unitInfo.name === '弓箭手' && unitInfo.onSkill2Click && this.buttonNodes[5]) {
+        // 九宫格第六格：弓箭手 / 剑士技能（索引5）
+        if ((unitInfo.name === '弓箭手' || unitInfo.name === '剑士') && unitInfo.onSkill2Click && this.buttonNodes[5]) {
             const skill2Button = this.buttonNodes[5];
             skill2Button.active = true;
 
-            // 先用升级按钮贴图占位
-            this.loadButtonSprite(5, 'kongxian2.png', 'kongxian1.png');
+            const isSwordsman = unitInfo.name === '剑士';
+            // 先用技能按钮贴图占位
+            const normalIcon = isSwordsman ? 'mojian1.png' : 'kongxian2.png';
+            const downIcon = isSwordsman ? 'mojian2.png' : 'kongxian1.png';
+            this.loadButtonSprite(5, normalIcon, downIcon);
 
             const btnComp = skill2Button.getComponent(Button);
             const sprite = this.buttonSprites.get(5);

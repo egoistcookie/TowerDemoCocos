@@ -16,6 +16,7 @@ import { DamageStatistics } from './DamageStatistics';
 import { ShamanTotem } from './ShamanTotem';
 import { WarAncientTree } from './role/WarAncientTree';
 import { ForestGridPanel } from './ForestGridPanel';
+import { AudioManager } from './AudioManager';
 import { SoundManager } from './SoundManager';
 import { BuffManager } from './BuffManager';
 import { AnalyticsManager, OperationType } from './AnalyticsManager';
@@ -80,6 +81,7 @@ export class GameManager extends Component {
     private hasShownPopulationLimitWarning: boolean = false; // 是否已显示过人口上限提示
     private hasShownFirstArrowerDeathPopup: boolean = false; // 是否已显示过第一个弓箭手死亡提示
     private hasTriggeredFirstArrowerBowstringMiniGame: boolean = false; // 首个弓箭手“紧弓弦”互动仅触发一次
+    private hasTriggeredFirstSwordsmanSharpenMiniGame: boolean = false; // 首个剑士“磨剑”互动仅触发一次
     private hasShownArrowerNeedPriestDialog: boolean = false; // 一局一次：弓箭手受伤且场上无牧师
     private hasShownPriestProtectBuildingDialog: boolean = false; // 一局一次：牧师在场且防御建筑掉血
     private hasShownGoldReach100ArrowerDialog: boolean = false; // 一局一次：金币首次达到100
@@ -124,10 +126,40 @@ export class GameManager extends Component {
     private bowstringMiniGameWaitFirstRelease: boolean = false;
     private bowstringMiniGameIgnoreEndUntilMs: number = 0;
     private bowstringMiniGameHasStartedHold: boolean = false;
+
+    // “磨剑”小游戏运行态（剑士：10秒狂点）
+    private swordSharpenMiniGameRoot: Node | null = null;
+    private swordSharpenMiniGameAnimSprite: Sprite | null = null;
+    private swordSharpenMiniGameAnimFrames: SpriteFrame[] = [];
+    private swordSharpenMiniGameClickCount: number = 0;
+    private swordSharpenMiniGameFinalized: boolean = false;
+    private swordSharpenMiniGameEndAtMs: number = 0;
+    private swordSharpenMiniGameTargetSwordsman: any = null;
+    private swordSharpenMiniGameRealtimeLoopId: number | null = null;
+    private swordSharpenMiniGameLastClickAtMs: number = 0;
+    private swordSharpenMiniGameInputEnableAtMs: number = 0;
+    private swordSharpenMiniGameTimerLabel: Label | null = null;
+    private swordSharpenMiniGameClickLabel: Label | null = null;
+
+    // 磨剑“每次点击播放完整一轮序列帧”的播放队列（避免只跳帧）
+    private swordSharpenMiniGameAnimPendingCount: number = 0;
+    private swordSharpenMiniGameAnimRunning: boolean = false;
+    private swordSharpenMiniGameAnimTimeoutId: number | null = null;
+
+    // 到 10 秒后：锁输入 + 延迟到动画队列播放完再做 UI 结算
+    private swordSharpenMiniGameShouldFinalizeUIAfterAnim: boolean = false;
+    private swordSharpenMiniGameFinalizeClicks: number = 0;
+    private swordSharpenMiniGameFinalizeDamageBoostPercent: number = 0;
+    private swordSharpenMiniGameFinalizeSpeedBoostPercent: number = 0;
+    private swordSharpenMiniGameFinalizeIconToUse: SpriteFrame | null = null;
     
     // 弓弦技能全局冷却（所有弓箭手共享）
     private bowstringSkillGlobalCooldownEndMs: number = 0;
     private bowstringSkillCooldownRefreshLoopId: number | null = null;
+
+    // 磨剑技能全局冷却（所有剑士共享）
+    private swordSharpenSkillGlobalCooldownEndMs: number = 0;
+    private swordSharpenSkillCooldownRefreshLoopId: number | null = null;
     
     /**
      * 加载全局增益卡片图标资源
@@ -5165,6 +5197,12 @@ export class GameManager extends Component {
             const introBlockedNames = new Set<string>(['弓箭手小屋', '猎手大厅', '法师塔', '剑士小屋', '教堂']);
             const shouldShowIntro = !introBlockedNames.has(uniqueUnitType);
             const isFirstArrower = unitType === 'Arrower' || unitScript?.unitType === 'Arrower' || unitScript?.prefabName === 'Arrower' || uniqueUnitType === '弓箭手';
+            const isFirstSwordsman =
+                unitType === 'ElfSwordsman' ||
+                unitScript?.unitType === 'ElfSwordsman' ||
+                unitScript?.prefabName === 'ElfSwordsman' ||
+                uniqueUnitType === '精灵剑士' ||
+                uniqueUnitType === '剑士';
 
             if (isFirstArrower && shouldShowIntro) {
                 const baseCloseCallback = this.getIntroCloseCallback(uniqueUnitType);
@@ -5176,6 +5214,16 @@ export class GameManager extends Component {
                 });
             } else if (isFirstArrower) {
                 this.triggerFirstArrowerBowstringFlow(unitScript);
+            } else if (isFirstSwordsman && shouldShowIntro) {
+                const baseCloseCallback = this.getIntroCloseCallback(uniqueUnitType);
+                this.showUnitIntro(unitScript, () => {
+                    if (baseCloseCallback) {
+                        baseCloseCallback();
+                    }
+                    this.triggerFirstSwordsmanSharpenFlow(unitScript);
+                });
+            } else if (isFirstSwordsman) {
+                this.triggerFirstSwordsmanSharpenFlow(unitScript);
             } else if (shouldShowIntro) {
                 this.showUnitIntro(unitScript, this.getIntroCloseCallback(uniqueUnitType));
             }
@@ -5513,6 +5561,62 @@ export class GameManager extends Component {
             unitInfoPanel.updateButtons(arrower.buildArrowerUnitInfo());
         }
     }
+
+    /**
+     * 获取磨剑技能全局冷却剩余秒数（所有剑士共享）
+     */
+    public getSwordSharpenSkillGlobalCooldownRemainingSec(): number {
+        const now = Date.now();
+        const remainMs = Math.max(0, (this.swordSharpenSkillGlobalCooldownEndMs || 0) - now);
+        return remainMs / 1000;
+    }
+
+    /**
+     * 启动磨剑技能全局冷却（所有剑士共享）
+     */
+    public startSwordSharpenSkillGlobalCooldown(cooldownMs: number) {
+        this.swordSharpenSkillGlobalCooldownEndMs = Date.now() + cooldownMs;
+        this.startSwordSharpenCooldownRefreshLoop();
+    }
+
+    private startSwordSharpenCooldownRefreshLoop() {
+        // 清除旧循环
+        if (this.swordSharpenSkillCooldownRefreshLoopId !== null) {
+            clearInterval(this.swordSharpenSkillCooldownRefreshLoopId);
+            this.swordSharpenSkillCooldownRefreshLoopId = null;
+        }
+        this.swordSharpenSkillCooldownRefreshLoopId = setInterval(() => {
+            const remain = this.getSwordSharpenSkillGlobalCooldownRemainingSec();
+            this.refreshSelectedSwordsmanPanel();
+            if (remain <= 0.01) {
+                clearInterval(this.swordSharpenSkillCooldownRefreshLoopId!);
+                this.swordSharpenSkillCooldownRefreshLoopId = null;
+                this.refreshSelectedSwordsmanPanel(); // 冷却结束再刷一次
+            }
+        }, 200) as unknown as number;
+    }
+
+    private refreshSelectedSwordsmanPanel() {
+        // 找到 UnitSelectionManager，获取当前选中的剑士并刷新面板
+        const canvas = find('Canvas');
+        if (!canvas) return;
+        const usmNode = find('Canvas/UnitSelectionManager') || canvas.getChildByName('UnitSelectionManager');
+        if (!usmNode) return;
+        const usm = usmNode.getComponent('UnitSelectionManager') as any;
+        if (!usm) return;
+
+        const unitInfoPanel = usm.unitInfoPanel;
+        if (!unitInfoPanel || !unitInfoPanel.updateButtons) return;
+
+        const selectedUnit = usm.getCurrentSelectedUnit ? usm.getCurrentSelectedUnit() : null;
+        if (!selectedUnit || !selectedUnit.isValid) return;
+
+        const swordsman = selectedUnit.getComponent('ElfSwordsman') as any;
+        if (!swordsman) return;
+        if (swordsman.buildSwordsmanUnitInfo) {
+            unitInfoPanel.updateButtons(swordsman.buildSwordsmanUnitInfo());
+        }
+    }
     /**
      * 弓箭手技能：打开弓弦松紧小游戏（不受“首次触发”限制）
      */
@@ -5522,6 +5626,17 @@ export class GameManager extends Component {
         }
         // 技能按钮触发：需要“先松开一次”门闩，避免按钮点击残留输入导致立刻开始/立刻结算
         this.showBowstringMiniGame(arrowerScript, true);
+    }
+
+    /**
+     * 磨剑技能：打开磨剑小游戏（不受“首次触发”限制）
+     */
+    public openSwordSharpenMiniGameForSwordsman(swordsmanScript: any) {
+        if (!swordsmanScript || !swordsmanScript.node || !swordsmanScript.node.isValid || !swordsmanScript.node.active) {
+            return;
+        }
+        // 技能按钮触发：需要“先短暂吞掉”残留输入，避免立刻触发一次点击
+        this.showSwordsmanSharpenMiniGame(swordsmanScript, true);
     }
 
     private startBowstringRealtimeLoop(barX: number, barY: number, barW: number, barH: number) {
@@ -5754,6 +5869,530 @@ export class GameManager extends Component {
             unitId: 'Arrower',
             onCloseCallback: () => {
                 GamePopup.showMessage(`全体弓箭手攻击力提升${attackBoostPercent}%`, true, 2.5);
+            }
+        });
+    }
+
+    /**
+     * 首个剑士：延迟触发“磨剑”剧情与小游戏
+     */
+    private triggerFirstSwordsmanSharpenFlow(swordsmanScript: any) {
+        if (this.hasTriggeredFirstSwordsmanSharpenMiniGame) {
+            return;
+        }
+        this.hasTriggeredFirstSwordsmanSharpenMiniGame = true;
+
+        // 固定 5 秒后出现请求帮助对话（参考弓箭手紧弓弦流程）
+        const delay = 5;
+        this.scheduleOnce(() => {
+            if (this.gameState !== GameState.Playing) { 
+                return;
+            }
+            if (!swordsmanScript || !swordsmanScript.node || !swordsmanScript.node.isValid || !swordsmanScript.node.active) {
+                return;
+            }
+            this.showFirstSwordsmanHelpIntro(swordsmanScript);
+        }, delay);
+    }
+
+    private showFirstSwordsmanHelpIntro(swordsmanScript: any) {
+        this.autoCreateUnitIntroPopup();
+        if (!this.unitIntroPopup) {
+            return;
+        }
+
+        const icon = swordsmanScript?.cardIcon || swordsmanScript?.defaultSpriteFrame || null;
+        this.unitIntroPopup.show({
+            unitName: '剑士',
+            unitDescription: '指挥官，吾之剑刃略有钝感，虽可自行处理，但若你愿意，可否助我打磨此剑？',
+            unitIcon: icon,
+            unitType: 'ElfSwordsman',
+            unitId: 'ElfSwordsman',
+            onCloseCallback: () => {
+                this.showSwordsmanSharpenMiniGame(swordsmanScript);
+            }
+        });
+    }
+
+    /**
+     * 剑士磨剑小游戏：10秒狂点鼠标，每次点击触发一次动画和音效
+     */
+    private showSwordsmanSharpenMiniGame(swordsmanScript: any, requireInputGuard: boolean = false) {
+        if (this.swordSharpenMiniGameRoot && this.swordSharpenMiniGameRoot.isValid) {
+            this.swordSharpenMiniGameRoot.destroy();
+        }
+
+        const canvas = find('Canvas');
+        if (!canvas) {
+            return;
+        }
+
+        this.swordSharpenMiniGameTargetSwordsman = swordsmanScript;
+        this.swordSharpenMiniGameFinalized = false;
+        this.swordSharpenMiniGameClickCount = 0;
+        this.swordSharpenMiniGameEndAtMs = Date.now() + 10_000;
+        this.swordSharpenMiniGameLastClickAtMs = 0;
+        // 防止“点击技能按钮/界面抬起”残留输入导致立刻进入点击态
+        this.swordSharpenMiniGameInputEnableAtMs = Date.now() + (requireInputGuard ? 180 : 120);
+
+        this.swordSharpenMiniGameAnimFrames = Array.isArray(swordsmanScript?.swordSharpenFrames)
+            ? (swordsmanScript.swordSharpenFrames as SpriteFrame[]).filter(Boolean)
+            : [];
+
+        this.clearSwordSharpenRealtimeLoop();
+        this.swordSharpenMiniGameAnimSprite = null;
+        this.swordSharpenMiniGameTimerLabel = null;
+        this.swordSharpenMiniGameClickLabel = null;
+        this.swordSharpenMiniGameAnimPendingCount = 0;
+        this.swordSharpenMiniGameAnimRunning = false;
+        this.clearSwordSharpenMiniGameAnimTimeout();
+        this.swordSharpenMiniGameShouldFinalizeUIAfterAnim = false;
+        this.swordSharpenMiniGameFinalizeClicks = 0;
+        this.swordSharpenMiniGameFinalizeDamageBoostPercent = 0;
+        this.swordSharpenMiniGameFinalizeSpeedBoostPercent = 0;
+        this.swordSharpenMiniGameFinalizeIconToUse = null;
+
+        this.pauseGame();
+
+        const root = new Node('SwordSharpenMiniGame');
+        root.setParent(canvas);
+        root.setSiblingIndex(Number.MAX_SAFE_INTEGER - 2);
+        this.swordSharpenMiniGameRoot = root;
+        root.addComponent(BlockInputEvents);
+
+        const rootTr = root.addComponent(UITransform);
+        rootTr.setContentSize(view.getVisibleSize().width * 2, view.getVisibleSize().height * 2);
+        root.setPosition(0, 0, 0);
+
+        const mask = root.addComponent(Graphics);
+        mask.fillColor = new Color(0, 0, 0, 180);
+        const vs = view.getVisibleSize();
+        mask.rect(-vs.width, -vs.height, vs.width * 2, vs.height * 2);
+        mask.fill();
+
+        const panel = new Node('MiniGamePanel');
+        panel.setParent(root);
+        panel.setPosition(0, 0, 0);
+        const panelTr = panel.addComponent(UITransform);
+        panelTr.setContentSize(400, 400);
+        const panelBg = panel.addComponent(Graphics);
+        panelBg.fillColor = new Color(25, 25, 35, 245);
+        panelBg.roundRect(-200, -200, 400, 400, 14);
+        panelBg.fill();
+
+        const titleNode = new Node('Title');
+        titleNode.setParent(panel);
+        titleNode.setPosition(0, 172, 0);
+        titleNode.addComponent(UITransform).setContentSize(360, 32);
+        const title = titleNode.addComponent(Label);
+        title.string = '打磨10秒';
+        title.fontSize = 20;
+        title.color = new Color(240, 240, 255, 255);
+        title.horizontalAlign = Label.HorizontalAlign.CENTER;
+        title.verticalAlign = Label.VerticalAlign.CENTER;
+
+        // 中间：磨剑动画区
+        const centerAnim = new Node('SwordAnimArea');
+        centerAnim.setParent(panel);
+        centerAnim.setPosition(0, 10, 0);
+        centerAnim.addComponent(UITransform).setContentSize(250, 250);
+
+        const animBg = centerAnim.addComponent(Graphics);
+        animBg.fillColor = new Color(48, 48, 68, 255);
+        animBg.roundRect(-125, -125, 250, 250, 12);
+        animBg.fill();
+
+        const animNode = new Node('SwordAnimSprite');
+        animNode.setParent(centerAnim);
+        animNode.setPosition(0, 0, 0);
+        const animTr = animNode.addComponent(UITransform);
+        animTr.setContentSize(180, 180);
+        this.swordSharpenMiniGameAnimSprite = animNode.addComponent(Sprite);
+        this.swordSharpenMiniGameAnimSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        // 关闭 trim，避免序列帧因裁边差异导致主体忽大忽小
+        this.swordSharpenMiniGameAnimSprite.trim = false;
+        if (this.swordSharpenMiniGameAnimFrames.length > 0) {
+            this.swordSharpenMiniGameAnimSprite.spriteFrame = this.swordSharpenMiniGameAnimFrames[0];
+        }
+
+        const infoNode = new Node('Info');
+        infoNode.setParent(panel);
+        infoNode.setPosition(0, -165, 0);
+        const infoTr = infoNode.addComponent(UITransform);
+        infoTr.setContentSize(360, 40);
+        const infoLabel = infoNode.addComponent(Label);
+        infoLabel.string = '点击触发打磨（点击越多，强化越强）';
+        infoLabel.fontSize = 14;
+        infoLabel.color = new Color(208, 216, 245, 255);
+        infoLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        infoLabel.verticalAlign = Label.VerticalAlign.CENTER;
+
+        // 右上：倒计时
+        const timerNode = new Node('Timer');
+        timerNode.setParent(panel);
+        timerNode.setPosition(112, 150, 0);
+        timerNode.addComponent(UITransform).setContentSize(120, 28);
+        this.swordSharpenMiniGameTimerLabel = timerNode.addComponent(Label);
+        this.swordSharpenMiniGameTimerLabel.fontSize = 18;
+        this.swordSharpenMiniGameTimerLabel.color = new Color(255, 245, 180, 255);
+        this.swordSharpenMiniGameTimerLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        this.swordSharpenMiniGameTimerLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        this.swordSharpenMiniGameTimerLabel.string = '10.0s';
+
+        // 右中：点击次数
+        const clickNode = new Node('ClickCount');
+        clickNode.setParent(panel);
+        clickNode.setPosition(112, 115, 0);
+        clickNode.addComponent(UITransform).setContentSize(120, 28);
+        this.swordSharpenMiniGameClickLabel = clickNode.addComponent(Label);
+        this.swordSharpenMiniGameClickLabel.fontSize = 18;
+        this.swordSharpenMiniGameClickLabel.color = new Color(200, 220, 255, 255);
+        this.swordSharpenMiniGameClickLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        this.swordSharpenMiniGameClickLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        this.swordSharpenMiniGameClickLabel.string = '打磨次数：0';
+
+        // 实时 UI 更新：真实时间（setInterval），不受 timeScale 影响
+        this.swordSharpenMiniGameRealtimeLoopId = setInterval(() => {
+            if (!this.swordSharpenMiniGameRoot || !this.swordSharpenMiniGameRoot.isValid || this.swordSharpenMiniGameFinalized) {
+                this.clearSwordSharpenRealtimeLoop();
+                return;
+            }
+            const remainSec = Math.max(0, (this.swordSharpenMiniGameEndAtMs - Date.now()) / 1000);
+            if (this.swordSharpenMiniGameTimerLabel) {
+                this.swordSharpenMiniGameTimerLabel.string = `${remainSec.toFixed(1)}s`;
+            }
+            if (remainSec <= 0) {
+                // 等 setTimeout 触发 finalize（避免多次 finalize），这里仅停止轮询
+                this.clearSwordSharpenRealtimeLoop();
+            }
+        }, 50) as unknown as number;
+
+        const onClick = () => {
+            if (this.swordSharpenMiniGameFinalized) {
+                return;
+            }
+            const now = Date.now();
+            if (now >= this.swordSharpenMiniGameEndAtMs) {
+                return;
+            }
+            if (now < this.swordSharpenMiniGameInputEnableAtMs) {
+                return;
+            }
+
+            // 防止同一物理动作被多个事件重复触发（touch/mouse 混合）
+            if (now - this.swordSharpenMiniGameLastClickAtMs < 25) {
+                return;
+            }
+            this.swordSharpenMiniGameLastClickAtMs = now;
+
+            this.swordSharpenMiniGameClickCount++;
+            // 点击也会触发“完整序列帧”的播放一次（队列式串行播放）
+            this.swordSharpenMiniGameAnimPendingCount++;
+
+            if (this.swordSharpenMiniGameClickLabel) {
+                this.swordSharpenMiniGameClickLabel.string = `点击：${this.swordSharpenMiniGameClickCount}`;
+            }
+
+            this.tryPlaySwordSharpenAnimQueue();
+
+            const clip = swordsmanScript?.swordSharpenSound;
+            if (clip && AudioManager.Instance) {
+                AudioManager.Instance.playSFX(clip);
+            }
+        };
+
+        root.on(Node.EventType.TOUCH_START, onClick, this, true);
+        root.on(Node.EventType.MOUSE_DOWN, onClick, this, true);
+
+        setTimeout(() => {
+            this.finalizeSwordsmanSharpenMiniGame();
+        }, 10_000);
+    }
+
+    private finalizeSwordsmanSharpenMiniGame() {
+        if (this.swordSharpenMiniGameFinalized) {
+            return;
+        }
+        this.swordSharpenMiniGameFinalized = true;
+        this.clearSwordSharpenRealtimeLoop();
+
+        const clicks = this.swordSharpenMiniGameClickCount;
+
+        const { damageBoostPercent, speedBoostPercent } = this.calcSwordSharpenBoost(clicks);
+        const damageMultiplier = 1 + damageBoostPercent / 100;
+
+        // 小游戏结束后给全体剑士应用强化（覆盖式）
+        this.applySwordSharpenBuffToAllSwordsmen(damageMultiplier, speedBoostPercent);
+
+        const swordsman = this.swordSharpenMiniGameTargetSwordsman;
+        const fallbackIcon = swordsman?.cardIcon || swordsman?.defaultSpriteFrame || null;
+        // 结算时确定要用的表情贴图：避免淡出销毁时 reset 导致引用丢失
+        let moodIcon: SpriteFrame | null = swordsman?.swordSharpenMoodBadIcon || null;
+        if (clicks > 20) {
+            moodIcon = swordsman?.swordSharpenMoodExcellentIcon || moodIcon;
+        } else if (clicks >= 10) {
+            moodIcon = swordsman?.swordSharpenMoodGoodIcon || moodIcon;
+        }
+        const iconToUse = moodIcon || fallbackIcon;
+        // 10 秒后：锁输入，但让队列里的动画把“每次点击完整播完”后再结算 UI
+        this.swordSharpenMiniGameShouldFinalizeUIAfterAnim = true;
+        this.swordSharpenMiniGameFinalizeClicks = clicks;
+        this.swordSharpenMiniGameFinalizeDamageBoostPercent = damageBoostPercent;
+        this.swordSharpenMiniGameFinalizeSpeedBoostPercent = speedBoostPercent;
+        this.swordSharpenMiniGameFinalizeIconToUse = iconToUse;
+
+        this.maybeFinalizeSwordSharpenMiniGameUI();
+    }
+
+    private maybeFinalizeSwordSharpenMiniGameUI() {
+        if (!this.swordSharpenMiniGameShouldFinalizeUIAfterAnim) return;
+        if (this.swordSharpenMiniGameAnimRunning) return;
+        if (this.swordSharpenMiniGameAnimPendingCount > 0) return;
+
+        this.swordSharpenMiniGameShouldFinalizeUIAfterAnim = false;
+
+        const clicks = this.swordSharpenMiniGameFinalizeClicks;
+        const damageBoostPercent = this.swordSharpenMiniGameFinalizeDamageBoostPercent;
+        const speedBoostPercent = this.swordSharpenMiniGameFinalizeSpeedBoostPercent;
+        const iconToUse = this.swordSharpenMiniGameFinalizeIconToUse;
+
+        const root = this.swordSharpenMiniGameRoot;
+        if (root && root.isValid) {
+            this.fadeOutSwordSharpenMiniGameRoot(0.35, 0, () => {
+                this.showSwordsmanThanksIntro(clicks, damageBoostPercent, speedBoostPercent, iconToUse);
+            });
+            return;
+        }
+
+        this.showSwordsmanThanksIntro(clicks, damageBoostPercent, speedBoostPercent, iconToUse);
+        this.resetSwordSharpenMiniGameRefs();
+    }
+
+    private calcSwordSharpenBoost(clicks: number): { damageBoostPercent: number; speedBoostPercent: number } {
+        // 最佳：click > 20
+        // 一般：10-20
+        // 最差：<10
+        if (clicks < 10) {
+            return { damageBoostPercent: 0, speedBoostPercent: 0 };
+        }
+        if (clicks <= 20) {
+            const t = (clicks - 10) / 10; // 0..1
+            const damageBoostPercent = Math.round(10 + t * 15); // 10..25
+            const speedBoostPercent = Math.round(6 + t * 9); // 6..15
+            return { damageBoostPercent, speedBoostPercent };
+        }
+        const extra = Math.min(clicks - 20, 10); // 1..10
+        const t = extra / 10; // 0..1
+        const damageBoostPercent = Math.round(25 + t * 15); // 25..40
+        const speedBoostPercent = Math.round(15 + t * 15); // 15..30
+        return { damageBoostPercent, speedBoostPercent };
+    }
+
+    private applySwordSharpenBuffToAllSwordsmen(damageMultiplier: number, speedBoostPercent: number) {
+        try {
+            const visited = new Set<string>();
+            let appliedCount = 0;
+
+            const containerPaths = [
+                'Canvas/Towers',
+                'Canvas/Units',
+                'Canvas/ElfSwordsmans',
+                'Canvas/Swordsmen',
+            ];
+
+            for (let p = 0; p < containerPaths.length; p++) {
+                const container = find(containerPaths[p]);
+                if (!container || !container.isValid) continue;
+
+                const children = container.children || [];
+                for (let i = 0; i < children.length; i++) {
+                    const n = children[i];
+                    if (!n || !n.isValid || !n.active) continue;
+
+                    const s = n.getComponent('ElfSwordsman') as any;
+                    if (!s || !s.node || !s.node.isValid || !s.node.active) continue;
+
+                    const id = s.node.uuid || `${s.node.name}_${i}`;
+                    if (visited.has(id)) continue;
+                    visited.add(id);
+
+                    if (typeof s.applySwordSharpenBuff === 'function') {
+                        s.applySwordSharpenBuff(damageMultiplier, speedBoostPercent);
+                        appliedCount++;
+                    }
+                }
+            }
+
+            const swordsman = this.swordSharpenMiniGameTargetSwordsman;
+            if (swordsman && swordsman.node && swordsman.node.isValid && swordsman.node.active) {
+                const id = swordsman.node.uuid || '__current_swordsman__';
+                if (!visited.has(id) && typeof swordsman.applySwordSharpenBuff === 'function') {
+                    swordsman.applySwordSharpenBuff(damageMultiplier, speedBoostPercent);
+                    appliedCount++;
+                }
+            }
+
+            console.log(`[SwordSharpenMiniGame] applyAllSwordsmen multiplier=${damageMultiplier.toFixed(3)} speed+${speedBoostPercent}% count=${appliedCount}`);
+        } catch (e) {
+            console.warn('[SwordSharpenMiniGame] applyAllSwordsmen failed', e);
+        }
+    }
+
+    private clearSwordSharpenRealtimeLoop() {
+        if (this.swordSharpenMiniGameRealtimeLoopId !== null) {
+            clearInterval(this.swordSharpenMiniGameRealtimeLoopId);
+            this.swordSharpenMiniGameRealtimeLoopId = null;
+        }
+    }
+
+    private clearSwordSharpenMiniGameAnimTimeout() {
+        if (this.swordSharpenMiniGameAnimTimeoutId !== null) {
+            clearTimeout(this.swordSharpenMiniGameAnimTimeoutId);
+            this.swordSharpenMiniGameAnimTimeoutId = null;
+        }
+    }
+
+    private tryPlaySwordSharpenAnimQueue() {
+        if (!this.swordSharpenMiniGameAnimSprite || !this.swordSharpenMiniGameAnimSprite.isValid) return;
+        if (this.swordSharpenMiniGameAnimPendingCount <= 0) return;
+        if (this.swordSharpenMiniGameAnimRunning) return;
+
+        this.swordSharpenMiniGameAnimRunning = true;
+        this.playSwordSharpenOneSequence();
+    }
+
+    private playSwordSharpenOneSequence() {
+        const sprite = this.swordSharpenMiniGameAnimSprite;
+        const frames = this.swordSharpenMiniGameAnimFrames;
+        if (!sprite || !sprite.isValid) {
+            this.swordSharpenMiniGameAnimRunning = false;
+            return;
+        }
+        if (!Array.isArray(frames) || frames.length <= 0) {
+            this.swordSharpenMiniGameAnimRunning = false;
+            // 没有帧就等价于“立即完成一次点击序列”
+            this.swordSharpenMiniGameAnimPendingCount = Math.max(0, this.swordSharpenMiniGameAnimPendingCount - 1);
+            this.tryPlaySwordSharpenAnimQueue();
+            return;
+        }
+
+        const frameCount = frames.length;
+        // 希望每次点击是“完整播放一次”，总时长控制在约 0.42s（帧数越多每帧越短）
+        const totalMs = 420;
+        const stepMs = Math.max(25, Math.round(totalMs / frameCount));
+
+        let frameIndex = 0;
+        const step = () => {
+            if (!this.swordSharpenMiniGameAnimSprite || !this.swordSharpenMiniGameAnimSprite.isValid) {
+                this.swordSharpenMiniGameAnimRunning = false;
+                return;
+            }
+
+            // 播放当前帧
+            this.swordSharpenMiniGameAnimSprite.spriteFrame = frames[frameIndex];
+            // 强制固定显示尺寸，避免帧切换时出现视觉缩放抖动
+            const tr = this.swordSharpenMiniGameAnimSprite.node.getComponent(UITransform);
+            if (tr) {
+                tr.setContentSize(180, 180);
+            }
+            frameIndex++;
+
+            if (frameIndex < frameCount) {
+                this.swordSharpenMiniGameAnimTimeoutId = setTimeout(step, stepMs) as unknown as number;
+                return;
+            }
+
+            // 序列播放完成：消耗一个“待播放点击序列”
+            this.swordSharpenMiniGameAnimPendingCount = Math.max(0, this.swordSharpenMiniGameAnimPendingCount - 1);
+            this.swordSharpenMiniGameAnimRunning = false;
+            this.swordSharpenMiniGameAnimTimeoutId = null;
+
+            // 如果 10 秒已结束且队列清空，则结算 UI
+            this.maybeFinalizeSwordSharpenMiniGameUI();
+
+            // 如果还有排队的点击序列，继续播放下一轮
+            this.tryPlaySwordSharpenAnimQueue();
+        };
+
+        // 立即开始序列，保证点击后立刻有反馈
+        step();
+    }
+
+    private fadeOutSwordSharpenMiniGameRoot(durationSec: number, delaySec: number, onDone: () => void) {
+        const root = this.swordSharpenMiniGameRoot;
+        if (!root || !root.isValid) {
+            onDone();
+            return;
+        }
+
+        let opacity = root.getComponent(UIOpacity);
+        if (!opacity) {
+            opacity = root.addComponent(UIOpacity);
+        }
+        opacity.opacity = 255;
+
+        setTimeout(() => {
+            const startMs = Date.now();
+            const loopId = setInterval(() => {
+                const curRoot = this.swordSharpenMiniGameRoot;
+                if (!curRoot || !curRoot.isValid || !opacity || !opacity.isValid) {
+                    clearInterval(loopId);
+                    onDone();
+                    return;
+                }
+                const t = Math.max(0, Math.min(1, (Date.now() - startMs) / Math.max(0.001, durationSec * 1000)));
+                opacity.opacity = Math.max(0, Math.round(255 * (1 - t)));
+                if (t >= 1) {
+                    clearInterval(loopId);
+                    curRoot.destroy();
+                    this.resetSwordSharpenMiniGameRefs();
+                    onDone();
+                }
+            }, 16) as unknown as number;
+        }, Math.max(0, delaySec) * 1000);
+    }
+
+    private resetSwordSharpenMiniGameRefs() {
+        this.swordSharpenMiniGameRoot = null;
+        this.swordSharpenMiniGameAnimSprite = null;
+        this.swordSharpenMiniGameAnimFrames = [];
+        this.swordSharpenMiniGameClickCount = 0;
+        this.swordSharpenMiniGameEndAtMs = 0;
+        this.swordSharpenMiniGameTargetSwordsman = null;
+        this.swordSharpenMiniGameTimerLabel = null;
+        this.swordSharpenMiniGameClickLabel = null;
+        this.swordSharpenMiniGameLastClickAtMs = 0;
+
+        this.swordSharpenMiniGameAnimPendingCount = 0;
+        this.swordSharpenMiniGameAnimRunning = false;
+        this.clearSwordSharpenMiniGameAnimTimeout();
+
+        this.swordSharpenMiniGameShouldFinalizeUIAfterAnim = false;
+        this.swordSharpenMiniGameFinalizeClicks = 0;
+        this.swordSharpenMiniGameFinalizeDamageBoostPercent = 0;
+        this.swordSharpenMiniGameFinalizeSpeedBoostPercent = 0;
+        this.swordSharpenMiniGameFinalizeIconToUse = null;
+    }
+
+    private showSwordsmanThanksIntro(clicks: number, damageBoostPercent: number, speedBoostPercent: number, unitIcon: SpriteFrame | null) {
+        this.autoCreateUnitIntroPopup();
+        if (!this.unitIntroPopup) return;
+
+        let description = '……无妨。战场上的磨损远甚于此。';
+        if (clicks > 20) {
+            description = '指挥官，卓越的手艺。此剑如今映出的寒光，胜过往昔。';
+        } else if (clicks >= 10) {
+            description = '嗯，已堪使用，多谢指挥官。';
+        }
+
+        this.unitIntroPopup.show({
+            unitName: '剑士',
+            unitDescription: description,
+            unitIcon: unitIcon,
+            unitType: 'ElfSwordsman',
+            unitId: 'ElfSwordsman',
+            onCloseCallback: () => {
+                GamePopup.showMessage(`全体剑士攻击力提升${damageBoostPercent}%，攻速提升${speedBoostPercent}%`, true, 2.5);
             }
         });
     }
