@@ -6,6 +6,7 @@ select * from game_sessions where DATE(created_at) = CURDATE()
 select * from game_sessions where DATE(created_at) = CURDATE() -1
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','') order by created_at desc ;
 select * from game_sessions where player_id='player_1774265446223_9255';
+select * from game_sessions where revive_count !=0;
 --查询当天有多少玩家、各玩了几局
 select player_id,count(*) from game_sessions where DATE(created_at) = CURDATE()
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','') group by player_id ;

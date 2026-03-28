@@ -192,17 +192,28 @@ export class Arrow2 extends Component {
             }
 
             // 检查是否是敌人
-            const enemyScript = enemy.getComponent('OrcWarlord') as any || 
-                               enemy.getComponent('OrcWarrior') as any || 
-                               enemy.getComponent('Enemy') as any ||
-                               enemy.getComponent('TrollSpearman') as any;
+            const enemyScript = (enemy.getComponent('OrcWarlord') as any) || 
+                               (enemy.getComponent('OrcWarrior') as any) || 
+                               (enemy.getComponent('Enemy') as any) ||
+                               (enemy.getComponent('TrollSpearman') as any) ||
+                               (enemy.getComponent('Portal') as any);
             
             if (!enemyScript) {
                 continue;
             }
 
             // 检查是否存活
-            const isAlive = enemyScript.isAlive && enemyScript.isAlive();
+            let isAlive = false;
+            if (typeof enemyScript.isAlive === 'function') {
+                isAlive = enemyScript.isAlive();
+            } else if (enemyScript.currentHealth !== undefined) {
+                isAlive = enemyScript.currentHealth > 0;
+            } else if (enemyScript.health !== undefined) {
+                isAlive = enemyScript.health > 0;
+            } else {
+                // 缺省认为存活，交由命中回调进一步验证
+                isAlive = true;
+            }
             if (!isAlive) {
                 continue;
             }

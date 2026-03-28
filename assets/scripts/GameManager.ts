@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, BlockInputEvents, sys, Texture2D, ImageAsset, Mask, UIOpacity, LabelOutline, AudioSource } from 'cc';
+import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, instantiate, BlockInputEvents, sys, Texture2D, ImageAsset, Mask, UIOpacity, LabelOutline, AudioSource } from 'cc';
 // 微信小游戏全局对象声明（避免 TypeScript 报错）
 declare const wx: any;
 import { Crystal } from './role/Crystal';
@@ -5093,6 +5093,11 @@ export class GameManager extends Component {
                     }
                 }, 0);
             }
+
+            // 生成敌人传送门（画面上方一排三个）
+            this.scheduleOnce(() => {
+                this.spawnInitialEnemyPortals();
+            }, 0.15);
         } else if (this.gameState !== GameState.Playing) {
             // 如果游戏已结束，重新开始游戏
             this.restartGame();
@@ -5177,6 +5182,110 @@ export class GameManager extends Component {
         return dfs(scene);
     }
     
+    /**
+     * 在画面上方生成三个敌人传送门（使用用户提供的传送门预制体）
+     * - 优先从分包 'prefabs_sub' 加载 'Portal'
+     * - 回退到主包 resources.load('Portal')
+     * - 容器：Canvas/Portals（不存在则创建）
+     * - 位置：y=1200，x为[-400, 0, 400]
+     */
+    private spawnInitialEnemyPortals() {
+        const createContainer = (): Node | null => {
+            const canvas = find('Canvas');
+            if (!canvas) return null;
+            // 优先放入 Enemies 容器，确保可被单位索敌/攻击；若不存在则退回到 Portals
+            let enemies = find('Canvas/Enemies');
+            if (enemies) {
+                return enemies;
+            }
+            let container = find('Canvas/Portals');
+            if (!container) {
+                container = new Node('Portals');
+                canvas.addChild(container);
+            }
+            return container;
+        };
+        const container = createContainer();
+        if (!container) {
+            console.warn('[GameManager] spawnInitialEnemyPortals: 未找到 Canvas，跳过创建传送门');
+            return;
+        }
+        // 调整容器层级：确保不遮挡 HUD/UI，且不低于背景
+        try {
+            const canvasNode = find('Canvas');
+            if (canvasNode) {
+                const children = canvasNode.children;
+                let uiIndex = -1;
+                let bgIndex = -1;
+                const uiNode = find('Canvas/UI') || find('Canvas/HUD') || find('Canvas/TopUI');
+                const bgNode = find('Canvas/Background') || find('Canvas/BG') || find('Canvas/Back');
+                if (uiNode) uiIndex = uiNode.getSiblingIndex();
+                if (bgNode) bgIndex = bgNode.getSiblingIndex();
+                if (uiIndex >= 0) {
+                    const targetIndex = Math.max(0, uiIndex - 1);
+                    container.setSiblingIndex(targetIndex);
+                } else if (bgIndex >= 0) {
+                    container.setSiblingIndex(bgIndex + 1);
+                } else {
+                    const mid = Math.floor(children.length / 2);
+                    container.setSiblingIndex(Math.max(0, mid));
+                }
+            }
+        } catch (e) {
+            // 忽略异常，保持默认层级
+        }
+        // 根据画布宽度动态计算三个位点，避免超出屏幕
+        const canvas = find('Canvas');
+        const ui = canvas ? canvas.getComponent(UITransform) : null;
+        const halfW = ui ? ui.contentSize.width * 0.5 : 480; // 兜底宽度为960
+        const margin = 160; // 边缘留白，避免越界
+        const offsetX = 360; // 整体向右平移（原300基础上再+100）
+        const leftX = -halfW + margin + offsetX;
+        const rightX = halfW - margin + offsetX;
+        const midX = 0 + offsetX;
+        const y = 1260; // 上移50
+        const positions = [new Vec3(leftX, y, 0), new Vec3(midX, y, 0), new Vec3(rightX, y, 0)];
+        const tryInstantiate = (prefab: Prefab | null) => {
+            if (!prefab) {
+                console.warn('[GameManager] spawnInitialEnemyPortals: 传送门预制体为空，放弃生成');
+                return;
+            }
+            for (const pos of positions) {
+                const node = instantiate(prefab);
+                node.setParent(container);
+                node.setWorldPosition(pos);
+                node.active = true;
+            }
+        };
+        // 优先使用分包 bundle
+        const sub = assetManager.getBundle('prefabs_sub');
+        if (sub) {
+            sub.load('Portal', Prefab, (err, prefab) => {
+                if (err || !prefab) {
+                    // 回退到主包 resources
+                    resources.load('Portal', Prefab, (err2, prefab2) => {
+                        if (err2 || !prefab2) {
+                            console.warn('[GameManager] spawnInitialEnemyPortals: 无法从分包或主包加载 Portal 预制体');
+                            return;
+                        }
+                        tryInstantiate(prefab2 as Prefab);
+                    });
+                    return;
+                }
+                tryInstantiate(prefab as Prefab);
+            });
+        } else {
+            // 无分包时直接从主包尝试
+            resources.load('Portal', Prefab, (err2, prefab2) => {
+                if (err2 || !prefab2) {
+                    console.warn('[GameManager] spawnInitialEnemyPortals: 主包未能加载 Portal 预制体');
+                    return;
+                }
+                tryInstantiate(prefab2 as Prefab);
+            });
+        }
+    }
+
     /**
      * 检查单位是否首次出现
      * @param unitType 单位类型
