@@ -184,6 +184,10 @@ export class Role extends Component {
     protected readonly TARGET_FIND_INTERVAL: number = 0.2; // 目标查找间隔（秒），不是每帧都查找
     protected hasFoundFirstTarget: boolean = false; // 是否已经找到过第一个目标（用于首次立即查找）
     
+    // 出场后自动前移（若未设置集结点/未收到手动移动命令）
+    private autoRoamScheduled: boolean = false;
+    private autoRoamCallback: (() => void) | null = null;
+    
     // 性能优化：碰撞检测频率控制
     protected collisionCheckTimer: number = 0; // 碰撞检测计时器
     protected readonly COLLISION_CHECK_INTERVAL: number = 0.05; // 碰撞检测间隔（秒），每0.05秒检测一次
@@ -3621,6 +3625,8 @@ export class Role extends Component {
         this.isManuallyControlled = false;
         this.isDefending = false; // 重置防御状态
         this.hasFoundFirstTarget = false;
+        this.autoRoamScheduled = false;
+        this.autoRoamCallback = null;
         
         // 重置智能避让系统
         this.lastPosition.set(0, 0, 0);
@@ -3806,6 +3812,57 @@ export class Role extends Component {
             }
         }
         
+        // 出场后6秒：若未设置集结点/未手动下达移动命令，自动向上方 400-500px 的随机位置前进
+        // 仅对：弓箭手、女猎手、剑士、牧师、法师 生效（通过单位名判断）
+        try {
+            const name = (this.unitName || '').trim();
+            const eligible =
+                name === '弓箭手' ||
+                name === '女猎手' ||
+                name === '剑士' || name === '精灵剑士' ||
+                name === '牧师' ||
+                name === '法师';
+            if (eligible && !this.autoRoamScheduled) {
+                // 若当前已经在较高位置（y >= 500），则不安排自动上移
+                const curPos = this.node?.worldPosition;
+                if (curPos && curPos.y >= 500) {
+                    // 直接跳过自动前移逻辑
+                    // 保持 autoRoamScheduled 为 false 以便后续如有需要可重新评估
+                } else {
+                this.autoRoamScheduled = true;
+                this.autoRoamCallback = () => {
+                    // 单位仍有效、未被销毁
+                    if (!this.node || !this.node.isValid || this.isDestroyed) {
+                        return;
+                    }
+                    // 若在6秒内已经被下达了移动/集结指令（manualMoveTarget 有值或被标记为手动控制），则不干预
+                    if (this.manualMoveTarget || this.isManuallyControlled) {
+                        return;
+                    }
+                    // 防御状态下不自动前移
+                    if (this.isDefending) {
+                        return;
+                    }
+                    // 若当前已经在较高位置（y >= 500），则不触发上移
+                    const curNow = this.node.worldPosition;
+                    if (curNow && curNow.y >= 500) {
+                        return;
+                    }
+                    // 计算上方 400-500 像素的随机位置
+                    const dy = 400 + Math.floor(Math.random() * 101); // [400, 500]
+                    const cur = this.node.worldPosition;
+                    const target = new Vec3(cur.x, cur.y + dy, 0);
+                    // 使用现有的手动移动接口，包含防重叠/可行走修正
+                    this.setManualMoveTargetPosition(target);
+                };
+                // 延迟 6 秒执行
+                this.scheduleOnce(this.autoRoamCallback, 6.0);
+                }
+            }
+        } catch (e) {
+            // ignore
+        }
+
         // 标记增幅已应用
         this._enhancementsApplied = true;
     }
@@ -3815,6 +3872,14 @@ export class Role extends Component {
      * 注意：不在这里重置 _enhancementsApplied，因为在生产过程中可能会多次触发 onDisable/onEnable
      */
     protected onDisable() {
+        // 取消自动前移回调
+        if (this.autoRoamCallback) {
+            try {
+                this.unschedule(this.autoRoamCallback);
+            } catch (e) {
+                // ignore
+            }
+        }
         // 什么都不做，让对象池的 release 方法来重置标志
     }
 

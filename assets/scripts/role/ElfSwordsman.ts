@@ -329,9 +329,13 @@ export class ElfSwordsman extends Role {
         // 近战攻击：直接对敌人造成伤害，不创建武器
         if (enemyScript && enemyScript.takeDamage) {
             const effectiveDamage = Math.max(0, Math.round(this.attackDamage || 0));
-            // 播放攻击音效
-            if (this.attackSound && AudioManager.Instance) {
-                AudioManager.Instance.playSFX(this.attackSound);
+            // 播放攻击音效（优先 attackSound，缺省则回退到 shootSound，确保有声）
+            if (AudioManager.Instance) {
+                if (this.attackSound) {
+                    AudioManager.Instance.playSFX(this.attackSound);
+                } else if ((this as any).shootSound) {
+                    AudioManager.Instance.playSFX((this as any).shootSound);
+                }
             }
             // 播放击中音效
             if (this.hitSound && AudioManager.Instance) {

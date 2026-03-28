@@ -89,17 +89,6 @@ export class UnitManager extends Component {
             this.updateUnitLists();
         }
 
-        if (this.mageDebugLogTimer >= 2.0) {
-            this.mageDebugLogTimer = 0;
-            const canvasMages = find('Canvas/Mages');
-            const rootMages = find('Mages');
-            console.info('[UnitManager] mage containers status:',
-                'cached=', this.magesNode ? `${this.magesNode.parent?.name}/${this.magesNode.name}` : 'null',
-                'cachedActiveCount=', this.mages.length,
-                'canvasMagesChildren=', canvasMages?.children?.length || 0,
-                'rootMagesChildren=', rootMages?.children?.length || 0
-            );
-        }
     }
     
     /**

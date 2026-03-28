@@ -86,6 +86,7 @@ export class GameManager extends Component {
     private hasShownPriestProtectBuildingDialog: boolean = false; // 一局一次：牧师在场且防御建筑掉血
     private hasShownGoldReach100ArrowerDialog: boolean = false; // 一局一次：金币首次达到100
     private hasShownPriestSuggestSwordsmanAfterKillDialog: boolean = false; // 一局一次：牧师在场且有友方单位被击杀 -> 提示建造剑士
+    private hasShownArrowerSuggestBuildWhenWood60: boolean = false; // 一局一次：木材达到60由弓箭手提示多建塔
     private lastDefenseStructureHealthSnapshot: number = -1; // 防御建筑血量快照（用于检测掉血）
     private lastFriendlyUnitCountSnapshot: number = -1; // 友方单位数量快照（用于检测有单位被击杀）
     private lastBattleDialogDebugLogMs: number = 0; // 动态对话调试日志节流
@@ -1032,7 +1033,7 @@ export class GameManager extends Component {
         // 保存引用
         this.waveLabel = waveLabel;
 
-        console.log('[GameManager] 已自动创建波次标签，并调整了时间标签和波次标签的位置');
+      //console.log('[GameManager] 已自动创建波次标签，并调整了时间标签和波次标签的位置');
     }
 
     start() {
@@ -1081,7 +1082,7 @@ export class GameManager extends Component {
             }
             if (analyticsComp) {
                 this.analyticsManager = analyticsComp;
-                console.log('[GameManager] AnalyticsManager 已初始化并绑定 (via node search)');
+              //console.log('[GameManager] AnalyticsManager 已初始化并绑定 (via node search)');
             } else {
                 console.warn('[GameManager] 找到 AnalyticsManager 节点，但未能获取组件实例');
             }
@@ -1097,6 +1098,7 @@ export class GameManager extends Component {
         this.hasShownPriestProtectBuildingDialog = false;
         this.hasShownGoldReach100ArrowerDialog = false;
         this.hasShownPriestSuggestSwordsmanAfterKillDialog = false;
+        this.hasShownArrowerSuggestBuildWhenWood60 = false;
         this.lastDefenseStructureHealthSnapshot = -1;
         this.lastFriendlyUnitCountSnapshot = -1;
         
@@ -2194,7 +2196,7 @@ export class GameManager extends Component {
 
         // 1. 微信小游戏环境：使用系统键盘输入名称
         if (sys.platform === sys.Platform.WECHAT_GAME && typeof wx !== 'undefined' && wx.showKeyboard) {
-            console.log('[GameManager] onNameInputClick in WECHAT_GAME, 使用 wx.showKeyboard');
+          //console.log('[GameManager] onNameInputClick in WECHAT_GAME, 使用 wx.showKeyboard');
 
             try {
                 wx.showKeyboard({
@@ -2988,7 +2990,7 @@ export class GameManager extends Component {
                     graphics.clear();
                 }
                 
-                console.log('[GameManager] 已从Base64加载并显示头像');
+              //console.log('[GameManager] 已从Base64加载并显示头像');
             } catch (e) {
                 console.error('[GameManager] 从Base64创建头像失败:', e);
             }
@@ -3403,13 +3405,13 @@ export class GameManager extends Component {
         damageStats.stopRecording();
         
         // 创建/更新伤害统计图表（会在内部设置MVP单位信息）
-        console.log('[GameManager.showGameResultPanel] 调用createDamageStatsPanel前，lastMVPUnit:', this.lastMVPUnit);
+      //console.log('[GameManager.showGameResultPanel] 调用createDamageStatsPanel前，lastMVPUnit:', this.lastMVPUnit);
         this.createDamageStatsPanel();
-        console.log('[GameManager.showGameResultPanel] 调用createDamageStatsPanel后，lastMVPUnit:', this.lastMVPUnit);
+      //console.log('[GameManager.showGameResultPanel] 调用createDamageStatsPanel后，lastMVPUnit:', this.lastMVPUnit);
         
         // 如果createDamageStatsPanel没有设置MVP单位（例如没有贡献数据），尝试设置默认MVP单位
         if (!this.lastMVPUnit) {
-            console.log('[GameManager.showGameResultPanel] lastMVPUnit为空，调用setDefaultMVPUnit');
+          //console.log('[GameManager.showGameResultPanel] lastMVPUnit为空，调用setDefaultMVPUnit');
             this.setDefaultMVPUnit();
         }
         
@@ -3568,21 +3570,16 @@ export class GameManager extends Component {
         filteredUnits.sort((a, b) => getContributionValue(b) - getContributionValue(a));
         const topUnits = filteredUnits.slice(0, 3);
         
-        // 调试日志：输出所有单位和过滤后的结果
-        //console.info(`[GameManager] 贡献榜统计: 总单位数=${allUnits.length}, 有贡献的单位数=${filteredUnits.length}, 显示前${topUnits.length}名`);
-        topUnits.forEach((u, i) => {
-            //console.info(`[GameManager] 第${i + 1}名: ${u.unitName}, 贡献值=${getContributionValue(u)}`);
-        });
         
         // 查找第一个非建筑物的单位（用于MVP/SVP提示）
-        console.log('[GameManager.createDamageStatsPanel] 开始查找非建筑物单位，总单位数:', filteredUnits.length);
+      //console.log('[GameManager.createDamageStatsPanel] 开始查找非建筑物单位，总单位数:', filteredUnits.length);
         let mvpUnitForHint: any = null;
         for (const unit of filteredUnits) {
             const isUnitBuilding = isBuilding(unit);
-            console.log(`[GameManager.createDamageStatsPanel] 检查单位: ${unit.unitName} (${unit.unitType}), 是建筑物: ${isUnitBuilding}`);
+          //console.log(`[GameManager.createDamageStatsPanel] 检查单位: ${unit.unitName} (${unit.unitType}), 是建筑物: ${isUnitBuilding}`);
             if (!isUnitBuilding) {
                 mvpUnitForHint = unit;
-                console.log(`[GameManager.createDamageStatsPanel] 找到非建筑物单位: ${unit.unitName} (${unit.unitType})`);
+              //console.log(`[GameManager.createDamageStatsPanel] 找到非建筑物单位: ${unit.unitName} (${unit.unitType})`);
                 break;
             }
         }
@@ -3590,7 +3587,7 @@ export class GameManager extends Component {
         // 如果找到了非建筑物单位，保存为MVP单位信息（用于首次返回主页提示）
         if (mvpUnitForHint) {
             const isVictory = this.lastGameResultState === GameState.Victory;
-            console.log(`[GameManager.createDamageStatsPanel] 保存MVP单位信息: ${mvpUnitForHint.unitName} (${mvpUnitForHint.unitType}), 胜利: ${isVictory}`);
+          //console.log(`[GameManager.createDamageStatsPanel] 保存MVP单位信息: ${mvpUnitForHint.unitName} (${mvpUnitForHint.unitType}), 胜利: ${isVictory}`);
             this.saveMVPUnitInfo(mvpUnitForHint, isVictory);
         } else {
             console.warn('[GameManager.createDamageStatsPanel] 未找到非建筑物单位，将使用默认MVP单位');
@@ -3610,7 +3607,7 @@ export class GameManager extends Component {
             label.verticalAlign = Label.VerticalAlign.CENTER;
             
             // 即使没有贡献数据，也尝试设置一个默认的MVP单位（用于首次返回主页提示）
-            console.log('[GameManager.createDamageStatsPanel] 没有贡献数据，调用setDefaultMVPUnit');
+          //console.log('[GameManager.createDamageStatsPanel] 没有贡献数据，调用setDefaultMVPUnit');
             this.setDefaultMVPUnit();
             return;
         }
@@ -3741,7 +3738,7 @@ export class GameManager extends Component {
      * 保存MVP/SVP单位信息，用于首次返回主页提示
      */
     private saveMVPUnitInfo(unit: any, isVictory: boolean) {
-        console.log(`[GameManager.saveMVPUnitInfo] 保存MVP单位信息: unitName=${unit.unitName}, unitType=${unit.unitType}, isVictory=${isVictory}`);
+      //console.log(`[GameManager.saveMVPUnitInfo] 保存MVP单位信息: unitName=${unit.unitName}, unitType=${unit.unitType}, isVictory=${isVictory}`);
         this.lastMVPUnit = {
             unitName: unit.unitName || '未知单位',
             unitType: unit.unitType || '',
@@ -3749,14 +3746,14 @@ export class GameManager extends Component {
             // 额外记录这局是否胜利，供UI决定提示文案
             isVictory: isVictory
         } as any;
-        console.log(`[GameManager.saveMVPUnitInfo] lastMVPUnit已设置:`, this.lastMVPUnit);
+      //console.log(`[GameManager.saveMVPUnitInfo] lastMVPUnit已设置:`, this.lastMVPUnit);
     }
     
     /**
      * 设置默认的MVP单位（当没有贡献数据时使用）
      */
     private setDefaultMVPUnit() {
-        console.log('[GameManager.setDefaultMVPUnit] 开始设置默认MVP单位');
+      //console.log('[GameManager.setDefaultMVPUnit] 开始设置默认MVP单位');
         // 判断是否是建筑物的辅助函数
         const isBuildingType = (unitType: string): boolean => {
             const buildingTypes = ['WatchTower', 'IceTower', 'ThunderTower', 'WarAncientTree',
@@ -3766,16 +3763,16 @@ export class GameManager extends Component {
         
         // 尝试获取第一个上场的非建筑物单位作为默认MVP
         const activeUnitTypes = this.getActiveUnitTypes().filter(type => type !== 'MageTower');
-        console.log('[GameManager.setDefaultMVPUnit] 当前上场的单位类型:', activeUnitTypes);
+      //console.log('[GameManager.setDefaultMVPUnit] 当前上场的单位类型:', activeUnitTypes);
         
         // 过滤掉建筑物类型
         const nonBuildingTypes = activeUnitTypes.filter(type => !isBuildingType(type));
-        console.log('[GameManager.setDefaultMVPUnit] 过滤后的非建筑物单位类型:', nonBuildingTypes);
+      //console.log('[GameManager.setDefaultMVPUnit] 过滤后的非建筑物单位类型:', nonBuildingTypes);
         
         if (nonBuildingTypes.length > 0) {
             // 使用第一个非建筑物单位类型
             const firstUnitType = nonBuildingTypes[0];
-            console.log(`[GameManager.setDefaultMVPUnit] 使用第一个非建筑物单位类型: ${firstUnitType}`);
+          //console.log(`[GameManager.setDefaultMVPUnit] 使用第一个非建筑物单位类型: ${firstUnitType}`);
             const unitNode = this.findFirstUnitInstance(firstUnitType);
             if (unitNode) {
                 // 尝试获取单位信息
@@ -3793,7 +3790,7 @@ export class GameManager extends Component {
                         unitType: firstUnitType,
                         unitIcon: null
                     };
-                    console.log(`[GameManager.setDefaultMVPUnit] 从单位实例获取信息: ${unitName} (${firstUnitType})`);
+                  //console.log(`[GameManager.setDefaultMVPUnit] 从单位实例获取信息: ${unitName} (${firstUnitType})`);
                     return;
                 }
             }
@@ -3809,10 +3806,10 @@ export class GameManager extends Component {
                 unitIcon: null,
                 isVictory: this.lastGameResultState === GameState.Victory
             } as any;
-            console.log(`[GameManager.setDefaultMVPUnit] 从配置获取信息: ${unitName} (${firstUnitType})`);
+          //console.log(`[GameManager.setDefaultMVPUnit] 从配置获取信息: ${unitName} (${firstUnitType})`);
         } else {
             // 如果没有任何非建筑物单位，使用默认单位（弓箭手）
-            console.log('[GameManager.setDefaultMVPUnit] 没有非建筑物单位，使用默认单位: 弓箭手');
+          //console.log('[GameManager.setDefaultMVPUnit] 没有非建筑物单位，使用默认单位: 弓箭手');
             this.lastMVPUnit = {
                 unitName: '弓箭手',
                 unitType: 'Arrower',
@@ -3820,7 +3817,7 @@ export class GameManager extends Component {
                 isVictory: this.lastGameResultState === GameState.Victory
             } as any;
         }
-        console.log('[GameManager.setDefaultMVPUnit] 最终设置的lastMVPUnit:', this.lastMVPUnit);
+      //console.log('[GameManager.setDefaultMVPUnit] 最终设置的lastMVPUnit:', this.lastMVPUnit);
     }
     
     /**
@@ -4516,13 +4513,13 @@ export class GameManager extends Component {
         const scene = director.getScene();
         if (!scene) return;
 
-        console.log('[GameManager] 开始清理所有单位...');
+      //console.log('[GameManager] 开始清理所有单位...');
 
         // 清理所有敌人
         const enemiesNode = find('Canvas/Enemies');
         if (enemiesNode) {
             const enemies = enemiesNode.children.slice();
-            console.log(`[GameManager] 清理 ${enemies.length} 个敌人`);
+          //console.log(`[GameManager] 清理 ${enemies.length} 个敌人`);
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid) {
                     enemy.destroy();
@@ -4545,7 +4542,7 @@ export class GameManager extends Component {
             if (containerNode) {
                 const units = containerNode.children.slice();
                 if (units.length > 0) {
-                    console.log(`[GameManager] 清理 ${containerPath}: ${units.length} 个单位`);
+                  //console.log(`[GameManager] 清理 ${containerPath}: ${units.length} 个单位`);
                 }
                 for (const unit of units) {
                     if (unit && unit.isValid) {
@@ -4578,7 +4575,7 @@ export class GameManager extends Component {
             if (containerNode) {
                 const buildings = containerNode.children.slice();
                 if (buildings.length > 0) {
-                    console.log(`[GameManager] 清理 ${containerPath}: ${buildings.length} 个建筑`);
+                  //console.log(`[GameManager] 清理 ${containerPath}: ${buildings.length} 个建筑`);
                 }
                 for (const building of buildings) {
                     if (building && building.isValid) {
@@ -4609,9 +4606,6 @@ export class GameManager extends Component {
 
         // 清理所有萨满图腾（如果还有残留，强制销毁）
         const totems = scene.getComponentsInChildren(ShamanTotem);
-        if (totems.length > 0) {
-            console.log(`[GameManager] 清理 ${totems.length} 个萨满图腾`);
-        }
         for (const totem of totems) {
             if (totem && totem.node && totem.node.isValid) {
                 totem.node.destroy();
@@ -4620,23 +4614,20 @@ export class GameManager extends Component {
 
         // 兜底：如果场景中还有战争古树实例，强制销毁，避免等级状态残留
         const warAncientTrees = scene.getComponentsInChildren(WarAncientTree);
-        if (warAncientTrees.length > 0) {
-            console.log(`[GameManager] 兜底清理 ${warAncientTrees.length} 个战争古树`);
-        }
         for (const tree of warAncientTrees) {
             if (tree && tree.node && tree.node.isValid) {
                 tree.node.destroy();
             }
         }
 
-        console.log('[GameManager] 所有单位清理完成');
+      //console.log('[GameManager] 所有单位清理完成');
     }
 
     /**
      * 重新开始一局时重置 GameManager 的局内状态（金币 / 时间 / 血量等）
      */
     resetGameStateForRestart() {
-        console.log('[GameManager] 开始重置游戏状态...');
+      //console.log('[GameManager] 开始重置游戏状态...');
         
         // 清除所有增益效果
         const buffManager = BuffManager.getInstance();
@@ -4646,14 +4637,14 @@ export class GameManager extends Component {
         const buildingPool = BuildingPool.getInstance();
         if (buildingPool) {
             buildingPool.clearAllPools();
-            console.log('[GameManager] 已清空建筑物对象池');
+          //console.log('[GameManager] 已清空建筑物对象池');
         }
         
         // 清空单位对象池
         const unitPool = UnitPool.getInstance();
         if (unitPool) {
             unitPool.clearAllPools();
-            console.log('[GameManager] 已清空单位对象池');
+          //console.log('[GameManager] 已清空单位对象池');
         }
         
         // 重置基础数值
@@ -4669,6 +4660,7 @@ export class GameManager extends Component {
         this.hasShownArrowerNeedPriestDialog = false;
         this.hasShownPriestProtectBuildingDialog = false;
         this.hasShownGoldReach100ArrowerDialog = false;
+        this.hasShownArrowerSuggestBuildWhenWood60 = false;
         this.pendingHighlightChurchCandidateAfterBuild = false;
         this.pendingHighlightSwordsmanHallCandidateAfterBuild = false;
         this.buildButtonBattleHintBlinkSeqId++;
@@ -4693,7 +4685,7 @@ export class GameManager extends Component {
         // 更新一次 UI（血量 / 金币 / 时间等）
         this.updateUI();
         
-        console.log('[GameManager] 游戏状态重置完成');
+      //console.log('[GameManager] 游戏状态重置完成');
     }
 
     getGameState(): GameState {
@@ -4842,7 +4834,7 @@ export class GameManager extends Component {
      * 开始游戏（对外入口）：先确保加载分包目录 prefabs_sub 下的所有预制体，再执行真正的开始逻辑
      */
     startGame() {
-        console.log('startGame' + this.gameState.toString());
+      //console.log('startGame' + this.gameState.toString());
 
         // 新开一局：重置复活按钮状态
         this.reviveUsedThisRun = false;
@@ -5321,10 +5313,10 @@ export class GameManager extends Component {
             // 非技能触发：仍需防止 touch-end + mouse-up 同时到来造成的误结算
             this.bowstringMiniGameIgnoreEndUntilMs = Date.now() + 120;
         }
-        console.log(
-            `[BowstringMiniGame] open t=${Date.now()} enableAt=${this.bowstringMiniGameInputEnableAtMs} waitFirstRelease=${this.bowstringMiniGameWaitFirstRelease} requireReleaseGuard=${requireReleaseGuard}`,
-            arrowerScript?.node?.uuid
-        );
+        // console.log(
+        //     `[BowstringMiniGame] open t=${Date.now()} enableAt=${this.bowstringMiniGameInputEnableAtMs} waitFirstRelease=${this.bowstringMiniGameWaitFirstRelease} requireReleaseGuard=${requireReleaseGuard}`,
+        //     arrowerScript?.node?.uuid
+        // );
 
         const root = new Node('BowstringMiniGame');
         root.setParent(canvas);
@@ -5473,10 +5465,10 @@ export class GameManager extends Component {
             const now = Date.now();
             const type = event?.type || 'unknown';
             const loc = (event?.getUILocation && event.getUILocation()) || (event?.getLocation && event.getLocation());
-            console.log(
-                `[BowstringMiniGame] onStart t=${now} type=${type} waitFirstRelease=${this.bowstringMiniGameWaitFirstRelease} enableAt=${this.bowstringMiniGameInputEnableAtMs}`,
-                loc ? `x=${Math.round(loc.x)} y=${Math.round(loc.y)}` : ''
-            );
+            // console.log(
+            //     `[BowstringMiniGame] onStart t=${now} type=${type} waitFirstRelease=${this.bowstringMiniGameWaitFirstRelease} enableAt=${this.bowstringMiniGameInputEnableAtMs}`,
+            //     loc ? `x=${Math.round(loc.x)} y=${Math.round(loc.y)}` : ''
+            // );
             // 仅在保护窗口期拦截“按钮残留输入”；窗口后第一下真实触控应允许直接开始长按
             if (this.bowstringMiniGameWaitFirstRelease && now < this.bowstringMiniGameInputEnableAtMs) return;
             if (this.bowstringMiniGameWaitFirstRelease && now >= this.bowstringMiniGameInputEnableAtMs) {
@@ -5492,29 +5484,29 @@ export class GameManager extends Component {
             this.bowstringMiniGameHasStartedHold = true;
             // 长按开始：播放并循环，直到松开/结算
             this.startBowstringHoldLoopSfx();
-            console.log(`[BowstringMiniGame] hold=true t=${now}`);
+          //console.log(`[BowstringMiniGame] hold=true t=${now}`);
         };
         const onEnd = (event?: any) => {
             const now = Date.now();
             const type = event?.type || 'unknown';
-            console.log(
-                `[BowstringMiniGame] onEnd t=${now} type=${type} hold=${this.bowstringMiniGameHold} waitFirstRelease=${this.bowstringMiniGameWaitFirstRelease}`
-            );
+            // console.log(
+            //     `[BowstringMiniGame] onEnd t=${now} type=${type} hold=${this.bowstringMiniGameHold} waitFirstRelease=${this.bowstringMiniGameWaitFirstRelease}`
+            // );
             // 同一次物理抬手可能同时触发 touch-end + mouse-up：短窗口内忽略重复 end
             if (now < (this.bowstringMiniGameIgnoreEndUntilMs || 0)) {
-                console.log(`[BowstringMiniGame] end ignored (dup window) t=${now}`);
+              //console.log(`[BowstringMiniGame] end ignored (dup window) t=${now}`);
                 return;
             }
             // 第一次 release 仅用于“清空技能按钮那次输入残留”，不触发结算
-            if (this.bowstringMiniGameWaitFirstRelease) {
-                this.bowstringMiniGameWaitFirstRelease = false;
-                this.bowstringMiniGameIgnoreEndUntilMs = now + 120;
-                console.log(`[BowstringMiniGame] first release consumed t=${now}`);
-                return;
-            }
+            // if (this.bowstringMiniGameWaitFirstRelease) {
+            //     this.bowstringMiniGameWaitFirstRelease = false;
+            //     this.bowstringMiniGameIgnoreEndUntilMs = now + 120;
+            //     console.log(`[BowstringMiniGame] first release consumed t=${now}`);
+            //     return;
+            // }
             // 没有真正开始过长按（hold 从未进入过 true），不允许结算，避免“自动结束/闪一下就没”
             if (!this.bowstringMiniGameHasStartedHold) {
-                console.log(`[BowstringMiniGame] end ignored (never started hold) t=${now}`);
+              //console.log(`[BowstringMiniGame] end ignored (never started hold) t=${now}`);
                 return;
             }
             this.finalizeBowstringMiniGame();
@@ -5719,10 +5711,10 @@ export class GameManager extends Component {
 
             // 关键日志：确认“未长按却开始”的真实触发点
             // （只在 hold=true 的第一次 tick 打印一次）
-            if ((this as any).__bowstringLoggedHoldTick !== true) {
-                (this as any).__bowstringLoggedHoldTick = true;
-                console.log(`[BowstringMiniGame] tick-start t=${now} dt=${dt.toFixed(3)} cycle=${this.bowstringMiniGameCycleTime.toFixed(3)}`);
-            }
+            // if ((this as any).__bowstringLoggedHoldTick !== true) {
+            //     (this as any).__bowstringLoggedHoldTick = true;
+            //     console.log(`[BowstringMiniGame] tick-start t=${now} dt=${dt.toFixed(3)} cycle=${this.bowstringMiniGameCycleTime.toFixed(3)}`);
+            // }
             this.bowstringMiniGameCycleTime += dt;
             while (this.bowstringMiniGameCycleTime >= 4.0) {
                 this.bowstringMiniGameCycleTime -= 4.0;
@@ -5780,7 +5772,7 @@ export class GameManager extends Component {
             return;
         }
         this.bowstringMiniGameFinalized = true;
-        console.log(`[BowstringMiniGame] finalize t=${Date.now()} energy=${this.bowstringMiniGameEnergyValue.toFixed(3)} cycle=${this.bowstringMiniGameCycleTime.toFixed(3)}`);
+      //console.log(`[BowstringMiniGame] finalize t=${Date.now()} energy=${this.bowstringMiniGameEnergyValue.toFixed(3)} cycle=${this.bowstringMiniGameCycleTime.toFixed(3)}`);
         this.bowstringMiniGameHold = false;
         this.stopBowstringHoldLoopSfx();
         this.clearBowstringRealtimeLoop();
@@ -5803,9 +5795,6 @@ export class GameManager extends Component {
             let appliedCount = 0;
             const containerPaths = [
                 'Canvas/Towers',
-                'Canvas/Units',
-                'Canvas/Archers',
-                'Canvas/Arrowers',
             ];
             for (let p = 0; p < containerPaths.length; p++) {
                 const container = find(containerPaths[p]);
@@ -5832,7 +5821,7 @@ export class GameManager extends Component {
                     appliedCount++;
                 }
             }
-            console.log(`[BowstringMiniGame] applyAllArrowersFast multiplier=${multiplier.toFixed(3)} count=${appliedCount}`);
+           //console.log(`[BowstringMiniGame] applyAllArrowersFast multiplier=${multiplier.toFixed(3)} count=${appliedCount}`);
         } catch (e) {
             console.warn('[BowstringMiniGame] applyAllArrowersFast failed', e);
         }
@@ -6297,7 +6286,7 @@ export class GameManager extends Component {
                 }
             }
 
-            console.log(`[SwordSharpenMiniGame] applyAllSwordsmen multiplier=${damageMultiplier.toFixed(3)} speed+${speedBoostPercent}% count=${appliedCount}`);
+           //console.log(`[SwordSharpenMiniGame] applyAllSwordsmen multiplier=${damageMultiplier.toFixed(3)} speed+${speedBoostPercent}% count=${appliedCount}`);
         } catch (e) {
             console.warn('[SwordSharpenMiniGame] applyAllSwordsmen failed', e);
         }
@@ -6481,7 +6470,7 @@ export class GameManager extends Component {
         if (this.unitIntroPopup && this.unitIntroPopup.container && this.unitIntroPopup.container.active) {
             // 已有介绍框在显示时不叠加，下一帧再尝试
             if (canDebugLog) {
-                console.log('[BattleDialog] skip: intro popup active');
+               //console.log('[BattleDialog] skip: intro popup active');
                 this.lastBattleDialogDebugLogMs = now;
             }
             return;
@@ -6490,14 +6479,31 @@ export class GameManager extends Component {
         const priestScript = this.getFirstActiveUnitScriptInContainers(['Canvas/Towers', 'Canvas/Priests'], 'Priest');
         const hasPriest = !!priestScript;
         if (canDebugLog) {
-            console.log(
-                `[BattleDialog] tick gold=${this.gold} hasPriest=${hasPriest} shown={A:${this.hasShownArrowerNeedPriestDialog},B:${this.hasShownPriestProtectBuildingDialog},C:${this.hasShownGoldReach100ArrowerDialog},D:${this.hasShownPriestSuggestSwordsmanAfterKillDialog}}`
-            );
+           //console.log(
+            //     `[BattleDialog] tick gold=${this.gold} wood=${this.wood} hasPriest=${hasPriest} shown={A:${this.hasShownArrowerNeedPriestDialog},B:${this.hasShownPriestProtectBuildingDialog},C:${this.hasShownGoldReach100ArrowerDialog},D:${this.hasShownPriestSuggestSwordsmanAfterKillDialog},E:${this.hasShownArrowerSuggestBuildWhenWood60}}`
+            // );
         }
+        // e. 木材达到 90：弓箭手提示多建造防御塔（仅在 Canvas/Towers 一层扫描）
+        if (!this.hasShownArrowerSuggestBuildWhenWood60 && this.wood >= 90) {
+            const arrowerForWood = this.getFirstActiveUnitScriptInContainers(['Canvas/Towers'], 'Arrower');
+            if (arrowerForWood) {
+                this.showQuickUnitIntro(
+                    arrowerForWood,
+                    '弓箭手',
+                    '指挥官，木头够多了，屯着也没用，多建造一些防御塔，为我们减轻压力吧！',
+                    'Arrower'
+                );
+                this.hasShownArrowerSuggestBuildWhenWood60 = true;
+               //console.log('[BattleDialog][E] Arrower container=Canvas/Towers');
+               //console.log('[BattleDialog][E] triggered: wood >= 60, arrower found');
+                return;
+            }
+        }
+
 
         // c. 金额第一次积攒达到100
         if (!this.hasShownGoldReach100ArrowerDialog && this.gold >= 100) {
-            const arrowerScript = this.getFirstActiveUnitScriptInContainers(['Canvas/Towers', 'Canvas/Arrowers', 'Canvas/Archers'], 'Arrower');
+            const arrowerScript = this.getFirstActiveUnitScriptInContainers(['Canvas/Towers'], 'Arrower');
             if (arrowerScript) {
                 this.showQuickUnitIntro(
                     arrowerScript,
@@ -6506,19 +6512,16 @@ export class GameManager extends Component {
                     'Arrower'
                 );
                 this.hasShownGoldReach100ArrowerDialog = true;
+               //console.log('[BattleDialog][C] Arrower container=Canvas/Towers');
                 this.highlightCrystalForBattleHint();
-                console.log('[BattleDialog][C] triggered: gold reached 100+, arrower found');
+               //console.log('[BattleDialog][C] triggered: gold reached 100+, arrower found');
                 return;
-            } else if (canDebugLog) {
-                console.log('[BattleDialog][C] blocked: no active Arrower found in target containers');
             }
-        } else if (!this.hasShownGoldReach100ArrowerDialog && canDebugLog) {
-            console.log(`[BattleDialog][C] waiting: gold=${this.gold} (<100)`);
         }
 
         // a. 弓箭手受伤，且场上没有牧师
         if (!this.hasShownArrowerNeedPriestDialog && !hasPriest) {
-            const injuredArrower = this.getFirstInjuredArrowerInContainers(['Canvas/Towers', 'Canvas/Arrowers', 'Canvas/Archers']);
+            const injuredArrower = this.getFirstInjuredArrowerInContainers(['Canvas/Towers']);
             if (injuredArrower) {
                 this.showQuickUnitIntro(
                     injuredArrower,
@@ -6529,13 +6532,9 @@ export class GameManager extends Component {
                 this.hasShownArrowerNeedPriestDialog = true;
                 this.highlightBuildButtonForBattleHint();
                 this.pendingHighlightChurchCandidateAfterBuild = true;
-                console.log('[BattleDialog][A] triggered: injured Arrower found and no Priest');
+               //console.log('[BattleDialog][A] triggered: injured Arrower found and no Priest');
                 return;
-            } else if (canDebugLog) {
-                console.log('[BattleDialog][A] blocked: no injured Arrower found');
             }
-        } else if (!this.hasShownArrowerNeedPriestDialog && hasPriest && canDebugLog) {
-            console.log('[BattleDialog][A] blocked: Priest is present');
         }
 
         // b. 牧师在场，且防御塔（含主水晶/防御建筑）血量减少
@@ -6543,17 +6542,10 @@ export class GameManager extends Component {
         if (this.lastDefenseStructureHealthSnapshot < 0) {
             this.lastDefenseStructureHealthSnapshot = currentDefenseHp;
             if (canDebugLog) {
-                console.log(`[BattleDialog][B] init snapshot=${currentDefenseHp.toFixed(1)}`);
+               //console.log(`[BattleDialog][B] init snapshot=${currentDefenseHp.toFixed(1)}`);
                 this.lastBattleDialogDebugLogMs = now;
             }
             return;
-        }
-        if (canDebugLog) {
-            const prevHp = this.lastDefenseStructureHealthSnapshot;
-            const delta = currentDefenseHp - prevHp;
-            console.log(
-                `[BattleDialog][B] hpSnapshot current=${currentDefenseHp.toFixed(1)} prev=${prevHp.toFixed(1)} delta=${delta.toFixed(1)} hasPriest=${hasPriest}`
-            );
         }
         if (
             !this.hasShownPriestProtectBuildingDialog &&
@@ -6568,7 +6560,7 @@ export class GameManager extends Component {
             );
             this.hasShownPriestProtectBuildingDialog = true;
             this.lastDefenseStructureHealthSnapshot = currentDefenseHp;
-            console.log('[BattleDialog][B] triggered: Priest present and defense hp decreased');
+          //console.log('[BattleDialog][B] triggered: Priest present and defense hp decreased');
             return;
         }
         this.lastDefenseStructureHealthSnapshot = currentDefenseHp;
@@ -6578,7 +6570,7 @@ export class GameManager extends Component {
         if (this.lastFriendlyUnitCountSnapshot < 0) {
             this.lastFriendlyUnitCountSnapshot = currentFriendlyCount;
             if (canDebugLog) {
-                console.log(`[BattleDialog][D] init snapshot=${currentFriendlyCount}`);
+              //console.log(`[BattleDialog][D] init snapshot=${currentFriendlyCount}`);
                 this.lastBattleDialogDebugLogMs = now;
             }
             return;
@@ -6598,7 +6590,7 @@ export class GameManager extends Component {
             this.highlightBuildButtonForBattleHint();
             this.pendingHighlightSwordsmanHallCandidateAfterBuild = true;
             this.lastFriendlyUnitCountSnapshot = currentFriendlyCount;
-            console.log('[BattleDialog][D] triggered: Priest present and friendly unit count decreased');
+          //console.log('[BattleDialog][D] triggered: Priest present and friendly unit count decreased');
             return;
         }
         this.lastFriendlyUnitCountSnapshot = currentFriendlyCount;
@@ -6718,10 +6710,10 @@ export class GameManager extends Component {
             const now = Date.now();
             if (now - this.lastPendingChurchHighlightDebugLogMs >= 1500) {
                 this.lastPendingChurchHighlightDebugLogMs = now;
-                console.log(
-                    '[BattleDialog][A] pending church highlight: cannot find candidate item. ' +
-                    `panelChildren=${(contentNode.children || []).length}`
-                );
+                // console.log(
+                //     '[BattleDialog][A] pending church highlight: cannot find candidate item. ' +
+                //     `panelChildren=${(contentNode.children || []).length}`
+                // );
             }
             return;
         }
@@ -7531,10 +7523,27 @@ export class GameManager extends Component {
         if (unitType === 'Mage') {
             buffTypes = buffTypes.filter(type => type === 'attackDamage' || type === 'moveSpeed');
         }
+        // 建筑物（如 弓箭手小屋/教堂/猎手大厅/剑士小屋 等）不出现“攻击力增幅”卡片
+        if (unitCategory === 'building') {
+            buffTypes = buffTypes.filter(type => type !== 'attackDamage');
+        }
         
         if (buffTypes.length === 0) {
             console.warn(`[GameManager] generateUnitBuffCard: 单位类型 ${unitType} 没有可用的增益效果`);
-            // 使用默认增益（UR时增强）
+            // 对于建筑物：不要回退到攻击力，改为提供生命值增幅作为兜底
+            if (unitCategory === 'building') {
+                const baseValue = rarity === 'UR' ? 45 : (rarity === 'SSR' ? 40 : rarity === 'SR' ? 30 : 20);
+                return {
+                    unitId: unitType,
+                    unitName: unitName,
+                    unitIcon: unitIcon,
+                    buffType: 'maxHealth',
+                    buffValue: baseValue,
+                    buffDescription: `${unitName}: 生命值+${baseValue}%`,
+                    rarity: rarity
+                };
+            }
+            // 非建筑：保持原有兜底（攻击力）
             const baseValue = rarity === 'UR' ? 30 : 20;
             return {
                 unitId: unitType,
@@ -8145,7 +8154,7 @@ export class GameManager extends Component {
                 // 启动定时切换（每 0.05 秒切换一次，即 20fps）
                 this.schedule(this.updateGameBackground, this.GAME_BG_INTERVAL);
 
-                console.log(`[GameManager] 成功加载 ${validFrames.length} 张动态背景图片，开始循环播放`);
+              //console.log(`[GameManager] 成功加载 ${validFrames.length} 张动态背景图片，开始循环播放`);
             });
         });
     }
