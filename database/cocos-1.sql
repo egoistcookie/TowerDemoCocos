@@ -21,8 +21,8 @@ select * from card_selection_events where DATE(created_at) = CURDATE()-1
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','')  order by created_at desc ;
 select * from card_selection_events where cards_json like BINARY  '%UR%' order by created_at desc ;
 select DATE(created_at),player_id,count(*) from card_selection_events where selection_mode  in ('get_all','reroll') 
- and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','') group by DATE(created_at),player_id ;
-order by created_at desc ;
+ and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','') group by DATE(created_at),player_id 
+order by DATE(created_at) desc ;
 --统计每天有多少次抽卡
 select DATE(created_at),count(*) from card_selection_events where 
   player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','')  group by DATE(created_at) ;
