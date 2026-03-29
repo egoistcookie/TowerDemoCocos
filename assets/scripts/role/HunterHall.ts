@@ -584,6 +584,7 @@ export class HunterHall extends Build {
             { nodeName: 'Canvas/Towers', scriptName: 'Arrower' },
             { nodeName: 'ElfSwordsmans', scriptName: 'ElfSwordsman' },
             { nodeName: 'Canvas/Towers', scriptName: 'Priest' },
+            { nodeName: 'Canvas/Mages', scriptName: 'Mage' }, // 新增：与法师保持间距，避免重叠
         ];
         const crossTypeMinDist = 60; // 跨类型单位最小间距
         const crossTypeMinDistSq = crossTypeMinDist * crossTypeMinDist;

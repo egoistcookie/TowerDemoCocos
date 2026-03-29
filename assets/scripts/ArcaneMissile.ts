@@ -1,4 +1,5 @@
 ﻿import { _decorator, Component, Node, Vec3, find, MotionStreak, Color } from 'cc';
+import { UnitType } from './UnitType';
 import { GameState } from './GameState';
 const { ccclass, property } = _decorator;
 
@@ -115,10 +116,18 @@ export class ArcaneMissile extends Component {
 
     private getEnemyScript(node: Node): any {
         if (!node || !node.isValid || !node.active) return null;
-        const names = ['TrollSpearman', 'OrcWarrior', 'OrcWarlord', 'OrcShaman', 'Dragon', 'Enemy', 'Boss', 'MinotaurWarrior'];
+        const names = ['Portal', 'TrollSpearman', 'OrcWarrior', 'OrcWarlord', 'OrcShaman', 'Dragon', 'Enemy', 'Boss', 'MinotaurWarrior'];
         for (const name of names) {
             const comp = node.getComponent(name) as any;
             if (comp) return comp;
+        }
+        // 兼容其他敌人类型（如 Portal）：查找带有 unitType===ENEMY 的组件
+        const comps = node?.components || [];
+        for (const c of comps) {
+            const anyComp = c as any;
+            if (anyComp && anyComp.unitType === UnitType.ENEMY) {
+                return anyComp;
+            }
         }
         return null;
     }
@@ -137,11 +146,15 @@ export class ArcaneMissile extends Component {
 
     private findNearbyEnemy(currentPos: Vec3): Node | null {
         const enemiesNode = find('Canvas/Enemies') || find('Enemies');
-        if (!enemiesNode) return null;
+        const portalsNode = find('Canvas/Portals') || null;
+        if (!enemiesNode && !portalsNode) return null;
         const maxDistSq = this.retargetRadius * this.retargetRadius;
         let best: Node | null = null;
         let bestDistSq = Number.POSITIVE_INFINITY;
-        for (const enemy of enemiesNode.children) {
+        const scanList: Node[] = [];
+        if (enemiesNode) scanList.push(...enemiesNode.children);
+        if (portalsNode) scanList.push(...portalsNode.children);
+        for (const enemy of scanList) {
             if (!enemy || !enemy.isValid || !enemy.active) continue;
             if (!this.isAliveEnemy(enemy)) continue;
             const dx = enemy.worldPosition.x - currentPos.x;

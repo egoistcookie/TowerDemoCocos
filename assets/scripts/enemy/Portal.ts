@@ -8,6 +8,7 @@ export class Portal extends Component {
     // 作为敌方单位参与索敌与被攻击
     public unitType: UnitType = UnitType.ENEMY;
     private static hasShownFirstPortalAttackIntro: boolean = false;
+	private _originalMaxHealth?: number;
 
 	// 循环贴图动画
 	@property({ type: [SpriteFrame] })
@@ -29,6 +30,10 @@ export class Portal extends Component {
     @property
     public fireIntervalSeconds: number = 2.0;
 
+	// 传送门攻击力（用于火球伤害），允许被动态增益
+	@property
+	public attackDamage: number = 12;
+
     private currentHealth: number = 0;
     private leftCooldown: number = 0;
     private rightCooldown: number = 0;
@@ -46,14 +51,14 @@ export class Portal extends Component {
     public damageNumberPrefab: Prefab = null!;
 
     onEnable() {
+        // 出场即按普通敌人的规则进行每关增幅
+        this.applyLevelBuffLikeEnemies();
         this.currentHealth = this.maxHealth;
         this.leftCooldown = 0;
         this.rightCooldown = 0;
         this.ensureHealthBar();
         this.updateHealthBar();
-        if (!this.damageNumberPrefab) {
-            this.loadDamageNumberPrefab();
-        }
+        // 伤害飘字：若未在编辑器指定预制体，则使用内置Label方案，无需异步加载
 		// 贴图循环动画初始化
 		this.sprite = this.node.getComponent(Sprite) || null;
 		this.animationTimer = 0;
@@ -63,6 +68,26 @@ export class Portal extends Component {
         const dormant = this.isDormantNow();
         this.applyDormantVisual(dormant);
         this.lastDormant = dormant;
+    }
+
+    // 参照 EnemySpawner.applyLevelBuff，对传送门应用关卡生命增幅
+    private applyLevelBuffLikeEnemies() {
+        if (this._originalMaxHealth === undefined) {
+            this._originalMaxHealth = this.maxHealth || 0;
+        }
+        const spawner = (find('Canvas/EnemySpawner') || find('EnemySpawner'))?.getComponent('EnemySpawner') as any;
+        if (!spawner) return;
+        const level = (spawner['currentLevel'] as number) ?? 1;
+        let levelMul = 1.0;
+        if (level > 2) {
+            levelMul = 1.0 + (level - 2) * 0.1;
+        }
+        const persistentMul = (spawner['persistentEnemyGrowthMultiplier'] as number) ?? 1.0;
+        const multiplier = levelMul * persistentMul;
+        if (multiplier === 1.0) return;
+        if (this._originalMaxHealth > 0) {
+            this.maxHealth = Math.floor(this._originalMaxHealth * multiplier);
+        }
     }
 
     private isDormantNow(): boolean {
@@ -147,6 +172,8 @@ export class Portal extends Component {
 	}
 
     public takeDamage(amount: number) {
+        console.log('[Portal] takeDamage', amount, 'hpBefore=',
+             this.currentHealth, 'hpAfter=', this.currentHealth - amount, this.node.name);
         if (this.isDormantNow()) {
             return;
         }
@@ -171,6 +198,13 @@ export class Portal extends Component {
             } catch (e) {
                 console.warn('[Portal] 触发狂暴失败', e);
             }
+        }
+
+        // 强化剩余的其他传送门（+50% 生命与攻击）
+        try {
+            (Portal as any).applyBuffToOtherPortals?.(this.node);
+        } catch (e) {
+            console.warn('[Portal] 强化其它传送门失败', e);
         }
         // 发放击毁奖励：+100 金币，+50 木材
         const gm = this.getGameManager();
@@ -250,8 +284,7 @@ export class Portal extends Component {
             label.fontSize = fontSize;
             label.lineHeight = lineHeight;
             label.color = e.color;
-            let outline = label.node.getComponent(LabelOutline);
-            if (!outline) outline = label.node.addComponent(LabelOutline);
+            // 直接使用 Label 的描边属性，避免使用已弃用的 LabelOutline.color
             (label as any).outlineColor = new Color(0, 0, 0, 255);
             (label as any).outlineWidth = 2;
 
@@ -302,15 +335,9 @@ export class Portal extends Component {
         this.healthBar.setHealth(this.currentHealth);
     }
 
-    private loadDamageNumberPrefab() {
-        resources.load('prefabs/DamageNumber', Prefab, (err, prefab) => {
-            if (!err && prefab) {
-                this.damageNumberPrefab = prefab;
-            } else {
-                console.warn('[Portal] Failed to load DamageNumber prefab:', err);
-            }
-        });
-    }
+    // 取消异步加载 DamageNumber 预制体逻辑：
+    // 若需要自定义样式，可在编辑器里直接指定 damageNumberPrefab；
+    // 否则走 showDamageNumber 内置的 Label 方案，避免报 bundle 缺失的警告。
 
     private showDamageNumber(damage: number) {
         let damageNode: Node;
@@ -352,10 +379,13 @@ export class Portal extends Component {
         }
         label.string = `-${Math.floor(Math.max(1, damage))}`;
         label.color = new Color(255, 255, 255, 255);
+        // 与普通敌人一致：添加 LabelOutline 组件，并使用 Label 的非弃用描边属性
         let outline = label.node.getComponent(LabelOutline);
-        if (!outline) outline = label.node.addComponent(LabelOutline);
+        if (!outline) {
+            outline = label.node.addComponent(LabelOutline);
+        }
         (label as any).outlineColor = new Color(0, 0, 0, 255);
-        (label as any).outlineWidth = 2;
+        outline.width = 2;
 
         const opacity = damageNode.getComponent(UIOpacity) || damageNode.addComponent(UIOpacity);
         opacity.opacity = 255;
@@ -412,9 +442,9 @@ export class Portal extends Component {
             fireballScript = fireballNode.addComponent('Fireball') as any
                           || fireballNode.addComponent('Arrow') as any;
         }
-        if (fireballScript && typeof fireballScript.init === 'function') {
-            // 传送门火球伤害可按需调整
-            const damage = 12;
+		if (fireballScript && typeof fireballScript.init === 'function') {
+            // 使用可配置的 attackDamage，便于被动增益生效
+            const damage = Math.max(1, Math.floor(this.attackDamage));
             fireballScript.init(startPos, targetNode, damage, (dmg: number, hitDir: Vec3) => {
                 if (!targetNode || !targetNode.isValid) return;
                 // 优先作为角色单位受击
@@ -489,5 +519,42 @@ export class Portal extends Component {
         }
         return best;
     }
+
+	// 当某个传送门被摧毁时，强化其他存活传送门：+50% 最大生命与 +50% 攻击力（可叠加）
+	private static applyBuffToOtherPortals(exclude: Node) {
+		const collect = (path: string) => {
+			const cont = find(path);
+			return cont && cont.isValid ? cont.children.slice() : [];
+		};
+		const candidates: Node[] = [];
+		candidates.push(...collect('Canvas/Portals'));
+		candidates.push(...collect('Canvas/Enemies'));
+		for (const n of candidates) {
+			if (!n || !n.isValid || !n.active || n === exclude) continue;
+			const p = n.getComponent('Portal') as any;
+			if (!p) continue;
+			if (typeof p.currentHealth !== 'number' || p.currentHealth <= 0) continue;
+			// 生命上限提升 50%，当前生命按原百分比提升
+			const oldMax = Math.max(1, p.maxHealth || 1);
+			const oldCur = Math.max(0, p.currentHealth || 0);
+			const ratio = Math.max(0, Math.min(1, oldCur / oldMax));
+			const newMax = Math.floor(oldMax * 1.5);
+			p.maxHealth = newMax;
+			p.currentHealth = Math.floor(newMax * ratio);
+			// 同步刷新血条最大值与当前值
+			if (typeof p.ensureHealthBar === 'function') p.ensureHealthBar();
+			try {
+				const hb = (p as any).healthBar;
+				if (hb && typeof hb.setMaxHealth === 'function') {
+					hb.setMaxHealth(p.maxHealth);
+				}
+			} catch {}
+			if (typeof p.updateHealthBar === 'function') p.updateHealthBar();
+			// 攻击力提升 50%
+			if (typeof p.attackDamage === 'number') {
+				p.attackDamage = Math.max(1, Math.floor(p.attackDamage * 1.5));
+			}
+		}
+	}
 }
 

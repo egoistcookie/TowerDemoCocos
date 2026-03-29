@@ -255,7 +255,20 @@ export class Mage extends Role {
         if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active && this.isAliveEnemy(this.currentTarget)) {
             return this.currentTarget;
         }
-        const enemies = this.getEnemies(true, this.attackRange * 1.2);
+        let enemies = this.getEnemies(true, this.attackRange * 1.2);
+        // 兜底：UnitManager 可能不包含传送门，额外合并 Canvas/Portals 内的敌对单位
+        try {
+            const portals = find('Canvas/Portals');
+            if (portals) {
+                for (const child of portals.children) {
+                    if (!child || !child.isValid || !child.active) continue;
+                    if (this.isAliveEnemy(child)) {
+                        enemies = enemies ? enemies.slice() : [];
+                        enemies.push(child);
+                    }
+                }
+            }
+        } catch {}
         if (!enemies || enemies.length === 0) {
             return null;
         }
@@ -658,24 +671,34 @@ export class Mage extends Role {
     private dealMeteorAOEDamage(center: Vec3, radius: number, damage: number) {
         const scene = this.node.scene;
         if (!scene || damage <= 0 || radius <= 0) return;
+        const hitEnemies = new Set<Node>();
         let hitCount = 0;
         const visitNode = (node: Node) => {
             if (!node || !node.isValid || !node.active) return;
             // 敌方单位组件集合
             const enemyScript = this.getEnemyScript(node);
             if (enemyScript && enemyScript.takeDamage) {
-                const p = node.worldPosition;
-                const dx = p.x - center.x, dy = p.y - center.y, dz = p.z - center.z;
-                const distSq = dx * dx + dy * dy + dz * dz;
-                if (distSq <= radius * radius) {
-                    // 命中方向：从中心指向单位
-                    const dir = new Vec3(dx, dy, dz);
-                    if (dir.length() > 0.1) dir.normalize();
-                    enemyScript.takeDamage(damage, dir);
-                    this.recordDamageToStatistics(damage);
-                    hitCount++;
+                const enemyNode = (enemyScript.node as Node) || node;
+                if (!hitEnemies.has(enemyNode)) {
+                    const p = enemyNode.worldPosition;
+                    const dx = p.x - center.x, dy = p.y - center.y, dz = p.z - center.z;
+                    const distSq = dx * dx + dy * dy + dz * dz;
+                    if (distSq <= radius * radius) {
+                        // 命中方向：从中心指向单位
+                        const dir = new Vec3(dx, dy, dz);
+                        if (dir.length() > 0.1) dir.normalize();
+                        enemyScript.takeDamage(damage, dir);
+                        this.recordDamageToStatistics(damage);
+                        hitEnemies.add(enemyNode);
+                        hitCount++;
+                        // 已命中该敌人，避免继续从其子节点重复命中
+                        for (const child of enemyNode.children) {
+                            // 跳过子树遍历（不再深入该敌人的结构）
+                        }
+                    }
                 }
             }
+            // 常规继续遍历
             for (const child of node.children) visitNode(child);
         };
         visitNode(scene);

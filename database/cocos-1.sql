@@ -17,13 +17,15 @@ select DATE(created_at),count(*) from game_sessions  group by DATE(created_at) ;
 --选卡明细表
 select * from card_selection_events where DATE(created_at) = CURDATE()
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','') order by created_at desc ;
-select * from card_selection_events where DATE(created_at) = CURDATE()-1 order by created_at desc ;
+select * from card_selection_events where DATE(created_at) = CURDATE()-1
+ and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','')  order by created_at desc ;
 select * from card_selection_events where cards_json like BINARY  '%UR%' order by created_at desc ;
 select DATE(created_at),player_id,count(*) from card_selection_events where selection_mode  in ('get_all','reroll') 
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','') group by DATE(created_at),player_id ;
 order by created_at desc ;
 --统计每天有多少次抽卡
-select DATE(created_at),count(*) from card_selection_events  group by DATE(created_at) ;
+select DATE(created_at),count(*) from card_selection_events where 
+  player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','')  group by DATE(created_at) ;
 
 --游戏记录主表
 select * from game_records where player_id='player_1774265446223_9255';
@@ -32,7 +34,7 @@ select * from game_records where DATE(created_at) = CURDATE()
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','')  order by created_at desc;
 select * from game_records where defend_time !=0 order by created_at desc;
 --玩家信息表
-select * from player_statistics where created_at>'20260322' order by created_at desc;
+select * from player_statistics where created_at>'20260326' order by created_at desc;
 select * from player_statistics where player_id like '%player_1774104641493_9000';
 --操作类型统计表
 select * from operation_statistics os ;

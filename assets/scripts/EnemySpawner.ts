@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Prefab, instantiate, Vec3, view, find, resources, JsonAsset, assetManager } from 'cc';
+import { _decorator, Component, Node, Prefab, instantiate, Vec3, view, find, resources, JsonAsset, assetManager, UITransform } from 'cc';
 import { GameManager, GameState } from './GameManager';
 // 移除UIManager导入，避免循环导入
 import { Enemy } from './enemy/Enemy';
@@ -198,6 +198,79 @@ export class EnemySpawner extends Component {
             this.initEnemyPool();
             this.loadWaveConfig();
         });
+    }
+
+    /**
+     * 获取所有存活的传送门节点（Canvas/Portals 或 Enemies 下）
+     */
+    private findAlivePortals(): Node[] {
+        const result: Node[] = [];
+        const tryCollect = (containerPath: string) => {
+            const node = find(containerPath);
+            if (!node || !node.isValid) return;
+            for (const child of node.children) {
+                if (!child || !child.isValid || !child.active) continue;
+                const portal = child.getComponent('Portal') as any;
+                if (portal && portal.currentHealth !== undefined && portal.currentHealth > 0) {
+                    result.push(child);
+                }
+            }
+        };
+        tryCollect('Canvas/Portals');
+        tryCollect('Canvas/Enemies'); // 兼容早期把Portal挂在 Enemies 下的情况
+        return result;
+    }
+
+    /**
+     * 计算“从最上方”刷怪的位置
+     */
+    private getTopSpawnPosition(): Vec3 {
+        const visibleSize = view.getVisibleSize();
+        const visibleOrigin = view.getVisibleOrigin();
+        return new Vec3(
+            visibleOrigin.x + Math.random() * visibleSize.width,
+            visibleOrigin.y + visibleSize.height - 10,
+            0
+        );
+    }
+
+    /**
+     * 计算“从传送门下方”刷怪的位置
+     */
+    private getPortalSpawnPosition(portalNode: Node): Vec3 {
+        const pos = portalNode.worldPosition.clone();
+        // 依据传送门高度，选择其下方一点作为刷怪点
+        const ui = portalNode.getComponent(UITransform);
+        const halfH = ui ? ui.contentSize.height * 0.5 : 50;
+        // 往下偏移：半高 + 40px，避免与传送门重叠
+        pos.y -= (halfH + 40);
+        return pos;
+    }
+
+    /**
+     * 按规则选择刷怪位置：
+     * - 每个存活传送门占20%概率（最多按存活数量累加）
+     * - 剩余概率从最上方刷
+     */
+    private chooseSpawnPositionWithPortals(): Vec3 {
+        const portals = this.findAlivePortals();
+        if (!portals || portals.length === 0) {
+            return this.getTopSpawnPosition();
+        }
+        // 计算权重
+        const perPortalWeight = 0.2; // 20%
+        const totalPortalWeight = Math.min(1.0, portals.length * perPortalWeight);
+        const topWeight = Math.max(0, 1.0 - totalPortalWeight);
+        // 抽签
+        const r = Math.random();
+        if (r < totalPortalWeight) {
+            // 映射到具体某个传送门
+            const which = Math.floor(r / perPortalWeight);
+            const idx = Math.min(which, portals.length - 1);
+            return this.getPortalSpawnPosition(portals[idx]);
+        } else {
+            return this.getTopSpawnPosition();
+        }
     }
 
     /**
@@ -1373,17 +1446,8 @@ export class EnemySpawner extends Component {
             return;
         }
 
-        // 从画面最上方生成敌人
-        // 获取屏幕尺寸和原点
-        const visibleSize = view.getVisibleSize();
-        const visibleOrigin = view.getVisibleOrigin();
-        
-        // 计算画面最上方的位置，敌人从屏幕顶部边缘生成，而不是屏幕外
-        const spawnPos = new Vec3(
-            visibleOrigin.x + Math.random() * visibleSize.width, // x轴在屏幕宽度范围内随机
-            visibleOrigin.y + visibleSize.height - 10, // y轴固定在画面最上方边缘，-10像素确保敌人从屏幕内顶部生成
-            0
-        );
+        // 计算刷怪位置：若场上存在传送门，则每个传送门20%概率在其下方刷怪，剩余概率从最上方刷
+        const spawnPos = this.chooseSpawnPositionWithPortals();
 
         // 性能优化：从对象池获取敌人，而不是直接实例化
         let enemy: Node | null = null;
