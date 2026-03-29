@@ -2369,7 +2369,7 @@ export class UIManager extends Component {
         // - 失败：只提示“必须提升自己，才有可能守护住防线”
         const isVictory = (mvpUnit as any).isVictory === true;
         if (isVictory) {
-            hintLabel.string = `指挥官，虽然刚才您指挥得当，带领我们守住了防线，但是接下来的敌人会更加强悍，我们必须提升自己，才有可能守护住防线。`;
+            hintLabel.string = `指挥官，虽然刚才您指挥得当，带领我们守住了防线，但是接下来的敌人会更加强悍，我们必须提升自己，才有可能坚持到最后。`;
         } else {
             hintLabel.string = `指挥官，我们必须提升自己，才有可能守护住防线。`;
         }

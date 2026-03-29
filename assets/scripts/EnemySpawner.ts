@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Prefab, instantiate, Vec3, view, find, resources, JsonAsset, assetManager, UITransform } from 'cc';
+import { _decorator, Component, Node, Prefab, instantiate, Vec3, view, find, resources, JsonAsset, assetManager, UITransform, Sprite, SpriteFrame, UIOpacity, tween } from 'cc';
 import { GameManager, GameState } from './GameManager';
 // 移除UIManager导入，避免循环导入
 import { Enemy } from './enemy/Enemy';
@@ -252,10 +252,10 @@ export class EnemySpawner extends Component {
      * - 每个存活传送门占20%概率（最多按存活数量累加）
      * - 剩余概率从最上方刷
      */
-    private chooseSpawnPositionWithPortals(): Vec3 {
+    private chooseSpawnPositionWithPortals(): { pos: Vec3; portal?: Node } {
         const portals = this.findAlivePortals();
         if (!portals || portals.length === 0) {
-            return this.getTopSpawnPosition();
+            return { pos: this.getTopSpawnPosition() };
         }
         // 计算权重
         const perPortalWeight = 0.2; // 20%
@@ -267,9 +267,101 @@ export class EnemySpawner extends Component {
             // 映射到具体某个传送门
             const which = Math.floor(r / perPortalWeight);
             const idx = Math.min(which, portals.length - 1);
-            return this.getPortalSpawnPosition(portals[idx]);
+            return { pos: this.getPortalSpawnPosition(portals[idx]), portal: portals[idx] };
         } else {
-            return this.getTopSpawnPosition();
+            return { pos: this.getTopSpawnPosition() };
+        }
+    }
+
+    /**
+     * 在传送门位置先显示“空间裂缝”贴图，然后再生成敌人
+     */
+    private showPortalRiftAndSpawn(prefabName: string, portalNode: Node, spawnPos: Vec3) {
+        // 读取传送门预制体上配置的裂缝贴图
+        const portal = portalNode.getComponent('Portal') as any;
+        const riftSf: SpriteFrame | null = portal && portal.riftSpriteFrame ? portal.riftSpriteFrame : null;
+        if (!riftSf) {
+            // 若未配置裂缝贴图，直接生成敌人
+            this.doSpawnEnemyAt(prefabName, spawnPos);
+            return;
+        }
+        const rift = new Node('PortalRift');
+        const parent = this.enemyContainer || this.node;
+        rift.setParent(parent);
+        rift.setWorldPosition(spawnPos);
+        const sp = rift.addComponent(Sprite);
+        sp.spriteFrame = riftSf;
+        const opacity = rift.addComponent(UIOpacity);
+        opacity.opacity = 0;
+        // 简单的淡入-短暂停留-淡出动画，然后生成敌人
+        tween(opacity)
+            .to(0.12, { opacity: 255 })
+            .delay(0.18)
+            .to(0.15, { opacity: 0 })
+            .call(() => {
+                if (rift && rift.isValid) rift.destroy();
+                this.doSpawnEnemyAt(prefabName, spawnPos);
+            })
+            .start();
+    }
+
+    /**
+     * 实际创建并初始化敌人（对象池/实例化、属性、目标、狂暴、计数与结束判断）
+     */
+    private doSpawnEnemyAt(prefabName: string, spawnPos: Vec3) {
+        const enemyPrefab = this.enemyPrefabMap.get(prefabName);
+        if (!enemyPrefab) return;
+        let enemy: Node | null = null;
+        if (this.enemyPool) {
+            enemy = this.enemyPool.get(prefabName);
+        }
+        if (!enemy) {
+            enemy = instantiate(enemyPrefab);
+        }
+        enemy.setParent(this.enemyContainer || this.node);
+        enemy.setWorldPosition(spawnPos);
+
+        const enemyScript = enemy.getComponent('Enemy') as any
+            || enemy.getComponent('OrcWarrior') as any
+            || enemy.getComponent('OrcWarlord') as any
+            || enemy.getComponent('TrollSpearman') as any
+            || enemy.getComponent('Dragon') as any
+            || enemy.getComponent('Boss') as any
+            || enemy.getComponent(Boss) as any; // 兼容类引用
+
+        if (enemyScript) {
+            enemyScript.prefabName = prefabName;
+            if (enemyScript.loadRewardsFromConfig && typeof enemyScript.loadRewardsFromConfig === 'function') {
+                enemyScript.loadRewardsFromConfig();
+            }
+            this.applyLevelBuff(enemyScript);
+            if (this.targetCrystal) {
+                enemyScript.targetCrystal = this.targetCrystal;
+            }
+            if (this.gameManager) {
+                const unitType = enemyScript.unitType || prefabName;
+                this.gameManager.checkUnitFirstAppearance(unitType, enemyScript);
+            }
+            if (this.isOrcRageSpawnBuffActive) {
+                this.applyBloodRageToEnemy(enemy, enemyScript, this.currentOrcRageTier);
+            }
+        }
+
+        // 增加已生成敌人计数并处理切换/结束逻辑
+        this.enemiesSpawnedCount++;
+        if (this.enemiesSpawnedCount >= (this.currentEnemyConfig?.count || 0)) {
+            if (this.currentWave && this.currentEnemyIndex + 1 >= this.currentWave.enemies.length) {
+                this.currentEnemyIndex++;
+                this.currentEnemyConfig = null;
+                this.enemiesSpawnedCount = 0;
+                this.scheduleOnce(() => {
+                    this.endCurrentWave();
+                }, 0);
+                return;
+            }
+            this.currentEnemyIndex++;
+            this.currentEnemyConfig = null;
+            this.enemiesSpawnedCount = 0;
         }
     }
 
@@ -1447,80 +1539,17 @@ export class EnemySpawner extends Component {
         }
 
         // 计算刷怪位置：若场上存在传送门，则每个传送门20%概率在其下方刷怪，剩余概率从最上方刷
-        const spawnPos = this.chooseSpawnPositionWithPortals();
+        const spawnInfo = this.chooseSpawnPositionWithPortals();
+        const spawnPos = spawnInfo.pos;
 
-        // 性能优化：从对象池获取敌人，而不是直接实例化
-        let enemy: Node | null = null;
-        if (this.enemyPool) {
-            enemy = this.enemyPool.get(prefabName);
+        // 若来自传送门且配置了裂缝贴图：先展示裂缝，再生成敌人
+        if (spawnInfo.portal) {
+            this.showPortalRiftAndSpawn(prefabName, spawnInfo.portal, spawnPos);
+            return;
         }
-        
-        // 如果对象池没有可用对象，降级使用instantiate
-        if (!enemy) {
-            enemy = instantiate(enemyPrefab);
-        }
-        
-        enemy.setParent(this.enemyContainer || this.node);
-        enemy.setWorldPosition(spawnPos);
 
-        // 设置敌人的目标水晶，支持Enemy、OrcWarrior、OrcWarlord、TrollSpearman、Dragon和Boss
-        // 尝试获取不同类型的敌人组件
-        const enemyScript = enemy.getComponent(Enemy) as any || enemy.getComponent(OrcWarrior) as any || enemy.getComponent(OrcWarlord) as any || enemy.getComponent(TrollSpearman) as any || enemy.getComponent('Dragon') as any || enemy.getComponent(Boss) as any || enemy.getComponent('Boss') as any;
-        if (enemyScript) {
-            // 设置prefabName（用于对象池回收）
-            enemyScript.prefabName = prefabName;
-            
-            // 从配置文件加载金币和经验奖励（在设置prefabName之后）
-            if (enemyScript.loadRewardsFromConfig && typeof enemyScript.loadRewardsFromConfig === 'function') {
-                enemyScript.loadRewardsFromConfig();
-            }
-            
-            // 根据关卡数强化敌人属性（在加载配置之后，确保使用原始值计算）
-            this.applyLevelBuff(enemyScript);
-            
-            if (this.targetCrystal) {
-                enemyScript.targetCrystal = this.targetCrystal;
-            } else {
-                // 如果EnemySpawner没有设置targetCrystal，让Enemy自己查找
-            }
-            
-            // 检查单位是否首次出现
-            if (this.gameManager) {
-                const unitType = enemyScript.unitType || prefabName;
-                this.gameManager.checkUnitFirstAppearance(unitType, enemyScript);
-            }
-
-            // 狂暴激活期间，新刷新的所有敌人都进入燃血狂暴
-            if (this.isOrcRageSpawnBuffActive) {
-                this.applyBloodRageToEnemy(enemy, enemyScript, this.currentOrcRageTier);
-            }
-        } else {
-        }
-        
-        // 增加已生成敌人计数
-        this.enemiesSpawnedCount++;
-        
-        // 如果已生成足够的敌人，获取下一个敌人配置
-        if (this.enemiesSpawnedCount >= this.currentEnemyConfig.count) {
-            // 检查是否所有配置都已完成
-            if (this.currentWave && this.currentEnemyIndex + 1 >= this.currentWave.enemies.length) {
-                // 所有配置都已完成，结束当前波次
-               //console.info(`[EnemySpawner.spawnEnemy] 所有敌人配置已完成，准备结束波次。currentEnemyIndex: ${this.currentEnemyIndex}, enemies.length: ${this.currentWave.enemies.length}`);
-                this.currentEnemyIndex++;
-                this.currentEnemyConfig = null;
-                this.enemiesSpawnedCount = 0;
-                // 延迟一帧调用 endCurrentWave，确保所有敌人都已生成
-                this.scheduleOnce(() => {
-                    this.endCurrentWave();
-                }, 0);
-                return;
-            }
-            
-            // 还有更多配置，获取下一个
-            this.currentEnemyIndex++;
-            this.currentEnemyConfig = null;
-            this.enemiesSpawnedCount = 0;
-        }
+        // 顶部刷新：直接生成
+        this.doSpawnEnemyAt(prefabName, spawnPos);
     }
     
     /**
@@ -1786,6 +1815,11 @@ export class EnemySpawner extends Component {
         for (let i = 0; i < enemies.length; i++) {
             const enemy = enemies[i];
             if (!enemy || !enemy.isValid || !enemy.active) {
+                continue;
+            }
+            // 传送门不计入胜利判定（允许存在传送门时依然通关）
+            const portalComp = enemy.getComponent('Portal') as any;
+            if (portalComp) {
                 continue;
             }
             

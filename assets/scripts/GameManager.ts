@@ -3255,6 +3255,33 @@ export class GameManager extends Component {
         // 显示结算面板
         this.showGameResultPanel(state);
     }
+
+    // 使用单位介绍框展示法师塔解锁，贴图直接从 resources/textures/fashita 加载
+    private showMageTowerUnlockViaIntro(onClosed?: () => void) {
+        if (!this.unitIntroPopup) {
+            if (onClosed) onClosed();
+            return;
+        }
+        const finish = (icon: SpriteFrame | null) => {
+            this.unitIntroPopup.show({
+                unitName: '法师塔',
+                unitDescription: '已解锁新兵营：法师塔！',
+                unitIcon: icon,
+                unitType: 'MageTower',
+                unitId: 'MageTower',
+                onCloseCallback: () => { if (onClosed) onClosed(); }
+            });
+        };
+        resources.load('textures/fashita/spriteFrame', SpriteFrame, (err, sf) => {
+            if (!err && sf) {
+                finish(sf);
+            } else {
+                resources.load('textures/fashita', SpriteFrame, (err2, sf2) => {
+                    finish(!err2 && sf2 ? sf2 : null);
+                });
+            }
+        });
+    }
     
     /**
      * 显示游戏结算面板（统一方法，用于游戏结束和主动退出）
@@ -3267,6 +3294,19 @@ export class GameManager extends Component {
         this.showExpSectionInGameOver = false;
 
        //console.info(`[GameManager.showGameResultPanel] start, state=${state}, currentGameExp=${this.currentGameExp}`);
+
+        // 最简需求：第一关胜利时，在结算页弹出前，先展示“法师塔解锁”单位介绍框（仅一次）
+        try {
+            const finalState = state != null ? state : this.lastGameResultState;
+            const level = this.getCurrentLevelSafe ? this.getCurrentLevelSafe() : (this as any).currentLevel || 1;
+            if (finalState === GameState.Victory && level === 1 && !(this as any)._hasShownLevel1MageUnlockOnce) {
+                (this as any)._hasShownLevel1MageUnlockOnce = true;
+                this.showMageTowerUnlockViaIntro(() => {
+                    this.showGameResultPanel(state);
+                });
+                return;
+            }
+        } catch {}
         
         // 消耗体力（每局游戏无论输赢都消耗5点体力）
         if (this.playerDataManager) {

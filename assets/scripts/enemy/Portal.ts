@@ -16,6 +16,10 @@ export class Portal extends Component {
 	@property
 	public loopAnimationDuration: number = 1.0; // 一轮动画总时长（秒）
 	private sprite: Sprite | null = null;
+
+	// 由美术配置到传送门预制体上的“空间裂缝”贴图（用于刷怪前短暂显示）
+	@property(SpriteFrame)
+	public riftSpriteFrame: SpriteFrame = null!;
 	private animationTimer: number = 0;
 	private currentAnimFrameIndex: number = -1;
     @property
@@ -172,8 +176,6 @@ export class Portal extends Component {
 	}
 
     public takeDamage(amount: number) {
-        console.log('[Portal] takeDamage', amount, 'hpBefore=',
-             this.currentHealth, 'hpAfter=', this.currentHealth - amount, this.node.name);
         if (this.isDormantNow()) {
             return;
         }
@@ -278,15 +280,19 @@ export class Portal extends Component {
             start.y += (entries.length - 1 - i) * lineHeight;
             n.setWorldPosition(start);
 
-            let label: Label | null = n.getComponent(Label);
-            if (!label) label = n.addComponent(Label);
-            label.string = e.text;
-            label.fontSize = fontSize;
-            label.lineHeight = lineHeight;
-            label.color = e.color;
-            // 直接使用 Label 的描边属性，避免使用已弃用的 LabelOutline.color
-            (label as any).outlineColor = new Color(0, 0, 0, 255);
-            (label as any).outlineWidth = 2;
+			let label: Label | null = n.getComponent(Label);
+			if (!label) label = n.addComponent(Label);
+			label.string = e.text;
+			label.fontSize = fontSize;
+			label.lineHeight = lineHeight;
+			label.color = e.color;
+			// 添加 LabelOutline 组件并使用 Label 的非弃用描边属性，确保有黑边
+			let outlineComp = label.node.getComponent(LabelOutline);
+			if (!outlineComp) {
+				outlineComp = label.node.addComponent(LabelOutline);
+			}
+			(label as any).outlineColor = new Color(0, 0, 0, 255);
+			(label as any).outlineWidth = 2;
 
             const opacity = n.getComponent(UIOpacity) || n.addComponent(UIOpacity);
             // 立即可见，后续只延迟开始消散
