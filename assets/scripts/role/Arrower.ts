@@ -10,8 +10,9 @@ const { ccclass, property } = _decorator;
 
 @ccclass('Arrower')
 export class Arrower extends Role {
-    // SP：多重箭 - 单体伤害系数（额外目标越多，总体DPS会变高，因此单体降伤做平衡）
-    private readonly SP_MULTI_ARROW_DAMAGE_MULTIPLIER: number = 0.6;
+    // SP：多重箭 - 单体伤害系数
+    // 说明：多重箭的降伤已改为在 BuffManager 中按等级统一处理（attackDamage *= 0.8^level），这里不再额外降伤
+    private readonly SP_MULTI_ARROW_DAMAGE_MULTIPLIER: number = 1.0;
     // 重写父类属性，设置 Arrower 的默认值
     @property({ override: true })
     maxHealth: number = 50;

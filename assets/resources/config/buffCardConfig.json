@@ -1,9 +1,9 @@
 {
   "rarityProbabilities": {
-    "R": 0.125,
-    "SR": 0.25,
-    "SSR": 0.125,
-    "SP": 0.5
+    "R": 0.5,
+    "SR": 0.3,
+    "SSR": 0.1,
+    "SP": 0.1
   },
   "buffEffects": {
     "R": {

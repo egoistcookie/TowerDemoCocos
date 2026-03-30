@@ -221,7 +221,8 @@ export class BuffCardPopup extends Component {
         if (!containerTransform) return;
         
         const containerHeight = containerTransform.height;
-        const buttonY = -containerHeight / 2 - 60; // 按钮位置在卡片下方
+        // 按钮位置在卡片下方
+        const buttonY = -containerHeight / 2 + 40;
         
         // 创建再抽一次按钮（如果不存在）
         if (!this.rerollButtonNode || !this.rerollButtonNode.isValid) {
@@ -251,8 +252,8 @@ export class BuffCardPopup extends Component {
             const rerollLabelTransform = rerollLabelNode.addComponent(UITransform);
             rerollLabelTransform.setContentSize(140, 50);
             const rerollLabel = rerollLabelNode.addComponent(Label);
-            // 两行文字：主文案 + "（观看视频）"
-            rerollLabel.string = '再抽一次\n（必得UR）';
+            // 两行文字：主文案 + “必得UR(+SP 单独上色)”
+            rerollLabel.string = '再抽一次\n必得UR';
             rerollLabel.fontSize = 20;
             // 文本颜色使用UR边框颜色（紫金色），配合黑色描边，保证在视频图标上的可读性
             rerollLabel.color = new Color(255, 100, 255, 255);
@@ -263,9 +264,40 @@ export class BuffCardPopup extends Component {
             const rerollOutline = rerollLabelNode.addComponent(LabelOutline);
             rerollOutline.color = new Color(0, 0, 0, 255);
             rerollOutline.width = 2;
+
+            // 在“（必得UR）”后追加“+SP”（亮蓝色，黑边），避免 Label 只能单色的问题
+            const rerollSpNode = new Node('RerollLabelSP');
+            rerollSpNode.setParent(rerollLabelNode);
+            const spTf = rerollSpNode.addComponent(UITransform);
+            spTf.setContentSize(60, 24);
+            // 经验值：第二行偏右位置（140宽按钮上，略偏右）
+            rerollSpNode.setPosition(55, -20, 0);
+            const spLb = rerollSpNode.addComponent(Label);
+            spLb.string = '+SP';
+            spLb.fontSize = 20;
+            spLb.color = new Color(0, 255, 255, 255); // SP 亮蓝色
+            spLb.horizontalAlign = Label.HorizontalAlign.CENTER;
+            spLb.verticalAlign = Label.VerticalAlign.CENTER;
+            const spOutline = rerollSpNode.addComponent(LabelOutline);
+            spOutline.color = new Color(0, 0, 0, 255);
+            spOutline.width = 2;
             
             // 绑定点击事件
             this.rerollButton.node.on(Button.EventType.CLICK, () => this.onRerollClick(), this);
+        }
+        // 若按钮已存在，也需要每次都重新定位（避免分辨率/容器尺寸变化或需求调整导致位置不更新）
+        if (this.rerollButtonNode && this.rerollButtonNode.isValid) {
+            this.rerollButtonNode.setPosition(-100, buttonY, 0);
+            // 同步更新文案（兼容热更新/反复打开）
+            const labelNode = this.rerollButtonNode.getChildByName('RerollLabel');
+            const lb = labelNode ? labelNode.getComponent(Label) : null;
+            if (lb) {
+                lb.string = '再抽一次\n必得UR';
+            }
+            const spNode = labelNode ? labelNode.getChildByName('RerollLabelSP') : null;
+            if (spNode) {
+                spNode.active = true;
+            }
         }
         
         // 创建全部获取按钮（如果不存在）
@@ -311,6 +343,10 @@ export class BuffCardPopup extends Component {
             
             // 绑定点击事件
             this.getAllButton.node.on(Button.EventType.CLICK, () => this.onGetAllClick(), this);
+        }
+        // 若按钮已存在，也需要每次都重新定位
+        if (this.getAllButtonNode && this.getAllButtonNode.isValid) {
+            this.getAllButtonNode.setPosition(100, buttonY, 0);
         }
         
         // 确保按钮可见
@@ -849,9 +885,100 @@ export class BuffCardPopup extends Component {
             unitImageSprite.node.active = false;
             console.warn(`[BuffCardPopup] updateCard: 单位图片不存在，隐藏图片节点，单位=${data.unitName}`);
         }
-        // 描述标签
+        // 描述 & 标题：所有卡片都拆成“卡片名称(单独一行，无冒号/引号)”+“详细描述(单行+黑边)”
         if (descLabel) {
-            descLabel.string = data.buffDescription;
+            const raw = data.buffDescription || '';
+            let titleText = '';
+            let bodyText = raw;
+
+            // 优先按中文冒号 '：' 或英文冒号 ':' 拆分（只拆第一个）
+            const cnIdx = raw.indexOf('：');
+            const enIdx = raw.indexOf(':');
+            let splitIdx = -1;
+            if (cnIdx >= 0 && enIdx >= 0) splitIdx = Math.min(cnIdx, enIdx);
+            else splitIdx = cnIdx >= 0 ? cnIdx : enIdx;
+
+            if (splitIdx >= 0) {
+                titleText = raw.substring(0, splitIdx).trim();
+                bodyText = raw.substring(splitIdx + 1).trim();
+            } else {
+                // 没有冒号时，标题用 unitName（例如全局增益）
+                titleText = (data.unitName || '').trim();
+                bodyText = raw;
+            }
+
+            // 标题：去掉引号/残留冒号
+            titleText = titleText
+                .replace(/["“”'‘’]/g, '')
+                .replace(/[：:]+$/g, '')
+                .trim();
+
+            // 标题颜色：SP 用彩色，其他卡片用白/稀有度色
+            const rarityColorMap: Record<string, Color> = {
+                R: new Color(200, 200, 200, 255),
+                SR: new Color(184, 115, 51, 255),
+                SSR: new Color(255, 215, 0, 255),
+                UR: new Color(255, 100, 255, 255),
+                SP: new Color(0, 255, 255, 255)
+            };
+            const titleColor = rarityColorMap[data.rarity] || new Color(255, 255, 255, 255);
+
+            const parent = descLabel.node.parent || cardNode;
+            let titleNode = parent.getChildByName('SpTitleLabel');
+            if (!titleNode) {
+                titleNode = new Node('SpTitleLabel');
+                titleNode.setParent(parent);
+
+                // 标题单独占一行（宽度对齐正文）
+                const titleTf = titleNode.addComponent(UITransform);
+                const bodyTf = descLabel.node.getComponent(UITransform);
+                if (bodyTf) {
+                    titleTf.setContentSize(bodyTf.width, Math.max(20, bodyTf.height * 0.35));
+                }
+
+                const titleLabelComp = titleNode.addComponent(Label);
+                titleLabelComp.horizontalAlign = Label.HorizontalAlign.CENTER;
+                titleLabelComp.verticalAlign = Label.VerticalAlign.CENTER;
+
+                const outline = titleNode.addComponent(LabelOutline);
+                outline.color = new Color(0, 0, 0, 255);
+                outline.width = 2;
+            } else {
+                titleNode.active = true;
+            }
+
+            const titleLabel = titleNode.getComponent(Label) || titleNode.addComponent(Label);
+            const baseSize = descLabel.fontSize || 24;
+            titleLabel.fontSize = data.rarity === 'SP' ? baseSize + 4 : baseSize + 1;
+            titleLabel.string = titleText || data.unitName || '';
+            titleLabel.color = titleColor;
+
+            // 标题位置：标题在上，正文在下
+            // 关键：缓存“初始位置”，避免每次刷新时 position 累积偏移导致越挪越下
+            const anyDescNode = descLabel.node as any;
+            if (!anyDescNode.__buffCardBasePos) {
+                anyDescNode.__buffCardBasePos = descLabel.node.position.clone();
+            }
+            const bodyPos = (anyDescNode.__buffCardBasePos as any).clone
+                ? (anyDescNode.__buffCardBasePos as any).clone()
+                : descLabel.node.position.clone();
+            const titleOffsetY = data.rarity === 'SP' ? 14 : 12;
+            // 将详细描述整体下移，避免与卡片名称太近/重叠
+            const bodyOffsetY = -2 - 20;
+            titleNode.setPosition(bodyPos.x, bodyPos.y + titleOffsetY, bodyPos.z);
+            descLabel.node.setPosition(bodyPos.x, bodyPos.y + bodyOffsetY, bodyPos.z);
+
+            // 正文：单行 + 黑边
+            descLabel.string = bodyText;
+            // 确保有黑边（详细描述全部加黑边）
+            let bodyOutline = descLabel.node.getComponent(LabelOutline);
+            if (!bodyOutline) bodyOutline = descLabel.node.addComponent(LabelOutline);
+            bodyOutline.color = new Color(0, 0, 0, 255);
+            bodyOutline.width = 2;
+
+            // 详细信息单行显示（避免与标题重叠）
+            descLabel.overflow = Label.Overflow.CLAMP;
+            descLabel.lineHeight = descLabel.fontSize + 2;
         }
         
         // 根据稀有度更新边框颜色（必须在最后执行，确保边框正确显示）
@@ -1036,18 +1163,26 @@ export class BuffCardPopup extends Component {
             }
             
             const unitScript = unit.getComponent(cardData.unitId) as any;
-            if (!unitScript) {
-                // 尝试其他可能的组件名
-                const roleScript = unit.getComponent('Role') as any;
-                const buildScript = unit.getComponent('Build') as any;
-                const script = roleScript || buildScript;
-                if (script) {
+            if (unitScript) {
+                // 统一走 BuffManager 重新计算（尤其 SP 需要按等级覆盖式应用）
+                buffManager.applyBuffsToUnit(unitScript, cardData.unitId);
+                continue;
+            }
+
+            // 尝试其他可能的组件名，但必须与 cardData.unitId 对应，避免跨单位误应用
+            const roleScript = unit.getComponent('Role') as any;
+            const buildScript = unit.getComponent('Build') as any;
+            const script = roleScript || buildScript;
+            if (script) {
+                const scriptType =
+                    script?.unitType ||
+                    script?.prefabName ||
+                    script?.constructor?.name ||
+                    '';
+                if (scriptType === cardData.unitId) {
                     // 统一走 BuffManager 重新计算（尤其 SP 需要按等级覆盖式应用）
                     buffManager.applyBuffsToUnit(script, cardData.unitId);
                 }
-            } else {
-                // 统一走 BuffManager 重新计算（尤其 SP 需要按等级覆盖式应用）
-                buffManager.applyBuffsToUnit(unitScript, cardData.unitId);
             }
         }
     }
@@ -1159,13 +1294,10 @@ export class BuffCardPopup extends Component {
                 unitScript._spDamageReductionPercent = (unitScript._spDamageReductionPercent || 0) + dr;
 
                 // 负面属性：每张重甲固定降低 15%
-                unitScript._buffAttackDamagePercent += -15;
                 unitScript._buffAttackSpeedPercent += -15;
                 unitScript._buffMoveSpeedPercent += -15;
 
-                // 重新计算三项属性
-                const dmgMul = 1 + unitScript._buffAttackDamagePercent / 100;
-                unitScript.attackDamage = Math.floor((unitScript._originalAttackDamage || 0) * dmgMul);
+                // 重新计算两项属性（重甲不降低攻击力）
                 const spdMul = 1 + unitScript._buffAttackSpeedPercent / 100;
                 unitScript.attackInterval = (unitScript._originalAttackInterval || 1) / Math.max(0.1, spdMul);
                 const mvMul = 1 + unitScript._buffMoveSpeedPercent / 100;
@@ -1201,7 +1333,8 @@ export class BuffCardPopup extends Component {
         const unitContainerMap: Record<string, string[]> = {
             'Arrower': ['Canvas/Towers'],
             'Hunter': ['Canvas/Hunters'],
-            'ElfSwordsman': ['Canvas/Swordsmen'],
+            // 剑士容器命名在不同场景/版本中可能不同，这里做兼容
+            'ElfSwordsman': ['Canvas/Swordsmen', 'Canvas/ElfSwordsmans'],
             'Priest': ['Canvas/Towers'],
             'WatchTower': ['Canvas/WatchTowers'],
             'IceTower': ['Canvas/IceTowers'],

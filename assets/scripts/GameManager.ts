@@ -7364,7 +7364,8 @@ export class GameManager extends Component {
             'Arrower': ['Canvas/Towers'],
             'Hunter': ['Canvas/Hunters'],
             'Mage': ['Canvas/Mages'],
-            'ElfSwordsman': ['Canvas/Swordsmen'],
+            // 剑士容器命名在不同场景/版本中可能不同，这里做兼容
+            'ElfSwordsman': ['Canvas/Swordsmen', 'Canvas/ElfSwordsmans'],
             'Priest': ['Canvas/Towers'],
             'WatchTower': ['Canvas/WatchTowers'],
             'IceTower': ['Canvas/IceTowers'],
@@ -7441,8 +7442,9 @@ export class GameManager extends Component {
             console.warn('[GameManager] generateBuffCards: 增益卡片配置未加载，使用默认配置');
         }
         
-        // 如果是再抽一次模式，确定UR卡片的位置（随机选择一张）
+        // 如果是再抽一次模式，确定UR/SP卡片的位置（随机选择，且不重复）
         let urCardIndex = -1;
+        let spCardIndex = -1;
         if (isRerollMode) {
             // 检查是否有支持UR的单位类型（只有角色和防御塔有UR）
             const urEligibleTypes = this.getUREligibleUnitTypes(activeUnitTypes);
@@ -7452,6 +7454,17 @@ export class GameManager extends Component {
                 // 如果没有支持UR的单位类型，不设置UR位置
                 console.warn('[GameManager] generateBuffCards: 再抽一次模式，但没有支持UR的单位类型');
             }
+
+            // 再抽一次：强制至少 1 张 SP（彩色卡）
+            // 只有存在角色单位时才有意义（SP 只对 role 生效）
+            try {
+                const buffCardConfigManager = BuffCardConfigManager.getInstance();
+                const roleTypes = activeUnitTypes.filter((t) => buffCardConfigManager.getUnitTypeCategory(t) === 'role');
+                if (roleTypes.length > 0) {
+                    const candidates = [0, 1, 2].filter((i) => i !== urCardIndex);
+                    spCardIndex = candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : -1;
+                }
+            } catch {}
         }
         
         // 总是生成3张卡片
@@ -7461,6 +7474,8 @@ export class GameManager extends Component {
             // 如果是再抽一次模式且当前卡片是UR位置
             if (isRerollMode && cardCount === urCardIndex && urCardIndex >= 0) {
                 rarity = 'UR';
+            } else if (isRerollMode && cardCount === spCardIndex && spCardIndex >= 0) {
+                rarity = 'SP';
             } else {
                 // 生成卡片稀有度（普通模式或非UR位置）
                 rarity = buffCardConfigManager.generateRarity();
@@ -7612,6 +7627,16 @@ export class GameManager extends Component {
         rarity: 'R' | 'SR' | 'SSR' | 'UR' | 'SP',
         cardIndex: number
     ): BuffCardData {
+        // SP 彩色卡：只允许从“角色”单位池中抽取，否则可能抽到建筑/塔导致降级，体验与“必得SP”不一致
+        if (rarity === 'SP') {
+            const roleOnly = activeUnitTypes.filter((t) => buffCardConfigManager.getUnitTypeCategory(t) === 'role');
+            if (roleOnly.length > 0) {
+                activeUnitTypes = roleOnly;
+            } else {
+                // 没有角色单位时，SP 无法生效，降级为 SSR
+                rarity = 'SSR';
+            }
+        }
         // 打乱单位类型
         const shuffledTypes = [...activeUnitTypes].sort(() => Math.random() - 0.5);
         const unitType = shuffledTypes[cardIndex % shuffledTypes.length];
@@ -7652,6 +7677,12 @@ export class GameManager extends Component {
         // 获取单位类型分类
         const unitCategory = buffCardConfigManager.getUnitTypeCategory(unitType);
         
+        // 如果是 SP（彩色）卡片：只允许角色类别使用 json 中定义的几种 SP 效果
+        // 建筑 / 防御塔 等非角色单位不应该出现 SP 卡，直接降级为 SSR 普通属性卡
+        if (rarity === 'SP' && unitCategory !== 'role') {
+            rarity = 'SSR';
+        }
+        
         // 获取该单位类型可用的增益效果
         // 如果是UR，先尝试获取UR配置，如果没有则使用SSR配置并增强
         let buffEffects = buffCardConfigManager.getBuffEffects(rarity, unitCategory);
@@ -7688,7 +7719,8 @@ export class GameManager extends Component {
             } catch {}
         }
         // 法师不提供攻速增幅：仅允许攻击力与移动速度
-        if (unitType === 'Mage') {
+        // 注意：SP 卡片已经做过“法师专属彩色效果”过滤，这里不能再覆盖掉，否则会把 SP 错当成普通属性卡（例如把攻击力+20%带出来）
+        if (unitType === 'Mage' && rarity !== 'SP') {
             buffTypes = buffTypes.filter(type => type === 'attackDamage' || type === 'moveSpeed');
         }
         // 建筑物（如 弓箭手小屋/教堂/猎手大厅/剑士小屋 等）不出现“攻击力增幅”卡片
@@ -7758,15 +7790,19 @@ export class GameManager extends Component {
             const spName = spNameMap[randomBuffType] || randomBuffType;
 
             if (randomBuffType === 'bouncyBoomerang') {
-                desc = `${spName}${roman(nextLv)}：女猎手弹射单位总计+${total}（本次+${delta}）`;
+                desc = `${spName}${roman(nextLv)}：弹射单位+${delta}`;
             } else if (randomBuffType === 'multiArrow') {
-                desc = `${spName}${roman(nextLv)}：弓箭手额外命中目标总计+${total}（本次+${delta}），但单体伤害降低`;
+                // 多重箭升级规则：
+                // - 每次升级只+1个额外目标（最多额外3个 => 最多打4个单位）
+                // - 攻击力会变为原来的 80%^等级
+                const extraTargetsDelta = 1;
+                desc = `${spName}${roman(nextLv)}：攻击目标+${extraTargetsDelta}，攻击力稍微降低`;
             } else if (randomBuffType === 'heavyArmor') {
-                desc = `${spName}${roman(nextLv)}：剑士伤害减免总计+${total}%（本次+${delta}%），但攻速/攻击/移速降低`;
+                desc = `${spName}${roman(nextLv)}：伤害减免+${delta}%，攻速移速稍微降低`;
             } else if (randomBuffType === 'widePrayer') {
-                desc = `${spName}${roman(nextLv)}：牧师祈祷范围总计+${total}（本次+${delta}）`;
+                desc = `${spName}${roman(nextLv)}：祈祷范围+${delta}`;
             } else if (randomBuffType === 'bangBangBang') {
-                desc = `${spName}${roman(nextLv)}：法师每次攻击飞弹数量总计+${total}（本次+${delta}）`;
+                desc = `${spName}${roman(nextLv)}：攻击飞弹数量+${delta}`;
             } else {
                 desc = `${spName}${roman(nextLv)}：效果总计+${total}（本次+${delta}）`;
             }
@@ -7792,7 +7828,8 @@ export class GameManager extends Component {
             'Arrower': ['Canvas/Towers', 'Canvas/Arrows', 'Canvas/Units'],
             'Hunter': ['Canvas/Hunters'],
             'Mage': ['Canvas/Mages'],
-            'ElfSwordsman': ['Canvas/Swordsmen'],
+            // 剑士容器兼容（部分场景使用 Canvas/ElfSwordsmans）
+            'ElfSwordsman': ['Canvas/Swordsmen', 'Canvas/ElfSwordsmans'],
             'Priest': ['Canvas/Towers', 'Canvas/Priests'],
             'MageTower': ['Canvas/MageTowers'],
             'WatchTower': ['Canvas/WatchTowers'],

@@ -54,7 +54,8 @@ export class Boomerang extends Component {
         this.startPos = startPos.clone();
         this.targetNode = targetNode;
         this.damage = damage;
-        this.currentDamage = damage; // 初始化当前伤害值
+        // 弹弹乐链路伤害下限：避免高弹射次数后出现 0 伤害
+        this.currentDamage = Math.max(2, Number(damage) || 0); // 初始化当前伤害值
         this.onHitCallback = onHit || null;
         this.ownerNode = ownerNode || null!;
 
@@ -331,6 +332,8 @@ export class Boomerang extends Component {
         this.targetNode = nextTarget;
         this.targetPos = nextTarget.worldPosition.clone();
         this.currentDamage *= this.bounceDamageMultiplier; // 更新伤害值
+        // 每次弹射后都保持至少 2 点伤害
+        this.currentDamage = Math.max(2, this.currentDamage);
         this.elapsedTime = 0; // 重置计时器
         this.hasHitTarget = false; // 重置命中标志，允许命中新目标
 
