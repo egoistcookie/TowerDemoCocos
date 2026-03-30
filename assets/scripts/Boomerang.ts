@@ -141,19 +141,26 @@ export class Boomerang extends Component {
 
         this.hasHitTarget = true;
 
-        // 直接对当前目标造成伤害，支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
-        const enemyScript = this.targetNode.getComponent('Enemy') as any || this.targetNode.getComponent('OrcWarrior') as any || this.targetNode.getComponent('OrcWarlord') as any || this.targetNode.getComponent('TrollSpearman') as any;
-        if (enemyScript && typeof enemyScript.isAlive === 'function' && enemyScript.isAlive() && typeof enemyScript.takeDamage === 'function') {
-            // 使用当前飞行方向作为受击方向
-            const currentPos = this.node.worldPosition.clone();
-            const dir = new Vec3();
-            Vec3.subtract(dir, currentPos, this.lastPos);
-            if (dir.length() > 0.001) {
-                dir.normalize();
-            }
-            enemyScript.takeDamage(this.currentDamage, dir);
-        } else {
-        }
+		// 直接对当前目标造成伤害，支持Enemy、OrcWarrior、OrcWarlord、TrollSpearman、Portal
+		const enemyScript = this.targetNode.getComponent('Enemy') as any
+			|| this.targetNode.getComponent('OrcWarrior') as any
+			|| this.targetNode.getComponent('OrcWarlord') as any
+			|| this.targetNode.getComponent('TrollSpearman') as any;
+		const portalScript = this.targetNode.getComponent('Portal') as any;
+		if (enemyScript && typeof enemyScript.isAlive === 'function' && enemyScript.isAlive() && typeof enemyScript.takeDamage === 'function') {
+			// 使用当前飞行方向作为受击方向
+			const currentPos = this.node.worldPosition.clone();
+			const dir = new Vec3();
+			Vec3.subtract(dir, currentPos, this.lastPos);
+			if (dir.length() > 0.001) {
+				dir.normalize();
+			}
+			enemyScript.takeDamage(this.currentDamage, dir);
+		} else if (portalScript && typeof portalScript.takeDamage === 'function') {
+			// 传送门不需要受击方向
+			portalScript.takeDamage(this.currentDamage);
+		} else {
+		}
         
         // 调用回调函数，用于播放音效等辅助效果
         if (this.onHitCallback) {
@@ -205,7 +212,7 @@ export class Boomerang extends Component {
         }
         
 
-        // 遍历所有敌人
+		// 遍历所有敌人
         const enemies = enemiesNode.children || [];
         
         for (const enemy of enemies) {
@@ -215,9 +222,16 @@ export class Boomerang extends Component {
                     continue;
                 }
 
-                // 检查敌人是否存活，支持OrcWarlord、OrcWarrior、Enemy和TrollSpearman
-                const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any || enemy.getComponent('TrollSpearman') as any;
-                const isAlive = enemyScript && typeof enemyScript.isAlive === 'function' && enemyScript.isAlive();
+				// 检查敌人是否存活，支持OrcWarlord、OrcWarrior、Enemy、TrollSpearman、Portal
+				const enemyScript = enemy.getComponent('OrcWarlord') as any
+					|| enemy.getComponent('OrcWarrior') as any
+					|| enemy.getComponent('Enemy') as any
+					|| enemy.getComponent('TrollSpearman') as any;
+				const portalScript = enemy.getComponent('Portal') as any;
+				const isEnemyAlive = enemyScript && typeof enemyScript.isAlive === 'function' && enemyScript.isAlive();
+				// 对传送门：视作可被攻击（Portal.takeDamage 内部会在休眠时拒绝伤害）
+				const isPortalValid = portalScript && typeof portalScript.takeDamage === 'function';
+				const isAlive = !!(isEnemyAlive || isPortalValid);
                 
                 if (isAlive) {
                     // 检查距离（使用平方距离避免开方运算）
@@ -234,6 +248,25 @@ export class Boomerang extends Component {
             }
         }
         
+		// 兜底：如果传送门不在 Enemies 容器，额外检查 Canvas/Portals
+		const portalsNode = find('Canvas/Portals');
+		if (portalsNode) {
+			for (const portal of portalsNode.children) {
+				if (!portal || !portal.isValid || !portal.active || portal === centerNode) continue;
+				if (this.enemiesHit.has(portal)) continue;
+				const portalScript = portal.getComponent('Portal') as any;
+				if (!portalScript || typeof portalScript.takeDamage !== 'function') continue;
+				const portalPos = portal.worldPosition;
+				const dx = centerPos.x - portalPos.x;
+				const dy = centerPos.y - portalPos.y;
+				const dz = centerPos.z - portalPos.z;
+				const distanceSq = dx * dx + dy * dy + dz * dz;
+				if (distanceSq <= range * range) {
+					nearbyEnemies.push(portal);
+				}
+			}
+		}
+		
         return nearbyEnemies;
     }
 

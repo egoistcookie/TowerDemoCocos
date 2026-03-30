@@ -123,9 +123,10 @@ export class Hunter extends Role {
         // 攻击时停止移动
         this.stopMoving();
 
-        // 获取敌人脚本，支持OrcWarlord、OrcWarrior、Enemy和TrollSpearman
-        const enemyScript = this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('TrollSpearman') as any;
-        if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
+		// 获取敌人脚本，支持OrcWarlord、OrcWarrior、Enemy、TrollSpearman、Portal
+		const enemyScript = this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('TrollSpearman') as any;
+		const portalScript = this.currentTarget.getComponent('Portal') as any;
+		if ((enemyScript && enemyScript.isAlive && enemyScript.isAlive()) || (portalScript && typeof portalScript.takeDamage === 'function')) {
             // 播放攻击动画，动画完成后才射出回旋镖
             this.playAttackAnimation(() => {
                 // 动画播放完成后的回调，在这里创建回旋镖
@@ -146,12 +147,15 @@ export class Hunter extends Role {
             return;
         }
 
-        // 获取敌人脚本，支持OrcWarlord、OrcWarrior、Enemy和TrollSpearman
-        const enemyScript = this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('TrollSpearman') as any;
-        if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
-            this.currentTarget = null!;
-            return;
-        }
+		// 获取敌人脚本，支持OrcWarlord、OrcWarrior、Enemy、TrollSpearman、Portal
+		const enemyScript = this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('TrollSpearman') as any;
+		const portalScript = this.currentTarget.getComponent('Portal') as any;
+		const canAttackEnemy = !!(enemyScript && enemyScript.isAlive && enemyScript.isAlive());
+		const canAttackPortal = !!(portalScript && typeof portalScript.takeDamage === 'function');
+		if (!canAttackEnemy && !canAttackPortal) {
+			this.currentTarget = null!;
+			return;
+		}
 
         // 优先使用回旋镖预制体（如果存在）
         if (this.boomerangPrefab) {
@@ -230,17 +234,20 @@ export class Hunter extends Role {
                     AudioManager.Instance?.playSFX(this.hitSound);
                 }
                 
-                // 检查目标是否仍然有效
+				// 检查目标是否仍然有效
                 if (targetNode && targetNode.isValid && targetNode.active) {
-                    // 支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
-                    const enemyScript = targetNode.getComponent('Enemy') as any || targetNode.getComponent('OrcWarrior') as any || targetNode.getComponent('OrcWarlord') as any || targetNode.getComponent('TrollSpearman') as any;
-                    if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
-                        if (enemyScript.takeDamage) {
-                            enemyScript.takeDamage(damage);
-                            // 记录伤害统计
-                            this.recordDamageToStatistics(damage);
-                        }
-                    }
+					// 支持Enemy、OrcWarrior、OrcWarlord、TrollSpearman、Portal
+					const enemyScript = targetNode.getComponent('Enemy') as any || targetNode.getComponent('OrcWarrior') as any || targetNode.getComponent('OrcWarlord') as any || targetNode.getComponent('TrollSpearman') as any;
+					const portalScript = targetNode.getComponent('Portal') as any;
+					if (enemyScript && enemyScript.isAlive && enemyScript.isAlive() && typeof enemyScript.takeDamage === 'function') {
+						enemyScript.takeDamage(damage);
+						// 记录伤害统计
+						this.recordDamageToStatistics(damage);
+					} else if (portalScript && typeof portalScript.takeDamage === 'function') {
+						portalScript.takeDamage(damage);
+						// 记录伤害统计
+						this.recordDamageToStatistics(damage);
+					}
                 }
             },
             this.node // 传入女猎手节点作为ownerNode
