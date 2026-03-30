@@ -13,7 +13,7 @@ export interface BuffCardData {
     buffType: string;            // 增益类型（如：攻击力、攻击速度、生命值等）
     buffValue: number;           // 增益数值
     buffDescription: string;     // 增益描述
-    rarity: 'R' | 'SR' | 'SSR' | 'UR'; // 卡片稀有度
+    rarity: 'R' | 'SR' | 'SSR' | 'UR' | 'SP'; // 卡片稀有度
 }
 
 @ccclass('BuffCardPopup')
@@ -861,7 +861,7 @@ export class BuffCardPopup extends Component {
     /**
      * 根据稀有度更新卡片边框颜色
      */
-    private updateCardBorder(cardNode: Node, rarity: 'R' | 'SR' | 'SSR' | 'UR') {
+    private updateCardBorder(cardNode: Node, rarity: 'R' | 'SR' | 'SSR' | 'UR' | 'SP') {
         const cardBg = cardNode.getChildByName('CardBackground');
         if (!cardBg) {
             console.warn(`[BuffCardPopup] updateCardBorder: 找不到CardBackground节点，卡片=${cardNode.name}`);
@@ -897,6 +897,11 @@ export class BuffCardPopup extends Component {
                 // UR边框：紫金色渐变效果，使用更亮的紫金色 (255, 100, 255)
                 borderColor = new Color(255, 100, 255, 255);
                 lineWidth = 5; // UR边框最粗
+                break;
+            case 'SP':
+                // SP边框：彩色卡片（高亮青蓝色），线宽更粗
+                borderColor = new Color(0, 255, 255, 255);
+                lineWidth = 6;
                 break;
             default:
                 borderColor = new Color(100, 100, 100, 255);
@@ -1037,10 +1042,12 @@ export class BuffCardPopup extends Component {
                 const buildScript = unit.getComponent('Build') as any;
                 const script = roleScript || buildScript;
                 if (script) {
-                    this.applyBuffToUnit(script, cardData);
+                    // 统一走 BuffManager 重新计算（尤其 SP 需要按等级覆盖式应用）
+                    buffManager.applyBuffsToUnit(script, cardData.unitId);
                 }
             } else {
-                this.applyBuffToUnit(unitScript, cardData);
+                // 统一走 BuffManager 重新计算（尤其 SP 需要按等级覆盖式应用）
+                buffManager.applyBuffsToUnit(unitScript, cardData.unitId);
             }
         }
     }
@@ -1137,6 +1144,50 @@ export class BuffCardPopup extends Component {
                 unitScript.moveSpeed = unitScript._originalMoveSpeed * moveMultiplier;
                 //console.info(`[BuffCardPopup] 应用移动速度增幅 ${cardData.buffValue}%，累积增幅 ${unitScript._buffMoveSpeedPercent}%，最终移动速度: ${unitScript.moveSpeed}`);
                 break;
+            
+            // ====== SP 彩色卡：自定义效果 ======
+            case 'multiArrow': {
+                unitScript._spMultiArrowExtraTargets = (unitScript._spMultiArrowExtraTargets || 0) + (cardData.buffValue || 0);
+                break;
+            }
+            case 'bouncyBoomerang': {
+                unitScript._spBoomerangExtraBounces = (unitScript._spBoomerangExtraBounces || 0) + (cardData.buffValue || 0);
+                break;
+            }
+            case 'heavyArmor': {
+                const dr = Number(cardData.buffValue) || 0;
+                unitScript._spDamageReductionPercent = (unitScript._spDamageReductionPercent || 0) + dr;
+
+                // 负面属性：每张重甲固定降低 15%
+                unitScript._buffAttackDamagePercent += -15;
+                unitScript._buffAttackSpeedPercent += -15;
+                unitScript._buffMoveSpeedPercent += -15;
+
+                // 重新计算三项属性
+                const dmgMul = 1 + unitScript._buffAttackDamagePercent / 100;
+                unitScript.attackDamage = Math.floor((unitScript._originalAttackDamage || 0) * dmgMul);
+                const spdMul = 1 + unitScript._buffAttackSpeedPercent / 100;
+                unitScript.attackInterval = (unitScript._originalAttackInterval || 1) / Math.max(0.1, spdMul);
+                const mvMul = 1 + unitScript._buffMoveSpeedPercent / 100;
+                unitScript.moveSpeed = (unitScript._originalMoveSpeed || 0) * mvMul;
+                break;
+            }
+            case 'widePrayer': {
+                if (unitScript._originalHolyPrayerRadius === undefined) {
+                    unitScript._originalHolyPrayerRadius = unitScript.holyPrayerRadius || 0;
+                }
+                unitScript._spHolyPrayerRadiusFlat = (unitScript._spHolyPrayerRadiusFlat || 0) + (cardData.buffValue || 0);
+                unitScript.holyPrayerRadius = (unitScript._originalHolyPrayerRadius || 0) + (unitScript._spHolyPrayerRadiusFlat || 0);
+                break;
+            }
+            case 'bangBangBang': {
+                if (unitScript._originalMissilesPerAttack === undefined) {
+                    unitScript._originalMissilesPerAttack = unitScript.missilesPerAttack || 0;
+                }
+                unitScript._spMissilesPerAttackFlat = (unitScript._spMissilesPerAttackFlat || 0) + (cardData.buffValue || 0);
+                unitScript.missilesPerAttack = Math.max(1, (unitScript._originalMissilesPerAttack || 0) + (unitScript._spMissilesPerAttackFlat || 0));
+                break;
+            }
         }
     }
     

@@ -215,6 +215,15 @@ export class Hunter extends Role {
             return;
         }
 
+        // SP：弹弹乐 - 增加弹射次数
+        try {
+            const extraBounces = Number((this as any)._spBoomerangExtraBounces) || 0;
+            if (extraBounces > 0) {
+                const base = Number(boomerangScript.maxBounces) || 0;
+                boomerangScript.maxBounces = base + extraBounces;
+            }
+        } catch {}
+
         // 播放箭矢射出音效
         if (this.shootSound && AudioManager.Instance) {
             AudioManager.Instance.playSFX(this.shootSound);

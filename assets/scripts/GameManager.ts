@@ -4,6 +4,7 @@ declare const wx: any;
 import { Crystal } from './role/Crystal';
 import { UnitIntroPopup } from './UnitIntroPopup';
 import { BuffCardPopup, BuffCardData } from './BuffCardPopup';
+import { BuffManager } from './BuffManager';
 import { UnitConfigManager } from './UnitConfigManager';
 import { BuffCardConfigManager } from './BuffCardConfigManager';
 import { PlayerDataManager } from './PlayerDataManager';
@@ -18,7 +19,6 @@ import { WarAncientTree } from './role/WarAncientTree';
 import { ForestGridPanel } from './ForestGridPanel';
 import { AudioManager } from './AudioManager';
 import { SoundManager } from './SoundManager';
-import { BuffManager } from './BuffManager';
 import { AnalyticsManager, OperationType } from './AnalyticsManager';
 import { PlayerProfilePopup } from './PlayerProfilePopup';
 import { WeChatShareManager } from './WeChatShareManager';
@@ -7456,7 +7456,7 @@ export class GameManager extends Component {
         
         // 总是生成3张卡片
         for (let cardCount = 0; cardCount < 3; cardCount++) {
-            let rarity: 'R' | 'SR' | 'SSR' | 'UR';
+            let rarity: 'R' | 'SR' | 'SSR' | 'UR' | 'SP';
             
             // 如果是再抽一次模式且当前卡片是UR位置
             if (isRerollMode && cardCount === urCardIndex && urCardIndex >= 0) {
@@ -7469,7 +7469,8 @@ export class GameManager extends Component {
             
             // 决定是单位增益还是全局增益（20%概率生成全局增益）
             // 注意：UR卡片只有角色和防御塔才有，不生成全局增益
-            const isGlobalBuff = rarity !== 'UR' && Math.random() < 0.2;
+            // SP/UR 不生成全局增益（SP 为彩色特殊卡，只做单位效果）
+            const isGlobalBuff = rarity !== 'UR' && rarity !== 'SP' && Math.random() < 0.2;
             
             let cardData: BuffCardData;
             
@@ -7608,7 +7609,7 @@ export class GameManager extends Component {
         activeUnitTypes: string[],
         configManager: UnitConfigManager,
         buffCardConfigManager: BuffCardConfigManager,
-        rarity: 'R' | 'SR' | 'SSR' | 'UR',
+        rarity: 'R' | 'SR' | 'SSR' | 'UR' | 'SP',
         cardIndex: number
     ): BuffCardData {
         // 打乱单位类型
@@ -7668,6 +7669,24 @@ export class GameManager extends Component {
         }
         
         let buffTypes = Object.keys(buffEffects);
+        // SP 彩色卡：按单位类型过滤专属效果，避免错配
+        if (rarity === 'SP') {
+            const spMap: Record<string, string[]> = {
+                Arrower: ['multiArrow'],
+                Hunter: ['bouncyBoomerang'],
+                ElfSwordsman: ['heavyArmor'],
+                Priest: ['widePrayer'],
+                Mage: ['bangBangBang']
+            };
+            const allowed = spMap[unitType] || [];
+            buffTypes = buffTypes.filter(t => allowed.indexOf(t) !== -1);
+
+            // 已满 3 级的 SP 不再出现
+            try {
+                const bm = BuffManager.getInstance();
+                buffTypes = buffTypes.filter((t) => bm.getSpLevel(unitType, t) < 3);
+            } catch {}
+        }
         // 法师不提供攻速增幅：仅允许攻击力与移动速度
         if (unitType === 'Mage') {
             buffTypes = buffTypes.filter(type => type === 'attackDamage' || type === 'moveSpeed');
@@ -7711,14 +7730,55 @@ export class GameManager extends Component {
         
         // 应用UR加成倍数
         const finalBuffValue = Math.round(buff.value * buffValueMultiplier);
-        
+
+        // 默认描述：单位名 + 配置描述（把数字替换为最终数值）
+        let desc = `${unitName}: ${buff.desc.replace(/\d+/, finalBuffValue.toString())}`;
+
+        // SP：三级升级 + 罗马数字（抽到即等级+1，最多3；效果按级级累加：1->3->6）
+        if (rarity === 'SP') {
+            const bm = BuffManager.getInstance();
+            const curLv = bm.getSpLevel(unitType, randomBuffType);
+            const nextLv = Math.min(3, curLv + 1);
+            const roman = (lv: number) => (lv === 1 ? 'I' : lv === 2 ? 'II' : 'III');
+            const tri = (lv: number) => (lv * (lv + 1)) / 2; // 1->1,2->3,3->6
+
+            // SP 的 buffValue 表示“一级增量”，总效果=base*tri(level)
+            const base = Number(finalBuffValue) || 0;
+            const total = base * tri(nextLv);
+            const prevTotal = base * tri(curLv);
+            const delta = total - prevTotal;
+
+            const spNameMap: Record<string, string> = {
+                multiArrow: '多重箭',
+                bouncyBoomerang: '弹弹乐',
+                heavyArmor: '重甲',
+                widePrayer: '广域祈祷',
+                bangBangBang: '砰砰砰'
+            };
+            const spName = spNameMap[randomBuffType] || randomBuffType;
+
+            if (randomBuffType === 'bouncyBoomerang') {
+                desc = `${spName}${roman(nextLv)}：女猎手弹射单位总计+${total}（本次+${delta}）`;
+            } else if (randomBuffType === 'multiArrow') {
+                desc = `${spName}${roman(nextLv)}：弓箭手额外命中目标总计+${total}（本次+${delta}），但单体伤害降低`;
+            } else if (randomBuffType === 'heavyArmor') {
+                desc = `${spName}${roman(nextLv)}：剑士伤害减免总计+${total}%（本次+${delta}%），但攻速/攻击/移速降低`;
+            } else if (randomBuffType === 'widePrayer') {
+                desc = `${spName}${roman(nextLv)}：牧师祈祷范围总计+${total}（本次+${delta}）`;
+            } else if (randomBuffType === 'bangBangBang') {
+                desc = `${spName}${roman(nextLv)}：法师每次攻击飞弹数量总计+${total}（本次+${delta}）`;
+            } else {
+                desc = `${spName}${roman(nextLv)}：效果总计+${total}（本次+${delta}）`;
+            }
+        }
+
         return {
             unitId: unitType,
             unitName: unitName,
             unitIcon: unitIcon,
             buffType: randomBuffType,
             buffValue: finalBuffValue,
-            buffDescription: `${unitName}: ${buff.desc.replace(/\d+/, finalBuffValue.toString())}`,
+            buffDescription: desc,
             rarity: rarity
         };
     }

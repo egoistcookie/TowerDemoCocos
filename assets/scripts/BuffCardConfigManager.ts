@@ -16,6 +16,7 @@ export interface BuffCardConfig {
         R: number;
         SR: number;
         SSR: number;
+        SP?: number;
     };
     buffEffects: {
         [rarity: string]: {
@@ -94,7 +95,7 @@ export class BuffCardConfigManager {
     /**
      * 根据概率随机生成卡片稀有度（不包括UR，UR只能通过再抽一次获得）
      */
-    public generateRarity(): 'R' | 'SR' | 'SSR' {
+    public generateRarity(): 'R' | 'SR' | 'SSR' | 'SP' {
         if (!this.config) {
             console.warn('[BuffCardConfigManager] 配置未加载，返回默认R');
             return 'R'; // 默认返回R
@@ -102,15 +103,19 @@ export class BuffCardConfigManager {
 
         const rand = Math.random();
         const probs = this.config.rarityProbabilities;
+        const sp = typeof probs.SP === 'number' && probs.SP > 0 ? probs.SP : 0;
         
-        // 确保概率值正确（R: 0-0.9, SR: 0.9-0.98, SSR: 0.98-1.0）
-        let rarity: 'R' | 'SR' | 'SSR';
-        if (rand < probs.R) {
-            rarity = 'R';
-        } else if (rand < probs.R + probs.SR) {
+        // 兼容：SP 可选，且概率建议很低。顺序：SP -> SSR -> SR -> R
+        // 这样可以让配置更直观：SP/SSR/SR/R 之和可<=1，其余视作回落到 R。
+        let rarity: 'R' | 'SR' | 'SSR' | 'SP';
+        if (rand < sp) {
+            rarity = 'SP';
+        } else if (rand < sp + probs.SSR) {
+            rarity = 'SSR';
+        } else if (rand < sp + probs.SSR + probs.SR) {
             rarity = 'SR';
         } else {
-            rarity = 'SSR';
+            rarity = 'R';
         }
         
         // 调试日志：输出概率计算详情
@@ -141,7 +146,7 @@ export class BuffCardConfigManager {
     /**
      * 获取指定稀有度和单位类型的增益效果列表
      */
-    public getBuffEffects(rarity: 'R' | 'SR' | 'SSR' | 'UR', unitCategory: 'tower' | 'role' | 'building' | null): Record<string, BuffEffect> {
+    public getBuffEffects(rarity: 'R' | 'SR' | 'SSR' | 'UR' | 'SP', unitCategory: 'tower' | 'role' | 'building' | null): Record<string, BuffEffect> {
         if (!this.config) {
             return {};
         }
@@ -161,7 +166,7 @@ export class BuffCardConfigManager {
     /**
      * 获取全局增益效果列表（人口、金币等）
      */
-    public getGlobalBuffEffects(rarity: 'R' | 'SR' | 'SSR' | 'UR'): Record<string, BuffEffect> {
+    public getGlobalBuffEffects(rarity: 'R' | 'SR' | 'SSR' | 'UR' | 'SP'): Record<string, BuffEffect> {
         if (!this.config) {
             return {};
         }

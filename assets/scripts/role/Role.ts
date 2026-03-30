@@ -3291,11 +3291,16 @@ export class Role extends Component {
         // 受到攻击后，在2秒内禁止播放待机动画
         this.idleBlockTimer = 2;
 
-        // 10% 概率触发暴击，实际伤害加成
-        const isCritical = Math.random() < 0.1;
-        const finalDamage = isCritical ? Math.floor(damage * 1.5) : damage;
+		// 10% 概率触发暴击，实际伤害加成
+		const isCritical = Math.random() < 0.1;
+		const criticalDamage = isCritical ? Math.floor(damage * 1.5) : damage;
 
-        // 显示伤害数字
+		// 伤害减免（用于“重甲”等卡片效果）
+		const drPercentRaw = (this as any)._spDamageReductionPercent;
+		const drPercent = Math.max(0, Math.min(90, typeof drPercentRaw === 'number' ? drPercentRaw : 0));
+		const finalDamage = drPercent > 0 ? Math.max(1, Math.floor(criticalDamage * (1 - drPercent / 100))) : criticalDamage;
+
+		// 显示伤害数字
         this.showDamageNumber(finalDamage, isCritical, hitDirection);
         
         // 播放受击动画

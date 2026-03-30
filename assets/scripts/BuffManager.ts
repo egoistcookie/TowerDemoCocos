@@ -37,10 +37,49 @@ export class BuffManager {
         return BuffManager.instance;
     }
     
+    private static readonly SP_BUFF_TYPES = new Set<string>([
+        'multiArrow',
+        'bouncyBoomerang',
+        'heavyArmor',
+        'widePrayer',
+        'bangBangBang'
+    ]);
+
+    private isSpBuffType(buffType: string): boolean {
+        return BuffManager.SP_BUFF_TYPES.has(buffType);
+    }
+
+    /**
+     * 获取 SP 等级（同单位同 buffType 的次数，最多 3）
+     */
+    public getSpLevel(unitId: string, buffType: string): number {
+        if (!this.isSpBuffType(buffType)) return 0;
+        const buffs = this.getBuffsForUnit(unitId);
+        let cnt = 0;
+        for (const b of buffs) {
+            if (b && b.buffType === buffType) cnt++;
+        }
+        return Math.min(3, cnt);
+    }
+
+    private static tri(level: number): number {
+        const l = Math.max(0, Math.min(3, Math.floor(level)));
+        return (l * (l + 1)) / 2; // 1->1, 2->3, 3->6
+    }
+
     /**
      * 添加增益
      */
     public addBuff(unitId: string, buffType: string, buffValue: number) {
+        // SP：同卡最多三级（抽到则等级+1）
+        if (this.isSpBuffType(buffType)) {
+            const lv = this.getSpLevel(unitId, buffType);
+            if (lv >= 3) {
+                // 达到三级后不再叠加
+                return;
+            }
+        }
+
         const buffData: BuffData = {
             unitId,
             buffType,
@@ -122,9 +161,87 @@ export class BuffManager {
         unitScript._buffMaxHealthPercent = 0;
         unitScript._buffMoveSpeedPercent = 0;
         
-        // 应用所有增益
+        // 应用所有“非SP”增益（SP 单独按等级计算，避免简单叠加导致数值失控）
+        const spBuffs: BuffData[] = [];
         for (const buff of buffs) {
-            this.applySingleBuff(unitScript, buff);
+            if (buff && this.isSpBuffType(buff.buffType)) {
+                spBuffs.push(buff);
+            } else {
+                this.applySingleBuff(unitScript, buff);
+            }
+        }
+
+        // 统一按等级应用 SP
+        this.applySpBuffsByLevel(unitScript, spBuffs);
+    }
+
+    private applySpBuffsByLevel(unitScript: any, spBuffs: BuffData[]) {
+        if (!spBuffs || spBuffs.length === 0) return;
+
+        // 先重置 SP 字段（保证覆盖式应用）
+        unitScript._spMultiArrowExtraTargets = 0;
+        unitScript._spBoomerangExtraBounces = 0;
+        unitScript._spDamageReductionPercent = 0;
+        unitScript._spHeavyArmorPenaltyPercent = 0;
+        unitScript._spHolyPrayerRadiusFlat = 0;
+        unitScript._spMissilesPerAttackFlat = 0;
+
+        // 分组：buffType -> { level, baseValue }
+        const map = new Map<string, { level: number; base: number }>();
+        for (const b of spBuffs) {
+            if (!b) continue;
+            const cur = map.get(b.buffType) || { level: 0, base: Number(b.buffValue) || 0 };
+            cur.level = Math.min(3, cur.level + 1);
+            // base 取第一次的 value（同一SP默认一致）
+            if (!Number.isFinite(cur.base) || cur.base === 0) cur.base = Number(b.buffValue) || 0;
+            map.set(b.buffType, cur);
+        }
+
+        // 应用：总效果 = base * tri(level)，符合“级级累加”
+        for (const [buffType, info] of map.entries()) {
+            const level = Math.max(0, Math.min(3, info.level));
+            const base = Number(info.base) || 0;
+            const total = base * BuffManager.tri(level);
+
+            switch (buffType) {
+                case 'multiArrow':
+                    unitScript._spMultiArrowExtraTargets = Math.max(0, Math.floor(total));
+                    break;
+                case 'bouncyBoomerang':
+                    unitScript._spBoomerangExtraBounces = Math.max(0, Math.floor(total));
+                    break;
+                case 'widePrayer': {
+                    if (unitScript._originalHolyPrayerRadius === undefined) {
+                        unitScript._originalHolyPrayerRadius = unitScript.holyPrayerRadius || 0;
+                    }
+                    unitScript._spHolyPrayerRadiusFlat = total;
+                    unitScript.holyPrayerRadius = (unitScript._originalHolyPrayerRadius || 0) + unitScript._spHolyPrayerRadiusFlat;
+                    break;
+                }
+                case 'bangBangBang': {
+                    if (unitScript._originalMissilesPerAttack === undefined) {
+                        unitScript._originalMissilesPerAttack = unitScript.missilesPerAttack || 0;
+                    }
+                    unitScript._spMissilesPerAttackFlat = Math.max(0, Math.floor(total));
+                    unitScript.missilesPerAttack = Math.max(1, (unitScript._originalMissilesPerAttack || 0) + unitScript._spMissilesPerAttackFlat);
+                    break;
+                }
+                case 'heavyArmor': {
+                    unitScript._spDamageReductionPercent = total;
+
+                    // 副作用：攻速/攻击/移速降低（同样按“级级累加”，每级基准惩罚 5%）
+                    const penalty = 5 * BuffManager.tri(level); // 1->5,2->15,3->30
+                    unitScript._spHeavyArmorPenaltyPercent = penalty;
+
+                    // 在“通用卡片百分比计算”之后，再额外施加惩罚（不污染 _buffXXXPercent，避免与普通卡片混算）
+                    const p = Math.max(0, Math.min(80, penalty));
+                    const downMul = 1 - p / 100;
+                    unitScript.attackDamage = Math.max(0, Math.floor((unitScript.attackDamage || 0) * downMul));
+                    unitScript.moveSpeed = Math.round((unitScript.moveSpeed || 0) * downMul * 100) / 100;
+                    unitScript.attackInterval = Math.max(0.05, (unitScript.attackInterval || 1) * (1 + p / 100));
+                    break;
+                }
+            }
         }
     }
     
@@ -183,6 +300,8 @@ export class BuffManager {
                 unitScript.moveSpeed = Math.round(unitScript._originalMoveSpeed * moveMultiplier * 100) / 100;
                //console.info(`[BuffManager] 应用移动速度增幅 ${buff.buffValue}%，累积增幅 ${unitScript._buffMoveSpeedPercent}%，最终移动速度: ${unitScript.moveSpeed}`);
                 break;
+            
+            // SP 彩色卡在 applyBuffsToUnit() 中按“等级”统一处理，这里不逐条叠加
         }
     }
     

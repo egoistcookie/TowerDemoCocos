@@ -10,6 +10,8 @@ const { ccclass, property } = _decorator;
 
 @ccclass('Arrower')
 export class Arrower extends Role {
+    // SP：多重箭 - 单体伤害系数（额外目标越多，总体DPS会变高，因此单体降伤做平衡）
+    private readonly SP_MULTI_ARROW_DAMAGE_MULTIPLIER: number = 0.6;
     // 重写父类属性，设置 Arrower 的默认值
     @property({ override: true })
     maxHealth: number = 50;
@@ -171,16 +173,72 @@ export class Arrower extends Role {
             
             // 等级小于3或没有技能，保持原有逻辑
             if (this.level < 3 || !this.level3ArrowPrefab) {
-                // 使用父类的普通箭矢逻辑
-                // @ts-ignore 通过索引访问以避免编译器对protected的限制提示
-                super['createArrow']();
+                // SP：多重箭（仅作用于普通箭，不覆盖穿透箭）
+                const extraTargets = Math.max(0, Math.floor(Number((this as any)._spMultiArrowExtraTargets) || 0));
+                if (extraTargets > 0) {
+                    this.createMultiArrow(extraTargets, this.attackDamage);
+                } else {
+                    // 使用父类的普通箭矢逻辑
+                    // @ts-ignore 通过索引访问以避免编译器对protected的限制提示
+                    super['createArrow']();
+                }
                 return;
             }
             
             // 3级但没有技能或蓝量不足，使用普通箭
             // @ts-ignore
-            super['createArrow']();
+            {
+                const extraTargets = Math.max(0, Math.floor(Number((this as any)._spMultiArrowExtraTargets) || 0));
+                if (extraTargets > 0) {
+                    this.createMultiArrow(extraTargets, this.attackDamage);
+                } else {
+                    super['createArrow']();
+                }
+            }
         });
+    }
+
+    private createMultiArrow(extraTargets: number, baseDamage: number) {
+        if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
+            return;
+        }
+        const maxTargets = 1 + extraTargets;
+        const enemies = this.getEnemies(true, this.attackRange);
+        if (!enemies || enemies.length === 0) {
+            return;
+        }
+        const myPos = this.node.worldPosition;
+        // 以距离排序，优先近的；确保 currentTarget 在列表里
+        const list = enemies
+            .filter(e => e && e.isValid && e.active && this.isAliveEnemy(e))
+            .sort((a, b) => {
+                const da = (a.worldPosition.x - myPos.x) ** 2 + (a.worldPosition.y - myPos.y) ** 2;
+                const db = (b.worldPosition.x - myPos.x) ** 2 + (b.worldPosition.y - myPos.y) ** 2;
+                return da - db;
+            });
+        // 把当前目标放在最前
+        const targets: Node[] = [];
+        targets.push(this.currentTarget);
+        for (const e of list) {
+            if (targets.length >= maxTargets) break;
+            if (e === this.currentTarget) continue;
+            targets.push(e);
+        }
+        const perDamage = Math.max(1, Math.floor((Number(baseDamage) || 0) * this.SP_MULTI_ARROW_DAMAGE_MULTIPLIER));
+
+        const oldTarget = this.currentTarget;
+        const oldDamage = this.attackDamage;
+        try {
+            for (const t of targets) {
+                this.currentTarget = t;
+                this.attackDamage = perDamage;
+                // @ts-ignore
+                super['createArrow']();
+            }
+        } finally {
+            this.currentTarget = oldTarget;
+            this.attackDamage = oldDamage;
+        }
     }
 
     private getEffectiveAttackDamage(): number {
