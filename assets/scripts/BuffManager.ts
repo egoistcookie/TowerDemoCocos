@@ -180,6 +180,7 @@ export class BuffManager {
 
         // 先重置 SP 字段（保证覆盖式应用）
         unitScript._spMultiArrowExtraTargets = 0;
+        unitScript._spMultiArrowDamageMul = 1.0;
         unitScript._spBoomerangExtraBounces = 0;
         unitScript._spDamageReductionPercent = 0;
         unitScript._spHeavyArmorPenaltyPercent = 0;
@@ -207,8 +208,14 @@ export class BuffManager {
                 case 'multiArrow':
                     // 新规则：
                     // - 每次升级只 +1 个额外目标：Lv1->1, Lv2->2, Lv3->3（最多额外3个，也就是最多打4个单位）
-                    // - 每次升级都会让最终攻击力变为“原来的 80%”：attackDamage *= 0.8^level
+                    // - 每次升级会让“最终结算伤害”乘以 0.9（每级一次），即 finalDamage *= 0.9^level
+                    //   注意：不要在这里直接改 attackDamage，否则会导致控弦/攻击力卡等加成被提前打折
                     unitScript._spMultiArrowExtraTargets = Math.max(0, Math.floor(base * level));
+                    try {
+                        unitScript._spMultiArrowDamageMul = Math.pow(0.9, level);
+                    } catch {
+                        unitScript._spMultiArrowDamageMul = 1.0;
+                    }
                     // 抽到多重箭后：自动关闭弓箭手“穿透箭”开关（两者不允许同时开启）
                     // 这里用 any 访问私有字段，避免在 BuffManager 引入 Arrower 类型依赖
                     if (level > 0) {
@@ -230,10 +237,6 @@ export class BuffManager {
                             }
                         } catch {}
                     }
-                    try {
-                        const mul = Math.pow(0.8, level);
-                        unitScript.attackDamage = Math.max(0, Math.floor((unitScript.attackDamage || 0) * mul));
-                    } catch {}
                     break;
                 case 'bouncyBoomerang':
                     unitScript._spBoomerangExtraBounces = Math.max(0, Math.floor(total));

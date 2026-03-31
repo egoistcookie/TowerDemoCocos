@@ -10,9 +10,8 @@ const { ccclass, property } = _decorator;
 
 @ccclass('Arrower')
 export class Arrower extends Role {
-    // SP：多重箭 - 单体伤害系数
-    // 说明：多重箭的降伤已改为在 BuffManager 中按等级统一处理（attackDamage *= 0.8^level），这里不再额外降伤
-    private readonly SP_MULTI_ARROW_DAMAGE_MULTIPLIER: number = 1.0;
+    // SP：多重箭 - 最终伤害衰减（由 BuffManager 写入到 _spMultiArrowDamageMul）
+    // 说明：必须在控弦/攻击力卡等所有加成计算完成后，再做最终乘区衰减
     // 重写父类属性，设置 Arrower 的默认值
     @property({ override: true })
     maxHealth: number = 50;
@@ -225,7 +224,10 @@ export class Arrower extends Role {
             if (e === this.currentTarget) continue;
             targets.push(e);
         }
-        const perDamage = Math.max(1, Math.floor((Number(baseDamage) || 0) * this.SP_MULTI_ARROW_DAMAGE_MULTIPLIER));
+        const spMul = Number((this as any)._spMultiArrowDamageMul);
+        const finalMul = Number.isFinite(spMul) && spMul > 0 ? spMul : 1.0;
+        // 多重箭：在最终伤害（已包含控弦、攻击力卡等加成）基础上，再做 0.9^level 衰减
+        const perDamage = Math.max(1, Math.floor((Number(baseDamage) || 0) * finalMul));
 
         const oldTarget = this.currentTarget;
         const oldDamage = this.attackDamage;

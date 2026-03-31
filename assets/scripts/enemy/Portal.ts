@@ -55,6 +55,8 @@ export class Portal extends Component {
     public damageNumberPrefab: Prefab = null!;
 
     onEnable() {
+        // 确保传送门渲染层级永远在顶部资源 UI（木材/金币等）之下
+        this.ensureBelowTopUI();
         // 出场即按普通敌人的规则进行每关增幅
         this.applyLevelBuffLikeEnemies();
         this.currentHealth = this.maxHealth;
@@ -72,6 +74,32 @@ export class Portal extends Component {
         const dormant = this.isDormantNow();
         this.applyDormantVisual(dormant);
         this.lastDormant = dormant;
+    }
+
+    /**
+     * 修复：传送门在“无敌/休眠后再显示”时可能被重排到 Canvas 顶层，覆盖木材/金币等 UI。
+     * 这里将 Portal（或其容器）强制放到 Top UI 之下。
+     */
+    private ensureBelowTopUI() {
+        try {
+            if (!this.node || !this.node.isValid) return;
+            const uiNode = find('Canvas/UI') || find('Canvas/HUD') || find('Canvas/TopUI');
+            if (!uiNode || !uiNode.isValid) return;
+
+            const uiIndex = uiNode.getSiblingIndex();
+            const parent = this.node.parent;
+            if (!parent || !parent.isValid) return;
+
+            // 优先调整“容器”层级（比如 Canvas/Enemies、Canvas/Portals），避免容器整体压到 UI 上
+            if (parent.name === 'Enemies' || parent.name === 'Portals') {
+                parent.setSiblingIndex(Math.max(0, uiIndex - 1));
+                // 同时把自己放在容器靠前，避免后续动态 addChild 导致顶到最上层
+                this.node.setSiblingIndex(0);
+            } else {
+                // 否则直接调整自己
+                this.node.setSiblingIndex(Math.max(0, uiIndex - 1));
+            }
+        } catch {}
     }
 
     // 参照 EnemySpawner.applyLevelBuff，对传送门应用关卡生命增幅
@@ -128,6 +156,8 @@ export class Portal extends Component {
         const dormant = this.isDormantNow();
         if (dormant !== this.lastDormant) {
             this.applyDormantVisual(dormant);
+            // 休眠/无敌状态切换时，经常伴随节点激活与层级重排，这里再兜底一次
+            this.ensureBelowTopUI();
             this.lastDormant = dormant;
         }
 
