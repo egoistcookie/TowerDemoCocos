@@ -160,7 +160,7 @@ export class ElfSwordsman extends Role {
     }
 
     
-    battleSlogans: string[] = ['Excalibur！', '我可以这样打一百天！', '要上了！', '以此剑为誓！', '没吃饱饭？', '用点力！'];
+    battleSlogans: string[] = ['Excalibur！', '我可以这样打上一百天！', '要上了！', '以此剑为誓！', '没吃饱饭？', '用点力！'];
 
     // 剑士磨剑技能冷却（全体剑士共享）
     private readonly SWORD_SHARPEN_SKILL_COOLDOWN_MS: number = 30_000;

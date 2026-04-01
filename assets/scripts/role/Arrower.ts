@@ -138,7 +138,7 @@ export class Arrower extends Role {
     // 当前弓弦松紧带来的攻击倍率（只作用于本弓箭手实例；不叠加，直接覆盖）
     public bowstringAttackMultiplier: number = 1.0;
 
-    battleSlogans: string[] = ['箭如雨下！', '射击！射击！射击！', '瞄准，射击！', '弓弦紧绷射天狼!', '箭似流星！','射箭！射箭！射箭！', 'Biu! Biu! Biu!'];
+    battleSlogans: string[] = ['箭如雨下！', '射击！射击！射击！', '瞄准，射击！', '弓弦紧绷射天狼!', '箭似流星！', 'Biu! Biu! Biu!'];
     private readonly SP_MULTI_ARROW_SLOGAN = '我的箭……会分叉？';
 
     public override tryTriggerSloganOnAction() {

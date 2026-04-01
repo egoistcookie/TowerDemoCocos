@@ -232,6 +232,11 @@ export class Role extends Component {
     private dialogTimer: number = 0; // 对话框显示计时器（用于控制显示时间和渐隐）
     private dialogIntervalTimer: number = 0; // 对话框间隔计时器（用于累计间隔时间）
     private dialogInterval: number = 0; // 下次显示对话框的间隔时间（3-6秒随机，稍微提高口号频率）
+    private lastDialogIndexLogTime: number = 0; // 调试：限制 index 日志频率，避免刷屏
+    private dialogWorldMaxRecalcTimer: number = 0; // worldMaxIndex 重算计时器
+    private cachedDialogWorldMaxIndex: number = -1; // 缓存 worldMaxIndex，避免每帧 for 循环
+    private readonly DIALOG_WORLD_MAX_RECALC_INTERVAL: number = 2; // 每2秒重算一次 worldMaxIndex
+    private readonly ENABLE_DIALOG_INDEX_DEBUG: boolean = false; // 默认关闭重型调试遍历
     private readonly DIALOG_MIN_INTERVAL: number = 3; // 最小间隔从 5 秒调整为 3 秒
     private readonly DIALOG_MAX_INTERVAL: number = 6; // 最大间隔从 10 秒调整为 6 秒
     private readonly DIALOG_DURATION: number = 2; // 对话框显示持续时间2秒
@@ -573,7 +578,8 @@ export class Role extends Component {
             this.manaBarNode.setScale(overheadScaleX, 1, 1);
         }
         if (this.dialogNode && this.dialogNode.isValid) {
-            this.dialogNode.setScale(overheadScaleX, 1, 1);
+            // 口号固定朝向：不再跟随单位左右翻转，仅保留待机第三段拉宽时的反向补偿
+            this.dialogNode.setScale(compensation, 1, 1);
         }
     }
 
@@ -605,8 +611,26 @@ export class Role extends Component {
 
         // 创建对话框节点
         this.dialogNode = new Node('Dialog');
-        this.dialogNode.setParent(this.node);
-        this.dialogNode.setPosition(0, 50, 0); // 在血条上方
+        // 关键改造：口号不挂在单位节点下，避免被石墙等“世界物体”遮挡
+        // 统一挂到 Canvas 下，并放到 TopUI（木材/金币栏）之下：只会被顶层 UI 遮挡。
+        const canvas = find('Canvas');
+        if (canvas && canvas.isValid) {
+            // 固定挂到 Canvas 根下，避免落在 UI 子树里导致跨父节点层级不可控
+            this.dialogNode.setParent(canvas);
+        } else if (this.node.scene) {
+            this.dialogNode.setParent(this.node.scene);
+        } else {
+            this.dialogNode.setParent(this.node.parent);
+        }
+
+        this.cachedDialogWorldMaxIndex = -1;
+        this.dialogWorldMaxRecalcTimer = 0;
+        this.ensureDialogRenderOrder(true);
+
+        // 初始位置：跟随单位头顶（世界坐标）
+        const startPos = this.node.worldPosition.clone();
+        startPos.y += 50;
+        this.dialogNode.setWorldPosition(startPos);
         // 根据当前单位的朝向设置对话框scale，并在第三段待机拉宽时做反向补偿
         this.refreshOverheadNodesScale();
 
@@ -647,6 +671,93 @@ export class Role extends Component {
         if (this.dialogLabel) {
             this.dialogLabel.color = new Color(0, 255, 0, 255); // 绿色文字（我方单位）
         }
+
+        // 调试：创建时打印一次口号与石墙层级（默认关闭）
+        if (this.ENABLE_DIALOG_INDEX_DEBUG) {
+            this.logDialogAndStoneWallIndices('create');
+        }
+    }
+
+    /**
+     * 调试输出：口号节点与石墙节点的 parent/siblingIndex
+     */
+    private logDialogAndStoneWallIndices(tag: string) {
+        if (!this.ENABLE_DIALOG_INDEX_DEBUG) return;
+        try {
+            const dialog = this.dialogNode;
+            if (!dialog || !dialog.isValid) return;
+            const dParent = dialog.parent;
+            console.log(
+                `[Role.dialog.index][${tag}] dialog=${dialog.name}, parent=${dParent ? dParent.name : 'null'}, index=${dialog.getSiblingIndex()}`
+            );
+
+            const canvas = find('Canvas');
+            if (!canvas || !canvas.isValid) {
+                console.log(`[Role.dialog.index][${tag}] Canvas not found`);
+                return;
+            }
+
+            const stack: Node[] = [canvas];
+            let hitCount = 0;
+            while (stack.length > 0) {
+                const n = stack.pop()!;
+                for (const c of n.children) {
+                    stack.push(c);
+                }
+
+                const hasStoneWallComp = !!n.getComponent('StoneWall');
+                const nameLikeStoneWall = n.name === 'StoneWall' || n.name.includes('StoneWall') || n.name.includes('石墙');
+                if (!hasStoneWallComp && !nameLikeStoneWall) continue;
+
+                hitCount++;
+                const p = n.parent;
+                console.log(
+                    `[Role.dialog.index][${tag}] stoneWall#${hitCount} node=${n.name}, parent=${p ? p.name : 'null'}, index=${n.getSiblingIndex()}`
+                );
+            }
+
+            if (hitCount === 0) {
+                console.log(`[Role.dialog.index][${tag}] no StoneWall nodes found under Canvas`);
+            }
+        } catch (e) {
+            console.warn('[Role.dialog.index] log failed:', e);
+        }
+    }
+
+    /**
+     * 统一口号渲染顺序：
+     * - 高于世界层（StoneWalls/Roles/Enemies/Builds 等）
+     * - 低于顶层 UI（UI/HUD/TopUI）
+     */
+    private ensureDialogRenderOrder(recalcWorldMax: boolean = false) {
+        try {
+            if (!this.dialogNode || !this.dialogNode.isValid) return;
+            const canvas = find('Canvas');
+            if (!canvas || !canvas.isValid || this.dialogNode.parent !== canvas) return;
+
+            const topUi = find('Canvas/UI') || find('Canvas/HUD') || find('Canvas/TopUI');
+            const topUiIndex = topUi && topUi.isValid && topUi.parent === canvas ? topUi.getSiblingIndex() : canvas.children.length;
+
+            if (recalcWorldMax || this.cachedDialogWorldMaxIndex < 0) {
+                const worldParentNames = new Set([
+                    'StoneWalls', 'Enemies', 'Enemys', 'Roles', 'Units', 'Builds', 'Bullets', 'Effects'
+                ]);
+                let worldMaxIndex = -1;
+                for (const child of canvas.children) {
+                    if (!child || !child.isValid) continue;
+                    if (child === this.dialogNode) continue;
+                    if (worldParentNames.has(child.name)) {
+                        worldMaxIndex = Math.max(worldMaxIndex, child.getSiblingIndex());
+                    }
+                }
+                this.cachedDialogWorldMaxIndex = worldMaxIndex;
+            }
+
+            const minIndex = this.cachedDialogWorldMaxIndex + 1;
+            const maxIndex = Math.max(0, topUiIndex - 1);
+            const targetIndex = Math.max(minIndex, maxIndex);
+            this.dialogNode.setSiblingIndex(targetIndex);
+        } catch {}
     }
 
     /**
@@ -796,12 +907,35 @@ export class Role extends Component {
         }
 
         // 更新对话框位置（跟随单位，保持在血条上方）
-        this.dialogNode.setPosition(0, 50, 0);
+        // 对话框挂在 Canvas 下，因此必须用 worldPosition 每帧同步。
+        const pos = this.node.worldPosition.clone();
+        pos.y += 50;
+        this.dialogNode.setWorldPosition(pos);
+
+        // 每帧使用缓存值校正层级（不做 for 扫描）
+        try {
+            this.ensureDialogRenderOrder(false);
+        } catch {}
         // 根据当前单位的朝向更新对话框scale，并在第三段待机拉宽时做反向补偿
         this.refreshOverheadNodesScale();
 
         // 更新显示计时器
         this.dialogTimer += deltaTime;
+
+        // worldMaxIndex 低频重算：每2秒才进行一次 for 循环
+        this.dialogWorldMaxRecalcTimer += deltaTime;
+        if (this.dialogWorldMaxRecalcTimer >= this.DIALOG_WORLD_MAX_RECALC_INTERVAL) {
+            this.dialogWorldMaxRecalcTimer = 0;
+            try {
+                this.ensureDialogRenderOrder(true);
+            } catch {}
+        }
+
+        // 调试：显示期间每 0.8s 打印一次口号与石墙 index（默认关闭）
+        if (this.ENABLE_DIALOG_INDEX_DEBUG && this.dialogTimer - this.lastDialogIndexLogTime >= 0.8) {
+            this.lastDialogIndexLogTime = this.dialogTimer;
+            this.logDialogAndStoneWallIndices('update');
+        }
 
         // 如果显示时间超过持续时间，开始渐隐
         if (this.dialogTimer > this.DIALOG_DURATION) {
@@ -825,6 +959,8 @@ export class Role extends Component {
                 this.dialogLabel = null;
                 this.isDialogIdleSlogan = false;
                 this.dialogTimer = 0;
+                this.dialogWorldMaxRecalcTimer = 0;
+                this.cachedDialogWorldMaxIndex = -1;
                 this.dialogIntervalTimer = 0; // 重置间隔计时器
                 // 重新随机生成下次显示的间隔时间
                 this.dialogInterval = this.DIALOG_MIN_INTERVAL + Math.random() * (this.DIALOG_MAX_INTERVAL - this.DIALOG_MIN_INTERVAL);

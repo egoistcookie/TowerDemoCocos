@@ -7,26 +7,40 @@ select * from game_sessions where DATE(created_at) = CURDATE() -1
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106') order by created_at desc ;
 select * from game_sessions where player_id='player_1774265446223_9255';
 select * from game_sessions where revive_count !=0;
---查询当天有多少玩家、各玩了几局
+--统计当天有多少玩家、各玩了几局
 select player_id,count(*) from game_sessions where DATE(created_at) = CURDATE()
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381'
 ,'player_1772722064044_978','player_1772465771074_4106') group by player_id ;
+--统计昨天有多少玩家、各玩了几局
 select player_id,count(*) from game_sessions where DATE(created_at) = CURDATE()-1
- and player_id not in ('player_1772462826043_800','player_1772466497770_5671','','') group by player_id ;
+ and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381'
+,'player_1772722064044_978','player_1772465771074_4106')  group by player_id ;
 --统计每天有多少局游戏
 select DATE(created_at),count(*) from game_sessions 
  where  player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381'
 ,'player_1772722064044_978','player_1772465771074_4106') group by DATE(created_at) order by DATE(created_at) desc ;
 --选卡明细表
+select * from card_selection_events  order by created_at desc ;
+--统计每天有多少次抽卡
 select * from card_selection_events where DATE(created_at) = CURDATE()
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381'
 ,'player_1772722064044_978','player_1772465771074_4106') order by created_at desc ;
+--统计每天有多少UR
 select * from card_selection_events where DATE(created_at) = CURDATE()-1
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')  order by created_at desc ;
 select * from card_selection_events where cards_json like BINARY  '%UR%' order by created_at desc ;
+--统计每天有多少广告抽卡(reroll和get_all只有看完了视频才会触发)
 select DATE(created_at),player_id,count(*) from card_selection_events where selection_mode  in ('get_all','reroll') 
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')
  group by DATE(created_at),player_id order by DATE(created_at) desc ;
+--统计每天广告抽卡及玩家的创建时间（创建时间为空则代表该玩家一局游戏都没有完整结束过）
+select DATE(a.created_at),a.player_id,ps.created_at ,count(*) from card_selection_events a
+left join player_statistics ps on a.player_id =ps.player_id 
+where a.selection_mode  in ('get_all','reroll') 
+ and a.player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')
+ group by DATE(a.created_at),a.player_id,ps.created_at order by DATE(created_at) desc ;
+
+select * from player_statistics where player_id='player_1774974647317_9849';
 --统计每天有多少次抽卡
 select DATE(created_at),count(*) from card_selection_events where 
   player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')
@@ -36,10 +50,11 @@ group by DATE(created_at) order by DATE(created_at) desc ;
 select * from game_records where player_id='player_1774265446223_9255';
 select * from game_records  order by created_at desc;
 select * from game_records where DATE(created_at) = CURDATE()
- and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')  order by created_at desc;
+ and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')
+order by created_at desc;
 select * from game_records where defend_time !=0 order by created_at desc;
 --玩家信息表
-select * from player_statistics where created_at>'20260326' order by created_at desc;
+select * from player_statistics where created_at>'20260401' order by created_at desc;
 select * from player_statistics where player_id like '%player_1774104641493_9000';
 --操作类型统计表
 select * from operation_statistics os ;
