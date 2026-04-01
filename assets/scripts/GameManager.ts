@@ -7367,6 +7367,7 @@ export class GameManager extends Component {
             // 剑士容器命名在不同场景/版本中可能不同，这里做兼容
             'ElfSwordsman': ['Canvas/Swordsmen', 'Canvas/ElfSwordsmans'],
             'Priest': ['Canvas/Towers'],
+            'StoneWall': ['Canvas/StoneWalls'],
             'WatchTower': ['Canvas/WatchTowers'],
             'IceTower': ['Canvas/IceTowers'],
             'ThunderTower': ['Canvas/ThunderTowers'],
@@ -7390,6 +7391,7 @@ export class GameManager extends Component {
                             // 对于其他单位，检查Role或Build组件
                             let script: any = null;
                             if (unitType === 'WatchTower' || unitType === 'IceTower' || unitType === 'ThunderTower' ||
+                                unitType === 'StoneWall' ||
                                 unitType === 'WarAncientTree' || unitType === 'HunterHall' || 
                                 unitType === 'SwordsmanHall' || unitType === 'Church') {
                                 // 建筑类单位，检查具体的组件类名
@@ -7456,11 +7458,14 @@ export class GameManager extends Component {
             }
 
             // 再抽一次：强制至少 1 张 SP（彩色卡）
-            // 只有存在角色单位时才有意义（SP 只对 role 生效）
+            // SP 可用于 角色 + StoneWall（无声自愈）
             try {
                 const buffCardConfigManager = BuffCardConfigManager.getInstance();
-                const roleTypes = activeUnitTypes.filter((t) => buffCardConfigManager.getUnitTypeCategory(t) === 'role');
-                if (roleTypes.length > 0) {
+                const spEligibleTypes = activeUnitTypes.filter((t) => {
+                    const cat = buffCardConfigManager.getUnitTypeCategory(t);
+                    return cat === 'role' || t === 'StoneWall';
+                });
+                if (spEligibleTypes.length > 0) {
                     const candidates = [0, 1, 2].filter((i) => i !== urCardIndex);
                     spCardIndex = candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : -1;
                 }
@@ -7627,13 +7632,16 @@ export class GameManager extends Component {
         rarity: 'R' | 'SR' | 'SSR' | 'UR' | 'SP',
         cardIndex: number
     ): BuffCardData {
-        // SP 彩色卡：只允许从“角色”单位池中抽取，否则可能抽到建筑/塔导致降级，体验与“必得SP”不一致
+        // SP 彩色卡：允许从“角色 + StoneWall”单位池中抽取
         if (rarity === 'SP') {
-            const roleOnly = activeUnitTypes.filter((t) => buffCardConfigManager.getUnitTypeCategory(t) === 'role');
-            if (roleOnly.length > 0) {
-                activeUnitTypes = roleOnly;
+            const spEligible = activeUnitTypes.filter((t) => {
+                const cat = buffCardConfigManager.getUnitTypeCategory(t);
+                return cat === 'role' || t === 'StoneWall';
+            });
+            if (spEligible.length > 0) {
+                activeUnitTypes = spEligible;
             } else {
-                // 没有角色单位时，SP 无法生效，降级为 SSR
+                // 没有 SP 可用单位时，降级为 SSR
                 rarity = 'SSR';
             }
         }
@@ -7677,9 +7685,10 @@ export class GameManager extends Component {
         // 获取单位类型分类
         const unitCategory = buffCardConfigManager.getUnitTypeCategory(unitType);
         
-        // 如果是 SP（彩色）卡片：只允许角色类别使用 json 中定义的几种 SP 效果
-        // 建筑 / 防御塔 等非角色单位不应该出现 SP 卡，直接降级为 SSR 普通属性卡
-        if (rarity === 'SP' && unitCategory !== 'role') {
+        // 如果是 SP（彩色）卡片：目前支持角色 + 石墙
+        // 其它非角色单位暂不支持 SP，降级为 SSR 普通属性卡
+        const spAllowedNonRoleUnits = new Set<string>(['StoneWall']);
+        if (rarity === 'SP' && unitCategory !== 'role' && !spAllowedNonRoleUnits.has(unitType)) {
             rarity = 'SSR';
         }
         
@@ -7707,7 +7716,8 @@ export class GameManager extends Component {
                 Hunter: ['bouncyBoomerang'],
                 ElfSwordsman: ['heavyArmor'],
                 Priest: ['widePrayer'],
-                Mage: ['bangBangBang']
+                Mage: ['bangBangBang'],
+                StoneWall: ['selfHealingWall']
             };
             const allowed = spMap[unitType] || [];
             buffTypes = buffTypes.filter(t => allowed.indexOf(t) !== -1);
@@ -7785,7 +7795,8 @@ export class GameManager extends Component {
                 bouncyBoomerang: '弹弹乐',
                 heavyArmor: '重甲',
                 widePrayer: '广域祈祷',
-                bangBangBang: '砰砰砰'
+                bangBangBang: '砰砰砰',
+                selfHealingWall: '无声自愈'
             };
             const spName = spNameMap[randomBuffType] || randomBuffType;
 
@@ -7803,6 +7814,9 @@ export class GameManager extends Component {
                 desc = `${spName}${roman(nextLv)}：祈祷范围+${delta}`;
             } else if (randomBuffType === 'bangBangBang') {
                 desc = `${spName}${roman(nextLv)}：攻击飞弹数量+${delta}`;
+            } else if (randomBuffType === 'selfHealingWall') {
+                const linearTotal = base * nextLv;
+                desc = `${spName}${roman(nextLv)}：每秒恢复${linearTotal}点生命值`;
             } else {
                 desc = `${spName}${roman(nextLv)}：效果总计+${total}（本次+${delta}）`;
             }

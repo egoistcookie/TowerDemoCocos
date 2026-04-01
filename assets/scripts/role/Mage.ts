@@ -108,6 +108,29 @@ export class Mage extends Role {
     unitIcon: SpriteFrame = null!;
 
     battleSlogans: string[] = ['奥术光辉！', '飞弹准备！', '爆炸，就是艺术！', '砰、砰、砰！'];
+    private readonly SP_BANG_BANG_BANG_SLOGAN = '火力覆盖！';
+
+    public override tryTriggerSloganOnAction() {
+        if (!this.battleSlogans || this.battleSlogans.length === 0) {
+            return;
+        }
+        const anyThis = this as any;
+        if (anyThis.dialogNode && anyThis.dialogNode.isValid) {
+            return;
+        }
+        if ((Number(anyThis.dialogIntervalTimer) || 0) < 2.0) {
+            return;
+        }
+
+        const spEnabled = (Number((this as any)._spMissilesPerAttackFlat) || 0) > 0;
+        if (spEnabled && Math.random() < 0.5) {
+            this.createDialog(this.SP_BANG_BANG_BANG_SLOGAN, false);
+        } else {
+            this.createDialog();
+        }
+        anyThis.dialogIntervalTimer = 0;
+        anyThis.dialogTimer = 0;
+    }
 
     // 避免在一次爆发期间被重复触发
     private isBurstEmitting: boolean = false;

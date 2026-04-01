@@ -42,7 +42,8 @@ export class BuffManager {
         'bouncyBoomerang',
         'heavyArmor',
         'widePrayer',
-        'bangBangBang'
+        'bangBangBang',
+        'selfHealingWall'
     ]);
 
     private isSpBuffType(buffType: string): boolean {
@@ -186,6 +187,7 @@ export class BuffManager {
         unitScript._spHeavyArmorPenaltyPercent = 0;
         unitScript._spHolyPrayerRadiusFlat = 0;
         unitScript._spMissilesPerAttackFlat = 0;
+        unitScript._spStoneWallRegenPerSec = 0;
 
         // 分组：buffType -> { level, baseValue }
         const map = new Map<string, { level: number; base: number }>();
@@ -270,6 +272,11 @@ export class BuffManager {
                     // 重甲：只降低攻速与移速，不降低攻击力
                     unitScript.moveSpeed = Math.round((unitScript.moveSpeed || 0) * downMul * 100) / 100;
                     unitScript.attackInterval = Math.max(0.05, (unitScript.attackInterval || 1) * (1 + p / 100));
+                    break;
+                }
+                case 'selfHealingWall': {
+                    // 石墙无声自愈：线性升级，每级 +2 点/秒（base=2 时 Lv1=2, Lv2=4, Lv3=6）
+                    unitScript._spStoneWallRegenPerSec = Math.max(0, base * level);
                     break;
                 }
             }

@@ -18,7 +18,9 @@
         "maxHealth": { "value": 20, "desc": "生命值+20%" },
         "moveSpeed": { "value": 8, "desc": "移动速度+8%" }
       },
-      "building": {},
+      "building": {
+        "maxHealth": { "value": 10, "desc": "生命值+10%" }
+      },
       "global": {
         "populationIncrease": { "value": 1, "desc": "人口上限+1" },
         "goldReward": { "value": 10, "desc": "获得10金币" }
@@ -36,7 +38,9 @@
         "maxHealth": { "value": 20, "desc": "生命值+20%" },
         "moveSpeed": { "value": 15, "desc": "移动速度+15%" }
       },
-      "building": {},
+      "building": {
+        "maxHealth": { "value": 15, "desc": "生命值+15%" }
+      },
       "global": {
         "populationIncrease": { "value": 2, "desc": "人口上限+2" },
         "goldReward": { "value": 20, "desc": "获得20金币" }
@@ -54,7 +58,9 @@
         "maxHealth": { "value": 50, "desc": "生命值+50%" },
         "moveSpeed": { "value": 25, "desc": "移动速度+25%" }
       },
-      "building": {},
+      "building": {
+        "maxHealth": { "value": 20, "desc": "生命值+20%" }
+      },
       "global": {
         "populationIncrease": { "value": 4, "desc": "人口上限+4" },
         "goldReward": { "value": 50, "desc": "获得50金币" }
@@ -70,13 +76,15 @@
         "widePrayer": { "value": 10, "desc": "彩色卡片：广域祈祷（抽到升级，最多三级）" },
         "bangBangBang": { "value": 1, "desc": "彩色卡片：砰砰砰（抽到升级，最多三级）" }
       },
-      "building": {},
+      "building": {
+        "selfHealingWall": { "value": 2, "desc": "彩色卡片：无声自愈（石墙每秒恢复2点生命值，抽到升级，最多三级）" }
+      },
       "global": {}
     }
   },
   "unitTypeCategories": {
     "tower": ["WatchTower", "IceTower", "ThunderTower"],
     "role": ["Arrower", "Hunter", "ElfSwordsman", "Priest", "Mage"],
-    "building": ["WarAncientTree", "HunterHall", "SwordsmanHall", "Church", "MoonWell"]
+    "building": ["WarAncientTree", "HunterHall", "SwordsmanHall", "Church", "MoonWell", "StoneWall"]
   }
 }

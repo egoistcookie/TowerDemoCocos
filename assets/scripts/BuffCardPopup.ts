@@ -1336,6 +1336,7 @@ export class BuffCardPopup extends Component {
             // 剑士容器命名在不同场景/版本中可能不同，这里做兼容
             'ElfSwordsman': ['Canvas/Swordsmen', 'Canvas/ElfSwordsmans'],
             'Priest': ['Canvas/Towers'],
+            'StoneWall': ['Canvas/StoneWalls'],
             'WatchTower': ['Canvas/WatchTowers'],
             'IceTower': ['Canvas/IceTowers'],
             'ThunderTower': ['Canvas/ThunderTowers'],

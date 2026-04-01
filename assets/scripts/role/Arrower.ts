@@ -139,6 +139,29 @@ export class Arrower extends Role {
     public bowstringAttackMultiplier: number = 1.0;
 
     battleSlogans: string[] = ['箭如雨下！', '射击！射击！射击！', '瞄准，射击！', '弓弦紧绷射天狼!', '箭似流星！','射箭！射箭！射箭！', 'Biu! Biu! Biu!'];
+    private readonly SP_MULTI_ARROW_SLOGAN = '我的箭……会分叉？';
+
+    public override tryTriggerSloganOnAction() {
+        if (!this.battleSlogans || this.battleSlogans.length === 0) {
+            return;
+        }
+        const anyThis = this as any;
+        if (anyThis.dialogNode && anyThis.dialogNode.isValid) {
+            return;
+        }
+        if ((Number(anyThis.dialogIntervalTimer) || 0) < 2.0) {
+            return;
+        }
+
+        const spEnabled = (Number((this as any)._spMultiArrowExtraTargets) || 0) > 0;
+        if (spEnabled && Math.random() < 0.5) {
+            this.createDialog(this.SP_MULTI_ARROW_SLOGAN, false);
+        } else {
+            this.createDialog();
+        }
+        anyThis.dialogIntervalTimer = 0;
+        anyThis.dialogTimer = 0;
+    }
 
     /**
      * 重写父类的checkSkill方法，检查是否有穿透箭技能

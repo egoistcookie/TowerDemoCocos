@@ -16,6 +16,7 @@ export class StoneWall extends Build {
     // 高亮相关
     private isHighlighted: boolean = false; // 是否高亮显示
     private highlightNode: Node = null!; // 高亮效果节点
+    private _regenTickTimer: number = 0; // SP自愈计时器
     
     /**
      * 当石墙从对象池激活时调用（用于对象池复用）
@@ -23,6 +24,7 @@ export class StoneWall extends Build {
     onEnable() {
         // 调用父类onEnable方法
         super.onEnable();
+        this._regenTickTimer = 0;
         
         // 石墙特有的初始化：监听点击事件
         this.node.on(Node.EventType.TOUCH_END, this.onStoneWallClick, this);
@@ -37,6 +39,29 @@ export class StoneWall extends Build {
         
         // 石墙特有的初始化：监听点击事件
         this.node.on(Node.EventType.TOUCH_END, this.onStoneWallClick, this);
+    }
+
+    update(deltaTime: number) {
+        if (this.isDestroyed) {
+            return;
+        }
+        const regenPerSec = Number((this as any)._spStoneWallRegenPerSec) || 0;
+        if (regenPerSec <= 0) {
+            this._regenTickTimer = 0;
+            return;
+        }
+        // 每秒结算一次自愈，避免每帧小数抖动
+        this._regenTickTimer += deltaTime;
+        while (this._regenTickTimer >= 1.0) {
+            this._regenTickTimer -= 1.0;
+            if (this.currentHealth < this.maxHealth) {
+                const nextHp = Math.min(this.maxHealth, this.currentHealth + regenPerSec);
+                this.currentHealth = nextHp;
+                if (this.healthBar) {
+                    this.healthBar.setHealth(this.currentHealth);
+                }
+            }
+        }
     }
     
     onDestroy() {
