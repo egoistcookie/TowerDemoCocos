@@ -26,6 +26,32 @@ export class BuffManager {
     private globalBuffs: BuffData[] = [];
     
     private constructor() {}
+
+    /**
+     * 统一刷新单位血条显示：
+     * - 优先使用 unitScript.healthBar
+     * - 回退到 unitScript.healthBarNode 上动态取组件（兼容对象池后引用丢失）
+     */
+    private refreshHealthBar(unitScript: any) {
+        const maxHp = Number(unitScript?.maxHealth) || 0;
+        const curHp = Number(unitScript?.currentHealth);
+        const current = Number.isFinite(curHp) ? curHp : maxHp;
+
+        let hb: any = unitScript?.healthBar;
+        if (!hb && unitScript?.healthBarNode && unitScript.healthBarNode.isValid) {
+            hb = unitScript.healthBarNode.getComponent('HealthBar' as any);
+            if (hb) {
+                unitScript.healthBar = hb;
+            }
+        }
+
+        if (hb && typeof hb.setMaxHealth === 'function') {
+            hb.setMaxHealth(maxHp);
+            if (typeof hb.setHealth === 'function') {
+                hb.setHealth(current);
+            }
+        }
+    }
     
     /**
      * 获取单例实例
@@ -177,6 +203,9 @@ export class BuffManager {
 
         // 统一按等级应用 SP
         this.applySpBuffsByLevel(unitScript, spBuffs);
+
+        // 增益应用完成后统一刷新血条，避免建筑物血条不更新
+        this.refreshHealthBar(unitScript);
     }
 
     private applySpBuffsByLevel(unitScript: any, spBuffs: BuffData[]) {
@@ -351,11 +380,8 @@ export class BuffManager {
                     unitScript.currentHealth = Math.floor(newMaxHealth * currentHealthRatio);
                 }
                 
-                // 同步刷新血条组件
-                if (unitScript.healthBar && typeof unitScript.healthBar.setMaxHealth === 'function') {
-                    unitScript.healthBar.setMaxHealth(unitScript.maxHealth);
-                    unitScript.healthBar.setHealth(unitScript.currentHealth);
-                }
+                // 同步刷新血条组件（含 healthBarNode 兜底）
+                this.refreshHealthBar(unitScript);
                 
                //console.info(`[BuffManager] 应用生命值增幅 ${buff.buffValue}%，累积增幅 ${unitScript._buffMaxHealthPercent}%，最终生命上限: ${unitScript.maxHealth}，当前生命: ${unitScript.currentHealth}`);
                 break;

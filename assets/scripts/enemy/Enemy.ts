@@ -240,6 +240,8 @@ export class Enemy extends Component {
     onEnable() {
         // 对象池复用时先恢复燃血改写的属性，避免数值叠加
         this.restoreBloodRageAttributesIfNeeded();
+        // 对象池复用时清理冰塔减速残留，避免“死亡重生后仍减速”
+        this.clearIceSlowDownState();
 
         // 从对象池获取时，重新初始化状态
         // 注意：sprite等组件引用在start中已经初始化，这里只需要重置状态
@@ -2389,6 +2391,7 @@ export class Enemy extends Component {
      */
     private resetEnemyState() {
         this.restoreBloodRageAttributesIfNeeded();
+        this.clearIceSlowDownState();
         // 重置所有状态变量
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
@@ -2430,6 +2433,20 @@ export class Enemy extends Component {
         }
         this.healthBarNode = null!;
         this.healthBar = null!;
+    }
+
+    /**
+     * 清理冰塔减速状态（对象池复用兜底）
+     * 兼容 IceArrow 写入的动态字段：_iceOriginalSpeed / _iceSlowDownEndTime
+     */
+    private clearIceSlowDownState() {
+        const anySelf = this as any;
+        const originalSpeed = Number(anySelf._iceOriginalSpeed);
+        if (Number.isFinite(originalSpeed) && originalSpeed > 0) {
+            this.moveSpeed = originalSpeed;
+        }
+        anySelf._iceOriginalSpeed = undefined;
+        anySelf._iceSlowDownEndTime = undefined;
     }
 
 
