@@ -43,7 +43,10 @@ export class BuffManager {
         'heavyArmor',
         'widePrayer',
         'bangBangBang',
-        'selfHealingWall'
+        'selfHealingWall',
+        'thunderChainPlus',
+        'iceCrawl',
+        'ballista'
     ]);
 
     private isSpBuffType(buffType: string): boolean {
@@ -188,6 +191,12 @@ export class BuffManager {
         unitScript._spHolyPrayerRadiusFlat = 0;
         unitScript._spMissilesPerAttackFlat = 0;
         unitScript._spStoneWallRegenPerSec = 0;
+        unitScript._spThunderExtraChains = 0;
+        unitScript._spThunderMinDamage = 0;
+        unitScript._spIceAoERangePlus = 0;
+        unitScript._spIceSlowPercentPlus = 0;
+        unitScript._spWatchArrowScaleMul = 1.0;
+        unitScript._spWatchKnockbackPower = 0;
 
         // 分组：buffType -> { level, baseValue }
         const map = new Map<string, { level: number; base: number }>();
@@ -277,6 +286,26 @@ export class BuffManager {
                 case 'selfHealingWall': {
                     // 石墙无声自愈：线性升级，每级 +2 点/秒（base=2 时 Lv1=2, Lv2=4, Lv3=6）
                     unitScript._spStoneWallRegenPerSec = Math.max(0, base * level);
+                    break;
+                }
+                case 'thunderChainPlus': {
+                    // 雷塔：额外弹跳 +1 / 级；最低伤害固定到 5 点（不叠加）
+                    unitScript._spThunderExtraChains = Math.max(0, Math.floor(base * level)); // base=1 => 1/2/3
+                    unitScript._spThunderMinDamage = 5; // 固定阈值
+                    break;
+                }
+                case 'iceCrawl': {
+                    // 冰塔：范围 +5 / 级；减速 +10% / 级（线性增长）
+                    unitScript._spIceAoERangePlus = Math.max(0, Math.floor(5 * level));
+                    unitScript._spIceSlowPercentPlus = Math.max(0, Math.floor(10 * level));
+                    break;
+                }
+                case 'ballista': {
+                    // 哨塔：箭体积放大（每级 +20%），小幅击退（每级 +10力度，示意值）
+                    const scalePerLv = 1 + 0.2 * level;
+                    unitScript._spWatchArrowScaleMul = scalePerLv;
+                    // 击退幅度减半；每次升级仅+1级（level 已按抽卡次数计算）
+                    unitScript._spWatchKnockbackPower = 10 * level;
                     break;
                 }
             }

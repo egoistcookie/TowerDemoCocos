@@ -1161,6 +1161,15 @@ export class WatchTower extends Build {
         // 确保节点激活
         arrow.active = true;
 
+        // SP：巨弩 - 箭体积放大
+        try {
+            const scaleMul = Number((this as any)._spWatchArrowScaleMul) || 1.0;
+            if (scaleMul && scaleMul !== 1.0) {
+                const s = arrow.scale;
+                arrow.setScale(s.x * scaleMul, s.y * scaleMul, s.z);
+            }
+        } catch {}
+
         // 获取或添加Arrow组件
         let arrowScript = arrow.getComponent(Arrow);
         if (!arrowScript) {
@@ -1202,6 +1211,23 @@ export class WatchTower extends Build {
                         targetScript.takeDamage(damage, hitDirection);
                         // 记录伤害统计（哨塔属于建筑，使用Build里的方法）
                         this.recordDamageToStatistics(damage);
+
+                        // SP：巨弩 - 小幅击退
+                        try {
+                            const power = Math.max(0, Math.floor(Number((this as any)._spWatchKnockbackPower) || 0));
+                            if (power > 0 && targetNode && targetNode.isValid) {
+                                // 对 Boss 级单位无效
+                                const isBoss = !!(targetNode.getComponent('Boss') as any);
+                                if (isBoss) {
+                                    return;
+                                }
+                                const dir = hitDirection ? hitDirection.clone() : new Vec3(1, 0, 0);
+                                if (dir.length() > 0.001) dir.normalize();
+                                const knockPos = new Vec3();
+                                Vec3.scaleAndAdd(knockPos, targetNode.worldPosition, dir, power);
+                                targetNode.setWorldPosition(knockPos);
+                            }
+                        } catch {}
                     }
                 }
             }

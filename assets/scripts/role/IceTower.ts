@@ -751,6 +751,21 @@ export class IceTower extends Build {
             iceArrowScript = arrowNode.addComponent(IceArrow);
         }
 
+        // 应用 SP：范围与减速强化（线性）
+        try {
+            const plusRange = Math.max(0, Math.floor(Number((this as any)._spIceAoERangePlus) || 0));
+            if (plusRange > 0) {
+                iceArrowScript.aoeRadius = Math.max(10, (Number(iceArrowScript.aoeRadius) || 0) + plusRange);
+            }
+            const extraSlowPercent = Math.max(0, Math.floor(Number((this as any)._spIceSlowPercentPlus) || 0));
+            if (extraSlowPercent > 0) {
+                const baseRatio = Number(iceArrowScript.slowDownRatio) || 0.5;
+                // 额外减速表示“再降低这么多比例”，下限 0.05，避免停滞
+                const newRatio = Math.max(0.05, baseRatio - extraSlowPercent / 100);
+                iceArrowScript.slowDownRatio = newRatio;
+            }
+        } catch {}
+
         // 初始化冰箭
         iceArrowScript.init(
             startPos,

@@ -15,6 +15,9 @@ export class ThunderChain extends Component {
     maxBounces: number = 3; // 最大弹射次数
 
     @property
+    minDamage: number = 0; // 最低伤害阈值（用于SP保底）
+
+    @property
     bounceRange: number = 100; // 弹射范围（像素）
 
     @property(SpriteFrame)
@@ -101,7 +104,10 @@ export class ThunderChain extends Component {
         // bounceCount从1开始，所以第一跳时bounceCount=1，伤害=damage
         // 第二跳时bounceCount=2，伤害=damage/2
         // 第三跳时bounceCount=3，伤害=damage/4
-        const currentDamage = this.damage / Math.pow(2, this.bounceCount - 1);
+        let currentDamage = this.damage / Math.pow(2, this.bounceCount - 1);
+        if (this.minDamage > 0) {
+            currentDamage = Math.max(this.minDamage, currentDamage);
+        }
 
         // 显示闪电特效（起点往上移20像素）
         const adjustedFromPos = new Vec3(fromPos.x, fromPos.y + 20, fromPos.z);

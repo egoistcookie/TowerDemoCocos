@@ -7458,12 +7458,12 @@ export class GameManager extends Component {
             }
 
             // 再抽一次：强制至少 1 张 SP（彩色卡）
-            // SP 可用于 角色 + StoneWall（无声自愈）
+            // SP 可用于 角色 + 防御塔(Watch/Ice/Thunder) + StoneWall（无声自愈）
             try {
                 const buffCardConfigManager = BuffCardConfigManager.getInstance();
                 const spEligibleTypes = activeUnitTypes.filter((t) => {
                     const cat = buffCardConfigManager.getUnitTypeCategory(t);
-                    return cat === 'role' || t === 'StoneWall';
+                    return cat === 'role' || cat === 'tower' || t === 'StoneWall';
                 });
                 if (spEligibleTypes.length > 0) {
                     const candidates = [0, 1, 2].filter((i) => i !== urCardIndex);
@@ -7632,11 +7632,11 @@ export class GameManager extends Component {
         rarity: 'R' | 'SR' | 'SSR' | 'UR' | 'SP',
         cardIndex: number
     ): BuffCardData {
-        // SP 彩色卡：允许从“角色 + StoneWall”单位池中抽取
+        // SP 彩色卡：允许从“角色 + 防御塔 + StoneWall”单位池中抽取
         if (rarity === 'SP') {
             const spEligible = activeUnitTypes.filter((t) => {
                 const cat = buffCardConfigManager.getUnitTypeCategory(t);
-                return cat === 'role' || t === 'StoneWall';
+                return cat === 'role' || cat === 'tower' || t === 'StoneWall';
             });
             if (spEligible.length > 0) {
                 activeUnitTypes = spEligible;
@@ -7685,9 +7685,9 @@ export class GameManager extends Component {
         // 获取单位类型分类
         const unitCategory = buffCardConfigManager.getUnitTypeCategory(unitType);
         
-        // 如果是 SP（彩色）卡片：目前支持角色 + 石墙
-        // 其它非角色单位暂不支持 SP，降级为 SSR 普通属性卡
-        const spAllowedNonRoleUnits = new Set<string>(['StoneWall']);
+        // 如果是 SP（彩色）卡片：目前支持 角色 + 防御塔(Watch/Ice/Thunder) + 石墙
+        // 其它单位暂不支持 SP，降级为 SSR 普通属性卡
+        const spAllowedNonRoleUnits = new Set<string>(['StoneWall', 'WatchTower', 'IceTower', 'ThunderTower']);
         if (rarity === 'SP' && unitCategory !== 'role' && !spAllowedNonRoleUnits.has(unitType)) {
             rarity = 'SSR';
         }
@@ -7717,7 +7717,10 @@ export class GameManager extends Component {
                 ElfSwordsman: ['heavyArmor'],
                 Priest: ['widePrayer'],
                 Mage: ['bangBangBang'],
-                StoneWall: ['selfHealingWall']
+                StoneWall: ['selfHealingWall'],
+                ThunderTower: ['thunderChainPlus'],
+                IceTower: ['iceCrawl'],
+                WatchTower: ['ballista']
             };
             const allowed = spMap[unitType] || [];
             buffTypes = buffTypes.filter(t => allowed.indexOf(t) !== -1);
@@ -7796,7 +7799,10 @@ export class GameManager extends Component {
                 heavyArmor: '重甲',
                 widePrayer: '广域祈祷',
                 bangBangBang: '砰砰砰',
-                selfHealingWall: '无声自愈'
+                selfHealingWall: '无声自愈',
+                thunderChainPlus: '我就是闪电！',
+                iceCrawl: '寸步难行',
+                ballista: '巨弩'
             };
             const spName = spNameMap[randomBuffType] || randomBuffType;
 
@@ -7817,8 +7823,12 @@ export class GameManager extends Component {
             } else if (randomBuffType === 'selfHealingWall') {
                 const linearTotal = base * nextLv;
                 desc = `${spName}${roman(nextLv)}：每秒恢复${linearTotal}点生命值`;
-            } else {
-                desc = `${spName}${roman(nextLv)}：效果总计+${total}（本次+${delta}）`;
+            } else if (randomBuffType === 'thunderChainPlus') {
+                desc = `${spName}${roman(nextLv)}：攻击目标+${delta}`;
+            } else if (randomBuffType === 'iceCrawl') {
+                desc = `${spName}${roman(nextLv)}：波及范围增加，减速效果增强`;
+            } else if (randomBuffType === 'ballista') {
+                desc = `${spName}${roman(nextLv)}：箭矢体积增加，命中可小幅击退`;
             }
         }
 

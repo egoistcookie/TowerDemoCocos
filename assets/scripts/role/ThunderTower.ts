@@ -768,6 +768,18 @@ export class ThunderTower extends Build {
             thunderChainScript = chainNode.addComponent(ThunderChain);
         }
 
+        // 应用 SP：额外弹射数与最低伤害
+        try {
+            const extraChains = Math.max(0, Math.floor(Number((this as any)._spThunderExtraChains) || 0));
+            if (extraChains > 0) {
+                thunderChainScript.maxBounces = Math.max(1, (Number(thunderChainScript.maxBounces) || 0) + extraChains);
+            }
+            const minDmg = Math.max(0, Math.floor(Number((this as any)._spThunderMinDamage) || 0));
+            if (minDmg > 0) {
+                (thunderChainScript as any).minDamage = minDmg;
+            }
+        } catch {}
+
         // 设置闪电链贴图（优先使用多张贴图数组，如果没有则使用单张贴图）
         if (this.lightningTextures && this.lightningTextures.length > 0) {
             thunderChainScript.lightningTextures = this.lightningTextures;
