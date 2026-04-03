@@ -979,9 +979,13 @@ export class UnitInfoPanel extends Component {
             // 一次性技能，这里不需要持久高亮，仅在按下时显示按下态
             this.skillButtonPressed = false;
 
-            // 牧师使用圣光祈祷图标；法师使用陨石图标（yunshi1/yunshi2）；女猎手暂时也用圣光图标占位
-            const normalIcon = unitInfo.name === '法师' ? 'yunshi1.png' : 'shengg.png';
-            const downIcon = unitInfo.name === '法师' ? 'yunshi2.png' : 'shengg.png';
+            // 牧师使用圣光祈祷图标；法师使用陨石图标；女猎手使用龙卷图标
+            const normalIcon = unitInfo.name === '法师'
+                ? 'yunshi1.png'
+                : (unitInfo.name === '女猎手' ? 'longjuan1.png' : 'shengg.png');
+            const downIcon = unitInfo.name === '法师'
+                ? 'yunshi2.png'
+                : (unitInfo.name === '女猎手' ? 'longjuan2.png' : 'shengg.png');
             this.loadButtonSprite(3, normalIcon, downIcon);
 
             const sprite = this.buttonSprites.get(3);

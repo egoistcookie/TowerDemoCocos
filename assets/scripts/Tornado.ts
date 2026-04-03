@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, find, Sprite, SpriteFrame, UITransform, Graphics, Color } from 'cc';
+import { _decorator, Component, Node, Vec3, find, Sprite, SpriteFrame, UITransform, resources, UIOpacity } from 'cc';
 import { GameManager } from './GameManager';
 const { ccclass, property } = _decorator;
 
@@ -38,7 +38,7 @@ export class Tornado extends Component {
 		this.currentFrame = -1;
 		this.lastDamageTick = 0;
 		this.sprite = this.getComponent(Sprite) || this.addComponent(Sprite);
-		// 可选：绘制一个辅助圈（仅开发可视）— 放到子节点，避免与 Sprite 同节点冲突
+		// 使用资源贴图显示辅助圈（hunterRing.png）
 		try {
 			let ringNode = this.node.getChildByName('Ring');
 			if (!ringNode) {
@@ -47,16 +47,36 @@ export class Tornado extends Component {
 			}
 			const ui = ringNode.getComponent(UITransform) || ringNode.addComponent(UITransform);
 			ui.setContentSize(this.radius * 2, this.radius * 2);
-			const g = ringNode.getComponent(Graphics) || ringNode.addComponent(Graphics);
-			g.clear();
-			g.strokeColor = new Color(0, 200, 255, 120);
-			g.lineWidth = 2;
-			g.circle(0, 0, this.radius);
-			g.stroke();
+			const ringSprite = ringNode.getComponent(Sprite) || ringNode.addComponent(Sprite);
+			const ringOpacity = ringNode.getComponent(UIOpacity) || ringNode.addComponent(UIOpacity);
+			ringOpacity.opacity = 26; // 10% 透明度（255 * 0.1 ≈ 26）
+			this.loadHunterRingSpriteFrame((frame) => {
+				if (ringNode && ringNode.isValid && ringSprite && frame) {
+					ringSprite.spriteFrame = frame;
+				}
+			});
 		} catch {}
 		if (!this.gameManager) {
 			this.gameManager = find('GameManager')?.getComponent('GameManager') as any;
 		}
+	}
+
+	private loadHunterRingSpriteFrame(cb: (frame: SpriteFrame | null) => void) {
+		// 优先尝试 SpriteFrame 子资源路径，失败后回退主资源路径
+		resources.load('textures/hunterRing/spriteFrame', SpriteFrame, (err, frame) => {
+			if (!err && frame) {
+				cb(frame);
+				return;
+			}
+			resources.load('textures/hunterRing', SpriteFrame, (err2, frame2) => {
+				if (err2 || !frame2) {
+					console.warn('[Tornado] 加载 hunterRing 失败:', err2 || err);
+					cb(null);
+					return;
+				}
+				cb(frame2);
+			});
+		});
 	}
 
 	update(deltaTime: number) {

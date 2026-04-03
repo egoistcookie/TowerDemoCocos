@@ -69,6 +69,9 @@ export class BuffCardPopup extends Component {
     private getAllButtonNode: Node = null!; // 全部获取按钮节点
     private videoAd: any = null; // 微信小游戏激励视频广告实例
     private videoAdCloseHandler: ((res: any) => void) | null = null; // 广告关闭事件处理器
+    
+    // 防止弹窗被重复 show() 覆盖（例如首抽固定SP后又被普通抽卡立即覆盖）
+    private isShowing: boolean = false;
 
     // “需要看视频”按钮背景图（assets/resources/textures/icon/video.png）
     private videoButtonSpriteFrame: SpriteFrame | null = null;
@@ -159,6 +162,12 @@ export class BuffCardPopup extends Component {
             return;
         }
         
+        // 已在显示中：忽略后续 show，避免内容被覆盖导致“闪一下就变了”
+        if (this.isShowing || this.container.active) {
+            //console.warn('[BuffCardPopup] show() ignored because popup is already showing');
+            return;
+        }
+        
         //console.info('[BuffCardPopup] container节点存在，isValid=', this.container.isValid, 'active=', this.container.active);
         
         // 限制最多3张卡片
@@ -205,6 +214,7 @@ export class BuffCardPopup extends Component {
         
         // 显示弹窗（参考UnitIntroPopup的实现，不重新绘制Graphics，直接使用创建时绘制的内容）
         this.container.active = true;
+        this.isShowing = true;
         
         // 重置再抽一次模式标志
         this.isRerollMode = false;
@@ -636,6 +646,7 @@ export class BuffCardPopup extends Component {
                 if (this.container && this.container.isValid) {
                     this.container.active = false;
                 }
+                    this.isShowing = false;
                 this.hideMaskLayer();
                 
                 // 继续游戏
@@ -1442,6 +1453,7 @@ export class BuffCardPopup extends Component {
                 if (this.container && this.container.isValid) {
                     this.container.active = false;
                 }
+                this.isShowing = false;
                 this.hideMaskLayer();
                 
                 // 继续游戏
@@ -1528,6 +1540,7 @@ export class BuffCardPopup extends Component {
                     if (this.container && this.container.isValid) {
                         this.container.active = false;
                     }
+                    this.isShowing = false;
                     this.hideMaskLayer();
                     
                     // 继续游戏
@@ -1544,6 +1557,7 @@ export class BuffCardPopup extends Component {
                 .start();
         } else {
             this.container.active = false;
+            this.isShowing = false;
             this.hideMaskLayer();
             
             // 继续游戏

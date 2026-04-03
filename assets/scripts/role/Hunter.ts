@@ -1,4 +1,4 @@
-import { _decorator, SpriteFrame, Prefab, Texture2D, AudioClip, Node, Vec3, instantiate, find, UITransform, Graphics, Color } from 'cc';
+import { _decorator, SpriteFrame, Prefab, Texture2D, AudioClip, Node, Vec3, instantiate, find, UITransform, Color, Sprite, resources, UIOpacity, AudioSource } from 'cc';
 import { Role } from './Role';
 import { Boomerang } from '../Boomerang';
 import { AudioManager } from '../AudioManager';
@@ -60,6 +60,8 @@ export class Hunter extends Role {
     
     @property({ type: AudioClip, override: true })
     hitSound: AudioClip = null!; // 箭矢击中敌人时的音效
+    @property({ type: AudioClip, tooltip: '龙卷技能音效（释放后持续5秒）' })
+    tornadoSkillSound: AudioClip = null!;
 
     @property({ type: Texture2D, override: true })
     attackAnimationTexture: Texture2D = null!; // 攻击动画纹理（12帧图片）
@@ -118,8 +120,35 @@ export class Hunter extends Role {
     tornadoDps: number = 3;
     @property
     tornadoPullPerSec: number = 30;
+    @property
+    tornadoAutoCastInterval: number = 20; // 自动释放间隔（秒）
+    @property
+    tornadoManaCost: number = 20; // 每次释放消耗蓝量
     private isTornadoPlacing: boolean = false;
     private tornadoCircleNode: Node | null = null;
+    private tornadoAutoCastTimer: number = 0;
+    private tornadoSFXNode: Node | null = null;
+    private tornadoSFXStopSeq: number = 0;
+
+    public override onEnable() {
+        super.onEnable();
+        this.tornadoAutoCastTimer = 0;
+        // 龙卷技能启用状态与关卡绑定（第3关及以后）
+        this.hasSkill = this.isTornadoAwakened();
+        if (this.hasSkill) {
+            if (!this.manaBarNode || !this.manaBarNode.isValid) {
+                this.createManaBar();
+            } else {
+                this.manaBarNode.active = true;
+                if (this.manaBar) {
+                    this.manaBar.setMaxMana(this.maxMana);
+                    this.manaBar.setMana(this.currentMana);
+                }
+            }
+        } else if (this.manaBarNode && this.manaBarNode.isValid) {
+            this.manaBarNode.active = false;
+        }
+    }
 
     /**
      * 重写攻击方法，使用回旋镖
@@ -155,7 +184,36 @@ export class Hunter extends Role {
 
     // === 技能按钮回调（第一格）：开始放置龙卷法阵（支持事件传入以确定初始位置） ===
     public onSkillClick(startEvent?: any) {
+        if (!this.isTornadoAwakened()) return;
         this.startTornadoPlacement(startEvent);
+    }
+
+    private isTornadoAwakened(): boolean {
+        // 需求：第三关之后才觉醒龙卷技能（即第3关及以后可用）
+        try {
+            const gm = this.gameManager as any;
+            const levelFromGM = Number(gm?.getCurrentLevelSafe?.());
+            if (Number.isFinite(levelFromGM)) {
+                return levelFromGM >= 3;
+            }
+        } catch {}
+        try {
+            const gmNode = find('GameManager');
+            const gm = gmNode?.getComponent('GameManager') as any;
+            const levelFromGM = Number(gm?.getCurrentLevelSafe?.());
+            if (Number.isFinite(levelFromGM)) {
+                return levelFromGM >= 3;
+            }
+        } catch {}
+        try {
+            const uiManagerNode = find('UIManager') || find('UI/UIManager') || find('Canvas/UI/UIManager');
+            const uiManager = uiManagerNode?.getComponent('UIManager') as any;
+            const levelFromUI = Number(uiManager?.getCurrentLevel?.());
+            if (Number.isFinite(levelFromUI)) {
+                return levelFromUI >= 3;
+            }
+        } catch {}
+        return false;
     }
 
     private startTornadoPlacement(startEvent?: any) {
@@ -173,16 +231,26 @@ export class Hunter extends Role {
             return;
         }
 
-        // 创建魔法阵（圆形可视半径）
+        // 创建魔法阵（使用 hunterRing 贴图，和牧师祈祷风格一致）
         const magicNode = new Node('TornadoCircle');
         const ui = magicNode.addComponent(UITransform);
         ui.setContentSize(this.tornadoRadius * 2, this.tornadoRadius * 2);
-        const g = magicNode.addComponent(Graphics);
-        g.clear();
-        g.strokeColor = new Color(0, 200, 255, 180);
-        g.lineWidth = 2;
-        g.circle(0, 0, this.tornadoRadius);
-        g.stroke();
+        const ringSprite = magicNode.addComponent(Sprite);
+        const ringOpacity = magicNode.addComponent(UIOpacity);
+        ringOpacity.opacity = 128; // 点击技能后出现的魔法阵：50% 透明度
+        resources.load('textures/hunterRing/spriteFrame', SpriteFrame, (err, frame) => {
+            if (!err && frame && magicNode.isValid) {
+                ringSprite.spriteFrame = frame;
+                return;
+            }
+            resources.load('textures/hunterRing', SpriteFrame, (err2, frame2) => {
+                if (!err2 && frame2 && magicNode.isValid) {
+                    ringSprite.spriteFrame = frame2;
+                    return;
+                }
+                console.warn('[Hunter] 加载龙卷预览圈 hunterRing 失败:', err2 || err);
+            });
+        });
         magicNode.setParent(canvas);
         this.tornadoCircleNode = magicNode;
 
@@ -236,6 +304,11 @@ export class Hunter extends Role {
             const worldPos = magicNode.worldPosition.clone();
             if (magicNode && magicNode.isValid) magicNode.destroy();
             this.tornadoCircleNode = null;
+
+            // 手动释放也需要消耗蓝量，不足则不释放
+            if (!this.consumeMana(this.tornadoManaCost)) {
+                return;
+            }
             this.spawnTornado(worldPos);
         };
         const onTouchEnd = (event: any) => finishAndCast(event);
@@ -269,6 +342,70 @@ export class Hunter extends Role {
         t.duration = this.tornadoDuration;
         t.dps = this.tornadoDps;
         t.pullPowerPerSecond = this.tornadoPullPerSec;
+
+        // 龙卷释放音效：持续播放 5 秒（参考祈祷的专用持续音效思路）
+        this.playTornadoSkillSFX(5);
+    }
+
+    private playTornadoSkillSFX(durationSec: number) {
+        if (!this.tornadoSkillSound || !AudioManager.Instance) return;
+
+        if (!this.tornadoSFXNode || !this.tornadoSFXNode.isValid) {
+            this.tornadoSFXNode = new Node('TornadoSFX');
+            this.tornadoSFXNode.setParent(this.node);
+            this.tornadoSFXNode.active = true;
+            this.tornadoSFXNode.addComponent(AudioSource);
+        }
+
+        const audio = this.tornadoSFXNode.getComponent(AudioSource);
+        if (!audio) return;
+
+        this.tornadoSFXStopSeq++;
+        const seq = this.tornadoSFXStopSeq;
+        audio.stop();
+        audio.clip = this.tornadoSkillSound;
+        audio.volume = AudioManager.Instance.getSFXVolume();
+        audio.loop = true;
+        audio.play();
+
+        this.scheduleOnce(() => {
+            if (seq !== this.tornadoSFXStopSeq) return;
+            if (audio && audio.node && audio.node.isValid) {
+                audio.stop();
+            }
+        }, Math.max(0.1, durationSec));
+    }
+
+    public override update(deltaTime: number) {
+        super.update(deltaTime);
+        this.updateAutoTornadoCast(deltaTime);
+    }
+
+    private updateAutoTornadoCast(deltaTime: number) {
+        if (this.isDestroyed || !this.isTornadoAwakened()) return;
+
+        this.tornadoAutoCastTimer += deltaTime;
+        if (this.tornadoAutoCastTimer < this.tornadoAutoCastInterval) return;
+        this.tornadoAutoCastTimer = 0;
+
+        const targetNode = this.currentTarget;
+        if (!targetNode || !targetNode.isValid || !targetNode.active) return;
+
+        // 仅对当前可攻击目标自动释放（敌人/传送门）
+        const enemyScript = targetNode.getComponent('OrcWarlord') as any ||
+                            targetNode.getComponent('OrcWarrior') as any ||
+                            targetNode.getComponent('Enemy') as any ||
+                            targetNode.getComponent('TrollSpearman') as any ||
+                            targetNode.getComponent('Boss') as any;
+        const portalScript = targetNode.getComponent('Portal') as any;
+        const canAttackEnemy = !!(enemyScript && enemyScript.isAlive && enemyScript.isAlive());
+        const canAttackPortal = !!(portalScript && typeof portalScript.takeDamage === 'function');
+        if (!canAttackEnemy && !canAttackPortal) return;
+
+        // 蓝量不足不释放
+        if (!this.consumeMana(this.tornadoManaCost)) return;
+
+        this.spawnTornado(targetNode.worldPosition.clone());
     }
 
     /**
@@ -312,8 +449,8 @@ export class Hunter extends Role {
             onUpgradeClick: this.level < 3 ? () => { this.onUpgradeClick(); } : undefined,
             onSellClick: () => { this.onSellClick(); },
             onDefendClick: () => { this.onDefendClick(); },
-            // 关键：把事件透传给 onSkillClick 以支持初始位置
-            onSkillClick: (event?: any) => { this.onSkillClick(event); },
+            // 第三关及以后解锁龙卷技能
+            onSkillClick: this.isTornadoAwakened() ? ((event?: any) => { this.onSkillClick(event); }) : undefined,
         };
 
         // 用 updateUnitInfo 刷新九宫格按钮和回调

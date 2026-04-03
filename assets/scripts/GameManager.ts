@@ -107,6 +107,8 @@ export class GameManager extends Component {
     // 单位首次出现相关
     private appearedUnitTypes: Set<string> = new Set();
     private hasShownLevel2MageTowerUnlockIntro: boolean = false; // 第2关小精灵介绍后，法师塔解锁介绍仅弹一次
+    private hasShownLevel2HunterTornadoAwakenIntro: boolean = false; // 第2关通关后，女猎手龙卷觉醒介绍仅弹一次
+    private shownFirstBuffCardLevels: Set<number> = new Set(); // 每关“首次抽卡”标记（用于固定SP卡逻辑）
     private originalTimeScale: number = 1; // 保存原始时间缩放值
     
     // 全局增益卡片图标（在初始化时加载）
@@ -1092,7 +1094,9 @@ export class GameManager extends Component {
         
         // 每次游戏开始时清空已出现单位类型集合
         this.appearedUnitTypes.clear();
+        this.shownFirstBuffCardLevels.clear();
         this.hasShownLevel2MageTowerUnlockIntro = false;
+        this.hasShownLevel2HunterTornadoAwakenIntro = false;
         this.debugUnitTypes = [];
         this.hasShownArrowerNeedPriestDialog = false;
         this.hasShownPriestProtectBuildingDialog = false;
@@ -3282,6 +3286,41 @@ export class GameManager extends Component {
             }
         });
     }
+
+    // 使用单位介绍框展示女猎手“龙卷觉醒”
+    private showHunterTornadoAwakenViaIntro(onClosed?: () => void) {
+        if (!this.unitIntroPopup) {
+            if (onClosed) onClosed();
+            return;
+        }
+        const finish = (icon: SpriteFrame | null) => {
+            this.unitIntroPopup.show({
+                unitName: '觉醒技能【龙卷】',
+                unitDescription: '不错，指挥官，终于恢复了我百分之一的力量。',
+                unitIcon: icon,
+                unitType: 'Hunter',
+                unitId: 'HunterTornadoAwaken',
+                onCloseCallback: () => { if (onClosed) onClosed(); }
+            });
+        };
+        const candidatePaths = [
+            'textures/Hunter/spriteFrame',
+        ];
+        const loadAt = (idx: number) => {
+            if (idx >= candidatePaths.length) {
+                finish(null);
+                return;
+            }
+            resources.load(candidatePaths[idx], SpriteFrame, (err, sf) => {
+                if (!err && sf) {
+                    finish(sf);
+                    return;
+                }
+                loadAt(idx + 1);
+            });
+        };
+        loadAt(0);
+    }
     
     /**
      * 显示游戏结算面板（统一方法，用于游戏结束和主动退出）
@@ -3299,6 +3338,13 @@ export class GameManager extends Component {
         try {
             const finalState = state != null ? state : this.lastGameResultState;
             const level = this.getCurrentLevelSafe ? this.getCurrentLevelSafe() : (this as any).currentLevel || 1;
+            if (finalState === GameState.Victory && level === 2 && !this.hasShownLevel2HunterTornadoAwakenIntro) {
+                this.hasShownLevel2HunterTornadoAwakenIntro = true;
+                this.showHunterTornadoAwakenViaIntro(() => {
+                    this.showGameResultPanel(state);
+                });
+                return;
+            }
             if (finalState === GameState.Victory && level === 1 && !(this as any)._hasShownLevel1MageUnlockOnce) {
                 (this as any)._hasShownLevel1MageUnlockOnce = true;
                 this.showMageTowerUnlockViaIntro(() => {
@@ -4696,7 +4742,9 @@ export class GameManager extends Component {
         this.hasShownPopulationLimitWarning = false;
         this.hasShownFirstArrowerDeathPopup = false;
         this.appearedUnitTypes.clear();
+        this.shownFirstBuffCardLevels.clear();
         this.hasShownLevel2MageTowerUnlockIntro = false;
+        this.hasShownLevel2HunterTornadoAwakenIntro = false;
         this.hasShownArrowerNeedPriestDialog = false;
         this.hasShownPriestProtectBuildingDialog = false;
         this.hasShownGoldReach100ArrowerDialog = false;
@@ -7431,7 +7479,7 @@ export class GameManager extends Component {
     /**
      * 生成增益卡片数据（总是生成3张卡片）
      */
-    generateBuffCards(isRerollMode: boolean = false): BuffCardData[] {
+    generateBuffCards(isRerollMode: boolean = false, forceFirstDrawFixedSp: boolean = false): BuffCardData[] {
         // 法师塔不参与增幅卡片池，仅保留法师单位参与
         const activeUnitTypes = this.getActiveUnitTypes().filter(type => type !== 'MageTower');
         //console.info(`[GameManager] generateBuffCards: 已上场的单位类型数量=${activeUnitTypes.length}, 再抽一次模式=${isRerollMode}`);
@@ -7442,6 +7490,27 @@ export class GameManager extends Component {
         
         if (!buffCardConfigManager.isConfigLoaded()) {
             console.warn('[GameManager] generateBuffCards: 增益卡片配置未加载，使用默认配置');
+        }
+
+        // 普通抽卡且是“本关首次抽卡”时，使用固定 SP 组合
+        if (!isRerollMode && forceFirstDrawFixedSp) {
+            const currentLevel = this.getCurrentLevelSafe();
+            const fixedSpUnitTypes: string[] = ['StoneWall', 'WatchTower'];
+            if (currentLevel <= 4) {
+                // 前四关：固定 石墙 + 哨塔 + 弓箭手
+                fixedSpUnitTypes.push('Arrower');
+            } else {
+                // 第五关起：固定 石墙 + 哨塔 + 场上存在的一个 role
+                const roleTypes = ['Arrower', 'Hunter', 'ElfSwordsman', 'Priest', 'Mage'];
+                const activeRoleTypes = activeUnitTypes.filter((t) => roleTypes.indexOf(t) !== -1);
+                const randomRole = activeRoleTypes.length > 0
+                    ? activeRoleTypes[Math.floor(Math.random() * activeRoleTypes.length)]
+                    : 'Arrower';
+                fixedSpUnitTypes.push(randomRole);
+            }
+            // 注意：首抽固定SP必须“稳定必出”，不能依赖 BuffCardConfigManager 异步加载是否完成。
+            // 因此这里直接构造 SP 卡片数据（并尽量从场景实例拿图标），避免被降级为 SSR。
+            return fixedSpUnitTypes.map((unitType) => this.buildFixedSpCard(unitType, configManager));
         }
         
         // 如果是再抽一次模式，确定UR/SP卡片的位置（随机选择，且不重复）
@@ -7842,6 +7911,52 @@ export class GameManager extends Component {
             rarity: rarity
         };
     }
+
+    /**
+     * 首抽固定 SP 卡片（不依赖 BuffCardConfigManager 是否已加载）
+     */
+    private buildFixedSpCard(unitType: string, configManager: UnitConfigManager): BuffCardData {
+        const displayInfo = configManager.getUnitDisplayInfo(unitType);
+        const unitName = displayInfo ? displayInfo.name : unitType;
+
+        // 尽量从实际实例中拿 icon（与普通卡一致）
+        let unitIcon: SpriteFrame | null = null;
+        const unitInstance = this.findFirstUnitInstance(unitType);
+        if (unitInstance) {
+            const unitScript = unitInstance.getComponent(unitType) as any ||
+                unitInstance.getComponent('Role') as any ||
+                unitInstance.getComponent('Build') as any;
+            if (unitScript) {
+                unitIcon = unitScript.cardIcon || unitScript.defaultSpriteFrame || unitScript.node?.getComponent(Sprite)?.spriteFrame || null;
+            }
+        }
+
+        // 固定 SP 效果（与 assets/resources/config/buffCardConfig.json 一致）
+        // - StoneWall: selfHealingWall value=2
+        // - WatchTower: ballista value=1
+        // - Arrower: multiArrow value=1
+        // - 其它角色：使用对应专属 SP（value 以配置为准）
+        const spByUnit: Record<string, { buffType: string; buffValue: number; buffDescription: string }> = {
+            StoneWall: { buffType: 'selfHealingWall', buffValue: 2, buffDescription: '无声自愈：每秒恢复2点生命值，抽到升级，最高三级' },
+            WatchTower: { buffType: 'ballista', buffValue: 1, buffDescription: '巨弩：箭矢体积增大，命中可小幅击退，最高三级' },
+            Arrower: { buffType: 'multiArrow', buffValue: 1, buffDescription: '多重箭：攻击目标+1，攻击力稍微降低，最高三级' },
+            Hunter: { buffType: 'bouncyBoomerang', buffValue: 1, buffDescription: '弹弹乐：弹射单位+1，最高三级' },
+            ElfSwordsman: { buffType: 'heavyArmor', buffValue: 5, buffDescription: '重甲：伤害减免+5%，攻速移速稍微降低，最高三级' },
+            Priest: { buffType: 'widePrayer', buffValue: 10, buffDescription: '广域祈祷：祈祷范围+10，最高三级' },
+            Mage: { buffType: 'bangBangBang', buffValue: 1, buffDescription: '砰砰砰：攻击飞弹数量+1，最高三级' }
+        };
+
+        const sp = spByUnit[unitType] || spByUnit['Arrower'];
+        return {
+            unitId: unitType,
+            unitName,
+            unitIcon,
+            buffType: sp.buffType,
+            buffValue: sp.buffValue,
+            buffDescription: sp.buffDescription,
+            rarity: 'SP'
+        };
+    }
     
     /**
      * 查找第一个指定类型的单位实例
@@ -7918,7 +8033,12 @@ export class GameManager extends Component {
         }
         
         //console.info('[GameManager] BuffCardPopup存在，开始生成卡片数据');
-        const cards = this.generateBuffCards();
+        const currentLevel = this.getCurrentLevelSafe();
+        const isFirstDrawThisLevel = !this.shownFirstBuffCardLevels.has(currentLevel);
+        if (isFirstDrawThisLevel) {
+            this.shownFirstBuffCardLevels.add(currentLevel);
+        }
+        const cards = this.generateBuffCards(false, isFirstDrawThisLevel);
         if (cards && cards.length > 0) {
             //console.info(`[GameManager] 生成了 ${cards.length} 张卡片`);
             if (cards.length > 0) {
