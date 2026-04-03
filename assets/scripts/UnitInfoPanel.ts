@@ -971,15 +971,15 @@ export class UnitInfoPanel extends Component {
             }
         }
 
-        // 牧师/法师技能按钮：放在第二行第一列（索引3），不与集结点/穿透箭冲突
-        if (unitInfo.onSkillClick && (unitInfo.name === '牧师' || unitInfo.name === '法师') && this.buttonNodes[3]) {
+        // 牧师/法师/女猎手技能按钮：放在第二行第一列（索引3），不与集结点/穿透箭冲突
+        if (unitInfo.onSkillClick && (unitInfo.name === '牧师' || unitInfo.name === '法师' || unitInfo.name === '女猎手') && this.buttonNodes[3]) {
             const skillButton = this.buttonNodes[3];
             skillButton.active = true;
 
             // 一次性技能，这里不需要持久高亮，仅在按下时显示按下态
             this.skillButtonPressed = false;
 
-            // 牧师使用圣光祈祷图标；法师使用陨石图标（yunshi1/yunshi2）
+            // 牧师使用圣光祈祷图标；法师使用陨石图标（yunshi1/yunshi2）；女猎手暂时也用圣光图标占位
             const normalIcon = unitInfo.name === '法师' ? 'yunshi1.png' : 'shengg.png';
             const downIcon = unitInfo.name === '法师' ? 'yunshi2.png' : 'shengg.png';
             this.loadButtonSprite(3, normalIcon, downIcon);

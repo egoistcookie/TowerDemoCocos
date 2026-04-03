@@ -1,7 +1,8 @@
-import { _decorator, SpriteFrame, Prefab, Texture2D, AudioClip, Node, Vec3, instantiate, find } from 'cc';
+import { _decorator, SpriteFrame, Prefab, Texture2D, AudioClip, Node, Vec3, instantiate, find, UITransform, Graphics, Color } from 'cc';
 import { Role } from './Role';
 import { Boomerang } from '../Boomerang';
 import { AudioManager } from '../AudioManager';
+import { Tornado } from '../Tornado';
 const { ccclass, property } = _decorator;
 
 @ccclass('Hunter')
@@ -106,6 +107,20 @@ export class Hunter extends Role {
 
     battleSlogans: string[] = ['我潜行于黑暗之中！', '利爪撕破长夜！', '月神指引我的道路!', '猎杀时刻！', '瞄准，射击！']; // 战斗口号数组（可在编辑器中配置）
 
+    // ===== 龙卷技能（技能栏第一格） =====
+    @property({ type: [SpriteFrame] })
+    tornadoFrames: SpriteFrame[] = [];
+    @property
+    tornadoRadius: number = 90;
+    @property
+    tornadoDuration: number = 5.0;
+    @property
+    tornadoDps: number = 3;
+    @property
+    tornadoPullPerSec: number = 30;
+    private isTornadoPlacing: boolean = false;
+    private tornadoCircleNode: Node | null = null;
+
     /**
      * 重写攻击方法，使用回旋镖
      */
@@ -136,6 +151,173 @@ export class Hunter extends Role {
             // 目标已死亡，清除目标
             this.currentTarget = null!;
         }
+    }
+
+    // === 技能按钮回调（第一格）：开始放置龙卷法阵（支持事件传入以确定初始位置） ===
+    public onSkillClick(startEvent?: any) {
+        this.startTornadoPlacement(startEvent);
+    }
+
+    private startTornadoPlacement(startEvent?: any) {
+        if (this.isDestroyed || this.isTornadoPlacing) return;
+        this.isTornadoPlacing = true;
+
+        const canvas = find('Canvas');
+        if (!canvas) {
+            this.isTornadoPlacing = false;
+            return;
+        }
+        const canvasTransform = canvas.getComponent(UITransform);
+        if (!canvasTransform) {
+            this.isTornadoPlacing = false;
+            return;
+        }
+
+        // 创建魔法阵（圆形可视半径）
+        const magicNode = new Node('TornadoCircle');
+        const ui = magicNode.addComponent(UITransform);
+        ui.setContentSize(this.tornadoRadius * 2, this.tornadoRadius * 2);
+        const g = magicNode.addComponent(Graphics);
+        g.clear();
+        g.strokeColor = new Color(0, 200, 255, 180);
+        g.lineWidth = 2;
+        g.circle(0, 0, this.tornadoRadius);
+        g.stroke();
+        magicNode.setParent(canvas);
+        this.tornadoCircleNode = magicNode;
+
+        // 统一位置更新函数：直接使用 UI 坐标映射到 Canvas（不再依赖 Camera，逻辑更稳定）
+        const updatePositionFromEvent = (event: any) => {
+            const anyEvent: any = event as any;
+            // 优先用 getUILocation（已有 UI 坐标），其次退回 getLocation
+            const loc = anyEvent?.getUILocation
+                ? anyEvent.getUILocation()
+                : (anyEvent?.getLocation ? anyEvent.getLocation() : anyEvent?.getLocationInView?.());
+            if (!loc) return;
+            // Canvas 是屏幕空间 UI，直接用设计分辨率宽高做偏移换算到锚点中心坐标
+            const canvasSize = canvasTransform.contentSize;
+            const localPos = new Vec3(
+                loc.x - canvasSize.width / 2,
+                loc.y - canvasSize.height / 2,
+                0
+            );
+            magicNode.setPosition(localPos);
+        };
+
+        // 初始事件定位
+        if (startEvent) {
+            try { updatePositionFromEvent(startEvent); } catch {}
+        } else {
+            // 没有事件时，默认放在女猎手脚下
+            const local = canvasTransform.convertToNodeSpaceAR(this.node.worldPosition.clone());
+            magicNode.setPosition(local);
+        }
+
+        // 拖拽与释放
+        const onTouchMove = (event: any) => {
+            if (!this.isTornadoPlacing || !magicNode.isValid) return;
+            updatePositionFromEvent(event);
+        };
+        const finishAndCast = (event: any | null) => {
+            if (event) (event as any).propagationStopped = true;
+            (canvas as any).off(Node.EventType.TOUCH_MOVE, onTouchMove, this, true);
+            (canvas as any).off(Node.EventType.TOUCH_END, onTouchEnd, this, true);
+            (canvas as any).off(Node.EventType.TOUCH_CANCEL, onTouchCancel, this, true);
+            (canvas as any).off(Node.EventType.MOUSE_MOVE, onMouseMove, this, true);
+            (canvas as any).off(Node.EventType.MOUSE_UP, onMouseUp, this, true);
+
+            const valid = this.isTornadoPlacing && magicNode && magicNode.isValid;
+            this.isTornadoPlacing = false;
+            if (!valid) {
+                if (magicNode && magicNode.isValid) magicNode.destroy();
+                this.tornadoCircleNode = null;
+                return;
+            }
+            const worldPos = magicNode.worldPosition.clone();
+            if (magicNode && magicNode.isValid) magicNode.destroy();
+            this.tornadoCircleNode = null;
+            this.spawnTornado(worldPos);
+        };
+        const onTouchEnd = (event: any) => finishAndCast(event);
+        const onTouchCancel = (event: any) => finishAndCast(event);
+        const onMouseMove = (event: any) => {
+            if (!this.isTornadoPlacing || !magicNode.isValid) return;
+            updatePositionFromEvent(event);
+        };
+        const onMouseUp = (event: any) => finishAndCast(event);
+
+        // 捕获阶段监听，避免被单位节点拦截
+        (canvas as any).on(Node.EventType.TOUCH_MOVE, onTouchMove, this, true);
+        (canvas as any).on(Node.EventType.TOUCH_END, onTouchEnd, this, true);
+        (canvas as any).on(Node.EventType.TOUCH_CANCEL, onTouchCancel, this, true);
+        (canvas as any).on(Node.EventType.MOUSE_MOVE, onMouseMove, this, true);
+        (canvas as any).on(Node.EventType.MOUSE_UP, onMouseUp, this, true);
+    }
+
+    private spawnTornado(worldPos: Vec3) {
+        const canvas = find('Canvas');
+        const parent = canvas || this.node.scene || this.node.parent;
+        if (!parent) return;
+        const n = new Node('Tornado');
+        n.setParent(parent);
+        n.setWorldPosition(worldPos);
+        n.active = true;
+        // 帧动画 + 逻辑
+        const t = n.addComponent(Tornado);
+        t.tornadoFrames = (this.tornadoFrames || []).filter(Boolean);
+        t.radius = this.tornadoRadius;
+        t.duration = this.tornadoDuration;
+        t.dps = this.tornadoDps;
+        t.pullPowerPerSecond = this.tornadoPullPerSec;
+    }
+
+    /**
+     * 重写显示信息面板：在第一格注入“龙卷”技能按钮（图标暂用穿透箭）
+     */
+    public override showUnitInfoPanel() {
+        // 先执行父类逻辑，确保选择与移动点击注册正常
+        super.showUnitInfoPanel();
+
+        // 然后更新面板，注入女猎手的第一格技能（龙卷）
+        if (!this.unitSelectionManager) {
+            this.findUnitSelectionManager();
+        }
+        if (!this.unitSelectionManager) {
+            return;
+        }
+
+        // 读取当前面板展示的基础数据并叠加技能回调
+        const upgradeCost = this.level < 3 ? (10 + (this.level - 1) * 10) : undefined;
+        const currentHealth = (this.currentHealth !== undefined && !isNaN(this.currentHealth) && this.currentHealth >= 0)
+            ? this.currentHealth
+            : (this.maxHealth || 0);
+        const maxHealth = (this.maxHealth !== undefined && !isNaN(this.maxHealth) && this.maxHealth > 0)
+            ? this.maxHealth
+            : 0;
+
+        const updatedInfo: any = {
+            name: this.unitName || '女猎手',
+            level: this.level,
+            currentHealth: currentHealth,
+            maxHealth: maxHealth,
+            attackDamage: this.attackDamage,
+            populationCost: 1,
+            icon: this.cardIcon || this.defaultSpriteFrame,
+            collisionRadius: this.collisionRadius,
+            attackRange: this.attackRange,
+            attackFrequency: 1.0 / this.attackInterval,
+            moveSpeed: this.moveSpeed,
+            isDefending: this.isDefending,
+            upgradeCost: upgradeCost,
+            onUpgradeClick: this.level < 3 ? () => { this.onUpgradeClick(); } : undefined,
+            onSellClick: () => { this.onSellClick(); },
+            onDefendClick: () => { this.onDefendClick(); },
+            // 关键：把事件透传给 onSkillClick 以支持初始位置
+            onSkillClick: (event?: any) => { this.onSkillClick(event); },
+        };
+
+        // 用 updateUnitInfo 刷新九宫格按钮和回调
+        (this.unitSelectionManager as any).updateUnitInfo?.(updatedInfo);
     }
 
     /**
