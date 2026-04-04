@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, instantiate, BlockInputEvents, sys, Texture2D, ImageAsset, Mask, UIOpacity, LabelOutline, AudioSource } from 'cc';
+import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, instantiate, BlockInputEvents, sys, Texture2D, ImageAsset, Mask, UIOpacity, LabelOutline, AudioSource, tween } from 'cc';
 // 微信小游戏全局对象声明（避免 TypeScript 报错）
 declare const wx: any;
 import { Crystal } from './role/Crystal';
@@ -135,7 +135,7 @@ export class GameManager extends Component {
     private bowstringMiniGameHasStartedHold: boolean = false;
     private bowstringMiniGameHoldAudioSource: AudioSource | null = null; // 弓弦小游戏长按音效（循环播放）
 
-    // “磨剑”小游戏运行态（剑士：10秒狂点）
+    // “磨剑”小游戏运行态（剑士：5秒狂点）
     private swordSharpenMiniGameRoot: Node | null = null;
     private swordSharpenMiniGameAnimSprite: Sprite | null = null;
     private swordSharpenMiniGameAnimFrames: SpriteFrame[] = [];
@@ -5338,6 +5338,7 @@ export class GameManager extends Component {
                 console.warn('[GameManager] spawnInitialEnemyPortals: 传送门预制体为空，放弃生成');
                 return;
             }
+            // 顶部三个传送门（保持原有机制）
             for (const pos of positions) {
                 const node = instantiate(prefab);
                 node.setParent(container);
@@ -5372,6 +5373,213 @@ export class GameManager extends Component {
                 tryInstantiate(prefab2 as Prefab);
             });
         }
+    }
+
+    /**
+     * 从第三波开始可调用：随机左/右侧出现“传送门预告”图标（textures/show.png，放大2倍，闪烁10秒），随后替换为传送门并开启独立刷怪。
+     */
+    public spawnRandomSidePortalWithIndicator() {
+        // 关卡 1、2 不生成侧面传送门
+        try {
+            const level = this.getCurrentLevelSafe ? this.getCurrentLevelSafe() : 1;
+            if (typeof level === 'number' && level < 3) {
+                //console.info('[SidePortal] skip on level < 3, level=', level);
+                return;
+            }
+        } catch {}
+        try { console.log('[SidePortal] spawnRandomSidePortalWithIndicator called'); } catch {}
+        const createContainer = (): Node | null => {
+            const canvas = find('Canvas');
+            if (!canvas) return null;
+            let enemies = find('Canvas/Enemies');
+            if (enemies) return enemies;
+            let container = find('Canvas/Portals');
+            if (!container) {
+                container = new Node('Portals');
+                canvas.addChild(container);
+            }
+            // 层级调整：不遮挡 HUD/UI
+            try {
+                const uiNode = find('Canvas/UI') || find('Canvas/HUD') || find('Canvas/TopUI');
+                if (uiNode) {
+                    container.setSiblingIndex(Math.max(0, uiNode.getSiblingIndex() - 1));
+                }
+            } catch {}
+            return container;
+        };
+        const container = createContainer();
+        if (!container) {
+            console.warn('[GameManager] spawnRandomSidePortalWithIndicator: no container');
+            return;
+        }
+        // 计算左右侧位点
+        const canvas = find('Canvas');
+        const ui = canvas ? canvas.getComponent(UITransform) : null;
+        const halfW = ui ? ui.contentSize.width * 0.5 : 480;
+        const sideMargin = 160;
+        const offsetX = 360;
+        const sideLeftX = -halfW + sideMargin + offsetX;
+        const sideRightX = halfW - sideMargin + offsetX;
+        const baseY = 900;
+        const randY = baseY - Math.random() * 200; // 在当前基准往下200像素内的随机位置
+        const sidePos = Math.random() < 0.5 ? new Vec3(sideLeftX, randY, 0) : new Vec3(sideRightX, randY, 0);
+        try { console.log('[SidePortal] indicator target pos =', sidePos.x, sidePos.y, 'container=', container?.name); } catch {}
+
+        // 先创建“预告”图标：textures/show（参考传送门生成的“空间裂缝”可视化：使用不透明度淡入/淡出循环）
+        const placeIndicator = (sf: SpriteFrame | null) => {
+            const n = new Node('PortalIndicator');
+            n.setParent(container);
+            n.setWorldPosition(sidePos);
+            try { console.log('[SidePortal] indicator node created under', n.parent?.name, 'worldPos=', sidePos.x, sidePos.y); } catch {}
+            // 图标
+            const sp = n.addComponent(Sprite);
+            if (sf) sp.spriteFrame = sf;
+            // 确保尺寸可见：使用自定义尺寸为原图的2倍
+            try {
+                (sp as any).sizeMode = (Sprite as any).SizeMode.CUSTOM;
+                const tr = n.getComponent(UITransform) || n.addComponent(UITransform);
+                const os = (sf as any)?.originalSize;
+                if (tr && os && typeof os.width === 'number' && typeof os.height === 'number') {
+                    tr.setContentSize(Math.max(32, os.width * 2), Math.max(32, os.height * 2));
+                } else {
+                    tr.setContentSize(96, 96);
+                }
+                try { const size = (n.getComponent(UITransform) as UITransform)?.contentSize; console.log('[SidePortal] indicator size =', size?.width, size?.height); } catch {}
+            } catch {
+                n.setScale(2, 2, 2);
+            }
+            // 置于容器顶端，避免被同容器内其他节点遮挡
+            try { n.setSiblingIndex(Number.MAX_SAFE_INTEGER - 1); } catch {}
+            const opacity = n.addComponent(UIOpacity);
+            opacity.opacity = 0; // 从透明开始
+            // 参考“裂缝”效果：淡入-停留-淡出，循环播放直到转换为传送门
+            const oneCycle = tween(opacity)
+                .to(0.12, { opacity: 255 })
+                .delay(0.18)
+                .to(0.15, { opacity: 60 });
+            tween(opacity).repeatForever(oneCycle).start();
+            try { console.log('[SidePortal] indicator blink tween started'); } catch {}
+
+            const spawnPortalAt = (pos: Vec3) => {
+                // 停止并移除指示
+                if (n && n.isValid) n.destroy();
+                try { console.log('[SidePortal] indicator ended, spawning portal at', pos.x, pos.y); } catch {}
+                const trySpawn = (prefab: Prefab | null) => {
+                    if (!prefab) {
+                        console.warn('[GameManager] spawnRandomSidePortalWithIndicator: Portal prefab null');
+                        return;
+                    }
+                    const p = instantiate(prefab);
+                    p.setParent(container);
+                    p.setWorldPosition(pos);
+                    p.active = true;
+                    const portal = p.getComponent('Portal') as any;
+                    if (portal) {
+                        portal.enableAutoSummon = true;
+                        portal.isSidePortal = true;
+                        portal.spawnTimestampMs = Date.now();
+                        portal.autoSummonMinInterval = 3.0;
+                        portal.autoSummonMaxInterval = 6.0;
+                    }
+                    try { console.log('[SidePortal] portal spawned node=', p?.name, 'parent=', p?.parent?.name); } catch {}
+                };
+                // 分包优先
+                const sub = assetManager.getBundle('prefabs_sub');
+                if (sub) {
+                    sub.load('Portal', Prefab, (err, prefab) => {
+                        if (err || !prefab) {
+                            try { console.warn('[SidePortal] subbundle load Portal failed, fallback to resources', err); } catch {}
+                            resources.load('Portal', Prefab, (e2, p2) => trySpawn((p2 as Prefab) || null));
+                            return;
+                        }
+                        try { console.log('[SidePortal] subbundle Portal loaded'); } catch {}
+                        trySpawn(prefab as Prefab);
+                    });
+                } else {
+                    try { console.log('[SidePortal] no subbundle, loading Portal from resources'); } catch {}
+                    resources.load('Portal', Prefab, (e2, p2) => trySpawn((p2 as Prefab) || null));
+                }
+            };
+
+            // 10秒后生成传送门
+            this.scheduleOnce(() => spawnPortalAt(sidePos), 10.0);
+            try { console.log('[SidePortal] scheduled portal spawn in 10s at', sidePos.x, sidePos.y); } catch {}
+
+            // 指示出现2秒后：触发单位介绍框提示一次
+            this.scheduleOnce(() => {
+                try {
+                    const arrower = typeof (this as any)['getFirstActiveUnitScriptInContainers'] === 'function'
+                        ? (this as any)['getFirstActiveUnitScriptInContainers'](['Canvas/Towers'], 'Arrower')
+                        : null;
+                    if (arrower && typeof (this as any)['showQuickUnitIntro'] === 'function') {
+                        (this as any)['showQuickUnitIntro'](
+                            arrower,
+                            '弓箭手',
+                            '指挥官，敌人展开了突袭！小心从战场两翼出现的传送门。',
+                            'Arrower'
+                        );
+                        try { console.log('[SidePortal] quick unit intro shown'); } catch {}
+                    }
+                } catch {}
+            }, 2.0);
+        };
+
+        // 加载 show.png（resources/textures/show）- 兼容多种导入形态与路径
+        const tryLoadShowSpriteFrame = (onReady: (sf: SpriteFrame | null) => void) => {
+            // 方案A：直接按 SpriteFrame 资源加载（若导入为精灵帧）
+            resources.load('textures/show', SpriteFrame, (errA, sfA) => {
+                if (!errA && sfA) {
+                    try { console.log('[SidePortal] textures/show loaded as SpriteFrame'); } catch {}
+                    onReady(sfA as SpriteFrame);
+                    return;
+                }
+                try { console.warn('[SidePortal] load SpriteFrame textures/show failed, try spriteFrame path', errA); } catch {}
+                // 方案B：部分版本需要显式 '/spriteFrame'
+                resources.load('textures/show/spriteFrame', SpriteFrame, (errB, sfB) => {
+                    if (!errB && sfB) {
+                        try { console.log('[SidePortal] textures/show/spriteFrame loaded'); } catch {}
+                        onReady(sfB as SpriteFrame);
+                        return;
+                    }
+                    try { console.warn('[SidePortal] load SpriteFrame textures/show/spriteFrame failed, try Texture2D', errB); } catch {}
+                    // 方案C：按纹理加载后临时创建 SpriteFrame
+                    resources.load('textures/show', Texture2D, (errC, tex) => {
+                        if (!errC && tex) {
+                            try {
+                                const sf = new SpriteFrame();
+                                sf.texture = tex as Texture2D;
+                                console.log('[SidePortal] textures/show loaded as Texture2D, created SpriteFrame');
+                                onReady(sf);
+                            } catch (e) {
+                                console.warn('[SidePortal] create SpriteFrame from Texture2D failed', e);
+                                onReady(null);
+                            }
+                            return;
+                        }
+                        try { console.warn('[SidePortal] load Texture2D textures/show failed, give up', errC); } catch {}
+                        onReady(null);
+                    });
+                });
+            });
+        };
+        tryLoadShowSpriteFrame((sf) => {
+            if (!sf) {
+                console.warn('[GameManager] 加载 textures/show 失败，仍然创建无图标的指示节点');
+                placeIndicator(null);
+                return;
+            }
+            placeIndicator(sf);
+        });
+    }
+
+    /**
+     * 安排在延时后重新触发一次侧面传送门预告与生成
+     */
+    public scheduleSidePortalRespawnAfter(delaySeconds: number) {
+        const sec = Math.max(0.1, delaySeconds || 0);
+        this.scheduleOnce(() => {
+            this.spawnRandomSidePortalWithIndicator();
+        }, sec);
     }
 
     /**
@@ -6166,7 +6374,7 @@ export class GameManager extends Component {
     }
 
     /**
-     * 剑士磨剑小游戏：10秒狂点鼠标，每次点击触发一次动画和音效
+     * 剑士磨剑小游戏：5秒狂点鼠标，每次点击触发一次动画和音效
      */
     private showSwordsmanSharpenMiniGame(swordsmanScript: any, requireInputGuard: boolean = false) {
         if (this.swordSharpenMiniGameRoot && this.swordSharpenMiniGameRoot.isValid) {
@@ -6181,7 +6389,7 @@ export class GameManager extends Component {
         this.swordSharpenMiniGameTargetSwordsman = swordsmanScript;
         this.swordSharpenMiniGameFinalized = false;
         this.swordSharpenMiniGameClickCount = 0;
-        this.swordSharpenMiniGameEndAtMs = Date.now() + 10_000;
+        this.swordSharpenMiniGameEndAtMs = Date.now() + 5_000;
         this.swordSharpenMiniGameLastClickAtMs = 0;
         // 防止“点击技能按钮/界面抬起”残留输入导致立刻进入点击态
         this.swordSharpenMiniGameInputEnableAtMs = Date.now() + (requireInputGuard ? 180 : 120);
@@ -6236,7 +6444,7 @@ export class GameManager extends Component {
         titleNode.setPosition(0, 172, 0);
         titleNode.addComponent(UITransform).setContentSize(360, 32);
         const title = titleNode.addComponent(Label);
-        title.string = '打磨10秒';
+        title.string = '打磨5秒';
         title.fontSize = 20;
         title.color = new Color(240, 240, 255, 255);
         title.horizontalAlign = Label.HorizontalAlign.CENTER;
@@ -6288,7 +6496,7 @@ export class GameManager extends Component {
         this.swordSharpenMiniGameTimerLabel.color = new Color(255, 245, 180, 255);
         this.swordSharpenMiniGameTimerLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         this.swordSharpenMiniGameTimerLabel.verticalAlign = Label.VerticalAlign.CENTER;
-        this.swordSharpenMiniGameTimerLabel.string = '10.0s';
+        this.swordSharpenMiniGameTimerLabel.string = '5.0s';
 
         // 右中：点击次数
         const clickNode = new Node('ClickCount');
@@ -6357,7 +6565,7 @@ export class GameManager extends Component {
 
         setTimeout(() => {
             this.finalizeSwordsmanSharpenMiniGame();
-        }, 10_000);
+        }, 5_000);
     }
 
     private finalizeSwordsmanSharpenMiniGame() {
@@ -6385,7 +6593,7 @@ export class GameManager extends Component {
             moodIcon = swordsman?.swordSharpenMoodGoodIcon || moodIcon;
         }
         const iconToUse = moodIcon || fallbackIcon;
-        // 10 秒后：锁输入，但让队列里的动画把“每次点击完整播完”后再结算 UI
+        // 结束后：锁输入，但让队列里的动画把“每次点击完整播完”后再结算 UI
         this.swordSharpenMiniGameShouldFinalizeUIAfterAnim = true;
         this.swordSharpenMiniGameFinalizeClicks = clicks;
         this.swordSharpenMiniGameFinalizeDamageBoostPercent = damageBoostPercent;
@@ -6428,14 +6636,14 @@ export class GameManager extends Component {
         }
         if (clicks <= 20) {
             const t = (clicks - 10) / 10; // 0..1
-            const damageBoostPercent = Math.round(10 + t * 15); // 10..25
-            const speedBoostPercent = Math.round(6 + t * 9); // 6..15
+            const damageBoostPercent = Math.round((10 + t * 15) * 0.5); // 原值一半：5..12(约)
+            const speedBoostPercent = Math.round((6 + t * 9) * 0.5); // 原值一半：3..8(约)
             return { damageBoostPercent, speedBoostPercent };
         }
         const extra = Math.min(clicks - 20, 10); // 1..10
         const t = extra / 10; // 0..1
-        const damageBoostPercent = Math.round(25 + t * 15); // 25..40
-        const speedBoostPercent = Math.round(15 + t * 15); // 15..30
+        const damageBoostPercent = Math.round((25 + t * 15) * 0.5); // 原值一半：12..20(约)
+        const speedBoostPercent = Math.round((15 + t * 15) * 0.5); // 原值一半：8..15(约)
         return { damageBoostPercent, speedBoostPercent };
     }
 

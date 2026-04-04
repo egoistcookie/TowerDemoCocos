@@ -28,7 +28,9 @@ select * from card_selection_events where DATE(created_at) = CURDATE()
 --统计每天有多少UR
 select * from card_selection_events where DATE(created_at) = CURDATE()-1
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')  order by created_at desc ;
-select * from card_selection_events where cards_json like BINARY  '%UR%' order by created_at desc ;
+select * from card_selection_events where cards_json like BINARY  '%SP%'
+ and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')
+order by created_at desc ;
 --统计每天有多少广告抽卡(reroll和get_all只有看完了视频才会触发)
 select DATE(created_at),player_id,count(*) from card_selection_events where selection_mode  in ('get_all','reroll') 
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')
@@ -54,7 +56,7 @@ select * from game_records where DATE(created_at) = CURDATE()
 order by created_at desc;
 select * from game_records where defend_time !=0 order by created_at desc;
 --玩家信息表
-select * from player_statistics where created_at>'20260401' order by created_at desc;
+select * from player_statistics where created_at>'20260403' order by created_at desc;
 select * from player_statistics where player_id like '%player_1774104641493_9000';
 --操作类型统计表
 select * from operation_statistics os ;

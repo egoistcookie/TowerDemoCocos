@@ -343,8 +343,10 @@ export class Hunter extends Role {
         t.dps = this.tornadoDps;
         t.pullPowerPerSecond = this.tornadoPullPerSec;
 
-        // 龙卷释放音效：持续播放 5 秒（参考祈祷的专用持续音效思路）
-        this.playTornadoSkillSFX(5);
+        // 音画同步：由 Tornado 动画真正开始时回调再播放音效，避免“只有声音不见动画”
+        t.onAnimationStarted = () => {
+            this.playTornadoSkillSFX(5);
+        };
     }
 
     private playTornadoSkillSFX(durationSec: number) {

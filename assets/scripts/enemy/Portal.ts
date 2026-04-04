@@ -42,6 +42,36 @@ export class Portal extends Component {
     private leftCooldown: number = 0;
     private rightCooldown: number = 0;
 
+    // 侧面传送门：独立刷怪（不依赖波次文件）
+    @property({
+        tooltip: '是否启用独立刷怪（不依赖波次文件，直到传送门被摧毁）'
+    })
+    public enableAutoSummon: boolean = false;
+
+    // 标记该传送门是否为“侧面出现”的传送门
+    @property({
+        tooltip: '是否为侧面传送门（用于强度判断与再刷逻辑）'
+    })
+    public isSidePortal: boolean = false;
+
+    // 记录该传送门生成的时间戳（毫秒）
+    public spawnTimestampMs: number = 0;
+
+    @property({
+        tooltip: '独立刷怪的最小间隔秒数（均匀随机区间下限）',
+        visible: function() { return this.enableAutoSummon; }
+    })
+    public autoSummonMinInterval: number = 3.0;
+
+    @property({
+        tooltip: '独立刷怪的最大间隔秒数（均匀随机区间上限）',
+        visible: function() { return this.enableAutoSummon; }
+    })
+    public autoSummonMaxInterval: number = 6.0;
+
+    private summonTimer: number = 0;
+    private nextSummonIn: number = 0;
+
     // 血条
     private healthBarNode: Node = null!;
     private healthBar: HealthBar = null!;
@@ -49,6 +79,7 @@ export class Portal extends Component {
     // 休眠可视化
     private uiOpacity: UIOpacity | null = null;
     private lastDormant: boolean = false;
+    private ensureUiOrderTimer: number = 0;
 
     // 伤害数字
     @property(Prefab)
@@ -57,6 +88,7 @@ export class Portal extends Component {
     onEnable() {
         // 确保传送门渲染层级永远在顶部资源 UI（木材/金币等）之下
         this.ensureBelowTopUI();
+        this.ensureUiOrderTimer = 0;
         // 出场即按普通敌人的规则进行每关增幅
         this.applyLevelBuffLikeEnemies();
         this.currentHealth = this.maxHealth;
@@ -74,6 +106,19 @@ export class Portal extends Component {
         const dormant = this.isDormantNow();
         this.applyDormantVisual(dormant);
         this.lastDormant = dormant;
+
+        // 初始化独立刷怪定时器
+        if (this.enableAutoSummon) {
+            this.scheduleNextSummon();
+        } else {
+            this.summonTimer = 0;
+            this.nextSummonIn = 0;
+        }
+
+        // 记录生成时间（如未提前设定）
+        if (this.isSidePortal && (!this.spawnTimestampMs || this.spawnTimestampMs <= 0)) {
+            this.spawnTimestampMs = Date.now();
+        }
     }
 
     /**
@@ -83,7 +128,15 @@ export class Portal extends Component {
     private ensureBelowTopUI() {
         try {
             if (!this.node || !this.node.isValid) return;
-            const uiNode = find('Canvas/UI') || find('Canvas/HUD') || find('Canvas/TopUI');
+            // 先找 HUD/TopUI 根节点；若项目里资源栏不在这些固定路径，则回退到 Gold/Wood Label 所在根节点
+            const uiNode =
+                find('Canvas/UI') ||
+                find('Canvas/HUD') ||
+                find('Canvas/TopUI') ||
+                (find('Canvas/UI/GoldLabel')?.parent as any) ||
+                (find('Canvas/GoldLabel')?.parent as any) ||
+                (find('Canvas/UI/WoodLabel')?.parent as any) ||
+                (find('Canvas/WoodLabel')?.parent as any);
             if (!uiNode || !uiNode.isValid) return;
 
             const uiIndex = uiNode.getSiblingIndex();
@@ -147,12 +200,75 @@ export class Portal extends Component {
     }
 
     private getGameManager(): any | null {
-        // 非递归：仅按统一路径获取
+        // 固定路径：仅从 Canvas/GameManager 获取
+        const gmNode = find('Canvas/GameManager');
+        if (!gmNode) {
+            try { console.warn('[Portal.getGameManager] GameManager not found at Canvas/GameManager'); } catch {}
+            return null;
+        }
+        try { console.log('[Portal.getGameManager] got via Canvas/GameManager'); } catch {}
+        return gmNode.getComponent('GameManager') as any;
+    }
+
+    private isGamePlaying(): boolean {
         const gmNode = find('GameManager') || find('Canvas/GameManager');
-        return gmNode ? (gmNode.getComponent('GameManager') as any) : null;
+        const gm = gmNode ? (gmNode.getComponent('GameManager') as any) : null;
+        if (!gm) return true;
+        if (typeof gm.getGameState === 'function') {
+            return gm.getGameState() === 'Playing';
+        }
+        return true;
+    }
+
+    private scheduleNextSummon() {
+        const minV = Math.max(0.5, Math.min(this.autoSummonMinInterval, this.autoSummonMaxInterval));
+        const maxV = Math.max(minV, Math.max(this.autoSummonMinInterval, this.autoSummonMaxInterval));
+        const r = minV + Math.random() * (maxV - minV);
+        this.nextSummonIn = r;
+        this.summonTimer = 0;
+    }
+
+    private getSummonSpawnPosition(): Vec3 {
+        const ui = this.node.getComponent(UITransform);
+        const base = this.node.worldPosition.clone();
+        const halfH = ui ? ui.contentSize.height * 0.5 : 50;
+        base.y -= (halfH + 40);
+        return base;
+    }
+
+    private trySummonOneEnemy() {
+        const enemySpawnerNode = find('Canvas/EnemySpawner') || find('EnemySpawner');
+        const spawner = enemySpawnerNode ? (enemySpawnerNode.getComponent('EnemySpawner') as any) : null;
+        if (!spawner) return;
+        try {
+            const name = typeof spawner.getRandomEnemyPrefabNameForPortal === 'function'
+                ? spawner.getRandomEnemyPrefabNameForPortal()
+                : null;
+            if (!name) return;
+            const pos = this.getSummonSpawnPosition();
+            if (typeof spawner.spawnEnemyByNameAtImmediate === 'function') {
+                spawner.spawnEnemyByNameAtImmediate(name, pos);
+            }
+        } catch {}
     }
 
 	update(dt: number) {
+        // 低频兜底：弹窗/遮罩 show/hide 可能导致 siblingIndex 偶发重排，这里每 3 秒纠正一次即可
+        this.ensureUiOrderTimer += dt;
+        if (this.ensureUiOrderTimer >= 3.0) {
+            this.ensureUiOrderTimer = 0;
+            this.ensureBelowTopUI();
+        }
+
+        // 独立刷怪：不受波次倒计时影响，只要游戏处于 Playing 就持续召唤
+        if (this.enableAutoSummon && this.isGamePlaying()) {
+            this.summonTimer += dt;
+            if (this.summonTimer >= this.nextSummonIn) {
+                this.trySummonOneEnemy();
+                this.scheduleNextSummon();
+            }
+        }
+
         const dormant = this.isDormantNow();
         if (dormant !== this.lastDormant) {
             this.applyDormantVisual(dormant);
@@ -267,6 +383,20 @@ export class Portal extends Component {
 
         // 三段奖励飘字：+50exp、+100gold、+50wood（字号比伤害数字大2，依次消散）
         this.showRewardTexts();
+
+        // 侧面传送门强度判定：若出现后1分钟内被摧毁，则在1分钟后再刷新一个侧面传送门
+        try {
+            if (this.isSidePortal) {
+                const now = Date.now();
+                const aliveMs = Math.max(0, now - (this.spawnTimestampMs || now));
+                if (aliveMs < 60 * 1000) {
+                    const gm = this.getGameManager();
+                    if (gm && typeof gm['scheduleSidePortalRespawnAfter'] === 'function') {
+                        gm['scheduleSidePortalRespawnAfter'](60.0);
+                    }
+                }
+            }
+        } catch {}
 
         if (this.node && this.node.isValid) {
             this.node.destroy();

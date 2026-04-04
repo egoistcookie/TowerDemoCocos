@@ -31,6 +31,11 @@ export class Tornado extends Component {
 	private sprite: Sprite | null = null;
 	private lastDamageTick: number = 0;
 	private gameManager: GameManager | null = null;
+	// 动画真正开始回调（用于与音效同步）
+	public onAnimationStarted: (() => void) | null = null;
+	private hasSignaledAnimationStart: boolean = false;
+	private animationStartSignalTries: number = 0;
+	private readonly MAX_ANIM_SIGNAL_TRIES: number = 5; // 最多重试 ~5 次（约 <= 100ms）
 
 	onEnable() {
 		this.elapsed = 0;
@@ -38,6 +43,17 @@ export class Tornado extends Component {
 		this.currentFrame = -1;
 		this.lastDamageTick = 0;
 		this.sprite = this.getComponent(Sprite) || this.addComponent(Sprite);
+		// 若有帧动画，立即显示第一帧，确保画面先于音效可见
+		if (this.tornadoFrames && this.tornadoFrames.length > 0) {
+			this.currentFrame = 0;
+			if (this.sprite) {
+				this.sprite.spriteFrame = this.tornadoFrames[0];
+			}
+			// 延后一帧、并带少量重试，确保“已渲染至少一帧”后再发出回调，避免偶发音画不同步
+			this.trySignalAnimationStartedDeferred();
+		} else {
+			this.hasSignaledAnimationStart = false;
+		}
 		// 使用资源贴图显示辅助圈（hunterRing.png）
 		try {
 			let ringNode = this.node.getChildByName('Ring');
@@ -106,6 +122,37 @@ export class Tornado extends Component {
 			if (frame) {
 				this.sprite.spriteFrame = frame;
 			}
+			// 第一次成功切换/显示帧时，触发回调，用于对齐音效
+			if (!this.hasSignaledAnimationStart) {
+				this.trySignalAnimationStartedDeferred();
+			}
+		}
+	}
+
+	private trySignalAnimationStartedDeferred() {
+		// 已经完成或没有回调，直接返回
+		if (this.hasSignaledAnimationStart || !this.onAnimationStarted) return;
+		this.animationStartSignalTries = 0;
+		// 首先等到“下一帧”（保证至少过一次渲染管线）
+		this.scheduleOnce(() => this.maybeSignalAnimationStarted(), 0);
+	}
+
+	private maybeSignalAnimationStarted() {
+		if (this.hasSignaledAnimationStart || !this.onAnimationStarted) return;
+		// 条件：节点在层级中激活、sprite 有可见帧
+		const visible = !!(this.node && this.node.isValid && this.node.activeInHierarchy && this.sprite && this.sprite.spriteFrame);
+		if (visible) {
+			this.hasSignaledAnimationStart = true;
+			try { this.onAnimationStarted && this.onAnimationStarted(); } catch {} finally { this.onAnimationStarted = null; }
+			return;
+		}
+		// 少量重试（每次延迟约 0.02s），避免偶发性的“贴图/层级延后”
+		if (this.animationStartSignalTries < this.MAX_ANIM_SIGNAL_TRIES) {
+			this.animationStartSignalTries++;
+			this.scheduleOnce(() => this.maybeSignalAnimationStarted(), 0.02);
+		} else {
+			// 超过重试仍不可见：放弃回调，避免卡死；此时也不播放音效
+			this.onAnimationStarted = null;
 		}
 	}
 

@@ -3984,6 +3984,10 @@ export class Role extends Component {
                     if (this.isDefending) {
                         return;
                     }
+                    // 若当前已有索敌目标（update 中已处理索敌），则不触发上移
+                    if (this.currentTarget) {
+                        return;
+                    }
                     // 若当前已经在较高位置（y >= 500），则不触发上移
                     const curNow = this.node.worldPosition;
                     if (curNow && curNow.y >= 500) {

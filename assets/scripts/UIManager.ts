@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Button, Label, find, director, UITransform, Color, Graphics, tween, Vec3, UIOpacity, Sprite, SpriteFrame, Prefab, instantiate, resources, assetManager, sys, view, macro } from 'cc';
+import { _decorator, Component, Node, Button, Label, find, director, UITransform, Color, Graphics, tween, Vec3, UIOpacity, Sprite, SpriteFrame, Prefab, instantiate, resources, assetManager, sys, view, macro, LabelOutline } from 'cc';
 import { GameManager as GameManagerClass } from './GameManager';
 import { CountdownPopup } from './CountdownPopup';
 // 导入TalentSystem，用于管理天赋系统和单位卡片
@@ -1461,6 +1461,10 @@ export class UIManager extends Component {
                 label.fontSize = 40;
                 label.color = Color.RED;
                 label.isBold = true;
+                // 黑色描边（边框）
+                const outline = this.announcementNode.addComponent(LabelOutline);
+                outline.width = 2;
+                (label as any).outlineColor = new Color(0, 0, 0, 255);
                 
                 this.announcementNode.active = false;
             }
@@ -1505,6 +1509,13 @@ export class UIManager extends Component {
         const label = this.announcementNode.getComponent(Label);
         if (label) {
             label.string = message;
+            // 兜底：确保描边存在并为黑色
+            let outline = this.announcementNode.getComponent(LabelOutline);
+            if (!outline) {
+                outline = this.announcementNode.addComponent(LabelOutline);
+            }
+            outline.width = Math.max(2, outline.width || 0);
+            (label as any).outlineColor = new Color(0, 0, 0, 255);
         }
         
         this.announcementNode.active = true;

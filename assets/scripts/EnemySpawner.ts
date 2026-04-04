@@ -133,6 +133,8 @@ export class EnemySpawner extends Component {
     private orcRageSpawnBuffEndAt: number = -1;
     private currentOrcRageTier: number = 1;
     private persistentEnemyGrowthMultiplier: number = 1;
+    // 第三波后侧面传送门预告只触发一次
+    private hasTriggeredSidePortalAfterWave3: boolean = false;
 
     start() {
         // 初始化变量
@@ -363,6 +365,68 @@ export class EnemySpawner extends Component {
             this.currentEnemyConfig = null;
             this.enemiesSpawnedCount = 0;
         }
+    }
+
+    /**
+     * 公开方法：在指定世界坐标立即生成一个敌人（不影响当前波次计数）
+     * 供“传送门”等独立机制调用，完全独立于关卡波次文件。
+     */
+    public spawnEnemyByNameAtImmediate(prefabName: string, worldPos: Vec3) {
+        const enemyPrefab = this.enemyPrefabMap.get(prefabName);
+        if (!enemyPrefab) return;
+        let enemy: Node | null = null;
+        if (this.enemyPool) {
+            enemy = this.enemyPool.get(prefabName);
+        }
+        if (!enemy) {
+            enemy = instantiate(enemyPrefab);
+        }
+        enemy.setParent(this.enemyContainer || this.node);
+        enemy.setWorldPosition(worldPos);
+
+        const enemyScript = enemy.getComponent('Enemy') as any
+            || enemy.getComponent('OrcWarrior') as any
+            || enemy.getComponent('OrcWarlord') as any
+            || enemy.getComponent('TrollSpearman') as any
+            || enemy.getComponent('Dragon') as any
+            || enemy.getComponent('Boss') as any
+            || enemy.getComponent(Boss) as any;
+
+        if (enemyScript) {
+            enemyScript.prefabName = prefabName;
+            if (enemyScript.loadRewardsFromConfig && typeof enemyScript.loadRewardsFromConfig === 'function') {
+                enemyScript.loadRewardsFromConfig();
+            }
+            this.applyLevelBuff(enemyScript);
+            if (this.targetCrystal) {
+                enemyScript.targetCrystal = this.targetCrystal;
+            }
+            if (this.gameManager) {
+                const unitType = enemyScript.unitType || prefabName;
+                this.gameManager.checkUnitFirstAppearance(unitType, enemyScript);
+            }
+            if (this.isOrcRageSpawnBuffActive) {
+                this.applyBloodRageToEnemy(enemy, enemyScript, this.currentOrcRageTier);
+            }
+        }
+        // 注意：不修改 enemiesSpawnedCount / currentEnemyIndex / endCurrentWave
+    }
+
+    /**
+     * 公开方法：返回一个可用于传送门刷新的随机敌人预制体名称
+     * 优先在常用候选集中筛选已加载的类型；若均不可用，则回退到任何已注册的类型。
+     */
+    public getRandomEnemyPrefabNameForPortal(): string | null {
+        const preferred = ['Orc', 'TrollSpearman', 'OrcWarrior', 'OrcShaman', 'OrcWarlord', 'Dragon'];
+        const availablePreferred = preferred.filter(n => this.enemyPrefabMap.has(n));
+        if (availablePreferred.length > 0) {
+            const idx = Math.floor(Math.random() * availablePreferred.length);
+            return availablePreferred[idx];
+        }
+        const all = Array.from(this.enemyPrefabMap.keys());
+        if (all.length === 0) return null;
+        const idx = Math.floor(Math.random() * all.length);
+        return all[idx];
     }
 
     /**
@@ -862,7 +926,17 @@ export class EnemySpawner extends Component {
         // 方法1: 通过节点名称查找
         let gmNode = find('GameManager');
         if (gmNode) {
+            try { console.log('[EnemySpawner.findGameManager] got GameManager via "GameManager" path:', gmNode?.name); } catch {}
             this.gameManager = gmNode.getComponent(GameManager);
+            if (this.gameManager) {
+                return;
+            }
+        }
+        // 方法1.1: 明确从 Canvas/GameManager 路径尝试
+        let gmNodeCanvas = find('Canvas/GameManager');
+        if (gmNodeCanvas) {
+            try { console.log('[EnemySpawner.findGameManager] got GameManager via "Canvas/GameManager" path:', gmNodeCanvas?.name); } catch {}
+            this.gameManager = gmNodeCanvas.getComponent(GameManager);
             if (this.gameManager) {
                 return;
             }
@@ -882,11 +956,13 @@ export class EnemySpawner extends Component {
             };
             this.gameManager = findInScene(scene, GameManager);
             if (this.gameManager) {
+                try { console.log('[EnemySpawner.findGameManager] got GameManager via recursive scene search'); } catch {}
                 return;
             }
         }
         
         // 如果还是找不到，输出警告但不阻止运行
+        try { console.warn('[EnemySpawner.findGameManager] GameManager not found via direct or recursive search'); } catch {}
     }
 
     update(deltaTime: number) {
@@ -1029,6 +1105,31 @@ export class EnemySpawner extends Component {
                 this.startNextWave();
             }
             return;
+        }
+
+        // 进行到第三波后：随机左/右侧出现传送门预告（10秒后生成传送门）
+        if (!this.hasTriggeredSidePortalAfterWave3 && this.currentWaveIndex >= 2) {
+            let allowSidePortal = false;
+            try {
+                const gm = this.gameManager || (find('GameManager')?.getComponent('GameManager') as any);
+                let level = 1;
+                if (gm && typeof gm.getCurrentLevelSafe === 'function') {
+                    level = gm.getCurrentLevelSafe();
+                } else if (this.uiManager && typeof this.uiManager.getCurrentLevel === 'function') {
+                    level = this.uiManager.getCurrentLevel();
+                }
+                allowSidePortal = typeof level === 'number' && level >= 3;
+            } catch {}
+            if (allowSidePortal) {
+                try {
+                    const gm = this.gameManager || (find('GameManager')?.getComponent(GameManager) as any);
+                    if (gm && typeof (gm as any).spawnRandomSidePortalWithIndicator === 'function') {
+                        (gm as any).spawnRandomSidePortalWithIndicator();
+                    }
+                } catch {}
+            }
+            // 不论是否允许侧门，都标记为已尝试，避免每帧重复判断；同时不影响后续波次逻辑
+            this.hasTriggeredSidePortalAfterWave3 = true;
         }
         
         // 如果没有当前敌人配置，获取下一个敌人配置

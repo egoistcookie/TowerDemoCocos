@@ -136,6 +136,7 @@ export class Mage extends Role {
     private isBurstEmitting: boolean = false;
     private isMeteorPlacing: boolean = false;
     private currentMeteorCircle: Node | null = null;
+    private activeMeteors: Node[] = [];
     private readonly METEOR_MANA_COST: number = 50;
 
     // 陨石技能配置
@@ -614,10 +615,15 @@ export class Mage extends Role {
                 if (meteor && meteor.isValid) meteor.destroy();
                 if (circleNode && circleNode.isValid) circleNode.destroy();
                 this.currentMeteorCircle = null;
+                // 从活跃列表移除
+                const idx = this.activeMeteors.indexOf(meteor);
+                if (idx >= 0) this.activeMeteors.splice(idx, 1);
             }
         };
 
         this.schedule(animationUpdate, 0);
+        // 记录活跃的陨石，便于在法师死亡时清理
+        this.activeMeteors.push(meteor);
     }
 
     private tryAutoCastMeteor() {
@@ -679,6 +685,30 @@ export class Mage extends Role {
             }
         });
         return circle;
+    }
+
+    /**
+     * 法师被禁用/死亡时的清理：正在施放的陨石与法阵立刻消失
+     */
+    protected onDisable(): void {
+        try {
+            // 清理魔法阵
+            if (this.currentMeteorCircle && this.currentMeteorCircle.isValid) {
+                this.currentMeteorCircle.destroy();
+            }
+            this.currentMeteorCircle = null;
+            // 清理所有活跃的陨石
+            if (this.activeMeteors && this.activeMeteors.length > 0) {
+                for (const m of this.activeMeteors) {
+                    if (m && m.isValid) {
+                        m.destroy();
+                    }
+                }
+                this.activeMeteors.length = 0;
+            }
+        } catch {}
+        // 调用父类以保持原有行为
+        super.onDisable();
     }
 
     private playMeteorExplosion(pos: Vec3) {
