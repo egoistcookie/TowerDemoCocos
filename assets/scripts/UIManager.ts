@@ -1290,6 +1290,21 @@ export class UIManager extends Component {
             if (isTalent && this.bottomSelectionNodeRef) {
                 this.talentPanelNode.setSiblingIndex(this.bottomSelectionNodeRef.children.length - 2);
             }
+            // 当切到“天赋”页时，主动刷新单位卡片的等级显示，避免返回后显示未更新
+            if (isTalent) {
+                this.scheduleOnce(() => {
+                    try {
+                        // 优先通过已知路径获取 TalentSystem
+                        const tsNode = find('Canvas/BottomSelection/TalentPanel');
+                        const ts = tsNode ? (tsNode.getComponent('TalentSystem') as any) : null;
+                        // 回退到全场景查找
+                        const talentSystem = ts || (this.node?.scene?.getComponentInChildren('TalentSystem') as any);
+                        if (talentSystem && typeof talentSystem.refreshUnitCardsLevels === 'function') {
+                            talentSystem.refreshUnitCardsLevels();
+                        }
+                    } catch {}
+                }, 0);
+            }
         }
         if (this.settingsPanelNode) {
             this.settingsPanelNode.active = isSettings;

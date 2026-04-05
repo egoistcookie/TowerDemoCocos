@@ -7701,6 +7701,8 @@ export class GameManager extends Component {
         }
 
         // 普通抽卡且是“本关首次抽卡”时，使用固定 SP 组合
+        // 【已注释 2026-04-05】回到初始版本，每次都是一样的抽卡概率
+        /*
         if (!isRerollMode && forceFirstDrawFixedSp) {
             const currentLevel = this.getCurrentLevelSafe();
             const fixedSpUnitTypes: string[] = ['StoneWall', 'WatchTower'];
@@ -7716,10 +7718,7 @@ export class GameManager extends Component {
                     : 'Arrower';
                 fixedSpUnitTypes.push(randomRole);
             }
-            // 注意：首抽固定SP必须“稳定必出”，不能依赖 BuffCardConfigManager 异步加载是否完成。
-            // 因此这里直接构造 SP 卡片数据（并尽量从场景实例拿图标），避免被降级为 SSR。
-            return fixedSpUnitTypes.map((unitType) => this.buildFixedSpCard(unitType, configManager));
-        }
+        */
         
         // 如果是再抽一次模式，确定UR/SP卡片的位置（随机选择，且不重复）
         let urCardIndex = -1;
@@ -8125,7 +8124,7 @@ export class GameManager extends Component {
      */
     private buildFixedSpCard(unitType: string, configManager: UnitConfigManager): BuffCardData {
         const displayInfo = configManager.getUnitDisplayInfo(unitType);
-        const unitName = displayInfo ? displayInfo.name : unitType;
+        const unitName = (displayInfo ? displayInfo.name : unitType) + 'I';
 
         // 尽量从实际实例中拿 icon（与普通卡一致）
         let unitIcon: SpriteFrame | null = null;
@@ -8155,13 +8154,16 @@ export class GameManager extends Component {
         };
 
         const sp = spByUnit[unitType] || spByUnit['Arrower'];
+        // 将 buffDescription 格式改为 "单位名称 I：效果描述"
+        const colonIndex = sp.buffDescription.indexOf(':');
+        const effectDesc = colonIndex >= 0 ? sp.buffDescription.substring(colonIndex + 1) : sp.buffDescription;
         return {
             unitId: unitType,
             unitName,
             unitIcon,
             buffType: sp.buffType,
             buffValue: sp.buffValue,
-            buffDescription: sp.buffDescription,
+            buffDescription: `${unitName}：${effectDesc}`,
             rarity: 'SP'
         };
     }
@@ -8322,7 +8324,7 @@ export class GameManager extends Component {
         cardContainer.setParent(containerNode);
         cardContainer.addComponent(UITransform).setContentSize(popupWidth, popupHeight * 0.8);
         cardContainer.setPosition(0, 0, 0);
-        
+
         // 创建三张卡片节点
         const cardWidth = (popupWidth - 60) / 3; // 减去间隔，每张卡片宽度（已随容器宽度增加）
         const cardHeight = popupHeight * 0.7 - 50; // 高度减少50像素
@@ -8417,7 +8419,7 @@ export class GameManager extends Component {
         buffCardPopup.card3Name = card3.getChildByName('Name')?.getComponent(Sprite) || null; // 改为 Sprite
         buffCardPopup.card3Description = card3.getChildByName('Description')?.getComponent(Label) || null;
         buffCardPopup.card3Button = card3.getChildByName('Button')?.getComponent(Button) || null;
-        
+
         // 验证绑定
         //console.info('[GameManager] BuffCardPopup 属性绑定验证:');
         //console.info('  container:', !!buffCardPopup.container);

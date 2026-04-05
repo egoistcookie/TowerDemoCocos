@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python *.py)",
+      "Bash(python3 *.py)",
+      "Bash(pytest *)",
+      "Bash(pip install *)",
+      "Bash(npm install:*)",
+      "Bash(npx tsx:*)",
+      "Bash(git:*)",
+      "WebFetch(domain:www.theverge.com)",
+      "WebSearch",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Edit",
+      "Write",
+      "Read",
+      "Glob",
+      "Grep"
+    ],
+    "defaultMode": "bypassPermissions",
+    "additionalDirectories": [
+      "C:\\Users\\Win10\\.claude"
+    ]
+  }
+}

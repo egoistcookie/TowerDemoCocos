@@ -542,6 +542,8 @@ export class TalentSystem extends Component {
         
         // 创建单位卡片网格
         this.createUnitCardsGrid();
+        // 创建完毕后，立即刷新一次等级显示（防止缓存导致的显示落后）
+        this.refreshUnitCardsLevels();
     }
     
     clearContent() {
@@ -627,7 +629,7 @@ export class TalentSystem extends Component {
         viewTr.setContentSize(viewW, viewH);
         viewNode.addComponent(Mask);
 
-        const contentNode = new Node('Content');
+        const contentNode = new Node('UnitCardsContainer');
         contentNode.setParent(viewNode);
         const contentTr = contentNode.addComponent(UITransform);
         contentTr.setContentSize(viewW, viewH);
@@ -717,6 +719,46 @@ export class TalentSystem extends Component {
             this.createUnitCard(unit, xPos, yPos, cardWidth, cardHeight, contentNode);
         }
         
+    }
+
+    /**
+     * 刷新当前天赋单位卡片页内所有卡片的等级显示
+     * 不重建UI，仅同步“等级: X”文本
+     */
+    public refreshUnitCardsLevels() {
+        if (!this.talentPanel) return;
+        const cardsContainer = this.getUnitCardsContainer();
+        if (!cardsContainer) return;
+        for (const card of cardsContainer.children) {
+            if (!card || !card.isValid || !card.active) continue;
+            if (!card.name || !card.name.startsWith('UnitCard_')) continue;
+            const unitId = card.name.substring('UnitCard_'.length);
+            const levelNode = card.getChildByName('UnitLevel');
+            if (!levelNode) continue;
+            const levelLabel = levelNode.getComponent(Label);
+            if (!levelLabel) continue;
+            const unitLevel = this.getUnitLevel(unitId);
+            levelLabel.string = `等级: ${unitLevel}`;
+        }
+        // 同步天赋点显示（有可能在其他页被消费/返还）
+        this.updateTalentPointsDisplay();
+    }
+
+    /**
+     * 获取单位卡片容器节点（兼容不同层级）
+     */
+    private getUnitCardsContainer(): Node | null {
+        if (!this.talentPanel) return null;
+        // 唯一路径：TalentUnitScrollView/View/UnitCardsContainer
+        const sv = this.talentPanel.getChildByName('TalentUnitScrollView');
+        const view = sv?.getChildByName('View') || null;
+        const container = view?.getChildByName('UnitCardsContainer') || null;
+        if (container && container.isValid) {
+            try { console.log('[TalentSystem] UnitCardsContainer found: TalentUnitScrollView/View/UnitCardsContainer'); } catch {}
+            return container;
+        }
+        try { console.warn('[TalentSystem] UnitCardsContainer not found at TalentUnitScrollView/View/UnitCardsContainer'); } catch {}
+        return null;
     }
     
     createUnitCard(unit: any, x: number, y: number, width: number, height: number, parentNode: Node) {
@@ -1287,8 +1329,9 @@ export class TalentSystem extends Component {
         // 更新天赋点显示
         this.updateTalentPointsDisplay();
         
-        // 更新卡片上的等级显示
+        // 更新卡片上的等级显示（单张与全体两种方式并用，确保可见时必然同步）
         this.updateUnitCardLevel(unitId);
+        this.refreshUnitCardsLevels();
         
         // 重新创建详情面板以显示更新后的数据
         detailPanel.destroy();
@@ -1376,7 +1419,7 @@ export class TalentSystem extends Component {
         
         // 查找对应的卡片节点
         const cardNodeName = `UnitCard_${unitId}`;
-        const cardsContainer = this.talentPanel.getChildByName('UnitCardsContainer');
+        const cardsContainer = this.getUnitCardsContainer();
         if (!cardsContainer) {
             return;
         }
@@ -1412,7 +1455,7 @@ export class TalentSystem extends Component {
         
         // 查找对应的卡片节点
         const cardNodeName = `UnitCard_${unitId}`;
-        const cardsContainer = this.talentPanel.getChildByName('UnitCardsContainer');
+        const cardsContainer = this.getUnitCardsContainer();
         if (!cardsContainer) {
             return null;
         }

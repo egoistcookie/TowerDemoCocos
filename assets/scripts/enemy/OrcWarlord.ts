@@ -28,7 +28,7 @@ export class OrcWarlord extends Boss {
     collisionRadius: number = 18;
 
     @property({ override: true, tooltip: "韧性（0-1）：1秒内遭受此百分比血量损失才会触发僵直。" })
-    tenacity: number = 0.3;
+    tenacity: number = 0.45;
 
     // 单位信息
     @property({ override: true })

@@ -136,6 +136,7 @@ export class Mage extends Role {
     private isBurstEmitting: boolean = false;
     private isMeteorPlacing: boolean = false;
     private currentMeteorCircle: Node | null = null;
+    private activeMeteorCircles: Node[] = [];
     private activeMeteors: Node[] = [];
     private readonly METEOR_MANA_COST: number = 50;
 
@@ -465,7 +466,15 @@ export class Mage extends Role {
 
             if (!this.isMeteorPlacing || !circle.isValid) {
                 this.isMeteorPlacing = false;
-                if (circle && circle.isValid) circle.destroy();
+                if (circle && circle.isValid) {
+                    try { (tween as any).stopAllByTarget?.(circle); } catch {}
+                    circle.destroy();
+                }
+                // 从活跃列表移除
+                {
+                    const idx = this.activeMeteorCircles.indexOf(circle);
+                    if (idx >= 0) this.activeMeteorCircles.splice(idx, 1);
+                }
                 this.currentMeteorCircle = null;
                 return;
             }
@@ -499,6 +508,8 @@ export class Mage extends Role {
                 sprite.spriteFrame = sf;
             }
         });
+        // 记录手动施法创建的法阵
+        this.activeMeteorCircles.push(circle);
     }
 
     /**
@@ -511,7 +522,10 @@ export class Mage extends Role {
                 GamePopup.showMessage(`蓝量不足，释放陨石需要${this.METEOR_MANA_COST}蓝量`);
             }
             if (circleNode && circleNode.isValid) {
+                try { (tween as any).stopAllByTarget?.(circleNode); } catch {}
                 circleNode.destroy();
+                const idx = this.activeMeteorCircles.indexOf(circleNode);
+                if (idx >= 0) this.activeMeteorCircles.splice(idx, 1);
             }
             this.currentMeteorCircle = null;
             return;
@@ -613,7 +627,12 @@ export class Mage extends Role {
                 this.unschedule(animationUpdate);
                 this.playMeteorExplosion(centerWorldPos);
                 if (meteor && meteor.isValid) meteor.destroy();
-                if (circleNode && circleNode.isValid) circleNode.destroy();
+                if (circleNode && circleNode.isValid) {
+                    try { (tween as any).stopAllByTarget?.(circleNode); } catch {}
+                    circleNode.destroy();
+                    const idx2 = this.activeMeteorCircles.indexOf(circleNode);
+                    if (idx2 >= 0) this.activeMeteorCircles.splice(idx2, 1);
+                }
                 this.currentMeteorCircle = null;
                 // 从活跃列表移除
                 const idx = this.activeMeteors.indexOf(meteor);
@@ -684,6 +703,8 @@ export class Mage extends Role {
                 sprite.spriteFrame = sf;
             }
         });
+        // 记录自动施放创建的法阵
+        this.activeMeteorCircles.push(circle);
         return circle;
     }
 
@@ -694,9 +715,20 @@ export class Mage extends Role {
         try {
             // 清理魔法阵
             if (this.currentMeteorCircle && this.currentMeteorCircle.isValid) {
+                try { (tween as any).stopAllByTarget?.(this.currentMeteorCircle); } catch {}
                 this.currentMeteorCircle.destroy();
             }
             this.currentMeteorCircle = null;
+            // 清理所有活跃法阵
+            if (this.activeMeteorCircles && this.activeMeteorCircles.length > 0) {
+                for (const c of this.activeMeteorCircles) {
+                    if (c && c.isValid) {
+                        try { (tween as any).stopAllByTarget?.(c); } catch {}
+                        c.destroy();
+                    }
+                }
+                this.activeMeteorCircles.length = 0;
+            }
             // 清理所有活跃的陨石
             if (this.activeMeteors && this.activeMeteors.length > 0) {
                 for (const m of this.activeMeteors) {
