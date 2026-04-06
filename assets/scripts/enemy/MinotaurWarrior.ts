@@ -288,6 +288,7 @@ export class MinotaurWarrior extends Boss {
                                node.getComponent('ThunderTower') as any ||
                                node.getComponent('WarAncientTree') as any ||
                                node.getComponent('HunterHall') as any ||
+                               node.getComponent('MageTower') as any ||
                                node.getComponent('StoneWall') as any;
             if (buildScript && buildScript.isAlive && buildScript.isAlive()) {
                 friendlyUnits.push(node);
@@ -349,7 +350,9 @@ export class MinotaurWarrior extends Boss {
                                        building.getComponent('IceTower') as any ||
                                        building.getComponent('ThunderTower') as any ||
                                        building.getComponent('WarAncientTree') as any ||
-                                       building.getComponent('HunterHall') as any;
+                                       building.getComponent('HunterHall') as any ||
+                                       building.getComponent('MageTower') as any ||
+                                       building.getComponent('StoneWall') as any;
                     if (buildScript && buildScript.isAlive && buildScript.isAlive()) {
                         friendlyUnits.push(building);
                     }
@@ -1183,7 +1186,8 @@ export class MinotaurWarrior extends Boss {
                 const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
                 const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
                 const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
-                const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
+                const mageTowerScript = this.currentTarget.getComponent('MageTower') as any;
+                const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript || mageTowerScript;
 
                 // 检查目标是否存活（直接检查血量和 destroyed 状态，因为 isAlive 是 protected）
                 if (targetScript && (targetScript.isDestroyed || targetScript.currentHealth <= 0)) {
@@ -1446,6 +1450,29 @@ export class MinotaurWarrior extends Boss {
             }
         }
 
+        // 4) 法师（在 Canvas/Mages 容器中）
+        let mages: Node[] = [];
+        const magesNode = find('Canvas/Mages');
+        if (magesNode) {
+            mages = magesNode.children;
+        }
+        for (const mage of mages) {
+            if (mage && mage.active && mage.isValid) {
+                const mageScript = mage.getComponent('Mage') as any;
+                if (mageScript && mageScript.isAlive && mageScript.isAlive()) {
+                    const distance = Vec3.distance(this.node.worldPosition, mage.worldPosition);
+                    if (distance <= detectionRange) {
+                        if (PRIORITY.CHARACTER < targetPriority ||
+                            (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
+                            minDistance = distance;
+                            nearestTarget = mage;
+                            targetPriority = PRIORITY.CHARACTER;
+                        }
+                    }
+                }
+            }
+        }
+
         // 4. 查找范围内的建筑物
         // 战争古树
         for (const tree of trees) {
@@ -1553,10 +1580,40 @@ export class MinotaurWarrior extends Boss {
             if (!thunderTowerScript || !thunderTowerScript.isAlive || !thunderTowerScript.isAlive()) continue;
             const distance = Vec3.distance(this.node.worldPosition, thunderTower.worldPosition);
             if (distance <= detectionRange) {
-                if (PRIORITY.BUILDING < targetPriority || 
+                if (PRIORITY.BUILDING < targetPriority ||
                     (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
                     minDistance = distance;
                     nearestTarget = thunderTower;
+                    targetPriority = PRIORITY.BUILDING;
+                }
+            }
+        }
+
+        // 查找法师塔
+        let mageTowers: Node[] = [];
+        if (this.unitManager && this.unitManager.getTowers) {
+            // getTowers() 返回所有塔，需要过滤出 MageTower
+            mageTowers = this.unitManager.getTowers().filter(building => {
+                const mageTowerScript = building.getComponent('MageTower') as any;
+                return mageTowerScript && mageTowerScript.isAlive && mageTowerScript.isAlive();
+            });
+        } else {
+            const mageTowersNode = find('Canvas/MageTowers');
+            if (mageTowersNode) {
+                mageTowers = mageTowersNode.children || [];
+            }
+        }
+
+        for (const mageTower of mageTowers) {
+            if (!mageTower || !mageTower.active || !mageTower.isValid) continue;
+            const mageTowerScript = mageTower.getComponent('MageTower') as any;
+            if (!mageTowerScript || !mageTowerScript.isAlive || !mageTowerScript.isAlive()) continue;
+            const distance = Vec3.distance(this.node.worldPosition, mageTower.worldPosition);
+            if (distance <= detectionRange) {
+                if (PRIORITY.BUILDING < targetPriority ||
+                    (PRIORITY.BUILDING === targetPriority && distance < minDistance)) {
+                    minDistance = distance;
+                    nearestTarget = mageTower;
                     targetPriority = PRIORITY.BUILDING;
                 }
             }

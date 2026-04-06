@@ -1420,7 +1420,7 @@ export class GameManager extends Component {
         }
 
         // 停止动态背景切换，恢复静态背景
-        this.stopDynamicBackground();
+        //this.stopDynamicBackground();
 
         // 隐藏建造按钮（多种路径兼容）
         const buildButtonNode = find('UI/BuildButton') || find('Canvas/UI/BuildButton') || find('BuildButton');
@@ -5137,7 +5137,7 @@ export class GameManager extends Component {
             this.showGameElements();
 
             // 启动动态背景切换
-            this.startDynamicBackground(level);
+            //this.startDynamicBackground(level);
 
             // 游戏正式开始时，让生命之树自动训练一个小精灵
             const crystalComp = this.findComponentInScene('Crystal') as any;

@@ -1,24 +1,28 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python *.py)",
-      "Bash(python3 *.py)",
-      "Bash(pytest *)",
-      "Bash(pip install *)",
-      "Bash(npm install:*)",
-      "Bash(npx tsx:*)",
-      "Bash(git:*)",
-      "WebFetch(domain:www.theverge.com)",
+      "Bash(python*)",  
+      "Bash(pytest*)",  
+      "Bash(pip*)",     
+      
+      "Bash(npm*)",    
+      "Bash(npx*)",     
+      
+      "Bash(git*)",     
+      
       "WebSearch",
-      "Skill(update-config)",
-      "Skill(update-config:*)",
+      "WebFetch(domain:www.theverge.com)",
+      
+      "Skill(update-config*)", 
       "Edit",
       "Write",
       "Read",
       "Glob",
       "Grep",
-      "Bash(python)",
-      "Bash(npx tsc:*)"
+      
+      "Bash(find* -name \"*\"*)",  
+      
+      "Read(//d/CocosProject/TowerDemoCocos/**)"  
     ],
     "defaultMode": "bypassPermissions",
     "additionalDirectories": [

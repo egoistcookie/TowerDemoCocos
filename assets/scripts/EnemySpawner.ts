@@ -1977,10 +1977,12 @@ export class EnemySpawner extends Component {
             }
             
             // 检查敌人是否存活
-            const enemyScript = enemy.getComponent('Enemy') as any || 
-                               enemy.getComponent('OrcWarrior') as any || 
-                               enemy.getComponent('OrcWarlord') as any || 
-                               enemy.getComponent('TrollSpearman') as any;
+            const enemyScript = enemy.getComponent('Enemy') as any ||
+                               enemy.getComponent('OrcWarrior') as any ||
+                               enemy.getComponent('OrcWarlord') as any ||
+                               enemy.getComponent('TrollSpearman') as any ||
+                               enemy.getComponent('MinotaurWarrior') as any ||
+                               enemy.getComponent('Boss') as any;
             
             if (enemyScript) {
                 // 检查是否有isAlive方法
