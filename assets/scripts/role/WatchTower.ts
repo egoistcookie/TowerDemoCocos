@@ -821,10 +821,12 @@ export class WatchTower extends Build {
             if (containerNode) {
                 for (const enemy of containerNode.children) {
                     if (!enemy || !enemy.isValid || !enemy.active) continue;
-                    const enemyScript = enemy.getComponent('Enemy') as any || 
+                    const enemyScript = enemy.getComponent('Enemy') as any ||
                                        enemy.getComponent('OrcWarlord') as any ||
                                        enemy.getComponent('OrcWarrior') as any ||
-                                       enemy.getComponent('TrollSpearman') as any;
+                                       enemy.getComponent('TrollSpearman') as any ||
+                                       enemy.getComponent('MinotaurWarrior') as any ||
+                                       enemy.getComponent('Boss') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const dx = enemy.worldPosition.x - center.x;
                         const dy = enemy.worldPosition.y - center.y;
@@ -977,17 +979,19 @@ export class WatchTower extends Build {
         }
 
         // 降级方案：直接查找
-        const enemyContainers = ['Canvas/Enemies', 'Canvas/Orcs', 'Canvas/TrollSpearmans', 'Canvas/OrcWarriors', 'Canvas/OrcWarlords'];
+        const enemyContainers = ['Canvas/Enemies', 'Canvas/Orcs', 'Canvas/TrollSpearmans', 'Canvas/OrcWarriors', 'Canvas/OrcWarlords', 'Canvas/MinotaurWarriors'];
         
         for (const containerName of enemyContainers) {
             const containerNode = find(containerName);
             if (containerNode) {
                 for (const enemy of containerNode.children) {
                     if (!enemy || !enemy.isValid || !enemy.active) continue;
-                    const enemyScript = enemy.getComponent('Enemy') as any || 
+                    const enemyScript = enemy.getComponent('Enemy') as any ||
                                        enemy.getComponent('OrcWarlord') as any ||
                                        enemy.getComponent('OrcWarrior') as any ||
-                                       enemy.getComponent('TrollSpearman') as any;
+                                       enemy.getComponent('TrollSpearman') as any ||
+                                       enemy.getComponent('MinotaurWarrior') as any ||
+                                       enemy.getComponent('Boss') as any;
                     if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) continue;
                     const enemyPos = enemy.worldPosition;
                     const dx = center.x - enemyPos.x;
@@ -1099,10 +1103,12 @@ export class WatchTower extends Build {
         //                   this.currentTarget.getComponent('Priest') as any;
         // } else {
             // 我方占领或中立，攻击敌人（哨塔只能归属我方）
-            targetScript = this.currentTarget.getComponent('Enemy') as any || 
+            targetScript = this.currentTarget.getComponent('Enemy') as any ||
                            this.currentTarget.getComponent('OrcWarlord') as any ||
                            this.currentTarget.getComponent('OrcWarrior') as any ||
-                           this.currentTarget.getComponent('TrollSpearman') as any;
+                           this.currentTarget.getComponent('TrollSpearman') as any ||
+                           this.currentTarget.getComponent('MinotaurWarrior') as any ||
+                           this.currentTarget.getComponent('Boss') as any;
         // }
         
         if (!targetScript || !targetScript.isAlive || !targetScript.isAlive()) {
@@ -1200,10 +1206,12 @@ export class WatchTower extends Build {
                                       targetNode.getComponent('ElfSwordsman') as any ||
                                       targetNode.getComponent('Priest') as any;
                     } else {
-                        targetScript = targetNode.getComponent('Enemy') as any || 
+                        targetScript = targetNode.getComponent('Enemy') as any ||
                                        targetNode.getComponent('OrcWarlord') as any ||
                                        targetNode.getComponent('OrcWarrior') as any ||
-                                       targetNode.getComponent('TrollSpearman') as any;
+                                       targetNode.getComponent('TrollSpearman') as any ||
+                                       targetNode.getComponent('MinotaurWarrior') as any ||
+                                       targetNode.getComponent('Boss') as any;
                     }
                     
                     if (targetScript && targetScript.takeDamage) {

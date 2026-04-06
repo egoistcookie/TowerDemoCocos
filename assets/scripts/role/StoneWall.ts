@@ -304,6 +304,13 @@ export class StoneWall extends Build {
     }
 
     /**
+     * 公有的 takeDamage 方法（覆盖父类的 protected 方法，供外部类调用）
+     */
+    public takeDamage(damage: number, hitDirection?: Vec3) {
+        super.takeDamage(damage, hitDirection);
+    }
+
+    /**
      * 回收按钮点击事件（石墙特有）
      */
     onSellClick(event?: EventTouch) {

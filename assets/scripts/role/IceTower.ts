@@ -662,15 +662,17 @@ export class IceTower extends Build {
 
         // 查找敌人
         const enemies = this.unitManager ? this.unitManager.getEnemiesInRange(myPos, detectionRange, true) : [];
-        
+
         for (const enemy of enemies) {
             if (!enemy || !enemy.isValid || !enemy.active) continue;
 
-            const enemyScript = enemy.getComponent('Enemy') as any || 
+            const enemyScript = enemy.getComponent('Enemy') as any ||
                                enemy.getComponent('OrcWarlord') as any ||
                                enemy.getComponent('OrcWarrior') as any ||
-                               enemy.getComponent('TrollSpearman') as any;
-            
+                               enemy.getComponent('TrollSpearman') as any ||
+                               enemy.getComponent('MinotaurWarrior') as any ||
+                               enemy.getComponent('Boss') as any;
+
             if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) continue;
 
             const dx = enemy.worldPosition.x - myPos.x;
@@ -792,11 +794,13 @@ export class IceTower extends Build {
         }
 
         // 应用伤害
-        const enemyScript = enemy.getComponent('Enemy') as any || 
+        const enemyScript = enemy.getComponent('Enemy') as any ||
                            enemy.getComponent('OrcWarlord') as any ||
                            enemy.getComponent('OrcWarrior') as any ||
-                           enemy.getComponent('TrollSpearman') as any;
-        
+                           enemy.getComponent('TrollSpearman') as any ||
+                           enemy.getComponent('MinotaurWarrior') as any ||
+                           enemy.getComponent('Boss') as any;
+
         if (enemyScript && enemyScript.takeDamage) {
             enemyScript.takeDamage(damage, hitDirection);
             // 记录伤害统计

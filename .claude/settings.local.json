@@ -16,7 +16,9 @@
       "Write",
       "Read",
       "Glob",
-      "Grep"
+      "Grep",
+      "Bash(python)",
+      "Bash(npx tsc:*)"
     ],
     "defaultMode": "bypassPermissions",
     "additionalDirectories": [

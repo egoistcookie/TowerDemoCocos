@@ -1,11 +1,11 @@
 /**
- * 牛头人战士
+ * 牛头人领主
  * 继承Boss基类，拥有比兽人督军更高的数值
  * 技能：增强版战争咆哮、战争践踏
  * 
  * 实现说明：
  * 1. 数值比OrcWarlord更高：
- *    - maxHealth: 200 (OrcWarlord: 100)
+ *    - maxHealth: 2000 (OrcWarlord: 100)
  *    - attackDamage: 30 (OrcWarlord: 15)
  *    - moveSpeed: 20 (OrcWarlord: 30，更慢体现boss压迫感)
  *    - tenacity: 0.4 (OrcWarlord: 0.3，更抗打)
@@ -30,7 +30,7 @@
  * - clearAttachedWeapons(), flipDirection()等辅助方法
  */
 
-import { _decorator, Node, Vec3, Sprite, find, Prefab, SpriteFrame, UITransform, AudioClip, tween, Label, Color, instantiate, view } from 'cc';
+import { _decorator, Node, Vec3, Sprite, find, Prefab, SpriteFrame, UITransform, AudioClip, Label, instantiate, view } from 'cc';
 import { GameManager, GameState } from '../GameManager';
 import { HealthBar } from '../HealthBar';
 import { DamageNumber } from '../DamageNumber';
@@ -45,7 +45,7 @@ const { ccclass, property } = _decorator;
 export class MinotaurWarrior extends Boss {
     // 基础属性（数值比OrcWarlord更高）
     @property
-    maxHealth: number = 200; // 比OrcWarlord的100更高
+    maxHealth: number = 2000; // 比OrcWarlord的100更高
 
     @property
     moveSpeed: number = 20; // 比OrcWarlord的30更慢，体现boss压迫感
@@ -78,10 +78,10 @@ export class MinotaurWarrior extends Boss {
     
     // 单位信息属性
     @property
-    unitName: string = "牛头人战士";
+    unitName: string = "牛头人领主";
     
     @property
-    unitDescription: string = "强大的牛头人战士，拥有极高的生命值和攻击力，能够释放增强版战争咆哮和战争践踏技能。";
+    unitDescription: string = "牛头人领主，情报有限。";
     
     @property(SpriteFrame)
     unitIcon: SpriteFrame = null!;
@@ -145,7 +145,7 @@ export class MinotaurWarrior extends Boss {
     stompCooldown: number = 20; // 战争践踏冷却时间（秒）
     
     @property
-    stompRange: number = 200; // 战争践踏范围（像素）
+    stompRange: number = 170; // 战争践踏范围（像素）
     
     @property
     stompDamageMultiplier: number = 2.0; // 伤害倍率（两倍攻击力）
@@ -155,9 +155,32 @@ export class MinotaurWarrior extends Boss {
     
     @property(SpriteFrame)
     stompAnimationFrames: SpriteFrame[] = []; // 战争践踏动画帧
-    
+
     @property
     stompAnimationDuration: number = 1.0; // 战争践踏动画时长
+
+    @property(SpriteFrame)
+    stompCrackFrame1: SpriteFrame = null!; // 战争践踏裂缝贴图 1
+
+    @property(SpriteFrame)
+    stompCrackFrame2: SpriteFrame = null!; // 战争践踏裂缝贴图 2
+
+    @property(SpriteFrame)
+    stompCrackFrame3: SpriteFrame = null!; // 战争践踏裂缝贴图 3
+
+    @property(AudioClip)
+    stompCrackSound: AudioClip = null!; // 战争践踏裂缝音效（动画播放到一半时播放）
+
+    // 范围攻击属性（前方扇形攻击）
+    @property({
+        tooltip: "范围攻击半径（像素）"
+    })
+    aoeRange: number = 100; // 攻击范围半径
+
+    @property({
+        tooltip: "范围攻击角度（度）"
+    })
+    aoeAngle: number = 90; // 前方扇形角度
 
     // 私有属性（需要从OrcWarlord复制）
     // 生命值、血条与大部分运行时状态均由 Boss 基类维护，这里不再重复声明这些字段
@@ -179,8 +202,26 @@ export class MinotaurWarrior extends Boss {
     // 战争践踏私有属性
     private stompTimer: number = 0; // 战争践踏冷却计时器
     private isPlayingStompAnimation: boolean = false; // 是否正在播放战争践踏动画
-    private wasPlayingAttackBeforeStomp: boolean = false; // 战争践踏前是否正在攻击
-    
+    private stompCrackNode: Node = null!; // 地面裂缝贴图节点
+    private isStompCrackActive: boolean = false; // 裂缝是否正在激活状态
+    private stompCrackFrames: SpriteFrame[] = []; // 3 张裂缝贴图数组
+    private currentCrackFrameIndex: number = 0; // 当前显示的裂缝贴图索引
+    private crackFrameDuration: number = 1.0 / 3; // 每张贴图显示时长（践踏时）
+    private crackFrameTimer: number = 0; // 裂缝贴图切换计时器
+
+    // 低血量狂暴相关属性
+    private hasTriggeredFrenzy: boolean = false; // 是否已触发狂暴
+    private isFrenzy: boolean = false; // 是否处于狂暴状态
+    private baseAttackDamage: number = 0; // 基础攻击力（狂暴前）
+    private baseAttackInterval: number = 0; // 基础攻击间隔（狂暴前）
+
+    // 顶部 Boss 血条相关
+    private bossHealthBarNode: Node = null!; // 顶部 Boss 血条节点
+    private bossHealthBar: any = null!; // 顶部 Boss 血条组件
+    private static bossHealthBarList: MinotaurWarrior[] = []; // 所有存活牛头人列表，用于血条排列
+    private static bossHealthBarContainer: Node = null!; // 血条容器节点
+    private bossHealthBarIndex: number = -1; // 当前牛头人在血条列表中的索引
+
     // 对象池相关
     public prefabName: string = "MinotaurWarrior";
 
@@ -218,10 +259,10 @@ export class MinotaurWarrior extends Boss {
         if (this.stompSound) {
             AudioManager.Instance.playSFX(this.stompSound);
         }
-        
+
         // 计算伤害值（两倍攻击力）
         const stompDamage = this.attackDamage * this.stompDamageMultiplier;
-        
+
         // 查找范围内的所有我方单位
         const friendlyUnits: Node[] = [];
         
@@ -330,20 +371,26 @@ export class MinotaurWarrior extends Boss {
         // 对范围内的所有我方单位造成伤害
         const bossPos = this.node.worldPosition;
         const rangeSq = this.stompRange * this.stompRange;
-        
+
         for (const unit of friendlyUnits) {
             if (!unit || !unit.isValid || !unit.active) {
                 continue;
             }
-            
+
             // 计算距离
             const unitPos = unit.worldPosition;
             const dx = unitPos.x - bossPos.x;
             const dy = unitPos.y - bossPos.y;
             const distanceSq = dx * dx + dy * dy;
-            
+
             // 如果在范围内，造成伤害
             if (distanceSq <= rangeSq) {
+                // 计算受击方向：从牛头人指向目标
+                const hitDir = new Vec3(dx, dy, 0);
+                if (hitDir.length() > 0.001) {
+                    hitDir.normalize();
+                }
+
                 const unitScript = unit.getComponent('Arrower') as any ||
                                   unit.getComponent('Hunter') as any ||
                                   unit.getComponent('ElfSwordsman') as any ||
@@ -354,14 +401,18 @@ export class MinotaurWarrior extends Boss {
                                   unit.getComponent('ThunderTower') as any ||
                                   unit.getComponent('WarAncientTree') as any ||
                                   unit.getComponent('HunterHall') as any ||
+                                  unit.getComponent('MageTower') as any ||
+                                  unit.getComponent('Church') as any ||
+                                  unit.getComponent('SwordsmanHall') as any ||
+                                  unit.getComponent('Crystal') as any ||
                                   unit.getComponent('StoneWall') as any;
-                
+
                 if (unitScript && unitScript.takeDamage && typeof unitScript.takeDamage === 'function') {
-                    unitScript.takeDamage(stompDamage);
+                    unitScript.takeDamage(stompDamage, hitDir);
                 }
             }
         }
-        
+
         // 重置战争践踏冷却计时器
         this.stompTimer = 0;
     }
@@ -370,6 +421,8 @@ export class MinotaurWarrior extends Boss {
      * 播放战争践踏动画
      */
     private playStompAnimation() {
+        console.log('[MinotaurWarrior] playStompAnimation 被调用，stompTimer=' + this.stompTimer.toFixed(2));
+
         if (this.isPlayingDeathAnimation || this.isDestroyed) {
             return;
         }
@@ -378,30 +431,211 @@ export class MinotaurWarrior extends Boss {
             return;
         }
 
-        // 如果正在播放攻击动画，保存状态
-        this.wasPlayingAttackBeforeStomp = this.isPlayingAttackAnimation;
-        
+        // 如果正在播放攻击动画，先停止攻击
+        if (this.isPlayingAttackAnimation) {
+            this.isPlayingAttackAnimation = false;
+            this.attackComplete = false;
+        }
+
+        // 重置攻击计时器，防止践踏期间触发攻击
+        this.attackTimer = 0;
+
         // 停止其他动画
         this.stopAllAnimations();
         this.isPlayingStompAnimation = true;
         this.animationTimer = 0;
         this.currentAnimationFrameIndex = -1;
-        
-        // 如果没有战争践踏动画帧，直接释放效果
+
+        // 创建/显示裂缝贴图
+        this.showStompCrack();
+
+        // 如果没有战争践踏动画帧，直接释放效果并回到空闲状态
         if (this.stompAnimationFrames.length === 0) {
+            console.warn('[MinotaurWarrior] 战争践踏动画帧未配置，直接释放效果');
             this.releaseStomp();
             this.isPlayingStompAnimation = false;
-            // 如果之前正在攻击，重新开始攻击
-            if (this.wasPlayingAttackBeforeStomp) {
-                this.wasPlayingAttackBeforeStomp = false;
-                if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
-                    this.attack();
-                }
-            } else {
-                this.playIdleAnimation();
-            }
+            this.playIdleAnimation();
+        } else {
+            console.log('[MinotaurWarrior] 开始播放战争践踏动画，帧数:', this.stompAnimationFrames.length);
+            // 立即播放第一帧动画，确保视觉反馈及时
+            this.sprite.spriteFrame = this.stompAnimationFrames[0];
         }
     }
+
+    /**
+     * 显示地面裂缝贴图（固定在原地，不跟随牛头人移动）
+     */
+    private showStompCrack() {
+        // 初始化 3 张裂缝贴图
+        this.stompCrackFrames = [this.stompCrackFrame1, this.stompCrackFrame2, this.stompCrackFrame3].filter(f => f != null);
+        if (this.stompCrackFrames.length === 0) {
+            console.warn('[MinotaurWarrior] 裂缝贴图未设置');
+            return;
+        }
+
+        // 获取牛头人当前位置（世界坐标）
+        const bossPos = this.node.worldPosition;
+
+        // 如果裂缝节点不存在，创建它
+        if (!this.stompCrackNode || !this.stompCrackNode.isValid) {
+            this.stompCrackNode = new Node('StompCrack');
+
+            // 将裂缝节点添加到 Canvas 下，但在敌人容器之下
+            const canvasNode = find('Canvas');
+            if (canvasNode) {
+                this.stompCrackNode.setParent(canvasNode);
+
+                // 将裂缝放到 Background 之上、其他单位之下
+                const backgroundNode = canvasNode.getChildByName('Background');
+                if (backgroundNode) {
+                    const newIndex = backgroundNode.getSiblingIndex() + 1;
+                    this.stompCrackNode.setSiblingIndex(newIndex);
+                } else {
+                    this.stompCrackNode.setSiblingIndex(3);
+                }
+            } else {
+                const scene = this.node.scene;
+                if (scene) {
+                    this.stompCrackNode.setParent(scene);
+                } else {
+                    this.stompCrackNode.setParent(this.node);
+                }
+            }
+
+            // 设置裂缝节点位置为牛头人当前位置
+            this.stompCrackNode.setWorldPosition(bossPos.x, bossPos.y, 0);
+
+            const sprite = this.stompCrackNode.addComponent(Sprite);
+            sprite.spriteFrame = this.stompCrackFrames[0]; // 显示第一张
+            sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+
+            const uiTransform = this.stompCrackNode.addComponent(UITransform);
+            uiTransform.setContentSize(this.stompRange * 2, this.stompRange * 2);
+
+            // 设置初始透明度
+            const color = sprite.color.clone();
+            color.a = 0;
+            sprite.color = color;
+
+            // 初始化裂缝状态
+            this.currentCrackFrameIndex = 0;
+            this.crackFrameTimer = 0;
+        } else {
+            // 重新显示裂缝
+            this.stompCrackNode.setWorldPosition(bossPos.x, bossPos.y, 0);
+
+            const sprite = this.stompCrackNode.getComponent(Sprite);
+            if (sprite) {
+                sprite.spriteFrame = this.stompCrackFrames[0];
+                const color = sprite.color.clone();
+                color.a = 0;
+                sprite.color = color;
+            }
+            this.stompCrackNode.active = true;
+
+            // 重置状态
+            this.currentCrackFrameIndex = 0;
+            this.crackFrameTimer = 0;
+        }
+
+        this.isStompCrackActive = true;
+    }
+
+    /**
+     * 更新裂缝贴图（践踏播放时切换贴图并逐渐清晰）
+     * @param deltaTime 帧间隔时间
+     */
+    private updateStompCrackDuringStomp(deltaTime: number) {
+        if (!this.stompCrackNode || !this.stompCrackNode.isValid || this.stompCrackFrames.length === 0) {
+            return;
+        }
+
+        const sprite = this.stompCrackNode.getComponent(Sprite);
+        if (!sprite) return;
+
+        // 累加计时器
+        this.crackFrameTimer += deltaTime;
+
+        // 切换贴图（每张图约 1/3 时长）
+        const framesPerCrack = Math.max(1, Math.floor(this.stompAnimationFrames.length / 3));
+        const targetFrameIndex = Math.floor(this.currentAnimationFrameIndex / framesPerCrack);
+
+        if (targetFrameIndex !== this.currentCrackFrameIndex && targetFrameIndex < this.stompCrackFrames.length) {
+            this.currentCrackFrameIndex = targetFrameIndex;
+            sprite.spriteFrame = this.stompCrackFrames[this.currentCrackFrameIndex];
+            console.log('[MinotaurWarrior] 切换到裂缝贴图', this.currentCrackFrameIndex + 1);
+        }
+
+        // 透明度从 0 渐变到最大（200）
+        const progress = this.animationTimer / this.stompAnimationDuration;
+        const maxAlpha = 200;
+        const currentAlpha = Math.min(Math.floor(progress * maxAlpha), maxAlpha);
+
+        const color = sprite.color.clone();
+        color.a = currentAlpha;
+        sprite.color = color;
+    }
+
+    /**
+     * 践踏完成后，裂缝倒序播放并逐渐虚化（每张贴图约 3.3 秒，共 10 秒）
+     */
+    private fadeOutStompCrack() {
+        if (!this.stompCrackNode || !this.stompCrackNode.isValid || this.stompCrackFrames.length === 0) {
+            return;
+        }
+
+        const sprite = this.stompCrackNode.getComponent(Sprite);
+        if (!sprite) return;
+
+        // 倒序播放 3 张裂缝贴图，每张约 3.3 秒
+        const frameDuration = 10.0 / this.stompCrackFrames.length; // 约 3.3 秒
+        let currentFrameIndex = this.stompCrackFrames.length - 1;
+        let timer = 0;
+        let alpha = 200; // 从最大透明度开始
+
+        // 设置初始贴图（最后一张）
+        sprite.spriteFrame = this.stompCrackFrames[currentFrameIndex];
+
+        const updateFunc = (dt: number) => {
+            if (!this.stompCrackNode || !this.stompCrackNode.isValid) {
+                return;
+            }
+
+            timer += dt;
+            alpha -= (200 / 10) * dt; // 10 秒内从 200 降到 0
+
+            // 更新透明度
+            const color = sprite.color.clone();
+            color.a = Math.max(0, Math.floor(alpha));
+            sprite.color = color;
+
+            // 切换贴图（倒序）
+            if (timer >= frameDuration && currentFrameIndex > 0) {
+                timer = 0;
+                currentFrameIndex--;
+                sprite.spriteFrame = this.stompCrackFrames[currentFrameIndex];
+                console.log('[MinotaurWarrior] 裂缝消散 - 切换到贴图', currentFrameIndex + 1);
+            }
+
+            // 10 秒后隐藏
+            if (alpha <= 0) {
+                this.stompCrackNode.active = false;
+                this.isStompCrackActive = false;
+            }
+        };
+
+        // 使用 scheduleUpdate 或 tween 来实现持续更新
+        // 这里使用一个简单的计时器循环
+        const schedule = () => {
+            if (!this.stompCrackNode || !this.stompCrackNode.isValid || alpha <= 0) {
+                return;
+            }
+            updateFunc(0.1); // 每帧约 0.1 秒
+            setTimeout(schedule, 100);
+        };
+        schedule();
+    }
+
 
     /**
      * 更新战争践踏动画
@@ -416,39 +650,49 @@ export class MinotaurWarrior extends Boss {
         const frameDuration = this.stompAnimationDuration / this.stompAnimationFrames.length;
         const frameIndex = Math.floor(this.animationTimer / frameDuration);
 
+        // 调试日志：追踪动画更新
+        if (this.currentAnimationFrameIndex !== frameIndex) {
+            console.log(`[MinotaurWarrior] 战争践踏动画：frame=${frameIndex}, timer=${this.animationTimer.toFixed(2)}, stompPoint=${Math.floor(this.stompAnimationFrames.length * 0.5)}`);
+        }
+
         if (frameIndex < this.stompAnimationFrames.length) {
             if (frameIndex !== this.currentAnimationFrameIndex) {
                 this.currentAnimationFrameIndex = frameIndex;
                 this.sprite.spriteFrame = this.stompAnimationFrames[frameIndex];
-                
-                // 在动画中间点释放战争践踏效果
+
+                // 在动画中间点释放战争践踏效果并播放裂缝音效
                 const stompPoint = Math.floor(this.stompAnimationFrames.length * 0.5);
                 if (frameIndex === stompPoint) {
+                    console.log('[MinotaurWarrior] 战争践踏动画到达中间点，释放效果并播放音效');
                     this.releaseStomp();
+
+                    // 播放裂缝音效（只播放一次）
+                    if (this.stompCrackSound) {
+                        AudioManager.Instance.playSFX(this.stompCrackSound);
+                    }
                 }
             }
+
+            // 更新裂缝贴图（每帧调用，切换贴图并更新透明度）
+            this.updateStompCrackDuringStomp(frameDuration);
         } else {
             // 战争践踏动画播放完成
             this.isPlayingStompAnimation = false;
-            
-            // 如果之前正在攻击，重新开始攻击
-            if (this.wasPlayingAttackBeforeStomp) {
-                this.wasPlayingAttackBeforeStomp = false;
-                if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
-                    this.attack();
-                } else {
-                    this.playIdleAnimation();
-                }
-            } else {
-                this.playIdleAnimation();
-            }
+            // 播放空闲动画，攻击会由 update 循环中的正常逻辑触发
+            this.playIdleAnimation();
+            // 开始裂缝虚化动画（10 秒后消失）
+            this.fadeOutStompCrack();
         }
     }
 
     onEnable() {
+        console.log('[MinotaurWarrior.onEnable] 被调用，node.name=', this.node.name);
         // 清理所有插在身上的武器（箭矢、长矛等）
         this.clearAttachedWeapons();
-        
+
+        // 调用父类方法恢复燃血狂暴改写的属性，避免数值叠加
+        this.restoreBloodRageAttributesIfNeeded();
+
         // 从对象池获取时，重新初始化状态
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
@@ -462,10 +706,25 @@ export class MinotaurWarrior extends Boss {
         this.warcryBuffedEnemies.clear();
         this.warcryBuffEndTime.clear();
         this.wasPlayingAttackBeforeWarcry = false;
+        // 重置狂怒状态（继承自 Boss 的属性）
+        this.clearBloodRageVisualOnly();
+        this.isBloodRageActive = false;
+        this.bloodRageBurnTimer = 0;
+        this.bloodRageOriginalMaxHealth = 0;
+        this.bloodRageOriginalMoveSpeed = 0;
+        this.bloodRageOriginalAttackDamage = 0;
+        this.bloodRageOriginalAttackInterval = 0;
+        this.bloodRagePulsePhase = 0;
+        this.bloodRageOriginalColor = null;
+        this.bloodRageTier = 0;
         // 战争践踏相关初始化
         this.stompTimer = 0;
         this.isPlayingStompAnimation = false;
-        this.wasPlayingAttackBeforeStomp = false;
+        this.isStompCrackActive = false;
+        // 隐藏裂缝节点（如果存在）
+        if (this.stompCrackNode && this.stompCrackNode.isValid) {
+            this.stompCrackNode.active = false;
+        }
         this.isHit = false;
         this.isPlayingAttackAnimation = false;
         this.isPlayingHitAnimation = false;
@@ -473,10 +732,17 @@ export class MinotaurWarrior extends Boss {
         this.isPlayingIdleAnimation = false;
         this.isPlayingWalkAnimation = false;
         this.currentTarget = null!;
-        
+
         // 重置动画
         this.currentAnimationFrameIndex = 0;
         this.animationTimer = 0;
+
+        // 狂暴状态重置
+        this.hasTriggeredFrenzy = false;
+        this.isFrenzy = false;
+        // 保存基础属性
+        this.baseAttackDamage = this.attackDamage;
+        this.baseAttackInterval = this.attackInterval;
         
         // 初始化动画相关属性（如果还没有初始化）
         if (!this.sprite) {
@@ -539,16 +805,17 @@ export class MinotaurWarrior extends Boss {
         }
         
         // 重新创建血条（如果不存在）
-        if (!this.healthBarNode || !this.healthBarNode.isValid) {
+        if (!this.healthBarNode || !this.healthBarNode.isValid || !this.healthBar) {
             this.createHealthBar();
         } else {
             // 如果血条已存在，更新血条状态
-            if (this.healthBar) {
-                this.healthBar.setMaxHealth(this.maxHealth);
-                this.healthBar.setHealth(this.currentHealth);
-            }
+            this.healthBar.setMaxHealth(this.maxHealth);
+            this.healthBar.setHealth(this.currentHealth);
         }
-        
+
+        // 创建顶部 Boss 血条
+        this.createBossHealthBar();
+
         // 初始播放待机动画
         this.playIdleAnimation();
     }
@@ -597,10 +864,13 @@ export class MinotaurWarrior extends Boss {
         }
         
         // 创建血条（如果不存在）
-        if (!this.healthBarNode || !this.healthBarNode.isValid) {
+        if (!this.healthBarNode || !this.healthBarNode.isValid || !this.healthBar) {
             this.createHealthBar();
         }
-        
+
+        // 创建顶部 Boss 血条
+        this.createBossHealthBar();
+
         // 初始播放待机动画
         this.playIdleAnimation();
     }
@@ -617,6 +887,182 @@ export class MinotaurWarrior extends Boss {
             this.healthBar.setMaxHealth(this.maxHealth);
             this.healthBar.setHealth(this.currentHealth);
         }
+    }
+
+    /**
+     * 创建顶部 Boss 血条（显示在屏幕顶部中央）
+     */
+    createBossHealthBar() {
+        console.log('[MinotaurWarrior.createBossHealthBar] 开始创建，node.name=', this.node.name, 'currentHealth=', this.currentHealth, 'maxHealth=', this.maxHealth);
+
+        // 检查是否已存在
+        if (this.bossHealthBarNode && this.bossHealthBarNode.isValid) {
+            console.log('[MinotaurWarrior.createBossHealthBar] 血条已存在，直接显示');
+            this.bossHealthBarNode.active = true;
+            if (this.bossHealthBar) {
+                this.bossHealthBar.setMaxHealth(this.maxHealth);
+                this.bossHealthBar.setHealth(this.currentHealth);
+            }
+            return;
+        }
+
+        // 查找 Canvas 节点
+        const canvas = find('Canvas');
+        console.log('[MinotaurWarrior.createBossHealthBar] Canvas 节点:', canvas ? '找到' : '未找到');
+        if (!canvas) {
+            console.warn('[MinotaurWarrior] 未找到 Canvas 节点，无法创建顶部 Boss 血条');
+            return;
+        }
+
+        // 创建或获取血条容器节点
+        if (!MinotaurWarrior.bossHealthBarContainer || !MinotaurWarrior.bossHealthBarContainer.isValid) {
+            console.log('[MinotaurWarrior.createBossHealthBar] 创建血条容器节点');
+            MinotaurWarrior.bossHealthBarContainer = new Node('BossHealthBarContainer');
+            MinotaurWarrior.bossHealthBarContainer.setParent(canvas);
+            // 设置容器位置在屏幕顶部中央
+            const uiTransform = canvas.getComponent(UITransform);
+            console.log('[MinotaurWarrior.createBossHealthBar] Canvas UITransform:', uiTransform ? `size=${uiTransform.contentSize.width}x${uiTransform.contentSize.height}` : '未找到');
+            if (uiTransform) {
+                // Cocos Creator 坐标系统：(0,0) 是中心点，向上为正
+                // 顶部边缘 Y = contentSize.height / 2
+                // 血条容器位置：X=0 (居中), Y=顶部边缘 - 50 像素偏移
+                const topY = uiTransform.contentSize.height / 2 - 50;
+                MinotaurWarrior.bossHealthBarContainer.setPosition(0, topY, 0);
+                console.log('[MinotaurWarrior.createBossHealthBar] 容器位置设置为 (0,', topY, ', 0)');
+            } else {
+                MinotaurWarrior.bossHealthBarContainer.setPosition(0, 500, 0);
+            }
+
+            // 将容器放到 Canvas 的最顶层（最高 siblingIndex）
+            const siblingIndex = canvas.children.length - 1;
+            MinotaurWarrior.bossHealthBarContainer.setSiblingIndex(siblingIndex);
+            console.log('[MinotaurWarrior.createBossHealthBar] 血条容器设置为最顶层，siblingIndex=', siblingIndex);
+        } else {
+            console.log('[MinotaurWarrior.createBossHealthBar] 血条容器节点已存在');
+            // 确保容器在最顶层
+            const siblingIndex = canvas.children.length - 1;
+            MinotaurWarrior.bossHealthBarContainer.setSiblingIndex(siblingIndex);
+        }
+
+        // 创建血条节点
+        this.bossHealthBarNode = new Node('BossHealthBar_' + this.node.uuid);
+        this.bossHealthBarNode.setParent(MinotaurWarrior.bossHealthBarContainer);
+        console.log('[MinotaurWarrior.createBossHealthBar] 创建血条节点，parent=', MinotaurWarrior.bossHealthBarContainer.name);
+
+        // 添加 HealthBar 组件
+        this.bossHealthBar = this.bossHealthBarNode.addComponent(HealthBar);
+        console.log('[MinotaurWarrior.createBossHealthBar] HealthBar 组件:', this.bossHealthBar ? '添加成功' : '添加失败');
+        if (this.bossHealthBar) {
+            // 设置 Boss 血条标志（启用美化）
+            this.bossHealthBar.isBossBar = true;
+            // 设置 Boss 名称
+            this.bossHealthBar.bossName = "牛头人领主";
+            // 设置更大的血条尺寸
+            this.bossHealthBar.barWidth = 300;
+            this.bossHealthBar.barHeight = 20;
+            this.bossHealthBar.setMaxHealth(this.maxHealth);
+            this.bossHealthBar.setHealth(this.currentHealth);
+            console.log('[MinotaurWarrior.createBossHealthBar] 血条设置完成，currentHealth=', this.currentHealth, '/', this.maxHealth);
+
+            // 手动调用 start 方法确保 Graphics 组件和名称标签正确初始化
+            if (this.bossHealthBar.start) {
+                this.bossHealthBar.start();
+                console.log('[MinotaurWarrior.createBossHealthBar] 手动调用 HealthBar.start()');
+            }
+
+            // 设置 Boss 名称（start 之后调用以确保标签已创建）
+            if (this.bossHealthBar.setBossName) {
+                this.bossHealthBar.setBossName("牛头人领主");
+            }
+
+            // 强制刷新一次血条显示
+            this.bossHealthBar.updateBar();
+            console.log('[MinotaurWarrior.createBossHealthBar] 强制刷新血条显示');
+        }
+
+        // 确保血条节点激活
+        this.bossHealthBarNode.active = true;
+        console.log('[MinotaurWarrior.createBossHealthBar] 血条节点激活状态:', this.bossHealthBarNode.active);
+
+        // 添加到列表并更新血条位置
+        this.bossHealthBarIndex = MinotaurWarrior.bossHealthBarList.length;
+        MinotaurWarrior.bossHealthBarList.push(this);
+        MinotaurWarrior.updateBossHealthBarPositions();
+
+        console.log('[MinotaurWarrior.createBossHealthBar] 顶部 Boss 血条创建完成，当前血条数量:', MinotaurWarrior.bossHealthBarList.length);
+    }
+
+    /**
+     * 更新所有 Boss 血条的位置（垂直排列）
+     */
+    private static updateBossHealthBarPositions() {
+        const verticalSpacing = 20; // 血条之间的垂直间距
+        const startY = 0;
+
+        console.log('[MinotaurWarrior.updateBossHealthBarPositions] 开始更新血条位置，血条数量=', MinotaurWarrior.bossHealthBarList.length);
+        for (let i = 0; i < MinotaurWarrior.bossHealthBarList.length; i++) {
+            const warrior = MinotaurWarrior.bossHealthBarList[i];
+            if (warrior && warrior.bossHealthBarNode && warrior.bossHealthBarNode.isValid) {
+                // 从上到下排列，y 坐标递减
+                warrior.bossHealthBarNode.setPosition(0, startY - i * verticalSpacing, 0);
+                console.log('[MinotaurWarrior.updateBossHealthBarPositions] 血条', i, '位置设置为 (0,', startY - i * verticalSpacing, ', 0)');
+            } else {
+                console.warn('[MinotaurWarrior.updateBossHealthBarPositions] 血条', i, '无效');
+            }
+        }
+    }
+
+    /**
+     * 从血条列表中移除当前牛头人
+     */
+    private static removeBossHealthBar(warrior: MinotaurWarrior) {
+        console.log('[MinotaurWarrior.removeBossHealthBar] 开始移除，当前列表数量=', MinotaurWarrior.bossHealthBarList.length);
+        const index = MinotaurWarrior.bossHealthBarList.indexOf(warrior);
+        if (index >= 0) {
+            console.log('[MinotaurWarrior.removeBossHealthBar] 找到牛头人，索引=', index);
+            MinotaurWarrior.bossHealthBarList.splice(index, 1);
+            // 重新排列剩余血条
+            MinotaurWarrior.updateBossHealthBarPositions();
+        } else {
+            console.warn('[MinotaurWarrior.removeBossHealthBar] 未在列表中找到牛头人');
+        }
+
+        // 如果所有牛头人都已死亡，销毁容器节点
+        if (MinotaurWarrior.bossHealthBarList.length === 0 &&
+            MinotaurWarrior.bossHealthBarContainer &&
+            MinotaurWarrior.bossHealthBarContainer.isValid) {
+            console.log('[MinotaurWarrior.removeBossHealthBar] 所有牛头人死亡，销毁容器节点');
+            MinotaurWarrior.bossHealthBarContainer.destroy();
+            MinotaurWarrior.bossHealthBarContainer = null!;
+        }
+    }
+
+    /**
+     * 更新顶部 Boss 血条
+     */
+    updateBossHealthBar() {
+        if (this.bossHealthBar && this.bossHealthBarNode && this.bossHealthBarNode.isValid) {
+            this.bossHealthBar.setHealth(this.currentHealth);
+            console.log('[MinotaurWarrior.updateBossHealthBar] 更新血条，currentHealth=', this.currentHealth, '/', this.maxHealth);
+        } else {
+            console.warn('[MinotaurWarrior.updateBossHealthBar] 血条无效，bossHealthBar=', !!this.bossHealthBar, 'bossHealthBarNode=', this.bossHealthBarNode?.isValid);
+        }
+    }
+
+    /**
+     * 隐藏顶部 Boss 血条
+     */
+    hideBossHealthBar() {
+        console.log('[MinotaurWarrior.hideBossHealthBar] 开始隐藏');
+        // 从列表中移除并更新血条位置
+        MinotaurWarrior.removeBossHealthBar(this);
+
+        // 销毁血条节点
+        if (this.bossHealthBarNode && this.bossHealthBarNode.isValid) {
+            this.bossHealthBarNode.destroy();
+        }
+        this.bossHealthBarNode = null!;
+        this.bossHealthBar = null!;
     }
 
     findGameManager() {
@@ -738,8 +1184,9 @@ export class MinotaurWarrior extends Boss {
                 const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
                 const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
                 const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
-                
-                if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
+
+                // 检查目标是否存活（直接检查血量和 destroyed 状态，因为 isAlive 是 protected）
+                if (targetScript && (targetScript.isDestroyed || targetScript.currentHealth <= 0)) {
                     // 当前目标已被摧毁，清除目标
                     this.currentTarget = null!;
                 }
@@ -1281,7 +1728,9 @@ export class MinotaurWarrior extends Boss {
 
         this.animationTimer += deltaTime;
 
-        if (this.isPlayingIdleAnimation) {
+        if (this.isPlayingStompAnimation) {
+            this.updateStompAnimation();
+        } else if (this.isPlayingIdleAnimation) {
             this.updateIdleAnimation();
         } else if (this.isPlayingWalkAnimation) {
             this.updateWalkAnimation();
@@ -1293,8 +1742,6 @@ export class MinotaurWarrior extends Boss {
             this.updateDeathAnimation();
         } else if (this.isPlayingWarcryAnimation) {
             this.updateWarcryAnimation();
-        } else if (this.isPlayingStompAnimation) {
-            this.updateStompAnimation();
         }
     }
 
@@ -1350,9 +1797,14 @@ export class MinotaurWarrior extends Boss {
                 
                 const attackPoint = Math.floor(this.attackAnimationFrames.length * 0.5);
                 if (frameIndex === attackPoint && !this.attackComplete) {
+                    // 在攻击命中点播放攻击音效
+                    if (this.attackSound) {
+                        AudioManager.Instance.playSFX(this.attackSound);
+                    }
+
                     this.dealDamage();
                     this.attackComplete = true;
-                    
+
                     if (!this.isPlayingAttackAnimation) {
                         return;
                     }
@@ -1437,68 +1889,184 @@ export class MinotaurWarrior extends Boss {
 
         const wasPlayingAttack = this.isPlayingAttackAnimation;
         this.stopAllAnimations();
-        
+
         if (wasPlayingAttack) {
             this.isPlayingAttackAnimation = true;
             return;
         }
-        
+
         this.isPlayingAttackAnimation = true;
         this.attackComplete = false;
         this.animationTimer = 0;
         this.currentAnimationFrameIndex = -1;
-        
-        if (this.attackSound) {
-            AudioManager.Instance.playSFX(this.attackSound);
-        }
     }
 
     // 受击与死亡动画播放逻辑复用 Boss 基类的 playHitAnimation / playDeathAnimation
 
     dealDamage() {
-        // 从OrcWarlord.ts的dealDamage()方法完整复制（1825-1878行）
-        if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
-            this.currentTarget = null!;
-            if (this.isPlayingAttackAnimation) {
-                this.isPlayingAttackAnimation = false;
-                this.attackComplete = false;
-                this.playIdleAnimation();
-            }
-            return;
+        // 牛头人领主范围攻击：对前方扇形区域内的所有我方单位造成伤害
+        const bossPos = this.node.worldPosition.clone();
+
+        // 使用当前目标的方向作为扇形中心方向（如果没有目标，使用贴图朝向）
+        let bossAngleRad = 0;
+        if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
+            const targetPos = this.currentTarget.worldPosition;
+            const dx = targetPos.x - bossPos.x;
+            const dy = targetPos.y - bossPos.y;
+            bossAngleRad = Math.atan2(dy, dx);
+        } else {
+            // 没有目标，使用贴图朝向
+            const isFacingRight = this.node.scale.x > 0;
+            bossAngleRad = isFacingRight ? 0 : Math.PI;
         }
 
-        const towerScript = this.currentTarget.getComponent('Arrower') as any;
-        const warAncientTreeScript = this.currentTarget.getComponent('WarAncientTree') as any;
-        const hallScript = this.currentTarget.getComponent('HunterHall') as any;
-        const swordsmanHallScript = this.currentTarget.getComponent('SwordsmanHall') as any;
-        const crystalScript = this.currentTarget.getComponent('Crystal') as any;
-        const hunterScript = this.currentTarget.getComponent('Hunter') as any;
-        const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
-        const priestScript = this.currentTarget.getComponent('Priest') as any;
-        const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-        const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
-        const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
-        const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
-        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
-        
-        if (targetScript && targetScript.takeDamage) {
-            targetScript.takeDamage(this.attackDamage);
-            
-            if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
-                this.currentTarget = null!;
-                if (this.isPlayingAttackAnimation) {
-                    this.isPlayingAttackAnimation = false;
-                    this.attackComplete = false;
-                    this.playIdleAnimation();
+        // 查找所有可能的目标
+        const potentialTargets: Node[] = [];
+
+        // 从 UnitManager 获取所有我方单位
+        if (this.unitManager) {
+            // 获取所有防御塔（弓箭手、法师、牧师）
+            const towers = this.unitManager.getTowers();
+            for (const tower of towers) {
+                if (tower && tower.isValid && tower.active) {
+                    const script = tower.getComponent('Arrower') as any ||
+                                  tower.getComponent('Mage') as any ||
+                                  tower.getComponent('Priest') as any;
+                    if (script && script.isAlive && script.isAlive()) {
+                        potentialTargets.push(tower);
+                    }
                 }
             }
-        } else {
-            this.currentTarget = null!;
-            if (this.isPlayingAttackAnimation) {
-                this.isPlayingAttackAnimation = false;
-                this.attackComplete = false;
-                this.playIdleAnimation();
+
+            // 获取女猎手
+            const hunters = this.unitManager.getHunters();
+            for (const hunter of hunters) {
+                if (hunter && hunter.isValid && hunter.active) {
+                    const hunterScript = hunter.getComponent('Hunter') as any;
+                    if (hunterScript && hunterScript.isAlive && hunterScript.isAlive()) {
+                        potentialTargets.push(hunter);
+                    }
+                }
             }
+
+            // 获取精灵剑士
+            const elfSwordsmans = this.unitManager.getElfSwordsmans();
+            for (const swordsman of elfSwordsmans) {
+                if (swordsman && swordsman.isValid && swordsman.active) {
+                    const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
+                    if (swordsmanScript && swordsmanScript.isAlive && swordsmanScript.isAlive()) {
+                        potentialTargets.push(swordsman);
+                    }
+                }
+            }
+
+            // 获取所有建筑物
+            const buildings = this.unitManager.getBuildings();
+            for (const building of buildings) {
+                if (building && building.isValid && building.active) {
+                    const buildScript = building.getComponent('WatchTower') as any ||
+                                       building.getComponent('IceTower') as any ||
+                                       building.getComponent('ThunderTower') as any ||
+                                       building.getComponent('WarAncientTree') as any ||
+                                       building.getComponent('HunterHall') as any;
+                    if (buildScript && buildScript.isAlive && buildScript.isAlive()) {
+                        potentialTargets.push(building);
+                    }
+                }
+            }
+
+            // 获取石墙
+            const stoneWalls = this.unitManager.getStoneWalls();
+            for (const wall of stoneWalls) {
+                if (wall && wall.isValid && wall.active) {
+                    const wallScript = wall.getComponent('StoneWall') as any;
+                    if (wallScript && wallScript.isAlive && wallScript.isAlive()) {
+                        potentialTargets.push(wall);
+                    }
+                }
+            }
+        }
+
+        // 也检查水晶
+        if (this.targetCrystal && this.targetCrystal.isValid && this.targetCrystal.active) {
+            const crystalScript = this.targetCrystal.getComponent('Crystal') as any;
+            if (crystalScript && crystalScript.isAlive && crystalScript.isAlive()) {
+                potentialTargets.push(this.targetCrystal);
+            }
+        }
+
+        // 筛选在扇形范围内的目标
+        const rangeSq = this.aoeRange * this.aoeRange;
+        const halfAngleRad = (this.aoeAngle / 2) * Math.PI / 180; // 半角弧度
+
+        for (const target of potentialTargets) {
+            if (!target || !target.isValid || !target.active) {
+                continue;
+            }
+
+            const targetPos = target.worldPosition;
+            const dx = targetPos.x - bossPos.x;
+            const dy = targetPos.y - bossPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            const distance = Math.sqrt(distanceSq);
+
+            // 检查距离
+            if (distanceSq > rangeSq) {
+                continue;
+            }
+
+            // 检查角度（前方扇形）
+            if (distance < 1) {
+                // 距离太近，默认在范围内
+                this.dealDamageToTarget(target, bossPos);
+                continue;
+            }
+
+            // 计算目标方向与牛头人朝向的夹角
+            const targetAngle = Math.atan2(dy, dx); // 目标方向弧度
+            const bossAngle = bossAngleRad; // 牛头人朝向弧度（使用目标方向或贴图朝向）
+
+            // 计算角度差（归一化到 -PI 到 PI）
+            let angleDiff = targetAngle - bossAngle;
+            while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+            while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+            // 检查是否在扇形角度内
+            if (Math.abs(angleDiff) <= halfAngleRad) {
+                this.dealDamageToTarget(target, bossPos);
+            }
+        }
+    }
+
+    /**
+     * 对单个目标造成伤害
+     */
+    private dealDamageToTarget(target: Node, bossPos: Vec3) {
+        const towerScript = target.getComponent('Arrower') as any;
+        const warAncientTreeScript = target.getComponent('WarAncientTree') as any;
+        const hallScript = target.getComponent('HunterHall') as any || target.getComponent('MageTower') as any;
+        const swordsmanHallScript = target.getComponent('SwordsmanHall') as any;
+        const churchScript = target.getComponent('Church') as any;
+        const crystalScript = target.getComponent('Crystal') as any;
+        const hunterScript = target.getComponent('Hunter') as any;
+        const mageScript = target.getComponent('Mage') as any;
+        const elfSwordsmanScript = target.getComponent('ElfSwordsman') as any;
+        const priestScript = target.getComponent('Priest') as any;
+        const stoneWallScript = target.getComponent('StoneWall') as any;
+        const watchTowerScript = target.getComponent('WatchTower') as any;
+        const iceTowerScript = target.getComponent('IceTower') as any;
+        const thunderTowerScript = target.getComponent('ThunderTower') as any;
+        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || churchScript || priestScript || crystalScript || hunterScript || mageScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
+
+        if (targetScript && targetScript.takeDamage && typeof targetScript.takeDamage === 'function') {
+            // 计算受击方向：从牛头人指向目标
+            const hitDir = new Vec3();
+            const targetPos = target.worldPosition;
+            Vec3.subtract(hitDir, targetPos, bossPos);
+            if (hitDir.length() > 0.001) {
+                hitDir.normalize();
+            }
+            targetScript.takeDamage(this.attackDamage, hitDir);
         }
     }
 
@@ -1513,8 +2081,13 @@ export class MinotaurWarrior extends Boss {
             if (this.healthBar) {
                 this.healthBar.setHealth(this.currentHealth);
             }
+            // 更新顶部 Boss 血条
+            this.updateBossHealthBar();
             this.showDamageNumber(damage);
-            
+
+            // 检查是否触发狂暴
+            this.checkAndTriggerFrenzy();
+
             if (this.currentHealth <= 0) {
                 this.currentHealth = 0;
                 this.die();
@@ -1559,10 +2132,59 @@ export class MinotaurWarrior extends Boss {
             this.healthBar.setHealth(this.currentHealth);
         }
 
+        // 更新顶部 Boss 血条
+        this.updateBossHealthBar();
+
+        // 检查是否触发狂暴
+        this.checkAndTriggerFrenzy();
+
         if (this.currentHealth <= 0) {
             this.currentHealth = 0;
             this.die();
         }
+    }
+
+    /**
+     * 检查并触发低血量狂暴
+     * 当血量低于 50% 时，触发全场兽人狂暴模式
+     */
+    private checkAndTriggerFrenzy() {
+        if (this.hasTriggeredFrenzy || this.isDestroyed) {
+            return;
+        }
+
+        const healthPercent = this.currentHealth / this.maxHealth;
+        if (healthPercent <= 0.5) {
+            this.triggerFrenzy();
+        }
+    }
+
+    /**
+     * 触发狂暴模式
+     * 显示"兽人永不为奴"提示，并触发全场兽人狂怒状态
+     */
+    private triggerFrenzy() {
+        this.hasTriggeredFrenzy = true;
+        this.isFrenzy = true;
+
+        // 查找 EnemySpawner 并触发全场兽人狂怒
+        const enemySpawnerNode = find('Canvas/EnemySpawner') || find('EnemySpawner');
+        const spawner = enemySpawnerNode ? (enemySpawnerNode.getComponent('EnemySpawner') as any) : null;
+        if (spawner && typeof spawner['triggerOrcBloodRage'] === 'function') {
+            try {
+                spawner['triggerOrcBloodRage'](1);
+                console.log('[MinotaurWarrior] 已触发全场兽人狂怒状态');
+            } catch (e) {
+                console.warn('[MinotaurWarrior] 触发全场狂怒失败', e);
+            }
+        } else {
+            // 备用方案：直接调用 GameManager 显示提示
+            if (this.gameManager) {
+                this.gameManager.showOrcBloodRageIntro(undefined, 1);
+            }
+        }
+
+        console.log('[MinotaurWarrior] 触发狂暴模式！血量低于 50%，全场兽人进入狂怒状态');
     }
 
     // 恢复移动逻辑复用 Boss 基类的 resumeMovement
@@ -1591,6 +2213,9 @@ export class MinotaurWarrior extends Boss {
             this.healthBarNode.destroy();
         }
 
+        // 隐藏顶部 Boss 血条
+        this.hideBossHealthBar();
+
         if (this.deathSound) {
             AudioManager.Instance.playSFX(this.deathSound);
         }
@@ -1617,15 +2242,23 @@ export class MinotaurWarrior extends Boss {
     protected resetEnemyState() {
         // 先调用父类的重置逻辑
         super.resetEnemyState();
-        // 再重置 MinotaurWarrior 自己新增的状态（如战争践踏）
+        // 再重置 MinotaurWarrior 自己新增的状态（如战争践踏、狂暴）
         this.stompTimer = 0;
         this.isPlayingStompAnimation = false;
-        this.wasPlayingAttackBeforeStomp = false;
+        this.isStompCrackActive = false;
+        // 隐藏并清理裂缝节点
+        if (this.stompCrackNode && this.stompCrackNode.isValid) {
+            this.stompCrackNode.destroy();
+        }
+        this.stompCrackNode = null!;
         if (this.healthBarNode && this.healthBarNode.isValid) {
             this.healthBarNode.destroy();
         }
         this.healthBarNode = null!;
         this.healthBar = null!;
+        // 重置狂暴状态
+        this.hasTriggeredFrenzy = false;
+        this.isFrenzy = false;
     }
 
     isAlive(): boolean {

@@ -178,26 +178,41 @@ export class Arrow2 extends Component {
      * 检查是否命中敌人
      */
     checkHitEnemies(currentPos: Vec3) {
+        // 合并 Canvas/Enemies 和 Canvas/MinotaurWarriors 的子节点
+        const allEnemies: Node[] = [];
+
         const enemiesNode = find('Canvas/Enemies');
-        if (!enemiesNode) {
+        if (enemiesNode) {
+            const enemiesChildren = enemiesNode.children || [];
+            allEnemies.push(...enemiesChildren);
+        }
+
+        const minotaurNode = find('Canvas/MinotaurWarriors');
+        if (minotaurNode) {
+            const minotaurChildren = minotaurNode.children || [];
+            allEnemies.push(...minotaurChildren);
+        }
+
+        if (allEnemies.length === 0) {
             return;
         }
 
-        const enemies = enemiesNode.children || [];
         const hitRadius = 30; // 命中判定半径
 
-        for (const enemy of enemies) {
+        for (const enemy of allEnemies) {
             if (!enemy || !enemy.isValid || !enemy.active) {
                 continue;
             }
 
-            // 检查是否是敌人
-            const enemyScript = (enemy.getComponent('OrcWarlord') as any) || 
-                               (enemy.getComponent('OrcWarrior') as any) || 
+            // 检查是否是敌人（包括牛头人领主和 Boss）
+            const enemyScript = (enemy.getComponent('OrcWarlord') as any) ||
+                               (enemy.getComponent('OrcWarrior') as any) ||
                                (enemy.getComponent('Enemy') as any) ||
                                (enemy.getComponent('TrollSpearman') as any) ||
-                               (enemy.getComponent('Portal') as any);
-            
+                               (enemy.getComponent('Portal') as any) ||
+                               (enemy.getComponent('MinotaurWarrior') as any) ||
+                               (enemy.getComponent('Boss') as any);
+
             if (!enemyScript) {
                 continue;
             }

@@ -2466,7 +2466,7 @@ export class Enemy extends Component {
      */
     private checkCollisionWithEnemy(position: Vec3): boolean {
         // 查找所有敌人容器，使用直接路径
-        const enemyContainers = ['Canvas/Enemies', 'Canvas/Orcs', 'Canvas/TrollSpearmans', 'Canvas/OrcWarriors', 'Canvas/OrcWarlords'];
+        const enemyContainers = ['Canvas/Enemies', 'Canvas/Orcs', 'Canvas/TrollSpearmans', 'Canvas/OrcWarriors', 'Canvas/OrcWarlords', 'Canvas/MinotaurWarriors'];
         const allEnemies: Node[] = [];
 
         for (const containerName of enemyContainers) {
@@ -2540,7 +2540,7 @@ export class Enemy extends Component {
         };
 
         // 查找所有敌人容器
-        const enemyContainers = ['Enemies', 'Orcs', 'TrollSpearmans', 'OrcWarriors', 'OrcWarlords'];
+        const enemyContainers = ['Enemies', 'Orcs', 'TrollSpearmans', 'OrcWarriors', 'OrcWarlords', 'MinotaurWarriors'];
         const allEnemies: Node[] = [];
 
         for (const containerName of enemyContainers) {

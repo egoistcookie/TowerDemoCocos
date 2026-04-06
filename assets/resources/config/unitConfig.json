@@ -555,6 +555,33 @@
       "金币奖励": "8金币",
       "经验奖励": "8点"
     }
+  },
+  "MinotaurWarrior": {
+    "baseStats": {
+      "maxHealth": 2000,
+      "attackRange": 80,
+      "attackDamage": 30,
+      "attackInterval": 2.5,
+      "moveSpeed": 20,
+      "collisionRadius": 15,
+      "tenacity": 0.4,
+      "goldReward": 10,
+      "expReward": 20
+    },
+    "displayInfo": {
+      "name": "牛头人领主",
+      "description": "牛头人领主，情报有限。"
+    },
+    "displayStats": {
+      "生命值": 2000,
+      "攻击力": 30,
+      "攻击范围": "80 像素",
+      "攻击间隔": "2.5 秒",
+      "移动速度": "20 像素/秒",
+      "韧性": "0.4",
+      "金币奖励": "10 金币",
+      "经验奖励": "20 点"
+    }
   }
 }
 

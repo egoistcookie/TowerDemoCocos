@@ -112,6 +112,11 @@
           "prefabName": "Dragon",
           "count": 2,
           "interval": 1.65
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 2.0
         }
       ]
     },
@@ -315,6 +320,11 @@
           "prefabName": "Dragon",
           "count": 3,
           "interval": 1.05
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 3,
+          "interval": 2.0
         }
       ]
     }

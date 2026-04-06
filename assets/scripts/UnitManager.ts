@@ -116,7 +116,19 @@ export class UnitManager extends Component {
             this.enemies = [];
             ////console.info(`[UnitManager.updateUnitLists] Enemies节点不存在或无效，敌人列表为空`);
         }
-        
+
+        // 从 Canvas/MinotaurWarriors 获取牛头人领主
+        const minotaurWarriorsNode = find('Canvas/MinotaurWarriors');
+        if (minotaurWarriorsNode && minotaurWarriorsNode.isValid) {
+            const allChildren = minotaurWarriorsNode.children || [];
+            for (let i = 0; i < allChildren.length; i++) {
+                const node = allChildren[i];
+                if (node && node.isValid && node.active) {
+                    this.enemies.push(node);
+                }
+            }
+        }
+
         // 更新防御塔列表
         if (this.towersNode && this.towersNode.isValid) {
             this.towers = this.towersNode.children.filter(node => 
@@ -446,10 +458,10 @@ export class UnitManager extends Component {
             return null;
         }
         
-        const possibleComponentNames = ['TrollSpearman', 'OrcWarrior', 'OrcWarlord', 'Enemy', 'Orc', 'Portal'];
+        const possibleComponentNames = ['TrollSpearman', 'OrcWarrior', 'OrcWarlord', 'MinotaurWarrior', 'Boss', 'Enemy', 'Orc', 'Portal'];
         for (const compName of possibleComponentNames) {
-            const comp = node.getComponent(compName) as any;
-            if (comp && comp.unitType === UnitType.ENEMY) {
+            const comp = node.getComponent(compName);
+            if (comp && (comp as any).unitType === UnitType.ENEMY) {
                 return comp;
             }
         }
@@ -462,6 +474,7 @@ export class UnitManager extends Component {
      */
     private isAliveEnemy(node: Node): boolean {
         const enemyScript = this.getEnemyScript(node);
+        // console.log('[UnitManager.isAliveEnemy] 节点:', node.name, 'enemyScript:', enemyScript ? enemyScript.constructor.name : 'null');
         if (!enemyScript) {
             return false;
         }

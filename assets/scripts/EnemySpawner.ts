@@ -6,6 +6,7 @@ import { OrcWarrior } from './enemy/OrcWarrior';
 import { OrcWarlord } from './enemy/OrcWarlord';
 import { TrollSpearman } from './enemy/TrollSpearman';
 import { Boss } from './enemy/Boss';
+import { MinotaurWarrior } from './enemy/MinotaurWarrior';
 import { EnemyPool } from './EnemyPool';
 import { UnitManager } from './UnitManager';
 const { ccclass, property } = _decorator;
@@ -105,12 +106,14 @@ export class EnemySpawner extends Component {
     private static sharedDragonPrefab: Prefab | null = null;
     private static sharedOrcWarlordPrefab: Prefab | null = null;
     private static sharedOrcShamanPrefab: Prefab | null = null;
+    private static sharedMinotaurWarriorPrefab: Prefab | null = null; // 牛头人领主预制体
     private static orcPrefabLoaded: boolean = false; // 全局标记：整个游戏过程中只加载一次
     private static orcWarriorPrefabLoaded: boolean = false;
     private static trollSpearmanPrefabLoaded: boolean = false;
     private static dragonPrefabLoaded: boolean = false;
     private static orcWarlordPrefabLoaded: boolean = false;
     private static orcShamanPrefabLoaded: boolean = false;
+    private static minotaurWarriorPrefabLoaded: boolean = false; // 牛头人领主加载标记
     
     // 对象池引用
     private enemyPool: EnemyPool = null!;
@@ -180,7 +183,12 @@ export class EnemySpawner extends Component {
         // 创建敌人容器
         if (!this.enemyContainer) {
             this.enemyContainer = new Node('Enemies');
-            this.enemyContainer.setParent(this.node.scene);
+            const canvas = find('Canvas');
+            if (canvas) {
+                this.enemyContainer.setParent(canvas);
+            } else {
+                this.enemyContainer.setParent(this.node.scene);
+            }
         }
         
         // 初始化敌人预制体映射表（此时只包含主包里通过属性面板指定的敌人）
@@ -195,6 +203,7 @@ export class EnemySpawner extends Component {
             this.injectDragonPrefabToMap();
             this.injectOrcWarlordPrefabToMap();
             this.injectOrcShamanPrefabToMap();
+            this.injectMinotaurWarriorPrefabToMap();
 
             // 初始化对象池并加载关卡配置
             this.initEnemyPool();
@@ -432,15 +441,16 @@ export class EnemySpawner extends Component {
     /**
      * 从分包 prefabs_sub 懒加载所有需要的敌人预制体（Orc / OrcWarrior / TrollSpearman / Dragon / OrcWarlord / OrcShaman）
      * 全局每种敌人只加载一次，多个 EnemySpawner 共享。
+     * @param onLoadedAll 加载完成回调
      */
-    private loadAllEnemyPrefabsFromSubpackage(onComplete: () => void) {
+    private loadAllEnemyPrefabsFromSubpackage(onLoadedAll: () => void) {
         // 统计本次实际上需要等待的加载次数
         let pending = 0;
 
         const doneOne = () => {
             pending--;
             if (pending <= 0) {
-                onComplete();
+                onLoadedAll();
             }
         };
 
@@ -534,9 +544,24 @@ export class EnemySpawner extends Component {
             );
         }
 
+        // 牛头人领主：只在第 4 关及之后才加载
+        if (this.currentLevel >= 4 && !EnemySpawner.minotaurWarriorPrefabLoaded) {
+            pending++;
+            this.loadSingleEnemyPrefabFromSubpackage(
+                ['MinotaurWarrior', 'minotaurWarrior', 'minotaur_warrior', 'Minotaur_Warrior'],
+                (prefab) => {
+                    if (prefab) {
+                        EnemySpawner.sharedMinotaurWarriorPrefab = prefab;
+                        EnemySpawner.minotaurWarriorPrefabLoaded = true;
+                    }
+                    doneOne();
+                }
+            );
+        }
+
         // 如果本次所有敌人都已经加载过了，直接回调
         if (pending === 0) {
-            onComplete();
+            onLoadedAll();
         }
     }
 
@@ -723,6 +748,12 @@ export class EnemySpawner extends Component {
             this.enemyPrefabMap.set('OrcShaman', EnemySpawner.sharedOrcShamanPrefab);
         }
     }
+
+    private injectMinotaurWarriorPrefabToMap() {
+        if (EnemySpawner.sharedMinotaurWarriorPrefab) {
+            this.enemyPrefabMap.set('MinotaurWarrior', EnemySpawner.sharedMinotaurWarriorPrefab);
+        }
+    }
     
     /**
      * 初始化敌人对象池
@@ -902,11 +933,32 @@ export class EnemySpawner extends Component {
      */
     setLevel(level: number) {
         if (level >= 1 && level <= 10 && level !== this.currentLevel) {
+            const prevLevel = this.currentLevel;
             this.currentLevel = level;
             this.currentLevelConfig = null;
             this.isConfigLoaded = false;
-            // 重新加载对应关卡的配置文件
-            this.loadLevelConfig(level);
+
+            // 如果从第 3 关或之前切换到第 4 关或之后，需要加载牛头人领主预制体
+            if (prevLevel < 4 && level >= 4 && !EnemySpawner.minotaurWarriorPrefabLoaded) {
+                // 重新加载所有敌人预制体（包括牛头人领主）
+                this.loadAllEnemyPrefabsFromSubpackage(() => {
+                    // 将已经加载到内存中的敌人预制体注入当前 Spawner 的映射表
+                    this.injectOrcPrefabToMap();
+                    this.injectOrcWarriorPrefabToMap();
+                    this.injectTrollSpearmanPrefabToMap();
+                    this.injectDragonPrefabToMap();
+                    this.injectOrcWarlordPrefabToMap();
+                    this.injectOrcShamanPrefabToMap();
+                    this.injectMinotaurWarriorPrefabToMap();
+
+                    // 重新初始化对象池并加载关卡配置
+                    this.initEnemyPool();
+                    this.loadLevelConfig(level);
+                });
+            } else {
+                // 重新加载对应关卡的配置文件
+                this.loadLevelConfig(level);
+            }
         }
     }
     
@@ -1993,6 +2045,7 @@ export class EnemySpawner extends Component {
         this.injectDragonPrefabToMap();
         this.injectOrcWarlordPrefabToMap();
         this.injectOrcShamanPrefabToMap();
+        this.injectMinotaurWarriorPrefabToMap();
         
         console.log(`[EnemySpawner] 预制体映射表重置完成，当前预制体数量: ${this.enemyPrefabMap.size}`);
         // 输出所有预制体名称，便于调试

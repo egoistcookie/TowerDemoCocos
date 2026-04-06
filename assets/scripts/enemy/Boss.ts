@@ -2597,7 +2597,7 @@ export class Boss extends Component {
             return null;
         };
 
-        const enemyContainers = ['Enemies', 'Orcs', 'TrollSpearmans', 'OrcWarriors', 'OrcWarlords'];
+        const enemyContainers = ['Enemies', 'Orcs', 'TrollSpearmans', 'OrcWarriors', 'OrcWarlords', 'MinotaurWarriors'];
         const allEnemies: Node[] = [];
 
         for (const containerName of enemyContainers) {

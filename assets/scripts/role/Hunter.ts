@@ -168,7 +168,7 @@ export class Hunter extends Role {
         this.stopMoving();
 
 		// 获取敌人脚本，支持OrcWarlord、OrcWarrior、Enemy、TrollSpearman、Portal
-		const enemyScript = this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('TrollSpearman') as any;
+		const enemyScript = this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('TrollSpearman') as any || this.currentTarget.getComponent('MinotaurWarrior') as any || this.currentTarget.getComponent('Boss') as any;
 		const portalScript = this.currentTarget.getComponent('Portal') as any;
 		if ((enemyScript && enemyScript.isAlive && enemyScript.isAlive()) || (portalScript && typeof portalScript.takeDamage === 'function')) {
             // 播放攻击动画，动画完成后才射出回旋镖
@@ -469,7 +469,7 @@ export class Hunter extends Role {
         }
 
 		// 获取敌人脚本，支持OrcWarlord、OrcWarrior、Enemy、TrollSpearman、Portal
-		const enemyScript = this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('TrollSpearman') as any;
+		const enemyScript = this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('TrollSpearman') as any || this.currentTarget.getComponent('MinotaurWarrior') as any || this.currentTarget.getComponent('Boss') as any;
 		const portalScript = this.currentTarget.getComponent('Portal') as any;
 		const canAttackEnemy = !!(enemyScript && enemyScript.isAlive && enemyScript.isAlive());
 		const canAttackPortal = !!(portalScript && typeof portalScript.takeDamage === 'function');
@@ -567,7 +567,7 @@ export class Hunter extends Role {
 				// 检查目标是否仍然有效
                 if (targetNode && targetNode.isValid && targetNode.active) {
 					// 支持Enemy、OrcWarrior、OrcWarlord、TrollSpearman、Portal
-					const enemyScript = targetNode.getComponent('Enemy') as any || targetNode.getComponent('OrcWarrior') as any || targetNode.getComponent('OrcWarlord') as any || targetNode.getComponent('TrollSpearman') as any;
+					const enemyScript = targetNode.getComponent('Enemy') as any || targetNode.getComponent('OrcWarrior') as any || targetNode.getComponent('OrcWarlord') as any || targetNode.getComponent('TrollSpearman') as any || targetNode.getComponent('MinotaurWarrior') as any || targetNode.getComponent('Boss') as any;
 					const portalScript = targetNode.getComponent('Portal') as any;
 					if (enemyScript && enemyScript.isAlive && enemyScript.isAlive() && typeof enemyScript.takeDamage === 'function') {
 						enemyScript.takeDamage(damage);

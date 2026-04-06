@@ -268,7 +268,7 @@ export class WarAncientTree extends Build {
         for (const enemy of enemies) {
                 if (enemy && enemy.active && enemy.isValid) {
                     // 获取敌人脚本，支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
-                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any || enemy.getComponent('TrollSpearman') as any;
+                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any || enemy.getComponent('TrollSpearman') as any || enemy.getComponent('MinotaurWarrior') as any || enemy.getComponent('Boss') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const myPos2 = this.node.worldPosition;
                         const enemyPos = enemy.worldPosition;
@@ -297,7 +297,7 @@ export class WarAncientTree extends Build {
         }
 
         // 获取敌人脚本，支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('TrollSpearman') as any;
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('TrollSpearman') as any || this.currentTarget.getComponent('MinotaurWarrior') as any || this.currentTarget.getComponent('Boss') as any;
         if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
             // 播放攻击动画，动画完成后才攻击
             this.playAttackAnimation(() => {
@@ -314,7 +314,7 @@ export class WarAncientTree extends Build {
         }
 
         // 获取敌人脚本，支持Enemy、OrcWarrior、OrcWarlord和TrollSpearman
-        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('TrollSpearman') as any;
+        const enemyScript = this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('TrollSpearman') as any || this.currentTarget.getComponent('MinotaurWarrior') as any || this.currentTarget.getComponent('Boss') as any;
         if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
             this.currentTarget = null!;
             return;
@@ -472,7 +472,7 @@ export class WarAncientTree extends Build {
             this.currentTarget,
             this.attackDamage,
             (damage: number, hitDirection: Vec3) => {
-                const enemyScript = this.currentTarget?.getComponent('Enemy') as any || this.currentTarget?.getComponent('OrcWarrior') as any || this.currentTarget?.getComponent('OrcWarlord') as any || this.currentTarget?.getComponent('TrollSpearman') as any;
+                const enemyScript = this.currentTarget?.getComponent('Enemy') as any || this.currentTarget?.getComponent('OrcWarrior') as any || this.currentTarget?.getComponent('OrcWarlord') as any || this.currentTarget?.getComponent('TrollSpearman') as any || this.currentTarget?.getComponent('MinotaurWarrior') as any || this.currentTarget?.getComponent('Boss') as any;
                 if (enemyScript && enemyScript.takeDamage) {
                     // 将受力方向传给敌人，用于控制伤害数字飘动方向
                     enemyScript.takeDamage(damage, hitDirection);
@@ -840,7 +840,7 @@ export class WarAncientTree extends Build {
             const enemies = enemiesNode.children || [];
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid && enemy.active) {
-                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any;
+                    const enemyScript = enemy.getComponent('OrcWarlord') as any || enemy.getComponent('OrcWarrior') as any || enemy.getComponent('Enemy') as any || enemy.getComponent('TrollSpearman') as any || enemy.getComponent('MinotaurWarrior') as any || enemy.getComponent('Boss') as any;
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const enemyWP = enemy.worldPosition;
                         const emdx = position.x - enemyWP.x, emdy = position.y - enemyWP.y, emdz = position.z - enemyWP.z;

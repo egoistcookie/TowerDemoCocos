@@ -143,7 +143,7 @@
     {
       "id": 5,
       "name": "第五波",
-      "description": "混合编队加强",
+      "description": "牛头人领主初次登场",
       "preWaveDelay": 3,
       "enemies": [
         {
@@ -170,6 +170,11 @@
           "prefabName": "Dragon",
           "count": 4,
           "interval": 1.1
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 2.0
         }
       ]
     },
@@ -350,6 +355,11 @@
           "prefabName": "Dragon",
           "count": 6,
           "interval": 0.6
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 2,
+          "interval": 1.0
         }
       ]
     }

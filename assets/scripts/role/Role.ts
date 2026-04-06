@@ -258,6 +258,7 @@ export class Role extends Component {
     private static cachedMagesNode: Node | null = null;
     private static cachedElfSwordsmansNode: Node | null = null;
     private static cachedEnemiesNode: Node | null = null;
+    private static cachedMinotaurWarriorsNode: Node | null = null;
     private static cacheInitialized: boolean = false;
     private static recursiveFindWarningCount: number = 0; // 递归查找警告计数
     private static cachedGameManagerWarned: boolean = false; // GameManager 警告标志
@@ -389,6 +390,7 @@ export class Role extends Component {
         Role.cachedMagesNode = find('Canvas/Mages');
         Role.cachedElfSwordsmansNode = find('Canvas/ElfSwordsmans');
         Role.cachedEnemiesNode = find('Canvas/Enemies');
+        Role.cachedMinotaurWarriorsNode = find('Canvas/MinotaurWarriors');
         
         Role.cacheInitialized = true;
         
@@ -398,7 +400,8 @@ export class Role extends Component {
             hunters: !!Role.cachedHuntersNode,
             mages: !!Role.cachedMagesNode,
             elfSwordsmans: !!Role.cachedElfSwordsmansNode,
-            enemies: !!Role.cachedEnemiesNode
+            enemies: !!Role.cachedEnemiesNode,
+            minotaurWarriors: !!Role.cachedMinotaurWarriorsNode
         });
     }
 
@@ -1390,7 +1393,7 @@ export class Role extends Component {
         }
         
         // 尝试获取所有可能的敌人组件类型
-        const possibleComponentNames = ['TrollSpearman', 'OrcWarrior', 'OrcWarlord', 'Enemy'];
+        const possibleComponentNames = ['TrollSpearman', 'OrcWarrior', 'OrcWarlord', 'MinotaurWarrior', 'Boss', 'Enemy'];
         for (const compName of possibleComponentNames) {
             const comp = node.getComponent(compName) as any;
             if (comp && comp.unitType === UnitType.ENEMY) {
@@ -1434,14 +1437,20 @@ export class Role extends Component {
         } else {
             // 降级方案：使用缓存的节点（避免 find() 调用）
             console.warn('[Role性能优化] UnitManager未初始化，使用缓存节点降级方案');
-            const enemiesNode = Role.cachedEnemiesNode;
-            
-            if (!enemiesNode) {
-                console.error('[Role性能优化] 缓存的敌人节点不存在！');
+            // 合并 Canvas/Enemies 和 Canvas/MinotaurWarriors 的子节点
+            const allEnemies: Node[] = [];
+            if (Role.cachedEnemiesNode && Role.cachedEnemiesNode.isValid) {
+                const enemiesChildren = Role.cachedEnemiesNode.children || [];
+                allEnemies.push(...enemiesChildren);
+            }
+            if (Role.cachedMinotaurWarriorsNode && Role.cachedMinotaurWarriorsNode.isValid) {
+                const minotaurChildren = Role.cachedMinotaurWarriorsNode.children || [];
+                allEnemies.push(...minotaurChildren);
+            }
+            if (allEnemies.length === 0) {
+                console.error('[Role 性能优化] 缓存的敌人节点不存在！');
                 return [];
             }
-            
-            const allEnemies = enemiesNode.children || [];
             const maxDistanceSq = maxDistance * maxDistance; // 使用平方距离，避免开方
             
             for (const enemy of allEnemies) {

@@ -99,6 +99,11 @@
           "prefabName": "Dragon",
           "count": 3,
           "interval": 1.40
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 2,
+          "interval": 2.0
         }
       ]
     },
@@ -203,6 +208,11 @@
           "prefabName": "Dragon",
           "count": 4,
           "interval": 1.10
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 3,
+          "interval": 2.0
         }
       ]
     },
@@ -307,6 +317,11 @@
           "prefabName": "Dragon",
           "count": 5,
           "interval": 0.85
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 4,
+          "interval": 2.0
         }
       ]
     },
@@ -345,6 +360,11 @@
           "prefabName": "Dragon",
           "count": 5,
           "interval": 0.80
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 4,
+          "interval": 2.0
         }
       ]
     }

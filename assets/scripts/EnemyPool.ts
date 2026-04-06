@@ -152,8 +152,9 @@ export class EnemyPool extends Component {
             const orcWarriorScript = enemy.getComponent('OrcWarrior') as any;
             const trollSpearmanScript = enemy.getComponent('TrollSpearman') as any;
             const orcShamanScript = enemy.getComponent('OrcShaman') as any;
-            
-            const script = enemyScript || orcWarlordScript || orcWarriorScript || trollSpearmanScript || orcShamanScript;
+            const minotaurWarriorScript = enemy.getComponent('MinotaurWarrior') as any;
+
+            const script = enemyScript || orcWarlordScript || orcWarriorScript || trollSpearmanScript || orcShamanScript || minotaurWarriorScript;
             if (script) {
                 // 重置状态
                 if (script.resetEnemyState) {
@@ -205,7 +206,9 @@ export class EnemyPool extends Component {
         if (!prefabName) {
             const nodeName = enemy.name;
             // 尝试匹配常见的敌人名称
-            if (nodeName.includes('OrcShaman') || nodeName.includes('Shaman')) {
+            if (nodeName.includes('MinotaurWarrior') || nodeName.includes('Minotaur')) {
+                prefabName = 'MinotaurWarrior';
+            } else if (nodeName.includes('OrcShaman') || nodeName.includes('Shaman')) {
                 prefabName = 'OrcShaman';
             } else if (nodeName.includes('OrcWarlord') || nodeName.includes('Warlord')) {
                 prefabName = 'OrcWarlord';
