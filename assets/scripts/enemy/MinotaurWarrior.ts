@@ -30,7 +30,7 @@
  * - clearAttachedWeapons(), flipDirection()等辅助方法
  */
 
-import { _decorator, Node, Vec3, Sprite, find, Prefab, SpriteFrame, UITransform, AudioClip, Label, instantiate, view } from 'cc';
+import { _decorator, Node, Vec3, Sprite, find, Prefab, SpriteFrame, UITransform, AudioClip, Label, instantiate, view, Color, UIOpacity, tween, LabelOutline } from 'cc';
 import { GameManager, GameState } from '../GameManager';
 import { HealthBar } from '../HealthBar';
 import { DamageNumber } from '../DamageNumber';
@@ -2266,6 +2266,9 @@ export class MinotaurWarrior extends Boss {
             this.gameManager.addExperience(this.expReward);
         }
 
+        // 显示 +xGold 飘字
+        this.showGoldRewardText();
+
         if (this.healthBarNode && this.healthBarNode.isValid) {
             this.healthBarNode.destroy();
         }
@@ -2294,6 +2297,58 @@ export class MinotaurWarrior extends Boss {
         setTimeout(() => {
             returnToPool();
         }, 60000);
+    }
+
+    /**
+     * 显示金币奖励飘字
+     */
+    private showGoldRewardText() {
+        if (!this.node || !this.node.isValid) return;
+
+        const canvas = find('Canvas');
+        const parentNode = canvas || this.node.scene || this.node.parent;
+        if (!parentNode) return;
+
+        const basePos = this.node.worldPosition.clone();
+        basePos.y += 50;
+
+        const n = new Node('GoldRewardText');
+        n.setParent(parentNode);
+
+        // 放到石墙（索引 30）之后，确保不被遮挡
+        try {
+            n.setSiblingIndex(48);
+        } catch {}
+
+        n.setWorldPosition(basePos);
+
+        let label: Label | null = n.getComponent(Label);
+        if (!label) label = n.addComponent(Label);
+        label.string = `+${this.goldReward} gold`;
+        label.fontSize = 20;
+        label.color = new Color(255, 215, 0, 255);
+
+        // 添加描边
+        let outline = label.node.getComponent(LabelOutline);
+        if (!outline) {
+            outline = label.node.addComponent(LabelOutline);
+        }
+        outline.color = new Color(0, 0, 0, 255);
+        outline.width = 2;
+
+        const opacity = n.getComponent(UIOpacity) || n.addComponent(UIOpacity);
+        opacity.opacity = 255;
+
+        const floatUp = 30;
+
+        tween(n)
+            .delay(0.1)
+            .to(0.8, { worldPosition: new Vec3(basePos.x, basePos.y + floatUp, basePos.z) }, { easing: 'sineOut' })
+            .parallel(tween(opacity).to(0.8, { opacity: 0 }))
+            .call(() => {
+                if (n && n.isValid) n.destroy();
+            })
+            .start();
     }
 
     protected resetEnemyState() {

@@ -1,28 +1,23 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python*)",  
-      "Bash(pytest*)",  
-      "Bash(pip*)",     
-      
-      "Bash(npm*)",    
-      "Bash(npx*)",     
-      
-      "Bash(git*)",     
-      
+      "Bash(python*)",
+      "Bash(pytest*)",
+      "Bash(pip*)",
+      "Bash(npm*)",
+      "Bash(npx*)",
+      "Bash(git*)",
       "WebSearch",
       "WebFetch(domain:www.theverge.com)",
-      
-      "Skill(update-config*)", 
+      "Skill(update-config*)",
       "Edit",
       "Write",
       "Read",
       "Glob",
       "Grep",
-      
-      "Bash(find* -name \"*\"*)",  
-      
-      "Read(//d/CocosProject/TowerDemoCocos/**)"  
+      "Bash(find* -name \"*\"*)",
+      "Read(//d/CocosProject/TowerDemoCocos/**)",
+      "Bash(move /y \"d:\\\\CocosProject\\\\TowerDemoCocos\\\\assets\\\\scripts\\\\enemy\\\\OrcWarlord_temp.ts\" \"d:\\\\CocosProject\\\\TowerDemoCocos\\\\assets\\\\scripts\\\\enemy\\\\OrcWarlord.ts\")"
     ],
     "defaultMode": "bypassPermissions",
     "additionalDirectories": [

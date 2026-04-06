@@ -1835,12 +1835,12 @@ export class Enemy extends Component {
         
         // 移除绕行点标记
 
-        // 奖励金币和经验值
+        // 普通小怪不再掉落金币，只给予经验值
+        // 奖励经验值
         if (!this.gameManager) {
             this.findGameManager();
         }
         if (this.gameManager) {
-            this.gameManager.addGold(this.goldReward);
             // 确保 expReward 有效才添加经验值
             if (this.expReward > 0) {
                 this.gameManager.addExperience(this.expReward);

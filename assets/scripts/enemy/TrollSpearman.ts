@@ -98,10 +98,9 @@ export class TrollSpearman extends Enemy {
 
         // 停止所有动画
         this.stopAllAnimations();
-        
+
         // 标记正在播放动画
         this.isPlayingAttackAnimation = true;
-        
 
         const frames = validFrames;
         const frameCount = frames.length;

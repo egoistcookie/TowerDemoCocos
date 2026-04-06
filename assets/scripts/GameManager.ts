@@ -5186,6 +5186,11 @@ export class GameManager extends Component {
             this.scheduleOnce(() => {
                 this.spawnInitialEnemyPortals();
             }, 0.15);
+
+            // 生成中央金矿（左右各一座，Y 坐标 500-700 随机）
+            this.scheduleOnce(() => {
+                this.spawnGoldMines();
+            }, 0.2);
         } else if (this.gameState !== GameState.Playing) {
             // 如果游戏已结束，重新开始游戏
             this.restartGame();
@@ -5580,6 +5585,94 @@ export class GameManager extends Component {
         this.scheduleOnce(() => {
             this.spawnRandomSidePortalWithIndicator();
         }, sec);
+    }
+
+    /**
+     * 生成中央金矿（左右各一座，Y 坐标 500-700 随机）
+     */
+    private spawnGoldMines() {
+        // 创建金矿容器
+        const createContainer = () => {
+            const canvas = find('Canvas');
+            if (!canvas) return null;
+            let container = find('Canvas/GoldMines');
+            if (!container) {
+                container = new Node('GoldMines');
+                canvas.addChild(container);
+            }
+            // 调整容器层级：在 Background 之后，GameManager 之前（索引 3-4 之间）
+            try {
+                const children = canvas.children;
+                const bgNode = find('Canvas/Background');
+                const gameManagerNode = find('Canvas/GameManager');
+                if (bgNode) {
+                    container.setSiblingIndex(bgNode.getSiblingIndex() + 1);
+                } else if (gameManagerNode) {
+                    container.setSiblingIndex(gameManagerNode.getSiblingIndex());
+                } else {
+                    // 默认放在索引 3（Background 之后）
+                    container.setSiblingIndex(3);
+                }
+            } catch {}
+            return container;
+        };
+        const container = createContainer();
+        if (!container) {
+            console.warn('[GameManager] spawnGoldMines: no container');
+            return;
+        }
+
+        // 加载金矿预制体
+        const trySpawnGoldMine = (prefab: Prefab | null, position: Vec3) => {
+            if (!prefab) {
+                console.warn('[GameManager] spawnGoldMines: GoldMine prefab null');
+                return;
+            }
+            const node = instantiate(prefab);
+            node.setParent(container);
+            node.setWorldPosition(position);
+            node.active = true;
+            console.log('[GoldMine] spawned at', position.x, position.y);
+        };
+
+        // 计算中央左右位置
+        const canvas = find('Canvas');
+
+        // 第一座金矿位置（X=150, Y=500）
+        const leftPos = new Vec3(150, 500, 0);
+        // 第二座金矿位置（X=500, Y=800）
+        const rightPos = new Vec3(600, 900, 0);
+
+        // 从 prefabs_sub 分包加载金矿预制体
+        const sub = assetManager.getBundle('prefabs_sub');
+        if (sub) {
+            sub.load('GoldMine', Prefab, (err, prefab) => {
+                if (err || !prefab) {
+                    console.warn('[GoldMine] subbundle load GoldMine failed, fallback to resources', err);
+                    resources.load('GoldMine', Prefab, (e2, p2) => {
+                        if (e2 || !p2) {
+                            console.warn('[GoldMine] resources load GoldMine failed', e2);
+                            return;
+                        }
+                        trySpawnGoldMine(p2 as Prefab, leftPos);
+                        trySpawnGoldMine(p2 as Prefab, rightPos);
+                    });
+                    return;
+                }
+                trySpawnGoldMine(prefab, leftPos);
+                trySpawnGoldMine(prefab, rightPos);
+            });
+        } else {
+            // 回退到 resources
+            resources.load('GoldMine', Prefab, (err, prefab) => {
+                if (err) {
+                    console.warn('[GoldMine] resources load GoldMine failed', err);
+                    return;
+                }
+                trySpawnGoldMine(prefab as Prefab, leftPos);
+                trySpawnGoldMine(prefab as Prefab, rightPos);
+            });
+        }
     }
 
     /**

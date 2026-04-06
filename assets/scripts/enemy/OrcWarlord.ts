@@ -1,4 +1,4 @@
-import { _decorator, AudioClip, SpriteFrame, Node } from 'cc';
+import { _decorator, AudioClip, SpriteFrame, Node, Color, Label, UIOpacity, tween, LabelOutline, Vec3, find } from 'cc';
 import { Boss } from './Boss';
 import { AudioManager } from '../AudioManager';
 import { EnemyPool } from '../EnemyPool';
@@ -263,6 +263,9 @@ export class OrcWarlord extends Boss {
             this.gameManager.addExperience(this.expReward);
         }
 
+        // 显示 +xGold 飘字
+        this.showGoldRewardText();
+
         // 销毁血条节点
         if ((this as any).healthBarNode && (this as any).healthBarNode.isValid) {
             (this as any).healthBarNode.destroy();
@@ -328,5 +331,56 @@ export class OrcWarlord extends Boss {
             }
         }
     }
-}
 
+    /**
+     * 显示金币奖励飘字
+     */
+    private showGoldRewardText() {
+        if (!this.node || !this.node.isValid) return;
+
+        const canvas = find('Canvas');
+        const parentNode = canvas || this.node.scene || this.node.parent;
+        if (!parentNode) return;
+
+        const basePos = this.node.worldPosition.clone();
+        basePos.y += 50;
+
+        const n = new Node('GoldRewardText');
+        n.setParent(parentNode);
+
+        // 放到石墙（索引 30）之后，确保不被遮挡
+        try {
+            n.setSiblingIndex(48);
+        } catch {}
+
+        n.setWorldPosition(basePos);
+
+        let label: Label | null = n.getComponent(Label);
+        if (!label) label = n.addComponent(Label);
+        label.string = `+${this.goldReward} gold`;
+        label.fontSize = 20;
+        label.color = new Color(255, 215, 0, 255);
+
+        // 添加描边
+        let outline = label.node.getComponent(LabelOutline);
+        if (!outline) {
+            outline = label.node.addComponent(LabelOutline);
+        }
+        outline.color = new Color(0, 0, 0, 255);
+        outline.width = 2;
+
+        const opacity = n.getComponent(UIOpacity) || n.addComponent(UIOpacity);
+        opacity.opacity = 255;
+
+        const floatUp = 30;
+
+        tween(n)
+            .delay(0.1)
+            .to(0.8, { worldPosition: new Vec3(basePos.x, basePos.y + floatUp, basePos.z) }, { easing: 'sineOut' })
+            .parallel(tween(opacity).to(0.8, { opacity: 0 }))
+            .call(() => {
+                if (n && n.isValid) n.destroy();
+            })
+            .start();
+    }
+}

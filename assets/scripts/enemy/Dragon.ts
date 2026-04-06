@@ -1,8 +1,9 @@
-import { _decorator, Component, Node, Vec3, SpriteFrame, Prefab, instantiate, find } from 'cc';
+import { _decorator, Component, Node, Vec3, SpriteFrame, Prefab, instantiate, find, Color, Label, UIOpacity, tween, LabelOutline } from 'cc';
 import { Enemy } from './Enemy';
 import { UnitManager } from '../UnitManager';
 import { GameState } from '../GameState';
 import { AudioManager } from '../AudioManager';
+import { EnemyPool } from '../EnemyPool';
 
 const { ccclass, property } = _decorator;
 
@@ -862,5 +863,116 @@ export class Dragon extends Enemy {
         if (enemiesIndex !== targetIndex) {
             enemiesNode.setSiblingIndex(targetIndex);
         }
+    }
+
+    /**
+     * 重写 die 方法，添加金币掉落和 +xGold 飘字
+     */
+    die() {
+        if (this.isDestroyed) {
+            return;
+        }
+
+        this.isDestroyed = true;
+        this.stopAllAnimations();
+
+        // 奖励金币和经验值
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        if (this.gameManager) {
+            this.gameManager.addGold(this.goldReward);
+            this.gameManager.addExperience(this.expReward);
+        }
+
+        // 显示 +xGold 飘字
+        this.showGoldRewardText();
+
+        // 销毁血条节点
+        if (this.healthBarNode && this.healthBarNode.isValid) {
+            this.healthBarNode.destroy();
+        }
+
+        // 播放死亡音效
+        if (this.deathSound) {
+            AudioManager.Instance.playSFX(this.deathSound);
+        }
+
+        // 优先播放死亡动画
+        this.playDeathAnimation();
+
+        const returnToPool = () => {
+            const enemyPool = EnemyPool.getInstance();
+            if (enemyPool && this.node && this.node.isValid) {
+                if ((this as any).resetEnemyState) {
+                    (this as any).resetEnemyState();
+                }
+                enemyPool.release(this.node, this.prefabName);
+            } else {
+                if (this.node && this.node.isValid) {
+                    this.node.destroy();
+                }
+            }
+        };
+
+        // 死亡动画完成后返回对象池
+        if (this.deathAnimationDuration > 0) {
+            this.scheduleOnce(returnToPool, this.deathAnimationDuration);
+        } else {
+            // 如果没有死亡动画，立即返回对象池
+            returnToPool();
+        }
+    }
+
+    /**
+     * 显示金币奖励飘字
+     */
+    private showGoldRewardText() {
+        if (!this.node || !this.node.isValid) return;
+
+        const canvas = find('Canvas');
+        const parentNode = canvas || this.node.scene || this.node.parent;
+        if (!parentNode) return;
+
+        const basePos = this.node.worldPosition.clone();
+        basePos.y += 50;
+
+        const n = new Node('GoldRewardText');
+        n.setParent(parentNode);
+
+        // 放到石墙（索引 30）之后，确保不被遮挡
+        try {
+            n.setSiblingIndex(48);
+        } catch {}
+
+        n.setWorldPosition(basePos);
+
+        let label: Label | null = n.getComponent(Label);
+        if (!label) label = n.addComponent(Label);
+        label.string = `+${this.goldReward} gold`;
+        label.fontSize = 20;
+        label.color = new Color(255, 215, 0, 255);
+
+        // 添加描边
+        let outline = label.node.getComponent(LabelOutline);
+        if (!outline) {
+            outline = label.node.addComponent(LabelOutline);
+        }
+        outline.color = new Color(0, 0, 0, 255);
+        outline.width = 2;
+
+        const opacity = n.getComponent(UIOpacity) || n.addComponent(UIOpacity);
+        opacity.opacity = 255;
+
+        const floatUp = 30;
+
+        tween(n)
+            .delay(0.1)
+            .to(0.8, { worldPosition: new Vec3(basePos.x, basePos.y + floatUp, basePos.z) }, { easing: 'sineOut' })
+            .parallel(tween(opacity).to(0.8, { opacity: 0 }))
+            .call(() => {
+                if (n && n.isValid) n.destroy();
+            })
+            .start();
     }
 }
