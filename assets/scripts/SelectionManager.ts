@@ -495,15 +495,8 @@ export class SelectionManager extends Component {
                         }
                     }
                 }
-                
-                // 检查女猎手是否在点击位置附近（平方距离）
-                const hunterPos = hunterNode.worldPosition;
-                const hdx = hunterPos.x - worldPos.x;
-                const hdy = hunterPos.y - worldPos.y;
-                const hdz = hunterPos.z - worldPos.z;
-                const distanceSq = hdx * hdx + hdy * hdy + hdz * hdz;
-                
-                if (distanceSq <= 100 * 100) { // 点击范围扩大到100像素
+
+                if (this.isPointOnUnit(hunterNode, worldPos)) {
                     return hunterScript;
                 }
             }
@@ -514,11 +507,7 @@ export class SelectionManager extends Component {
                 if (node.name.includes('Hunter') || node.name.includes('hunter')) {
                     const hunterScript = node.getComponent('Hunter') as any;
                     if (hunterScript) {
-                        const hunterPos = node.worldPosition;
-                        const h2dx = hunterPos.x - worldPos.x;
-                        const h2dy = hunterPos.y - worldPos.y;
-                        const h2dz = hunterPos.z - worldPos.z;
-                        if (h2dx * h2dx + h2dy * h2dy + h2dz * h2dz <= 100 * 100) {
+                        if (this.isPointOnUnit(node, worldPos)) {
                             return hunterScript;
                         }
                     }
@@ -1583,6 +1572,52 @@ export class SelectionManager extends Component {
             // 静默处理错误，避免影响正常流程
             return false;
         }
+    }
+
+    /**
+     * 检查点是否在单位身上（基于 Sprite 实际尺寸或碰撞半径）
+     * @param unitNode 单位节点
+     * @param worldPos 世界坐标位置
+     * @returns 是否点击在单位上
+     */
+    private isPointOnUnit(unitNode: Node, worldPos: Vec3): boolean {
+        // 获取单位的 Sprite 组件
+        const sprite = unitNode.getComponent(Sprite);
+        if (sprite && sprite.spriteFrame) {
+            // 使用 Sprite 的实际尺寸作为点击区域
+            const spriteFrame = sprite.spriteFrame;
+            const spriteWidth = spriteFrame.width;
+            const spriteHeight = spriteFrame.height;
+
+            const unitWorldPos = unitNode.worldPosition;
+
+            // 计算世界坐标下的边界（以单位中心为基准）
+            const unitLeft = unitWorldPos.x - spriteWidth / 2;
+            const unitRight = unitWorldPos.x + spriteWidth / 2;
+            const unitBottom = unitWorldPos.y - spriteHeight / 2;
+            const unitTop = unitWorldPos.y + spriteHeight / 2;
+
+            // 检查世界坐标位置是否在边界内
+            if (worldPos.x >= unitLeft &&
+                worldPos.x <= unitRight &&
+                worldPos.y >= unitBottom &&
+                worldPos.y <= unitTop) {
+                return true;
+            }
+        }
+
+        // 如果没有 Sprite 组件或使用 Sprite 检测失败，使用碰撞半径作为后备方案
+        // 获取 Role 组件的 collisionRadius 属性
+        const roleScript = unitNode.getComponent('Role') as any;
+        const collisionRadius = roleScript?.collisionRadius || 50;
+
+        const unitWorldPos = unitNode.worldPosition;
+        const dx = unitWorldPos.x - worldPos.x;
+        const dy = unitWorldPos.y - worldPos.y;
+        const dz = unitWorldPos.z - worldPos.z;
+        const distanceSq = dx * dx + dy * dy + dz * dz;
+
+        return distanceSq <= collisionRadius * collisionRadius;
     }
 }
 

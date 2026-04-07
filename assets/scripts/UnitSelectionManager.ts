@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, find, Graphics, UITransform, Color, EventTouch, Camera, Vec3, Sprite, SpriteFrame, resources } from 'cc';
+import { _decorator, Component, Node, find, Graphics, UITransform, Color, EventTouch, Camera, Vec3, Vec2, Sprite, SpriteFrame, resources } from 'cc';
 import { UnitInfoPanel, UnitInfo } from './UnitInfoPanel';
 const { ccclass, property } = _decorator;
 
@@ -12,9 +12,9 @@ export class UnitSelectionManager extends Component {
     unitInfoPanelNode: Node = null!; // 单位信息面板节点
 
     private unitInfoPanel: UnitInfoPanel = null!; // 单位信息面板组件
-    private currentSelectedUnit: Node = null!; // 当前选中的单位节点（单选）
+    private currentSelectedUnit: Node | null = null; // 当前选中的单位节点（单选）
     private currentSelectedUnits: Node[] = []; // 当前选中的单位节点数组（多选）
-    private currentRangeDisplayNode: Node = null!; // 当前范围显示节点
+    private currentRangeDisplayNode: Node | null = null; // 当前范围显示节点
 
     start() {
         this.initUnitInfoPanel();
@@ -101,17 +101,7 @@ export class UnitSelectionManager extends Component {
         
         // 检查点击位置是否在选中的单位上（单选或多选）
         if (this.currentSelectedUnit) {
-            const unitWorldPos = this.currentSelectedUnit.worldPosition;
-            const unitScreenPos = new Vec3();
-            camera.worldToScreen(unitWorldPos, unitScreenPos);
-            
-            const distanceToUnit = Math.sqrt(
-                Math.pow(touchLocation.x - unitScreenPos.x, 2) +
-                Math.pow(touchLocation.y - unitScreenPos.y, 2)
-            );
-            
-            const collisionRadius = 50;
-            if (distanceToUnit <= collisionRadius) {
+            if (this.isTouchOnUnit(this.currentSelectedUnit, touchLocation, camera)) {
                 // 点击在单位上，不取消选择
                //console.info('[UnitSelectionManager.onGlobalTouchEnd] 点击在单选单位上，不取消选择，单位名称:', this.currentSelectedUnit?.name);
                 return;
@@ -120,18 +110,8 @@ export class UnitSelectionManager extends Component {
             // 多选模式：检查是否点击在任何一个选中的单位上
             for (const unitNode of this.currentSelectedUnits) {
                 if (!unitNode || !unitNode.isValid) continue;
-                
-                const unitWorldPos = unitNode.worldPosition;
-                const unitScreenPos = new Vec3();
-                camera.worldToScreen(unitWorldPos, unitScreenPos);
-                
-                const distanceToUnit = Math.sqrt(
-                    Math.pow(touchLocation.x - unitScreenPos.x, 2) +
-                    Math.pow(touchLocation.y - unitScreenPos.y, 2)
-                );
-                
-                const collisionRadius = 50;
-                if (distanceToUnit <= collisionRadius) {
+
+                if (this.isTouchOnUnit(unitNode, touchLocation, camera)) {
                     // 点击在单位上，不取消选择
                    //console.info('[UnitSelectionManager.onGlobalTouchEnd] 点击在多选单位上，不取消选择，单位名称:', unitNode?.name);
                     return;
@@ -231,7 +211,7 @@ export class UnitSelectionManager extends Component {
 
         // 设置当前选中的单位数组
         this.currentSelectedUnits = unitNodes.filter(node => node && node.isValid && node.active);
-        this.currentSelectedUnit = null!; // 清除单选
+        this.currentSelectedUnit = null; // 清除单选
 
         if (this.currentSelectedUnits.length === 0) {
            //console.info('[UnitSelectionManager] selectMultipleUnits: 过滤后没有有效单位，返回');
@@ -416,6 +396,57 @@ export class UnitSelectionManager extends Component {
     }
 
     /**
+     * 检查触摸位置是否在单位身上（基于 Sprite 实际尺寸）
+     * @param unitNode 单位节点
+     * @param touchLocation 触摸位置（屏幕坐标，Vec2）
+     * @param camera 相机组件
+     * @returns 是否点击在单位上
+     */
+    private isTouchOnUnit(unitNode: Node, touchLocation: Vec2, camera: Camera | null): boolean {
+        if (!camera) return false;
+
+        const unitWorldPos = unitNode.worldPosition;
+        const unitScreenPos = new Vec3();
+        camera.worldToScreen(unitWorldPos, unitScreenPos);
+
+        // 获取单位的 Sprite 组件
+        const sprite = unitNode.getComponent(Sprite);
+        if (sprite && sprite.spriteFrame) {
+            // 使用 Sprite 的实际尺寸作为点击区域
+            const spriteFrame = sprite.spriteFrame;
+            // 获取 SpriteFrame 的原始尺寸（考虑 trim 后的实际显示尺寸）
+            const spriteWidth = spriteFrame.width;
+            const spriteHeight = spriteFrame.height;
+
+            // 计算屏幕上的边界（以单位中心为基准）
+            const unitLeft = unitScreenPos.x - spriteWidth / 2;
+            const unitRight = unitScreenPos.x + spriteWidth / 2;
+            const unitBottom = unitScreenPos.y - spriteHeight / 2;
+            const unitTop = unitScreenPos.y + spriteHeight / 2;
+
+            // 检查触摸位置是否在边界内（touchLocation 是 Vec2）
+            if (touchLocation.x >= unitLeft &&
+                touchLocation.x <= unitRight &&
+                touchLocation.y >= unitBottom &&
+                touchLocation.y <= unitTop) {
+                return true;
+            }
+        }
+
+        // 如果没有 Sprite 组件或使用 Sprite 检测失败，使用碰撞半径作为后备方案
+        // 获取 Role 组件的 collisionRadius 属性
+        const roleScript = unitNode.getComponent('Role') as any;
+        const collisionRadius = roleScript?.collisionRadius || 50;
+
+        const distanceToUnit = Math.sqrt(
+            Math.pow(touchLocation.x - unitScreenPos.x, 2) +
+            Math.pow(touchLocation.y - unitScreenPos.y, 2)
+        );
+
+        return distanceToUnit <= collisionRadius;
+    }
+
+    /**
      * 清除选择
      */
     clearSelection() {
@@ -445,7 +476,7 @@ export class UnitSelectionManager extends Component {
         }
         
         // 清除当前选中单位（在清除globalTouchHandler之后）
-        this.currentSelectedUnit = null!;
+        this.currentSelectedUnit = null;
         this.currentSelectedUnits = [];
         
         // 清除单选单位的高亮
