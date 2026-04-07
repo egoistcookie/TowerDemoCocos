@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, tween, EventTouch, input, Input, resources, Sprite, SpriteFrame, Texture2D, Camera, AudioClip, view, CCString, UIOpacity, LabelOutline } from 'cc';
+﻿import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, tween, EventTouch, input, Input, resources, Sprite, SpriteFrame, Texture2D, Camera, AudioClip, view, CCString, UIOpacity, LabelOutline } from 'cc';
 import { AudioManager } from '../AudioManager';
 import { GameManager } from '../GameManager';
 import { GameState } from '../GameState';
@@ -164,7 +164,6 @@ export class Role extends Component {
     protected idleAnimationOriginalType: number | null = null; // 待机动画前的原始type设置（Sprite.Type枚举值）
     protected idleAnimationOriginalScale: Vec3 | null = null; // 待机动画前的原始缩放
     protected moveAnimationDisplaySize: { width: number; height: number } | null = null; // 移动动画时的实际显示大小
-    protected idleAnimationFixedScale: Vec3 | null = null; // 待机动画的固定缩放比例（在整个待机动画过程中保持不变）
     protected currentIdleAnimationSegmentIndex: number = -1; // 当前播放的待机动画段落索引（用于判断是否是第三段）
     protected avoidDirection: Vec3 = new Vec3(); // 避障方向
     protected avoidTimer: number = 0; // 避障计时器
@@ -244,8 +243,6 @@ export class Role extends Component {
     // 第三段待机动画“拉宽50%”相关：
     // 由于血条/对话框是 this.node 的子节点，如果直接拉宽 this.node，会一起被拉宽；
     // 所以在拉宽生效时对血条/对话框做反向缩放补偿，保持它们宽度不变。
-    private static readonly IDLE_THIRD_WIDTH_SCALE_FACTOR: number = 1.5;
-    private isIdleThirdWidthScaleActive: boolean = false;
     
     // 性能监控相关属性
     private static unitCountLogTimer: number = 0; // 单位数量日志输出计时器（静态，所有Role实例共享）
@@ -562,27 +559,27 @@ export class Role extends Component {
     protected hasEnoughMana(amount: number): boolean {
         return this.hasSkill && this.currentMana >= amount;
     }
-    
     /**
-     * 刷新血条/对话框的缩放：
-     * - 始终保持文字从左往右（根据角色朝向翻转）
-     * - 如果第三段待机动画正在拉宽角色本体，则对血条/对话框做反向补偿（除以1.5），避免被拉宽
+     * 刷新血条/对话框缩放：
+     * - 血条/蓝条根据角色朝向翻转
+     * - 对话框保持固定朝向，文字始终从左往右显示
      */
     private refreshOverheadNodesScale() {
-        const facingSignX = this.node.scale.x < 0 ? -1 : 1;
-        const compensation = this.isIdleThirdWidthScaleActive ? (1 / Role.IDLE_THIRD_WIDTH_SCALE_FACTOR) : 1;
-        const overheadScaleX = facingSignX * compensation;
+        // 血条/蓝条需要根据角色朝向翻转
+        const overheadScaleX = this.node.scale.x < 0 ? -1 : 1;
 
+        // 血条/蓝条需要根据角色朝向翻转
         if (this.healthBarNode && this.healthBarNode.isValid) {
             this.healthBarNode.setScale(overheadScaleX, 1, 1);
         }
-        // 蓝量条与血条保持一致的方向和补偿
+        // 蓝条和血条保持一致的朝向
         if (this.manaBarNode && this.manaBarNode.isValid) {
             this.manaBarNode.setScale(overheadScaleX, 1, 1);
         }
+        
+        // 对话框保持固定朝向：文字始终从左往右显示，不跟随角色翻转
         if (this.dialogNode && this.dialogNode.isValid) {
-            // 口号固定朝向：不再跟随单位左右翻转，仅保留待机第三段拉宽时的反向补偿
-            this.dialogNode.setScale(compensation, 1, 1);
+            this.dialogNode.setScale(1, 1, 1);
         }
     }
 
@@ -592,17 +589,11 @@ export class Role extends Component {
     initDialogSystem() {
         this.dialogTimer = 0;
         this.dialogIntervalTimer = 0;
-        // 随机生成第一次显示对话框的间隔时间（5-10秒）
         this.dialogInterval = this.DIALOG_MIN_INTERVAL + Math.random() * (this.DIALOG_MAX_INTERVAL - this.DIALOG_MIN_INTERVAL);
     }
 
     /**
      * 创建对话框节点
-     */
-    /**
-     * 创建对话框
-     * @param sloganText 可选的口号文本，如果不提供则使用战斗口号
-     * @param isIdleSlogan 是否为待机口号（用于区分战斗口号和待机口号）
      */
     createDialog(sloganText?: string, isIdleSlogan: boolean = false) {
         if (this.dialogNode && this.dialogNode.isValid) {
@@ -2911,44 +2902,11 @@ export class Role extends Component {
         this.currentIdleAnimationSegmentIndex = selectedIndex;
         this.isPlayingIdleAnimation = true;
 
-        // 特殊处理：如果是第三段待机动画（索引为2），将角色拉宽50%
-        const isThirdSegment = selectedIndex === 2;
-        if (isThirdSegment) {
-            this.isIdleThirdWidthScaleActive = true;
-            // 保存原始缩放（如果还没有保存）
-            if (this.idleAnimationOriginalScale === null) {
-                this.idleAnimationOriginalScale = this.node.scale.clone();
-            }
-            // 将scale.x增加50%（乘以1.5）
-            const currentScale = this.node.scale;
-            this.node.setScale(
-                currentScale.x * 1.5,
-                currentScale.y,
-                currentScale.z
-            );
-            //console.log(`[Role] 第三段待机动画 - 拉宽50%，原始缩放: (${this.idleAnimationOriginalScale.x.toFixed(2)}, ${this.idleAnimationOriginalScale.y.toFixed(2)}), 新缩放: (${(currentScale.x * 1.5).toFixed(2)}, ${currentScale.y.toFixed(2)})`);
-            
-            // 触发待机口号（在播放第三段待机动画时）
-            // 再次做一次状态保护，避免切换到攻击/移动的瞬间误触发
-            if (!this.isMoving && !this.isPlayingAttackAnimation && !this.isPlayingHitAnimation && !this.isPlayingDeathAnimation) {
-                this.triggerIdleSlogan();
-            }
-
-            // 血条/对话框不跟随拉宽
-            this.refreshOverheadNodesScale();
-        } else {
-            this.isIdleThirdWidthScaleActive = false;
-            // 如果不是第三段，确保恢复原始缩放（如果之前播放过第三段）
-            if (this.idleAnimationOriginalScale) {
-                this.node.setScale(
-                    this.idleAnimationOriginalScale.x,
-                    this.idleAnimationOriginalScale.y,
-                    this.idleAnimationOriginalScale.z
-                );
-                //console.log(`[Role] 非第三段待机动画 - 恢复原始缩放: (${this.idleAnimationOriginalScale.x.toFixed(2)}, ${this.idleAnimationOriginalScale.y.toFixed(2)})`);
-            }
-            this.refreshOverheadNodesScale();
+        // 触发待机口号（在播放第三段待机动画时）
+        if (selectedIndex === 2 && !this.isMoving && !this.isPlayingAttackAnimation && !this.isPlayingHitAnimation && !this.isPlayingDeathAnimation) {
+            this.triggerIdleSlogan();
         }
+
 
         const frames = validFrames;
         const frameCount = frames.length;
@@ -2960,14 +2918,11 @@ export class Role extends Component {
         if (frames[0]) {
             this.sprite.spriteFrame = frames[0];
             lastFrameIndex = 0;
-
-            // 仅打印当前 UITransform 尺寸，便于对比调试，不做任何修改
             const uiTransform = this.node.getComponent(UITransform);
             if (uiTransform) {
-                //console.log(`[Role] 播放待机动画 - UITransform大小: width=${uiTransform.width}, height=${uiTransform.height}, 单位名称=${this.unitName || '未知'}`);
+                //console.log(播放待机动画);
             }
         }
-
         // 使用 update 方法逐帧播放（整体结构与移动动画一致）
         const animationUpdate = (deltaTime: number) => {
             // 如果角色开始移动或攻击，停止待机动画
@@ -2992,20 +2947,7 @@ export class Role extends Component {
                 // 停止动画更新，等待静止时间
                 this.isPlayingIdleAnimation = false;
                 this.unschedule(animationUpdate);
-
                 // 如果是第三段动画播放完成，立即恢复原始缩放
-                if (this.currentIdleAnimationSegmentIndex === 2 && this.idleAnimationOriginalScale) {
-                    this.node.setScale(
-                        this.idleAnimationOriginalScale.x,
-                        this.idleAnimationOriginalScale.y,
-                        this.idleAnimationOriginalScale.z
-                    );
-                    //console.log(`[Role] 第三段待机动画播放完成 - 恢复原始缩放: (${this.idleAnimationOriginalScale.x.toFixed(2)}, ${this.idleAnimationOriginalScale.y.toFixed(2)})`);
-                    this.isIdleThirdWidthScaleActive = false;
-                    this.refreshOverheadNodesScale();
-                    // 重置段落索引
-                    this.currentIdleAnimationSegmentIndex = -1;
-                }
 
                 // 随机等待 2-5 秒后播放下一段待机动画
                 const waitTime = 2 + Math.random() * 3;
@@ -3116,20 +3058,16 @@ export class Role extends Component {
             //console.log(`[Role] 恢复待机动画缩放 - 恢复到原始缩放: (${this.idleAnimationOriginalScale.x.toFixed(2)}, ${this.idleAnimationOriginalScale.y.toFixed(2)})`);
         }
 
-        // 退出第三段待机拉宽状态后，刷新血条/对话框缩放（避免残留补偿）
-        this.isIdleThirdWidthScaleActive = false;
         this.refreshOverheadNodesScale();
-        
         // 清除所有保存的设置
         this.idleAnimationOriginalSizeMode = null;
         this.idleAnimationOriginalSize = null;
         this.idleAnimationOriginalTrim = null;
         this.idleAnimationOriginalType = null;
         this.idleAnimationOriginalScale = null;
-        this.idleAnimationFixedScale = null; // 清除固定缩放
         this.currentIdleAnimationSegmentIndex = -1; // 重置段落索引
     }
-    
+
     /**
      * 播放被攻击动画
      */

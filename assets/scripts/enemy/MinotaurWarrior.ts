@@ -1995,6 +1995,17 @@ export class MinotaurWarrior extends Boss {
                 }
             }
 
+            // 获取法师
+            const mages = this.unitManager.getMages();
+            for (const mage of mages) {
+                if (mage && mage.isValid && mage.active) {
+                    const mageScript = mage.getComponent('Mage') as any;
+                    if (mageScript && mageScript.isAlive && mageScript.isAlive()) {
+                        potentialTargets.push(mage);
+                    }
+                }
+            }
+
             // 获取女猎手
             const hunters = this.unitManager.getHunters();
             for (const hunter of hunters) {

@@ -72,18 +72,53 @@
     {
       "id": 3,
       "name": "第三波",
-      "description": "督军终极军团",
+      "description": "督军终极军团 - 三牛头人领军",
       "preWaveDelay": 4,
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 62,
+          "count": 12,
+          "interval": 0.18
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 6,
+          "interval": 0.45
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 2.0
+        },
+        {
+          "prefabName": "Orc",
+          "count": 15,
+          "interval": 0.15
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 7,
+          "interval": 0.38
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 1.8
+        },
+        {
+          "prefabName": "Orc",
+          "count": 17,
           "interval": 0.13
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 33,
+          "count": 7,
           "interval": 0.35
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 1.8
         },
         {
           "prefabName": "OrcWarlord",
@@ -104,11 +139,6 @@
           "prefabName": "Dragon",
           "count": 5,
           "interval": 0.75
-        },
-        {
-          "prefabName": "MinotaurWarrior",
-          "count": 3,
-          "interval": 2.0
         }
       ]
     },
@@ -181,18 +211,68 @@
     {
       "id": 6,
       "name": "第六波",
-      "description": "督军带领终极精锐",
+      "description": "督军带领终极精锐 - 四牛头人领军",
       "preWaveDelay": 4,
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 75,
-          "interval": 0.09
+          "count": 12,
+          "interval": 0.14
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 39,
+          "count": 6,
+          "interval": 0.38
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 2.0
+        },
+        {
+          "prefabName": "Orc",
+          "count": 15,
+          "interval": 0.11
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 7,
+          "interval": 0.32
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 1.8
+        },
+        {
+          "prefabName": "Orc",
+          "count": 16,
+          "interval": 0.1
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 8,
+          "interval": 0.3
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 1.8
+        },
+        {
+          "prefabName": "Orc",
+          "count": 18,
+          "interval": 0.08
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 8,
           "interval": 0.28
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 1.8
         },
         {
           "prefabName": "OrcWarlord",
@@ -213,11 +293,6 @@
           "prefabName": "Dragon",
           "count": 6,
           "interval": 0.55
-        },
-        {
-          "prefabName": "MinotaurWarrior",
-          "count": 4,
-          "interval": 2.0
         }
       ]
     },
@@ -290,18 +365,83 @@
     {
       "id": 9,
       "name": "第九波",
-      "description": "督军终极大军",
+      "description": "督军终极大军 - 五牛头人领军",
       "preWaveDelay": 4,
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 85,
+          "count": 15,
+          "interval": 0.12
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 8,
+          "interval": 0.32
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 2.0
+        },
+        {
+          "prefabName": "Orc",
+          "count": 16,
+          "interval": 0.1
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 8,
+          "interval": 0.28
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 1.8
+        },
+        {
+          "prefabName": "Orc",
+          "count": 16,
+          "interval": 0.09
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 9,
+          "interval": 0.25
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 1.8
+        },
+        {
+          "prefabName": "Orc",
+          "count": 17,
           "interval": 0.08
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 45,
+          "count": 9,
           "interval": 0.23
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 1.8
+        },
+        {
+          "prefabName": "Orc",
+          "count": 18,
+          "interval": 0.07
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 9,
+          "interval": 0.21
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 1.8
         },
         {
           "prefabName": "OrcWarlord",
@@ -322,29 +462,89 @@
           "prefabName": "Dragon",
           "count": 10,
           "interval": 0.35
-        },
-        {
-          "prefabName": "MinotaurWarrior",
-          "count": 5,
-          "interval": 2.0
         }
       ]
     },
     {
       "id": 10,
       "name": "第十波",
-      "description": "最终决战",
+      "description": "最终决战 - 五牛头人领军",
       "preWaveDelay": 4,
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 110,
+          "count": 20,
+          "interval": 0.1
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 10,
+          "interval": 0.3
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 2.0
+        },
+        {
+          "prefabName": "Orc",
+          "count": 25,
+          "interval": 0.08
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 12,
+          "interval": 0.25
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 1.8
+        },
+        {
+          "prefabName": "Orc",
+          "count": 30,
           "interval": 0.06
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 50,
-          "interval": 0.20
+          "count": 15,
+          "interval": 0.2
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 1.8
+        },
+        {
+          "prefabName": "Orc",
+          "count": 35,
+          "interval": 0.05
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 18,
+          "interval": 0.18
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 1.8
+        },
+        {
+          "prefabName": "Orc",
+          "count": 40,
+          "interval": 0.04
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 20,
+          "interval": 0.15
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 1.8
         },
         {
           "prefabName": "OrcWarlord",
@@ -365,11 +565,6 @@
           "prefabName": "Dragon",
           "count": 12,
           "interval": 0.3
-        },
-        {
-          "prefabName": "MinotaurWarrior",
-          "count": 5,
-          "interval": 2.0
         }
       ]
     }

@@ -118,8 +118,28 @@
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 35,
-          "interval": 0.31
+          "count": 8,
+          "interval": 0.5
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 3,
+          "interval": 0.9
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 2.0
+        },
+        {
+          "prefabName": "Orc",
+          "count": 10,
+          "interval": 0.35
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 4,
+          "interval": 0.75
         },
         {
           "prefabName": "TrollSpearman",
@@ -127,19 +147,9 @@
           "interval": 0.46
         },
         {
-          "prefabName": "OrcWarrior",
-          "count": 10,
-          "interval": 0.77
-        },
-        {
           "prefabName": "Dragon",
           "count": 2,
           "interval": 1.70
-        },
-        {
-          "prefabName": "MinotaurWarrior",
-          "count": 1,
-          "interval": 2.0
         }
       ]
     },
@@ -283,18 +293,33 @@
     {
       "id": 10,
       "name": "第十波",
-      "description": "督军带领大军",
+      "description": "督军带领大军 - 双牛头人领军",
       "preWaveDelay": 4,
       "enemies": [
         {
           "prefabName": "Orc",
-          "count": 39,
-          "interval": 0.21
+          "count": 10,
+          "interval": 0.28
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 23,
-          "interval": 0.48
+          "count": 5,
+          "interval": 0.6
+        },
+        {
+          "prefabName": "MinotaurWarrior",
+          "count": 1,
+          "interval": 2.0
+        },
+        {
+          "prefabName": "Orc",
+          "count": 12,
+          "interval": 0.22
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 6,
+          "interval": 0.52
         },
         {
           "prefabName": "OrcWarlord",
@@ -315,11 +340,6 @@
           "prefabName": "Dragon",
           "count": 2,
           "interval": 1.13
-        },
-        {
-          "prefabName": "MinotaurWarrior",
-          "count": 2,
-          "interval": 1.0
         }
       ]
     }
