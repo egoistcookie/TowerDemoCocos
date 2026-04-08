@@ -196,6 +196,9 @@ export class Role extends Component {
     protected tempVec3_1: Vec3 = new Vec3();
     protected tempVec3_2: Vec3 = new Vec3();
     protected tempVec3_3: Vec3 = new Vec3();
+
+    // 性能优化：缓存 Camera 引用，避免重复查找（添加于 2026/04/08）
+    protected cachedCamera: Camera | null = null;
     
     // 防止 onEnable 重复应用增幅
     private _enhancementsApplied: boolean = false;
@@ -273,7 +276,6 @@ export class Role extends Component {
     }
 
     start() {
-      //console.info(`[Role] start 被调用，单位类型: ${this.constructor.name}`);
         
         // 保存初始属性值（用于对象池回收时恢复）
         // 注意：从配置文件中读取基础值，而不是当前值（当前值可能已被配置管理器修改）
@@ -289,14 +291,12 @@ export class Role extends Component {
                 this._initialAttackDamage = config.baseStats.attackDamage || this.attackDamage;
                 this._initialAttackInterval = config.baseStats.attackInterval || this.attackInterval;
                 this._initialMoveSpeed = config.baseStats.moveSpeed || this.moveSpeed;
-               //console.info(`[Role.start] ${unitId} 从配置读取初始值：攻击力=${this._initialAttackDamage}, 生命值=${this._initialMaxHealth}`);
             } else {
                 // 如果配置不存在，使用当前值
                 this._initialMaxHealth = this.maxHealth;
                 this._initialAttackDamage = this.attackDamage;
                 this._initialAttackInterval = this.attackInterval;
                 this._initialMoveSpeed = this.moveSpeed;
-               //console.info(`[Role.start] ${unitId} 从当前值保存初始值：攻击力=${this._initialAttackDamage}, 生命值=${this._initialMaxHealth}`);
             }
         }
         
@@ -349,6 +349,10 @@ export class Role extends Component {
         
         // 监听点击事件
         this.node.on(Node.EventType.TOUCH_END, this.onTowerClick, this);
+
+        // 性能优化：缓存 Camera 引用，避免重复查找（添加于 2026/04/08）
+        const cameraNode = find('Canvas/Camera') || this.node.scene?.getChildByName('Camera');
+        this.cachedCamera = cameraNode?.getComponent(Camera) || null;
         
         // 注意：不在 start() 中应用增幅，统一在 onEnable() 中处理
         // 这样可以确保首次创建和对象池复用时的行为一致
@@ -3685,8 +3689,6 @@ export class Role extends Component {
      * 重置单位状态（用于对象池回收）
      */
     private resetRoleState() {
-        //console.info(`[Role.resetRoleState] ${this.constructor.name} 重置前：攻击力=${this.attackDamage}, 生命值=${this.maxHealth}`);
-        //console.info(`[Role.resetRoleState] ${this.constructor.name} 初始值：攻击力=${this._initialAttackDamage}, 生命值=${this._initialMaxHealth}`);
         
         // 恢复初始属性值（移除所有增幅效果）
         this.maxHealth = this._initialMaxHealth;
@@ -3694,7 +3696,6 @@ export class Role extends Component {
         this.attackInterval = this._initialAttackInterval;
         this.moveSpeed = this._initialMoveSpeed;
         
-        //console.info(`[Role.resetRoleState] ${this.constructor.name} 重置后：攻击力=${this.attackDamage}, 生命值=${this.maxHealth}`);
         
         // 重置所有状态变量
         this.currentHealth = this.maxHealth;
@@ -3767,7 +3768,6 @@ export class Role extends Component {
      * 从对象池获取的单位会调用此方法，而不是start方法
      */
     onEnable() {
-       //console.info(`[Role] onEnable 被调用，单位类型: ${this.constructor.name}`);
         
         // 从对象池获取时，重新初始化状态
         // 注意：sprite等组件引用在start中已经初始化，这里只需要重置状态
@@ -3850,11 +3850,9 @@ export class Role extends Component {
         
         // 防止重复应用增幅：如果已经应用过，直接返回
         if (this._enhancementsApplied) {
-            //console.info(`[Role.onEnable] ${unitId} 增幅已应用，跳过重复调用`);
             return;
         }
         
-        //console.info(`[Role.onEnable] ${unitId} 开始应用增幅，当前攻击力=${this.attackDamage}, 生命值=${this.maxHealth}`);
         
         // 清除BuffManager保存的基准值缓存（对象池复用时必须清除）
         const hadCache = !!(this as any)._originalAttackDamage;
@@ -3866,15 +3864,12 @@ export class Role extends Component {
         (this as any)._buffAttackIntervalPercent = undefined;
         (this as any)._buffMaxHealthPercent = undefined;
         (this as any)._buffMoveSpeedPercent = undefined;
-        //console.info(`[Role.onEnable] ${unitId} 清除缓存完成，hadCache=${hadCache}`);
         
         // 应用天赋增幅（必须在应用卡片增幅之前）
         this.applyTalentEnhancements();
-        //console.info(`[Role.onEnable] ${unitId} 天赋增幅后，攻击力=${this.attackDamage}, 生命值=${this.maxHealth}`);
         
         // 应用已保存的增益效果（会更新maxHealth和currentHealth，并再次更新血条）
         this.applyBuffsFromManager();
-        //console.info(`[Role.onEnable] ${unitId} 卡片增幅后，攻击力=${this.attackDamage}, 生命值=${this.maxHealth}`);
         
         // 应用天赋增幅后，如果有技能，创建蓝量条
         if (this.hasSkill) {
@@ -3989,14 +3984,27 @@ export class Role extends Component {
             return;
         }
 
-        // 阻止事件冒泡
-        event.propagationStopped = true;
+        const touchLocation = event.getLocation();
 
-        // 如果已选中此单位，先取消选择
+        // 如果已选中此单位，直接设置移动目标
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
-            this.unitSelectionManager.clearSelection();
+            this.setManualMoveTarget(event);
             return;
         }
+
+        // 首次选中：检查点击是否在碰撞半径内（修复去掉 trim 后贴图覆盖区域变大的问题）
+        const camera = this.cachedCamera;
+        if (camera) {
+            // 使用公共方法检测碰撞（性能优化点 2）
+            // event.getLocation() 返回 Vec2，需要转换为 Vec3
+            const touchPos = this.tempVec3_1.set(touchLocation.x, touchLocation.y, 0);
+            if (!this.isPointInCollisionRadius(touchPos, camera)) {
+                return;
+            }
+        }
+
+        // 首次选中此单位，阻止事件冒泡
+        event.propagationStopped = true;
 
         // 只显示单位信息面板，不显示头顶的选择面板
         this.showUnitInfoPanel();
@@ -4006,7 +4014,6 @@ export class Role extends Component {
      * 显示单位信息面板（不显示头顶的选择面板）
      */
     showUnitInfoPanel() {
-       //console.info(`[Role] showUnitInfoPanel 被调用，单位类型: ${this.constructor.name}, this.maxHealth=${this.maxHealth}, this.currentHealth=${this.currentHealth}`);
         
         // 显示单位信息面板和范围
         if (!this.unitSelectionManager) {
@@ -4025,7 +4032,6 @@ export class Role extends Component {
                 ? this.maxHealth 
                 : 0;
             
-           //console.info(`[Role] showUnitInfoPanel 构建 unitInfo: currentHealth=${currentHealth}, maxHealth=${maxHealth}`);
             
             const unitInfo: UnitInfo = {
                 name: this.unitName || '角色',
@@ -4060,7 +4066,7 @@ export class Role extends Component {
             if (canvas) {
                 // 创建全局触摸事件处理器
                 this.globalTouchHandler = (event: EventTouch) => {
-                    
+
                     // 检查当前单位是否仍被选中
                     // 注意：globalTouchHandler只有在单位被选中时才会注册
                     // 但如果选中状态在onGlobalTouchEnd中被清除，这里检查可能返回false
@@ -4068,8 +4074,8 @@ export class Role extends Component {
                     if (this.unitSelectionManager) {
                         const currentSelectedUnit = this.unitSelectionManager.getCurrentSelectedUnit();
                         const isSelected = this.unitSelectionManager.isUnitSelected(this.node);
-                        
-                        
+
+
                         // 如果选中了其他单位（不是当前单位），移除监听器
                         if (currentSelectedUnit !== null && currentSelectedUnit !== this.node) {
                             const canvas = find('Canvas');
@@ -4117,7 +4123,7 @@ export class Role extends Component {
                             }
                         }
                     }
-                    
+
                     // 点击不在信息面板上，设置移动目标
                     this.setManualMoveTarget(event);
                 };
@@ -4147,30 +4153,62 @@ export class Role extends Component {
      * 设置手动移动目标（用于单选移动）
      * @param event 触摸事件
      */
+
+    /**
+     * 检查点是否在单位碰撞半径内（添加于 2026/04/08，性能优化点 2）
+     * @param touchLocation 触摸位置（屏幕坐标）
+     * @param camera 相机组件
+     * @returns 是否在碰撞半径内
+     */
+    protected isPointInCollisionRadius(touchLocation: Vec3, camera: Camera): boolean {
+        const unitWorldPos = this.node.worldPosition;
+        const unitScreenPos = new Vec3();
+        camera.worldToScreen(unitWorldPos, unitScreenPos);
+
+        // 将世界坐标的碰撞半径转换为屏幕坐标
+        const testWorldPos = new Vec3(unitWorldPos.x + this.collisionRadius, unitWorldPos.y, unitWorldPos.z);
+        const testScreenPos = new Vec3();
+        camera.worldToScreen(testWorldPos, testScreenPos);
+        const collisionRadiusScreen = Math.abs(testScreenPos.x - unitScreenPos.x);
+
+        const dx = touchLocation.x - unitScreenPos.x;
+        const dy = touchLocation.y - unitScreenPos.y;
+        const distanceToUnit = Math.sqrt(dx * dx + dy * dy);
+
+        return distanceToUnit <= collisionRadiusScreen;
+    }
+
     setManualMoveTarget(event: EventTouch) {
-        // 阻止事件冒泡，避免触发其他点击事件
-        event.propagationStopped = true;
-        
         // 获取触摸位置
         const touchLocation = event.getLocation();
-        
-        // 查找Camera节点
-        const cameraNode = find('Canvas/Camera') || this.node.scene?.getChildByName('Camera');
-        if (!cameraNode) {
-           //console.info('[Role.setManualMoveTarget] 找不到Camera节点');
+
+        // 检查点击是否在单位碰撞体积内（添加于 2026/04/08）
+        // 使用公共方法检测碰撞（性能优化点 2）
+        const camera = this.cachedCamera;
+        if (camera) {
+            // event.getLocation() 返回 Vec2，需要转换为 Vec3
+            const touchPos = this.tempVec3_1.set(touchLocation.x, touchLocation.y, 0);
+            if (this.isPointInCollisionRadius(touchPos, camera)) {
+                return;
+            }
+        }
+
+        // 阻止事件冒泡，避免触发其他点击事件
+        event.propagationStopped = true;
+
+        // 使用缓存的 Camera（已在 start 中初始化）
+        if (!this.cachedCamera) {
+            // 如果缓存为空，尝试重新查找
+            const cameraNode = find('Canvas/Camera') || this.node.scene?.getChildByName('Camera');
+            this.cachedCamera = cameraNode?.getComponent(Camera) || null;
+        }
+        if (!this.cachedCamera) {
             return;
         }
-        
-        const camera = cameraNode.getComponent(Camera);
-        if (!camera) {
-           //console.info('[Role.setManualMoveTarget] 找不到Camera组件');
-            return;
-        }
-        
         // 将屏幕坐标转换为世界坐标
         const screenPos = new Vec3(touchLocation.x, touchLocation.y, 0);
         const worldPos = new Vec3();
-        camera.screenToWorld(screenPos, worldPos);
+        this.cachedCamera.screenToWorld(screenPos, worldPos);
         worldPos.z = 0;
         
         // 使用setManualMoveTargetPosition方法设置移动目标
@@ -4190,7 +4228,6 @@ export class Role extends Component {
             }
         } else {
             // 如果没有unitSelectionManager，也不应该执行移动操作
-           //console.info('[Role.setManualMoveTarget] 没有unitSelectionManager，不执行移动操作，单位名称:', this.node?.name);
             return;
         }
     }
@@ -4374,11 +4411,9 @@ export class Role extends Component {
             const canvas = find('Canvas');
             if (canvas) {
                 canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
-               //console.info('[Role.hideSelectionPanel] 已从Canvas移除TOUCH_END监听器');
             }
             this.globalTouchHandler = null!;
         } else {
-           //console.info('[Role.hideSelectionPanel] globalTouchHandler为null，无需清除');
         }
 
         // 清除单位信息面板和范围显示
@@ -4387,7 +4422,6 @@ export class Role extends Component {
             if (this.unitSelectionManager.isUnitSelected(this.node)) {
                 this.unitSelectionManager.clearSelection();
             } else {
-               //console.info('[Role.hideSelectionPanel] 当前选中的不是这个单位，不调用clearSelection');
             }
         }
         
@@ -4645,18 +4679,15 @@ export class Role extends Component {
         const buffManager = BuffManager.getInstance();
         const unitId = this.getUnitIdForEnhancement(); // 使用稳定的单位ID（优先 prefabName）
         
-       //console.info(`[Role] applyBuffsFromManager 开始，单位ID: ${unitId}, 应用前 currentHealth=${this.currentHealth}, maxHealth=${this.maxHealth}`);
         
         // 应用增益
         buffManager.applyBuffsToUnit(this, unitId);
         
-       //console.info(`[Role] applyBuffsFromManager 应用后，currentHealth=${this.currentHealth}, maxHealth=${this.maxHealth}`);
         
         // 应用增益后，强制更新血条显示
         if (this.healthBar && this.healthBar.isValid) {
             this.healthBar.setMaxHealth(this.maxHealth);
             this.healthBar.setHealth(this.currentHealth);
-           //console.info(`[Role] 更新血条显示: ${this.currentHealth}/${this.maxHealth}`);
         }
         
         // 如果单位被选中，更新单位信息面板
@@ -4668,7 +4699,6 @@ export class Role extends Component {
                 currentHealth: this.currentHealth,
                 maxHealth: this.maxHealth
             });
-           //console.info(`[Role] 更新单位信息面板: 生命=${this.currentHealth}/${this.maxHealth}, 攻击频率=${(1.0 / this.attackInterval).toFixed(2)}, 移动速度=${this.moveSpeed}`);
         }
     }
 }

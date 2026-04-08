@@ -15,7 +15,7 @@ select player_id,count(*) from game_sessions where DATE(created_at) = CURDATE()
 ,'player_1772722064044_978','player_1772465771074_4106') group by player_id ;
 --统计昨天有多少玩家、各玩了几局
 select player_id,count(*) from game_sessions where DATE(created_at) = CURDATE()-1
- and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381'
+ and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1775652153130_8335',
 ,'player_1772722064044_978','player_1772465771074_4106')  group by player_id ;
 --统计每天有多少局游戏
 select DATE(created_at),count(*) from game_sessions 
@@ -24,9 +24,9 @@ select DATE(created_at),count(*) from game_sessions
 --选卡明细表
 select * from card_selection_events  order by created_at desc ;
 --统计每天有多少次抽卡
-select * from card_selection_events where DATE(created_at) = CURDATE()-1
- and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381'
-,'player_1772722064044_978','player_1772465771074_4106') order by created_at desc ;
+select * from card_selection_events where DATE(created_at) = CURDATE()
+ and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1775652153130_8335',
+'player_1772722064044_978','player_1772465771074_4106') order by created_at desc ;
 --统计每天有多少UR
 select * from card_selection_events where DATE(created_at) = CURDATE()-1
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')  order by created_at desc ;
@@ -58,7 +58,7 @@ select * from game_records where DATE(created_at) = CURDATE()
 order by created_at desc;
 select * from game_records where defend_time !=0 order by created_at desc;
 --玩家信息表
-select * from player_statistics where created_at>'20260403' order by created_at desc;
+select * from player_statistics where created_at>'20260408' order by created_at desc;
 select * from player_statistics where player_id like '%player_1774104641493_9000';
 --操作类型统计表
 select * from operation_statistics os ;

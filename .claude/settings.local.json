@@ -1,36 +1,25 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python*)",
-      "Bash(pytest*)",
-      "Bash(pip*)",
-      "Bash(npm*)",
-      "Bash(npx*)",
-      "Bash(git*)",
-      "Bash(cat*)",
-      "Bash(sed*)",
+      "Bash(*)",
       "WebSearch",
-      "WebFetch(domain:www.theverge.com)",
-      "Skill(update-config*)",
+      "WebFetch(domain:*)",
+      "Skill(*)",
       "Edit",
       "Write",
       "Read",
       "Glob",
       "Grep",
-      "Bash(find* -name \"*\"*)",
-      "Read(//d/CocosProject/TowerDemoCocos/**)",
-      "Bash(move /y \"d:\\\\CocosProject\\\\TowerDemoCocos\\\\assets\\\\scripts\\\\enemy\\\\OrcWarlord_temp.ts\" \"d:\\\\CocosProject\\\\TowerDemoCocos\\\\assets\\\\scripts\\\\enemy\\\\OrcWarlord.ts\")",
-      "Read(//tmp/**)",
-      "Bash(r)",
-      "Bash(powershell -Command \"cd 'd:/cocosProject/TowerDemoCocos/assets/scripts/role'; \\(Get-Content Role.ts\\) -replace '// 特殊处理：如果是第三段待机动画.*this\\\\.refreshOverheadNodesScale\\\\\\(\\\\\\);[\\\\r\\\\n]+[\\\\t ]*\\\\}', '// 触发待机口号（在播放第三段待机动画时）`r`n        if \\(selectedIndex === 2 && !this.isMoving && !this.isPlayingAttackAnimation && !this.isPlayingHitAnimation && !this.isPlayingDeathAnimation\\) {`r`n            this.triggerIdleSlogan\\(\\);`r`n        }' | Set-Content Role.ts\")",
-      "Bash(powershell -Command ':*)",
-      "Bash(powershell -c ':*)",
-      "Bash(powershell -NoProfile -Command '*')",
-      "Bash(powershell -NoProfile -Command \"cd 'd:\\\\cocosProject\\\\TowerDemoCocos'; node --check 'd:\\\\cocosProject\\\\TowerDemoCocos\\\\assets\\\\scripts\\\\role\\\\Role.ts' 2>&1 | Select-Object -First 20\")"
+      "Agent(*)",
+      "AskUserQuestion",
+      "TodoWrite",
+      "TaskOutput",
+      "TaskStop"
     ],
     "defaultMode": "bypassPermissions",
     "additionalDirectories": [
-      "C:\\Users\\Win10\\.claude"
+      "C:\\Users\\Win10\\.claude",
+      "d:\\tmp\\*"
     ]
   }
 }

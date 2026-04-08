@@ -641,6 +641,7 @@ export class Build extends Component {
      * 显示单位信息面板（不显示头顶的选择面板）
      */
     public showSelectionPanel() {
+        console.log('[Build] showSelectionPanel called, unitSelectionManager:', this.unitSelectionManager != null);
         // 显示单位信息面板和范围
         if (!this.unitSelectionManager) {
             this.findUnitSelectionManager();
@@ -660,6 +661,7 @@ export class Build extends Component {
                 };
                 unitInfo.rallyPoint = this.rallyPoint;
                 this.unitSelectionManager.selectUnit(this.node, unitInfo);
+                console.log('[Build] selectUnit called');
             }
         }
         
@@ -1405,6 +1407,12 @@ export class Build extends Component {
             towerBuilder = findComponentInScene(this.node.scene, 'TowerBuilder');
         }
         
+
+        // 检查 TowerBuilder 是否正在处理此点击（防止 TowerBuilder 的长按检测与建筑物点击冲突）
+        if ((this.node as any)._towerBuilderHandlingClick) {
+            console.log('[Build] onBuildingClick: TowerBuilder 正在处理此点击，跳过');
+            return;
+        }
         // 检查是否正在长按检测（由TowerBuilder处理）
         if (towerBuilder && (towerBuilder as any).isLongPressActive) {
             return;
