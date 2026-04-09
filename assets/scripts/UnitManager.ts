@@ -129,6 +129,18 @@ export class UnitManager extends Component {
             }
         }
 
+        // 从 Canvas/Portals 获取传送门
+        const portalsNode = find('Canvas/Portals');
+        if (portalsNode && portalsNode.isValid) {
+            const allChildren = portalsNode.children || [];
+            for (let i = 0; i < allChildren.length; i++) {
+                const node = allChildren[i];
+                if (node && node.isValid && node.active) {
+                    this.enemies.push(node);
+                }
+            }
+        }
+
         // 更新防御塔列表
         if (this.towersNode && this.towersNode.isValid) {
             this.towers = this.towersNode.children.filter(node => 

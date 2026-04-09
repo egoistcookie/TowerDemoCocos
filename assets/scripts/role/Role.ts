@@ -1359,12 +1359,20 @@ export class Role extends Component {
         if (!node || !node.isValid || !node.active) {
             return false;
         }
-        
+
         const enemyScript = this.getEnemyScript(node);
         if (!enemyScript) {
             return false;
         }
-        
+
+        // 检查传送门是否处于休眠状态（五波次结束后的透明状态）
+        // 休眠状态的传送门不应作为攻击目标
+        if (enemyScript.isDormantNow && typeof enemyScript.isDormantNow === 'function') {
+            if (enemyScript.isDormantNow()) {
+                return false;
+            }
+        }
+
         // 检查敌人是否存活，支持多种存活检查方式
         if (enemyScript.isAlive && typeof enemyScript.isAlive === 'function') {
             return enemyScript.isAlive();
@@ -1373,7 +1381,7 @@ export class Role extends Component {
         } else if (enemyScript.currentHealth !== undefined) {
             return enemyScript.currentHealth > 0;
         }
-        
+
         return true;
     }
     
@@ -1387,8 +1395,8 @@ export class Role extends Component {
             return null;
         }
         
-        // 尝试获取所有可能的敌人组件类型
-        const possibleComponentNames = ['TrollSpearman', 'OrcWarrior', 'OrcWarlord', 'MinotaurWarrior', 'Boss', 'Enemy'];
+        // 尝试获取所有可能的敌人组件类型（包括 Portal）
+        const possibleComponentNames = ['TrollSpearman', 'OrcWarrior', 'OrcWarlord', 'MinotaurWarrior', 'Boss', 'Enemy', 'Portal'];
         for (const compName of possibleComponentNames) {
             const comp = node.getComponent(compName) as any;
             if (comp && comp.unitType === UnitType.ENEMY) {
@@ -3992,13 +4000,11 @@ export class Role extends Component {
             return;
         }
 
-        // 首次选中：检查点击是否在碰撞半径内（修复去掉 trim 后贴图覆盖区域变大的问题）
+        // 首次选中：检查点击是否在 2 倍宽 3 倍高的选中区域内
         const camera = this.cachedCamera;
         if (camera) {
-            // 使用公共方法检测碰撞（性能优化点 2）
-            // event.getLocation() 返回 Vec2，需要转换为 Vec3
             const touchPos = this.tempVec3_1.set(touchLocation.x, touchLocation.y, 0);
-            if (!this.isPointInCollisionRadius(touchPos, camera)) {
+            if (!this.isPointInSelectionArea(touchPos, camera)) {
                 return;
             }
         }
@@ -4006,7 +4012,7 @@ export class Role extends Component {
         // 首次选中此单位，阻止事件冒泡
         event.propagationStopped = true;
 
-        // 只显示单位信息面板，不显示头顶的选择面板
+        // 显示单位信息面板
         this.showUnitInfoPanel();
     }
 
@@ -4176,6 +4182,33 @@ export class Role extends Component {
         const distanceToUnit = Math.sqrt(dx * dx + dy * dy);
 
         return distanceToUnit <= collisionRadiusScreen;
+    }
+
+    /**
+     * 检查点是否在单位选中区域内（2 倍宽 3 倍高矩形区域）
+     * @param touchLocation 触摸位置（屏幕坐标）
+     * @param camera 相机组件
+     * @returns 是否在选中区域内
+     */
+    protected isPointInSelectionArea(touchLocation: Vec3, camera: Camera): boolean {
+        const unitWorldPos = this.node.worldPosition;
+        const unitScreenPos = new Vec3();
+        camera.worldToScreen(unitWorldPos, unitScreenPos);
+
+        // 将世界坐标的碰撞半径转换为屏幕坐标
+        const testWorldPos = new Vec3(unitWorldPos.x + this.collisionRadius, unitWorldPos.y, unitWorldPos.z);
+        const testScreenPos = new Vec3();
+        camera.worldToScreen(testWorldPos, testScreenPos);
+        const collisionRadiusScreen = Math.abs(testScreenPos.x - unitScreenPos.x);
+
+        // 选中区域：宽度 = 2 * 碰撞半径，高度 = 3 * 碰撞半径
+        const selectionHalfWidth = collisionRadiusScreen * 2;
+        const selectionHalfHeight = collisionRadiusScreen * 3;
+
+        const dx = Math.abs(touchLocation.x - unitScreenPos.x);
+        const dy = Math.abs(touchLocation.y - unitScreenPos.y);
+
+        return dx <= selectionHalfWidth && dy <= selectionHalfHeight;
     }
 
     setManualMoveTarget(event: EventTouch) {
