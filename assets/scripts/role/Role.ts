@@ -187,9 +187,8 @@ export class Role extends Component {
     private autoRoamScheduled: boolean = false;
     private autoRoamCallback: (() => void) | null = null;
 
-    // 出生 5 秒内是否被手动控制过（如果是，则取消自动上移）
-    private wasManuallyControlledAtSpawn: boolean = false;
-    private timeSinceSpawn: number = 0; // 出生后经过的时间（秒）
+    // 是否被手动控制过（如果是，则取消自动上移）
+    private wasManuallyControlled: boolean = false;
     
     // 性能优化：碰撞检测频率控制
     protected collisionCheckTimer: number = 0; // 碰撞检测计时器
@@ -999,11 +998,6 @@ export class Role extends Component {
         if (this.isDestroyed) {
             // PerformanceMonitor.endTiming('Role.update', updateStartTime, 5);
             return;
-        }
-
-        // 更新出生后经过的时间（用于 5 秒内手动控制检测）
-        if (this.timeSinceSpawn < 5.0) {
-            this.timeSinceSpawn += deltaTime;
         }
         
         // 更新蓝量（每秒回复）
@@ -3785,7 +3779,11 @@ export class Role extends Component {
      * 从对象池获取的单位会调用此方法，而不是start方法
      */
     onEnable() {
-        
+
+        // 重置增幅标志，让每次从对象池获取时都能重新安排自动上移
+        this._enhancementsApplied = false;
+        console.log(`[Role.onEnable] ${this.unitName}, _enhancementsApplied=false, wasManuallyControlled=${this.wasManuallyControlled}, autoRoamScheduled=${this.autoRoamScheduled}`);
+
         // 从对象池获取时，重新初始化状态
         // 注意：sprite等组件引用在start中已经初始化，这里只需要重置状态
         if (this.sprite && this.defaultSpriteFrame) {
@@ -3812,9 +3810,8 @@ export class Role extends Component {
         this.isDefending = false; // 重置防御状态
         this.hasFoundFirstTarget = false;
 
-        // 重置出生控制标志（用于 5 秒内手动控制检测）
-        this.wasManuallyControlledAtSpawn = false;
-        this.timeSinceSpawn = 0;
+        // 重置手动控制标志
+        this.wasManuallyControlled = false;
 
         // 重置智能避让系统
         this.lastPosition.set(this.node.worldPosition);
@@ -3939,8 +3936,9 @@ export class Role extends Component {
                     if (!this.node || !this.node.isValid || this.isDestroyed) {
                         return;
                     }
-                    // 若在出生后 5 秒内被手动控制过，则取消自动上移
-                    if (this.wasManuallyControlledAtSpawn) {
+                    // 若已被手动控制过，则取消自动上移
+                    if (this.wasManuallyControlled) {
+                        console.log(`[Role.autoRoam] ${this.unitName}, wasManuallyControlled=true, 取消自动上移`);
                         return;
                     }
                     // 若在6秒内已经被下达了移动/集结指令（manualMoveTarget 有值或被标记为手动控制），则不干预
@@ -3964,8 +3962,11 @@ export class Role extends Component {
                     const dy = 400 + Math.floor(Math.random() * 101); // [400, 500]
                     const cur = this.node.worldPosition;
                     const target = new Vec3(cur.x, cur.y + dy, 0);
-                    // 使用现有的手动移动接口，包含防重叠/可行走修正
-                    this.setManualMoveTargetPosition(target);
+                    // 自动上移：直接设置移动目标，不标记 wasManuallyControlled
+                    const adjustedPos = this.findAvailableMovePosition(target);
+                    this.manualMoveTarget = adjustedPos.clone();
+                    this.isManuallyControlled = true;
+                    this.currentTarget = null!;
                 };
                 // 延迟 6 秒执行
                 this.scheduleOnce(this.autoRoamCallback, 6.0);
@@ -3992,7 +3993,9 @@ export class Role extends Component {
                 // ignore
             }
         }
-        // 什么都不做，让对象池的 release 方法来重置标志
+        // 重置自动上移标志，避免对象池复用时的状态污染
+        this.autoRoamScheduled = false;
+        this.wasManuallyControlled = false;
     }
 
     getHealth(): number {
@@ -4025,8 +4028,17 @@ export class Role extends Component {
 
         const touchLocation = event.getLocation();
 
-        // 如果已选中此单位，直接设置移动目标
+        // 如果已选中此单位，检查点击是否在选中区域内
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+            const touchPos = this.tempVec3_1.set(touchLocation.x, touchLocation.y, 0);
+            const camera = this.cachedCamera;
+            if (camera && !this.isPointInSelectionArea(touchPos, camera)) {
+                // 点击不在选中区域内，不阻止事件冒泡，让 Canvas 的 onGlobalTouchEnd 检测其他单位
+// 设置移动目标但不阻止冒泡
+                this.setManualMoveTarget(event, true);
+                return;
+            }
+            // 点击在选中区域内，设置移动目标并阻止冒泡
             this.setManualMoveTarget(event);
             return;
         }
@@ -4035,7 +4047,9 @@ export class Role extends Component {
         const camera = this.cachedCamera;
         if (camera) {
             const touchPos = this.tempVec3_1.set(touchLocation.x, touchLocation.y, 0);
-            if (!this.isPointInSelectionArea(touchPos, camera)) {
+            const isInSelectionArea = this.isPointInSelectionArea(touchPos, camera);
+if (!isInSelectionArea) {
+                // 点击不在当前单位的选中区域内，不阻止事件冒泡，让下方的单位有机会接收事件
                 // 检查是否有其他单位被选中（说明用户想控制已选中的单位移动）
                 if (previouslySelectedUnit) {
                     // 获取之前选中的单位组件，设置移动目标
@@ -4055,6 +4069,7 @@ export class Role extends Component {
                     // 不阻止事件冒泡，让 SelectionManager 的 globalTouchHandler 处理移动
                     return;
                 }
+                // 没有其他单位被选中，不阻止事件冒泡，让下方的单位有机会接收事件
                 return;
             }
         }
@@ -4199,11 +4214,6 @@ export class Role extends Component {
         this.manualMoveTarget = adjustedPos.clone();
         this.isManuallyControlled = true;
 
-        // 如果在出生后 5 秒内被手动控制，标记为已手动控制过（取消自动上移）
-        if (this.timeSinceSpawn < 5.0) {
-            this.wasManuallyControlledAtSpawn = true;
-        }
-
         // 清除当前自动寻敌目标，优先执行手动移动
         this.currentTarget = null!;
     }
@@ -4298,6 +4308,10 @@ export class Role extends Component {
         const worldPos = new Vec3();
         this.cachedCamera.screenToWorld(screenPos, worldPos);
         worldPos.z = 0;
+        
+        // 标记为已被手动控制过（取消自动上移）
+        this.wasManuallyControlled = true;
+        console.log(`[Role.setManualMoveTarget] ${this.unitName}, wasManuallyControlled=true`);
         
         // 使用setManualMoveTargetPosition方法设置移动目标
         this.setManualMoveTargetPosition(worldPos);

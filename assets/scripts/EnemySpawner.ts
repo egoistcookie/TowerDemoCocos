@@ -92,6 +92,11 @@ export class EnemySpawner extends Component {
     private enemiesSpawnedCount: number = 0;
     private enemySpawnTimer: number = 0;
     private pauseAfterFirstEnemy: boolean = false; // 第一只怪刷新后暂停刷新
+
+
+    // 波次刷新完后抽卡延迟，给玩家更多注意抽卡的时间
+    private buffCardDelayTimer: number = 0;
+    private readonly BUFF_CARD_DELAY: number = 5; // 波次刷新完后 5 秒才出现抽卡
     
     // 测试模式相关
     private testEnemySpawned: boolean = false; // 测试模式下是否已刷新敌人
@@ -1144,14 +1149,14 @@ export class EnemySpawner extends Component {
             if (this.isCountdownActive) {
                 return;
             }
-            
+
             // 如果最后一波已完成，不要继续尝试开始下一波
             if (this.isLastWaveCompleted) {
                 return;
             }
-            
+
             this.preWaveDelayTimer += deltaTime;
-            
+
             // 如果延迟时间到，开始下一波
             if (this.preWaveDelayTimer >= (this.currentWave?.preWaveDelay || 0)) {
                 this.startNextWave();
@@ -1253,16 +1258,113 @@ export class EnemySpawner extends Component {
             this.enemySpawnTimer = 0;
         }
     }
+    /**
+     * 结束当前波次
+     */
+    private endCurrentWave() {
+        console.log(`[EnemySpawner] endCurrentWave() 被调用，currentWaveIndex=${this.currentWaveIndex}, isWaveActive=${this.isWaveActive}`);
+        this.isWaveActive = false;
+        this.currentEnemyConfig = null;
+
+        // 检查是否是最后一波
+        const totalWaves = this.currentLevelConfig && this.currentLevelConfig.waves ? this.currentLevelConfig.waves.length : 0;
+        const isLastWave = totalWaves > 0 && (this.currentWaveIndex + 1) >= totalWaves;
+
+        if (isLastWave) {
+            this.isLastWaveCompleted = true;
+        }
+
+        const waveNumber = this.currentWaveIndex + 1;
+
+        // 第 2、4、6、8 波：显示 10 秒倒计时（可手动关闭），倒计时结束后显示增益卡片
+        const is10SecondPause = waveNumber === 2 || waveNumber === 4 || waveNumber === 6 || waveNumber === 8;
+
+        console.log(`[EnemySpawner] endCurrentWave() 波次=${waveNumber}, is10SecondPause=${is10SecondPause}`);
+
+        if (is10SecondPause) {
+            // 显示 10 秒倒计时弹窗（右上角可点击，立即开始倒计时）
+            console.log(`[EnemySpawner] 第${waveNumber}波完成，显示 10 秒倒计时弹窗`);
+            if (this.uiManager) {
+                this.uiManager.showCountdownPopup(
+                    () => {
+                        // 倒计时完成回调：10 秒后显示增益卡片
+                        console.log('[EnemySpawner] 10 秒倒计时结束回调被调用，准备显示增益卡片');
+                        if (this.gameManager) {
+                            this.gameManager.showBuffCards(() => {
+                                console.log('[EnemySpawner] 增益卡片选择完成，准备继续下一波');
+                                this.continueToNextWaves();
+                            });
+                        } else {
+                            this.continueToNextWaves();
+                        }
+                    },
+                    () => {
+                        // 手动关闭回调：立即显示增益卡片
+                        console.log('[EnemySpawner] 玩家手动关闭 10 秒倒计时回调被调用，准备显示增益卡片');
+                        if (this.gameManager) {
+                            this.gameManager.showBuffCards(() => {
+                                console.log('[EnemySpawner] 增益卡片选择完成，准备继续下一波（手动关闭）');
+                                this.continueToNextWaves();
+                            });
+                        } else {
+                            this.continueToNextWaves();
+                        }
+                    },
+                    10, // 10 秒倒计时
+                    true // skipInitialDelay = true，立即开始倒计时
+                );
+            } else {
+                // UI 管理器不存在，直接等待 10 秒后显示卡片
+                this.scheduleOnce(() => {
+                    if (this.gameManager) {
+                        this.gameManager.showBuffCards(() => {
+                            this.continueToNextWaves();
+                        });
+                    } else {
+                        this.continueToNextWaves();
+                    }
+                }, 10);
+            }
+            return;
+        }
+
+        // 第 10 波：等待 5 秒后显示增益卡片
+        if (waveNumber === 10) {
+            console.log(`[EnemySpawner] 第${waveNumber}波完成，等待 5 秒后显示增益卡片`);
+            if (this.gameManager) {
+                this.scheduleOnce(() => {
+                    this.gameManager.showBuffCards(() => {
+                        this.continueToNextWaves();
+                    });
+                }, 5);
+            } else {
+                this.continueToNextWaves();
+            }
+            return;
+        }
+
+        // 其他波次（1、3、5、7、9...）：立即显示增益卡片
+        console.log(`[EnemySpawner] 第${waveNumber}波完成，立即显示增益卡片`);
+        if (this.gameManager) {
+            this.gameManager.showBuffCards(() => {
+                this.continueToNextWaves();
+            });
+        } else {
+            this.continueToNextWaves();
+        }
+    }
+
     
+
     /**
      * 开始下一波
      */
     private startNextWave() {
-       //console.info(`[EnemySpawner] startNextWave() 被调用，currentWaveIndex=${this.currentWaveIndex}`);
+       console.log(`[EnemySpawner] startNextWave() 被调用，currentWaveIndex=${this.currentWaveIndex}`);
         // 检查游戏状态，只有在游戏进行中时才显示波次提示
         if (this.gameManager) {
             const gameState = this.gameManager.getGameState();
-           //console.info(`[EnemySpawner] startNextWave() 游戏状态=${gameState}`);
+           console.log(`[EnemySpawner] startNextWave() 游戏状态=${gameState}`);
             if (gameState !== GameState.Playing) {
                 // 只更新波次状态，不显示UI提示
                 console.warn(`[EnemySpawner] startNextWave() 游戏状态不是Playing，只更新波次索引`);
@@ -1285,7 +1387,7 @@ export class EnemySpawner extends Component {
         
         const totalWaves = this.currentLevelConfig.waves.length;
         if (this.currentWaveIndex >= totalWaves - 1) {
-           //console.info(`[EnemySpawner] startNextWave() 已经是最后一波，currentWaveIndex=${this.currentWaveIndex}, totalWaves=${totalWaves}，设置isLastWaveCompleted=true并返回`);
+           console.log(`[EnemySpawner] startNextWave() 已经是最后一波，currentWaveIndex=${this.currentWaveIndex}, totalWaves=${totalWaves}，设置isLastWaveCompleted=true并返回`);
             // 标记最后一波已完成，防止重复调用
             this.isLastWaveCompleted = true;
             // 确保波次状态正确
@@ -1295,7 +1397,7 @@ export class EnemySpawner extends Component {
         
         // 增加波次索引
         this.currentWaveIndex++;
-       //console.info(`[EnemySpawner] startNextWave() 增加波次索引到 ${this.currentWaveIndex}`);
+       console.log(`[EnemySpawner] startNextWave() 增加波次索引到 ${this.currentWaveIndex}`);
         
         // 检查索引是否有效
         if (this.currentWaveIndex < 0 || this.currentWaveIndex >= totalWaves) {
@@ -1304,7 +1406,7 @@ export class EnemySpawner extends Component {
         }
         
         this.currentWave = this.currentLevelConfig.waves[this.currentWaveIndex];
-       //console.info(`[EnemySpawner] startNextWave() 开始第 ${this.currentWaveIndex + 1} 波，波次名称=${this.currentWave?.name}`);
+       console.log(`[EnemySpawner] startNextWave() 开始第 ${this.currentWaveIndex + 1} 波，波次名称=${this.currentWave?.name}`);
         
         // 重置波次状态
         this.isWaveActive = true;
@@ -1314,7 +1416,7 @@ export class EnemySpawner extends Component {
         this.enemySpawnTimer = 0;
         this.currentEnemyConfig = null;
         
-       //console.info(`[EnemySpawner] startNextWave() 重置波次状态，isWaveActive=${this.isWaveActive}`);
+       console.log(`[EnemySpawner] startNextWave() 重置波次状态，isWaveActive=${this.isWaveActive}`);
         
         // 输出波次信息
         
@@ -1325,104 +1427,6 @@ export class EnemySpawner extends Component {
         }
     }
     
-    /**
-     * 结束当前波次
-     */
-    private endCurrentWave() {
-        this.isWaveActive = false;
-        this.currentEnemyConfig = null;
-        
-        // 检查是否是最后一波
-        const totalWaves = this.currentLevelConfig && this.currentLevelConfig.waves ? this.currentLevelConfig.waves.length : 0;
-        const isLastWave = totalWaves > 0 && (this.currentWaveIndex + 1) >= totalWaves;
-        
-        if (isLastWave) {
-           //console.info(`[EnemySpawner] endCurrentWave() 最后一波完成，currentWaveIndex=${this.currentWaveIndex}, totalWaves=${totalWaves}，设置isLastWaveCompleted=true`);
-            this.isLastWaveCompleted = true;
-        }
-        
-        // 每完成一次波次，显示增益卡片（除了每隔5波的倒计时弹窗）
-        const isSpecialWave = this.currentLevelConfig && this.currentLevelConfig.waves && 
-            (this.currentWaveIndex + 1) % 5 === 0 && 
-            (this.currentWaveIndex + 1) < this.currentLevelConfig.waves.length;
-        
-        // 检查是否是第5、10、15波完成，每隔5波出现一次弹窗
-        // 使用 currentLevelConfig 而不是 waveConfig
-        if (isSpecialWave) {
-            
-           //console.info(`[EnemySpawner] 第 ${this.currentWaveIndex + 1} 波完成，停止刷怪1分钟，显示倒计时弹窗`);
-            
-            // 设置倒计时激活标志
-            this.isCountdownActive = true;
-            
-            // 显示倒计时弹窗
-            if (this.uiManager) {
-                this.uiManager.showCountdownPopup(
-                    this.onCountdownComplete.bind(this),
-                    this.onCountdownManualClose.bind(this)
-                );
-            } else {
-                // 如果UI管理器不存在，直接继续下一波
-                this.continueToNextWaves();
-            }
-            
-            // 每5波也显示增益卡片，但需要临时隐藏倒计时，卡片关闭后恢复
-            if (this.gameManager) {
-                // 临时隐藏倒计时弹窗（如果存在）
-                // 使用 temporaryHide() 方法，只隐藏节点，不停止倒计时逻辑
-                if (this.uiManager && this.uiManager.countdownPopup) {
-                   //console.info(`[EnemySpawner] 准备临时隐藏倒计时弹窗，countdownPopup存在=${!!this.uiManager.countdownPopup}, isCountdownActive=${this.isCountdownActive}`);
-                    this.uiManager.countdownPopup.temporaryHide();
-                   //console.info(`[EnemySpawner] 显示增益卡片前，临时隐藏倒计时弹窗（倒计时继续运行）`);
-                } else {
-                    console.warn(`[EnemySpawner] 无法临时隐藏倒计时弹窗：uiManager=${!!this.uiManager}, countdownPopup=${!!(this.uiManager && this.uiManager.countdownPopup)}`);
-                }
-                
-                // 显示增益卡片，卡片关闭后恢复倒计时
-                this.gameManager.showBuffCards(() => {
-                   //console.info(`[EnemySpawner] 增益卡片关闭回调，isCountdownActive=${this.isCountdownActive}, uiManager=${!!this.uiManager}, countdownPopup=${!!(this.uiManager && this.uiManager.countdownPopup)}`);
-                    // 卡片关闭后，如果倒计时仍然激活，恢复显示倒计时
-                    if (this.isCountdownActive && this.uiManager && this.uiManager.countdownPopup) {
-                        // 使用 temporaryShow() 方法恢复显示，倒计时逻辑应该还在运行
-                        this.uiManager.countdownPopup.temporaryShow();
-                       //console.info(`[EnemySpawner] 增益卡片关闭，恢复倒计时弹窗显示`);
-                    } else {
-                        console.warn(`[EnemySpawner] 增益卡片关闭后未恢复倒计时：isCountdownActive=${this.isCountdownActive}, uiManager=${!!this.uiManager}, countdownPopup=${!!(this.uiManager && this.uiManager.countdownPopup)}`);
-                    }
-                });
-            }
-            
-            // 取消之前的定时器（如果存在）
-            if (this.countdownAutoContinueTimer) {
-                this.unschedule(this.countdownAutoContinueTimer);
-                this.countdownAutoContinueTimer = null;
-            }
-            
-            // 启动一个自动继续的定时器，确保即使没有弹窗也能继续游戏
-            this.countdownAutoContinueTimer = this.scheduleOnce(() => {
-                if (this.isCountdownActive) {
-                   //console.info(`[EnemySpawner] 倒计时1分钟完成，自动继续下一波`);
-                    this.continueToNextWaves();
-                }
-                this.countdownAutoContinueTimer = null;
-            }, 60); // 60秒后自动继续
-            
-            return; // 暂停波次生成，等待倒计时完成
-        }
-        
-        // 非特殊波次，显示增益卡片
-        if (this.gameManager) {
-            // 显示增益卡片，卡片关闭后继续下一波
-            this.gameManager.showBuffCards(() => {
-                // 卡片关闭后继续下一波
-                this.continueToNextWaves();
-            });
-            return; // 等待卡片关闭后再继续
-        }
-        
-        // 如果没有显示增益卡片（比如没有已上场的单位），直接继续下一波
-        this.continueToNextWaves();
-    }
     
     /**
      * 倒计时完成回调
@@ -1443,14 +1447,14 @@ export class EnemySpawner extends Component {
      * 继续生成下一波（点击倒计时弹窗后触发，继续下5波）
      */
     private continueToNextWaves() {
-       //console.info(`[EnemySpawner] continueToNextWaves() 被调用，currentWaveIndex=${this.currentWaveIndex}, isCountdownActive=${this.isCountdownActive}`);
+       console.log(`[EnemySpawner] continueToNextWaves() START - currentWaveIndex=${this.currentWaveIndex}`);
         
         // 取消倒计时激活标志
         this.isCountdownActive = false;
         
         // 取消60秒自动继续定时器（如果存在）
         if (this.countdownAutoContinueTimer) {
-           //console.info(`[EnemySpawner] continueToNextWaves() 取消60秒自动继续定时器`);
+           console.log(`[EnemySpawner] continueToNextWaves() 取消60秒自动继续定时器`);
             this.unschedule(this.countdownAutoContinueTimer);
             this.countdownAutoContinueTimer = null;
         }
@@ -1458,9 +1462,9 @@ export class EnemySpawner extends Component {
         // 确保游戏已恢复（增益卡片可能暂停了游戏）
         if (this.gameManager) {
             const gameState = this.gameManager.getGameState();
-           //console.info(`[EnemySpawner] continueToNextWaves() 当前游戏状态=${gameState}`);
+           console.log(`[EnemySpawner] continueToNextWaves() 当前游戏状态=${gameState}`);
             if (gameState !== GameState.Playing) {
-               //console.info(`[EnemySpawner] continueToNextWaves() 游戏未在运行状态，恢复游戏`);
+               console.log(`[EnemySpawner] continueToNextWaves() 游戏未在运行状态，恢复游戏`);
                 this.gameManager.resumeGame();
             }
         }
@@ -1475,7 +1479,7 @@ export class EnemySpawner extends Component {
             // 如果用户点击，isCountdownActive 已经被设置为 false，但 onPopupClick() 已经调用了 hide()
             // 所以这里只需要检查弹窗是否仍然激活
             if (this.uiManager && this.uiManager.countdownPopup && this.uiManager.countdownPopup.node.active) {
-               //console.info(`[EnemySpawner] continueToNextWaves() 延迟隐藏倒计时弹窗（自动完成或用户已点击）`);
+               console.log(`[EnemySpawner] continueToNextWaves() 延迟隐藏倒计时弹窗（自动完成或用户已点击）`);
                 this.uiManager.hideCountdownPopup();
             }
         }, 0.1);
@@ -1483,7 +1487,7 @@ export class EnemySpawner extends Component {
         // 如果还有下一波，开始下一波
         if (this.currentLevelConfig && this.currentLevelConfig.waves) {
             const totalWaves = this.currentLevelConfig.waves.length;
-           //console.info(`[EnemySpawner] continueToNextWaves() 检查波次，currentWaveIndex=${this.currentWaveIndex}, totalWaves=${totalWaves}, 条件=${this.currentWaveIndex < totalWaves - 1}`);
+           console.log(`[EnemySpawner] continueToNextWaves() 检查波次，currentWaveIndex=${this.currentWaveIndex}, totalWaves=${totalWaves}, 条件=${this.currentWaveIndex < totalWaves - 1}`);
             if (this.currentWaveIndex < totalWaves - 1) {
                //console.info(`[EnemySpawner] 继续下一波，currentWaveIndex: ${this.currentWaveIndex}, 总波数: ${totalWaves}`);
                 // 调用 startNextWave 开始下一波

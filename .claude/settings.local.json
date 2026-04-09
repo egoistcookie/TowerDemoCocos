@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(*)",
+      "Bash(git status)",
+      "Bash(git log)",
+      "Bash(git diff)",
+      "Bash(git add)",
+      "Bash(git commit)",
+      "Bash(git push)",
       "WebSearch",
       "WebFetch(domain:*)",
       "Skill(*)",
@@ -14,7 +19,26 @@
       "AskUserQuestion",
       "TodoWrite",
       "TaskOutput",
-      "TaskStop"
+      "TaskStop",
+      "Bash(python3)",
+      "Bash(py *)",
+      "Bash(py d:/CocosProject/TowerDemoCocos/fix_logs.py)",
+      "Bash(ls *.py)",
+      "Bash(node -e ':*)",
+      "Bash(grep -c \"^[[:space:]]*}$\" \"d:/CocosProject/TowerDemoCocos/assets/scripts/EnemySpawner.ts\")",
+      "Bash(node -e *)",
+      "Bash(sed -i *)",
+      "Bash(wc -l *)",
+      "Bash(grep -n *)",
+      "Bash(head -n *)",
+      "Bash(tail -n *)",
+      "Bash(cat *)",
+      "Bash(echo *)",
+      "Bash(grep -c \"//console.info\" \"d:\\\\CocosProject\\\\TowerDemoCocos\\\\assets\\\\scripts\\\\EnemySpawner.ts\")"
+    ],
+    "deny": [
+      "Bash(git*)",
+      "Edit(.claude/settings.local.json)"
     ],
     "defaultMode": "bypassPermissions",
     "additionalDirectories": [

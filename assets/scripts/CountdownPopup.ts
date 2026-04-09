@@ -326,7 +326,7 @@ export class CountdownPopup extends Component {
      * @param onComplete 倒计时完成回调
      * @param onManualClose 手动关闭回调
      */
-    show(onComplete: () => void, onManualClose: () => void) {
+    show(onComplete: () => void, onManualClose: () => void, durationSeconds: number = 60, skipInitialDelay: boolean = false) {
         //console.info(`[CountdownPopup] show() 被调用，onComplete存在=${!!onComplete}, onManualClose存在=${!!onManualClose}`);
         
         // 取消之前的hide()动画（如果存在）
@@ -347,18 +347,33 @@ export class CountdownPopup extends Component {
         this.onCountdownComplete = onComplete;
         this.onManualClose = onManualClose;
         //console.info(`[CountdownPopup] show() 设置回调后，onManualClose存在=${!!this.onManualClose}`);
-        this.countdownTime = 60;
-        this.initialCountdownTime = 60; // 保存初始倒计时时间
+        this.countdownTime = durationSeconds;
+        this.initialCountdownTime = durationSeconds; // 保存初始倒计时时间
         
         // 确保GameManager已获取
         if (!this.gameManager) {
             this.findGameManager();
         }
         
-        // 初始状态：显示"下一波敌人"文本，不开始倒计时
-        this.isCounting = false;
-        this.isShowingNextWaveText = true;
-        this.nextWaveTextTimer = 0;
+        // 初始状态：根据 skipInitialDelay 决定是否跳过 5 秒延迟
+        if (skipInitialDelay) {
+            // 跳过 5 秒延迟，直接开始倒计时
+            this.isCounting = true;
+            this.isShowingNextWaveText = false;
+            this.nextWaveTextTimer = 0;
+            // 隐藏"下一波敌人"文本，显示倒计时
+            if (this.nextWaveLabel) {
+                this.nextWaveLabel.node.active = false;
+            }
+            if (this.countdownLabel) {
+                this.countdownLabel.node.active = true;
+            }
+        } else {
+            // 显示 5 秒"下一波敌人"文本后再开始倒计时
+            this.isCounting = false;
+            this.isShowingNextWaveText = true;
+            this.nextWaveTextTimer = 0;
+        }
         
         this.node.active = true;
         //console.info(`[CountdownPopup] show() 设置 node.active = true`);
@@ -377,16 +392,26 @@ export class CountdownPopup extends Component {
             //console.info(`[CountdownPopup] show() 设置 siblingIndex = ${maxIndex}`);
         }
         
-        // 显示"下一波敌人"文本，隐藏倒计时
-        if (this.nextWaveLabel) {
-            this.nextWaveLabel.node.active = true;
-            //console.info(`[CountdownPopup] show() 显示 nextWaveLabel`);
-        }
-        if (this.countdownLabel) {
-            this.countdownLabel.node.active = false;
-            //console.info(`[CountdownPopup] show() 隐藏 countdownLabel`);
-        }
         
+        // 根据 skipInitialDelay 决定显示什么
+        if (skipInitialDelay) {
+            // 直接显示倒计时，隐藏"下一波敌人"文本
+            if (this.nextWaveLabel) {
+                this.nextWaveLabel.node.active = false;
+            }
+            if (this.countdownLabel) {
+                this.countdownLabel.node.active = true;
+            }
+        } else {
+            // 显示"下一波敌人"文本，隐藏倒计时
+            if (this.nextWaveLabel) {
+                this.nextWaveLabel.node.active = true;
+            }
+            if (this.countdownLabel) {
+                this.countdownLabel.node.active = false;
+            }
+        }
+
         //console.info(`[CountdownPopup] show() 完成，node.active=${this.node.active}, isShowingNextWaveText=${this.isShowingNextWaveText}, isCounting=${this.isCounting}`);
     }
 
@@ -544,7 +569,7 @@ export class CountdownPopup extends Component {
             this.nextWaveTextTimer += deltaTime;
             
             // 显示5秒后，切换到倒计时
-            if (this.nextWaveTextTimer >= 5) {
+            if (this.nextWaveTextTimer >= 2) {
                 //console.info(`[CountdownPopup] update() 5秒后切换到倒计时，node.active=${this.node.active}`);
                 
                 // 隐藏"下一波敌人"文本，显示倒计时
