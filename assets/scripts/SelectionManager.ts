@@ -283,11 +283,11 @@ export class SelectionManager extends Component {
 
         // 检查是否有选中的单位（防御塔、女猎手或精灵剑士）
         const hasSelectedUnits = this.selectedTowers.length > 0 || this.selectedHunters.length > 0 || this.selectedSwordsmen.length > 0 || this.selectedPriests.length > 0 || this.selectedMages.length > 0;
-        
+
         // 优先检查是否在建造模式下（如果是，且没有选中单位，完全不处理，让建造系统处理）
         const buildingMode = this.isBuildingMode();
         const draggingBuilding = this.isDraggingBuilding();
-        
+
         if ((buildingMode || draggingBuilding) && !hasSelectedUnits) {
             // 如果正在选择，清除选择状态
             if (this.isSelecting) {
@@ -1132,7 +1132,7 @@ export class SelectionManager extends Component {
 
             // 检查点击位置是否在建筑物占地区域内
             const clickedBuilding = this.findBuildingAtPosition(worldPos);
-            
+
             // 检查当前选中的单位
             
             // 计算分散位置（包括防御单位、女猎手、精灵剑士和牧师）

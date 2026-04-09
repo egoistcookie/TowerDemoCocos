@@ -37,14 +37,11 @@ export class UnitSelectionManager extends Component {
      * 全局触摸结束事件处理
      */
     onGlobalTouchEnd(event: EventTouch) {
-        console.log('[UnitSelectionManager] onGlobalTouchEnd called, event.propagationStopped:', event.propagationStopped);
-
         // 检查点击的是否是建筑物，如果是建筑物则跳过清除选择
         const targetNode = event.target as Node;
         if (targetNode) {
             const building = targetNode.getComponent(Build);
             if (building) {
-                console.log('[UnitSelectionManager] onGlobalTouchEnd: 点击的是建筑物，跳过清除选择');
                 return;
             }
         }
@@ -197,7 +194,6 @@ export class UnitSelectionManager extends Component {
 
         // 显示单位信息面板
         if (this.unitInfoPanel) {
-            console.log('[UnitSelectionManager] 调用 showUnitInfo');
             this.unitInfoPanel.showUnitInfo(unitInfo);
         }
 
