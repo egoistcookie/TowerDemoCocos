@@ -186,6 +186,10 @@ export class Role extends Component {
     // 出场后自动前移（若未设置集结点/未收到手动移动命令）
     private autoRoamScheduled: boolean = false;
     private autoRoamCallback: (() => void) | null = null;
+
+    // 出生 5 秒内是否被手动控制过（如果是，则取消自动上移）
+    private wasManuallyControlledAtSpawn: boolean = false;
+    private timeSinceSpawn: number = 0; // 出生后经过的时间（秒）
     
     // 性能优化：碰撞检测频率控制
     protected collisionCheckTimer: number = 0; // 碰撞检测计时器
@@ -991,10 +995,15 @@ export class Role extends Component {
     update(deltaTime: number) {
         // 性能监控：开始计时
         // const updateStartTime = PerformanceMonitor.startTiming('Role.update');
-        
+
         if (this.isDestroyed) {
             // PerformanceMonitor.endTiming('Role.update', updateStartTime, 5);
             return;
+        }
+
+        // 更新出生后经过的时间（用于 5 秒内手动控制检测）
+        if (this.timeSinceSpawn < 5.0) {
+            this.timeSinceSpawn += deltaTime;
         }
         
         // 更新蓝量（每秒回复）
@@ -3802,7 +3811,11 @@ export class Role extends Component {
         this.isManuallyControlled = false;
         this.isDefending = false; // 重置防御状态
         this.hasFoundFirstTarget = false;
-        
+
+        // 重置出生控制标志（用于 5 秒内手动控制检测）
+        this.wasManuallyControlledAtSpawn = false;
+        this.timeSinceSpawn = 0;
+
         // 重置智能避让系统
         this.lastPosition.set(this.node.worldPosition);
         this.cachedAvoidDirection.set(0, 0, 0);
@@ -3926,6 +3939,10 @@ export class Role extends Component {
                     if (!this.node || !this.node.isValid || this.isDestroyed) {
                         return;
                     }
+                    // 若在出生后 5 秒内被手动控制过，则取消自动上移
+                    if (this.wasManuallyControlledAtSpawn) {
+                        return;
+                    }
                     // 若在6秒内已经被下达了移动/集结指令（manualMoveTarget 有值或被标记为手动控制），则不干预
                     if (this.manualMoveTarget || this.isManuallyControlled) {
                         return;
@@ -3987,6 +4004,20 @@ export class Role extends Component {
     }
 
     protected onTowerClick(event: EventTouch) {
+        // 在检查选中区域之前，先保存当前的选中状态
+        // 这样可以在"不在选中区域内"时，知道是哪一个单位被选中了
+        let previouslySelectedUnit: Node | null = null;
+        let previouslySelectedUnits: Node[] = [];
+        if (this.unitSelectionManager) {
+            previouslySelectedUnit = this.unitSelectionManager.getCurrentSelectedUnit();
+            previouslySelectedUnits = [...(this.unitSelectionManager as any).currentSelectedUnits || []];
+            // 过滤掉当前单位，看看是否有其他单位被选中
+            if (previouslySelectedUnit === this.node) {
+                previouslySelectedUnit = null;
+            }
+            previouslySelectedUnits = previouslySelectedUnits.filter(node => node !== this.node);
+        }
+
         // 如果游戏已结束，不显示信息面板
         if (this.gameManager && this.gameManager.getGameState() !== GameState.Playing) {
             return;
@@ -4000,11 +4031,30 @@ export class Role extends Component {
             return;
         }
 
-        // 首次选中：检查点击是否在 2 倍宽 3 倍高的选中区域内
+        // 首次选中：检查点击是否在 1.5 倍宽 3 倍高的选中区域内
         const camera = this.cachedCamera;
         if (camera) {
             const touchPos = this.tempVec3_1.set(touchLocation.x, touchLocation.y, 0);
             if (!this.isPointInSelectionArea(touchPos, camera)) {
+                // 检查是否有其他单位被选中（说明用户想控制已选中的单位移动）
+                if (previouslySelectedUnit) {
+                    // 获取之前选中的单位组件，设置移动目标
+                    const prevUnitRole = previouslySelectedUnit.getComponent('Role') as any;
+                    if (prevUnitRole && prevUnitRole.setManualMoveTargetPosition) {
+                        // 将屏幕坐标转换为世界坐标
+                        const screenPos = new Vec3(touchLocation.x, touchLocation.y, 0);
+                        const worldPos = new Vec3();
+                        camera.screenToWorld(screenPos, worldPos);
+                        worldPos.z = 0;
+                        prevUnitRole.setManualMoveTargetPosition(worldPos);
+                    }
+                    // 不阻止事件冒泡，让 SelectionManager 也能处理（清除选择状态）
+                    return;
+                }
+                if (previouslySelectedUnits.length > 0) {
+                    // 不阻止事件冒泡，让 SelectionManager 的 globalTouchHandler 处理移动
+                    return;
+                }
                 return;
             }
         }
@@ -4081,7 +4131,6 @@ export class Role extends Component {
                         const currentSelectedUnit = this.unitSelectionManager.getCurrentSelectedUnit();
                         const isSelected = this.unitSelectionManager.isUnitSelected(this.node);
 
-
                         // 如果选中了其他单位（不是当前单位），移除监听器
                         if (currentSelectedUnit !== null && currentSelectedUnit !== this.node) {
                             const canvas = find('Canvas');
@@ -4095,7 +4144,6 @@ export class Role extends Component {
                         // 如果当前单位未被选中，也不执行移动操作
                         // 或者如果没有任何选中（currentSelectedUnit为null），也不执行移动操作
                         if (!isSelected || currentSelectedUnit === null) {
-                            // 移除监听器，因为单位已不再被选中
                             const canvas = find('Canvas');
                             if (canvas && this.globalTouchHandler) {
                                 canvas.off(Node.EventType.TOUCH_END, this.globalTouchHandler, this);
@@ -4146,11 +4194,16 @@ export class Role extends Component {
     setManualMoveTargetPosition(worldPos: Vec3) {
         // 智能调整目标位置，避免与单位重叠
         const adjustedPos = this.findAvailableMovePosition(worldPos);
-        
+
         // 设置手动移动目标
         this.manualMoveTarget = adjustedPos.clone();
         this.isManuallyControlled = true;
-        
+
+        // 如果在出生后 5 秒内被手动控制，标记为已手动控制过（取消自动上移）
+        if (this.timeSinceSpawn < 5.0) {
+            this.wasManuallyControlledAtSpawn = true;
+        }
+
         // 清除当前自动寻敌目标，优先执行手动移动
         this.currentTarget = null!;
     }
@@ -4185,7 +4238,7 @@ export class Role extends Component {
     }
 
     /**
-     * 检查点是否在单位选中区域内（2 倍宽 3 倍高矩形区域）
+     * 检查点是否在单位选中区域内（1.5 倍宽 3 倍高矩形区域）
      * @param touchLocation 触摸位置（屏幕坐标）
      * @param camera 相机组件
      * @returns 是否在选中区域内
@@ -4201,8 +4254,8 @@ export class Role extends Component {
         camera.worldToScreen(testWorldPos, testScreenPos);
         const collisionRadiusScreen = Math.abs(testScreenPos.x - unitScreenPos.x);
 
-        // 选中区域：宽度 = 2 * 碰撞半径，高度 = 3 * 碰撞半径
-        const selectionHalfWidth = collisionRadiusScreen * 2;
+        // 选中区域：宽度 = 1.5 * 碰撞半径，高度 = 3 * 碰撞半径
+        const selectionHalfWidth = collisionRadiusScreen * 1.5;
         const selectionHalfHeight = collisionRadiusScreen * 3;
 
         const dx = Math.abs(touchLocation.x - unitScreenPos.x);
@@ -4211,7 +4264,7 @@ export class Role extends Component {
         return dx <= selectionHalfWidth && dy <= selectionHalfHeight;
     }
 
-    setManualMoveTarget(event: EventTouch) {
+    setManualMoveTarget(event: EventTouch, shouldPropagate = false) {
         // 获取触摸位置
         const touchLocation = event.getLocation();
 
@@ -4226,8 +4279,10 @@ export class Role extends Component {
             }
         }
 
-        // 阻止事件冒泡，避免触发其他点击事件
-        event.propagationStopped = true;
+        // 阻止事件冒泡，避免触发其他点击事件（除非 shouldPropagate 为 true）
+        if (!shouldPropagate) {
+            event.propagationStopped = true;
+        }
 
         // 使用缓存的 Camera（已在 start 中初始化）
         if (!this.cachedCamera) {
