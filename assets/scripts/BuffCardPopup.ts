@@ -1084,7 +1084,7 @@ export class BuffCardPopup extends Component {
         
         const cardData = this.cardData[index];
 
-        // 埋点：记录操作 + 实时上报选卡（首次选卡会创建会话记录，后续只更新选卡信息表）
+        // 埋点：记录操作 + 实时上报选卡（上报 3 张卡片，选中的那张标记 selected=true）
         try {
             const analytics = AnalyticsManager.getInstance();
             const gameTime = this.gameManager && this.gameManager.getGameTime ? this.gameManager.getGameTime() : 0;
@@ -1097,14 +1097,16 @@ export class BuffCardPopup extends Component {
                 buffValue: cardData.buffValue
             });
 
-            const item: CardSelectionItem = {
-                unitId: cardData.unitId,
-                rarity: cardData.rarity,
-                buffType: cardData.buffType,
-                buffValue: cardData.buffValue
-            };
+            // 上报 3 张卡片，选中的那张标记 selected=true（用于出率统计 + 玩家选择分析）
+            const allCards: CardSelectionItem[] = this.cardData.map((c, idx) => ({
+                unitId: c.unitId,
+                rarity: c.rarity,
+                buffType: c.buffType,
+                buffValue: c.buffValue,
+                selected: idx === index
+            }));
             // 异步实时上报，不阻塞游戏流程
-            analytics.reportCardSelection('single', [item], gameTime);
+            analytics.reportCardSelection('single', allCards, gameTime);
         } catch (e) {
             // 忽略埋点异常，不影响游戏流程
         }

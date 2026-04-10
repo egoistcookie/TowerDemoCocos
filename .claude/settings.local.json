@@ -34,7 +34,9 @@
       "Bash(tail -n *)",
       "Bash(cat *)",
       "Bash(echo *)",
-      "Bash(grep -c \"//console.info\" \"d:\\\\CocosProject\\\\TowerDemoCocos\\\\assets\\\\scripts\\\\EnemySpawner.ts\")"
+      "Bash(grep -c \"//console.info\" \"d:\\\\CocosProject\\\\TowerDemoCocos\\\\assets\\\\scripts\\\\EnemySpawner.ts\")",
+      "Bash(mysql -h www.egoistcookie.top -u root -ptowerdefense123. tower_defense_analytics -e ':*)",
+      "Bash(mysql *)"
     ],
     "deny": [
       "Bash(git*)",

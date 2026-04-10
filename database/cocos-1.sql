@@ -27,6 +27,9 @@ select * from card_selection_events  order by created_at desc ;
 select * from card_selection_events where DATE(created_at) = CURDATE()
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1775652153130_8335',
 'player_1772722064044_978','player_1772465771074_4106') order by created_at desc ;
+select * from card_selection_events where DATE(created_at) = CURDATE()
+ and player_id  in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1775652153130_8335',
+'player_1772722064044_978','player_1772465771074_4106') order by created_at desc ;
 --统计每天有多少UR
 select * from card_selection_events where DATE(created_at) = CURDATE()-1
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')  order by created_at desc ;
@@ -43,6 +46,8 @@ left join player_statistics ps on a.player_id =ps.player_id
 where a.selection_mode  in ('get_all','reroll') 
  and a.player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')
  group by DATE(a.created_at),a.player_id,ps.created_at order by DATE(created_at) desc ;
+
+select * from play;
 
 select * from player_statistics where player_id='player_1774974647317_9849';
 --统计每天有多少次抽卡
@@ -81,6 +86,8 @@ select * from level_difficulty_analysis;
 select * from player_kill_rank pkr ;
 
 
+select * from operation_statistics os where player_id  in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1775652153130_8335',
+,'player_1772722064044_978','player_1772465771074_4106') order by created_at desc;
 --统计：没有建造任何东西的玩家 2个 ： player_1772528465464_6650 和 player_1772530812536_2652
 select * from operation_statistics os where player_id not in (
 select player_id from operation_statistics os  where 

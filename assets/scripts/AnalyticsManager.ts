@@ -67,6 +67,7 @@ export interface CardSelectionItem {
     rarity?: string;
     buffType?: string;
     buffValue?: number;
+    selected?: boolean; // 标记是否被玩家选中（仅 single 模式）
 }
 
 /**
