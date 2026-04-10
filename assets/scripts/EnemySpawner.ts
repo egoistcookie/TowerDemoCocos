@@ -1276,6 +1276,19 @@ export class EnemySpawner extends Component {
 
         const waveNumber = this.currentWaveIndex + 1;
 
+        // 最后一波：立即显示增益卡片（不等待）
+        if (isLastWave) {
+            console.log(`[EnemySpawner] 第${waveNumber}波完成（最后一波），立即显示增益卡片`);
+            if (this.gameManager) {
+                this.gameManager.showBuffCards(() => {
+                    this.continueToNextWaves();
+                });
+            } else {
+                this.continueToNextWaves();
+            }
+            return;
+        }
+
         // 第 2、4、6、8 波：显示 10 秒倒计时（可手动关闭），倒计时结束后显示增益卡片
         const is10SecondPause = waveNumber === 2 || waveNumber === 4 || waveNumber === 6 || waveNumber === 8;
 
@@ -1284,6 +1297,8 @@ export class EnemySpawner extends Component {
         if (is10SecondPause) {
             // 显示 10 秒倒计时弹窗（右上角可点击，立即开始倒计时）
             console.log(`[EnemySpawner] 第${waveNumber}波完成，显示 10 秒倒计时弹窗`);
+            // 设置倒计时激活标志，防止 updateWave() 提前开始下一波
+            this.isCountdownActive = true;
             if (this.uiManager) {
                 this.uiManager.showCountdownPopup(
                     () => {
@@ -1324,21 +1339,6 @@ export class EnemySpawner extends Component {
                         this.continueToNextWaves();
                     }
                 }, 10);
-            }
-            return;
-        }
-
-        // 第 10 波：等待 5 秒后显示增益卡片
-        if (waveNumber === 10) {
-            console.log(`[EnemySpawner] 第${waveNumber}波完成，等待 5 秒后显示增益卡片`);
-            if (this.gameManager) {
-                this.scheduleOnce(() => {
-                    this.gameManager.showBuffCards(() => {
-                        this.continueToNextWaves();
-                    });
-                }, 5);
-            } else {
-                this.continueToNextWaves();
             }
             return;
         }

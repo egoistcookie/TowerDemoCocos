@@ -575,18 +575,23 @@ export class Role extends Component {
         // 血条/蓝条需要根据角色朝向翻转
         const overheadScaleX = this.node.scale.x < 0 ? -1 : 1;
 
+        // 第三段待机动画拉宽 50% 时，对血条/对话框做反向补偿，保持它们宽度不变
+        const isWideIdle = this.currentIdleAnimationSegmentIndex === 2 && this.isPlayingIdleAnimation;
+        const wideIdleCompensationX = isWideIdle ? 1 / 1.5 : 1;
+
         // 血条/蓝条需要根据角色朝向翻转
         if (this.healthBarNode && this.healthBarNode.isValid) {
-            this.healthBarNode.setScale(overheadScaleX, 1, 1);
+            this.healthBarNode.setScale(overheadScaleX * wideIdleCompensationX, 1, 1);
         }
         // 蓝条和血条保持一致的朝向
         if (this.manaBarNode && this.manaBarNode.isValid) {
-            this.manaBarNode.setScale(overheadScaleX, 1, 1);
+            this.manaBarNode.setScale(overheadScaleX * wideIdleCompensationX, 1, 1);
         }
-        
+
         // 对话框保持固定朝向：文字始终从左往右显示，不跟随角色翻转
+        // 第三段待机动画拉宽时，做反向补偿
         if (this.dialogNode && this.dialogNode.isValid) {
-            this.dialogNode.setScale(1, 1, 1);
+            this.dialogNode.setScale(wideIdleCompensationX, 1, 1);
         }
     }
 
@@ -2922,6 +2927,19 @@ export class Role extends Component {
             this.triggerIdleSlogan();
         }
 
+        // 保存原始缩放（如果尚未保存）
+        if (!this.idleAnimationOriginalScale) {
+            this.idleAnimationOriginalScale = this.node.getScale().clone();
+        }
+
+        // 第三段待机动画：应用拉宽 50% 效果
+        if (selectedIndex === 2) {
+            // 应用拉宽 50% 效果（只修改 X 轴缩放）
+            const targetScaleX = this.idleAnimationOriginalScale.x * 1.5;
+            this.node.setScale(targetScaleX, this.idleAnimationOriginalScale.y, this.idleAnimationOriginalScale.z);
+            // 血条/对话框反向补偿，保持它们宽度不变
+            this.refreshOverheadNodesScale();
+        }
 
         const frames = validFrames;
         const frameCount = frames.length;
@@ -2959,10 +2977,14 @@ export class Role extends Component {
                     this.sprite.spriteFrame = lastFrame;
                 }
 
-                // 停止动画更新，等待静止时间
+                // 停止动画更新
                 this.isPlayingIdleAnimation = false;
                 this.unschedule(animationUpdate);
-                // 如果是第三段动画播放完成，立即恢复原始缩放
+
+                // 第三段动画播放完成，立即恢复原始缩放
+                if (selectedIndex === 2) {
+                    this.restoreIdleAnimationSettings();
+                }
 
                 // 随机等待 2-5 秒后播放下一段待机动画
                 const waitTime = 2 + Math.random() * 3;
@@ -3074,6 +3096,8 @@ export class Role extends Component {
         }
 
         this.refreshOverheadNodesScale();
+        // 重置待机播放标志
+        this.isPlayingIdleAnimation = false;
         // 清除所有保存的设置
         this.idleAnimationOriginalSizeMode = null;
         this.idleAnimationOriginalSize = null;
