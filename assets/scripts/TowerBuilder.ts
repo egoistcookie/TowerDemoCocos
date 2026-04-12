@@ -812,7 +812,7 @@ export class TowerBuilder extends Component {
      * 触摸开始事件（检测建筑物点击，开始长按检测）
      */
     onTouchStart(event: EventTouch) {
-        console.log('[TowerBuilder] onTouchStart called');
+          //console.log('[TowerBuilder] onTouchStart called');
         // 如果正在建造模式，不处理拖拽
         if (this.isBuildingMode) {
             return;
@@ -1149,7 +1149,7 @@ export class TowerBuilder extends Component {
     }
 
     onTouchEnd(event: EventTouch) {
-        console.log('[TowerBuilder] onTouchEnd called, isLongPressActive:', this.isLongPressActive, 'longPressBuilding:', this.longPressBuilding?.name);
+          //console.log('[TowerBuilder] onTouchEnd called, isLongPressActive:', this.isLongPressActive, 'longPressBuilding:', this.longPressBuilding?.name);
         const location = event.getLocation();
         const targetNode = event.target as Node;
 
@@ -1185,7 +1185,7 @@ export class TowerBuilder extends Component {
             const currentTime = Date.now();
             const elapsedTime = this.longPressStartTime > 0 ? (currentTime - this.longPressStartTime) / 1000 : 0;
 
-            console.log('[TowerBuilder] onTouchEnd: 单击建筑物，打开信息面板', this.longPressBuilding.name, 'elapsedTime:', elapsedTime);
+              //console.log('[TowerBuilder] onTouchEnd: 单击建筑物，打开信息面板', this.longPressBuilding.name, 'elapsedTime:', elapsedTime);
 
             // 先清除长按检测状态，避免定时器继续运行
             const building = this.longPressBuilding;
@@ -1202,7 +1202,7 @@ export class TowerBuilder extends Component {
             if (building && building.isValid) {
                 // 先标记建筑物正在显示信息面板，防止 onBuildingClick 执行
                 (building as any)._showingInfoPanel = true;
-                console.log('[TowerBuilder] 准备打开信息面板，已设置 _showingInfoPanel 标志');
+                  //console.log('[TowerBuilder] 准备打开信息面板，已设置 _showingInfoPanel 标志');
 
                 this.showBuildingInfoPanel(building);
 
@@ -1210,7 +1210,7 @@ export class TowerBuilder extends Component {
                 this.scheduleOnce(() => {
                     if (building && building.isValid) {
                         (building as any)._showingInfoPanel = false;
-                        console.log('[TowerBuilder] 清除 _showingInfoPanel 标志');
+                          //console.log('[TowerBuilder] 清除 _showingInfoPanel 标志');
                     }
                 }, 0.5); // 延长到 0.5 秒，确保面板完全显示
             }
@@ -3002,7 +3002,7 @@ export class TowerBuilder extends Component {
         // 使用 scheduleOnce 在 0.5 秒后显示读条指示器
         this.scheduleOnce(() => {
             if (this.isLongPressActive && this.longPressBuilding === building) {
-                console.log('[TowerBuilder] 长按超过 0.5 秒，显示读条指示器');
+                  //console.log('[TowerBuilder] 长按超过 0.5 秒，显示读条指示器');
                 this.showLongPressIndicator(building);
             }
         }, 0.5);
@@ -3069,7 +3069,7 @@ export class TowerBuilder extends Component {
      * 显示建筑物信息面板
      */
     showBuildingInfoPanel(building: Node) {
-        console.log('[TowerBuilder] showBuildingInfoPanel called, building:', building.name, 'isValid:', building.isValid);
+          //console.log('[TowerBuilder] showBuildingInfoPanel called, building:', building.name, 'isValid:', building.isValid);
         if (!building || !building.isValid) {
             return;
         }
@@ -3083,7 +3083,7 @@ export class TowerBuilder extends Component {
 
         // 根据建筑物类型调用对应的showSelectionPanel方法
         const warAncientTree = building.getComponent(WarAncientTree);
-        console.log('[TowerBuilder] 获取 WarAncientTree 组件，结果:', warAncientTree != null);
+          //console.log('[TowerBuilder] 获取 WarAncientTree 组件，结果:', warAncientTree != null);
         if (warAncientTree && warAncientTree.showSelectionPanel) {
             warAncientTree.showSelectionPanel();
             return;

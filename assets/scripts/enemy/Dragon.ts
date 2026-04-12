@@ -27,7 +27,7 @@ export class Dragon extends Enemy {
     attackDamage: number = 15;
     attackInterval: number = 2.0;
     attackRange: number = 200; // 攻击范围200像素
-    collisionRadius: number = 25;
+    collisionRadius: number = 2;
     unitName: string = "飞龙";
     unitDescription: string = "强大的飞龙，能够飞行并释放火球攻击。";
     goldReward: number = 10;

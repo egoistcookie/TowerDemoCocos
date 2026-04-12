@@ -18,6 +18,22 @@ import { UnitConfigManager } from '../UnitConfigManager';
 // import { PerformanceMonitor } from './PerformanceMonitor';
 const { ccclass, property } = _decorator;
 
+// ============================================================================
+// 性能优化：预计算避让角度的 sin/cos 值，避免每帧重复计算三角函数
+// 优化前：每帧计算 8-20 次 Math.cos/sin（每次避让尝试都计算）
+// 优化后：文件加载时计算一次，之后查表
+// ============================================================================
+const OFFSET_ANGLES = [60, -60, 90, -90, 120, -120, 150, -150, 30, -30];
+const OFFSET_COS: number[] = [];
+const OFFSET_SIN: number[] = [];
+(function() {
+    for (const angle of OFFSET_ANGLES) {
+        const rad = angle * Math.PI / 180;
+        OFFSET_COS.push(Math.cos(rad));
+        OFFSET_SIN.push(Math.sin(rad));
+    }
+})();
+
 @ccclass('Role')
 export class Role extends Component {
     @property
@@ -194,11 +210,14 @@ export class Role extends Component {
     protected collisionCheckTimer: number = 0; // 碰撞检测计时器
     protected readonly COLLISION_CHECK_INTERVAL: number = 0.05; // 碰撞检测间隔（秒），每0.05秒检测一次
     protected lastCollisionResult: boolean = false; // 上次碰撞检测结果
+    protected moveLogTimer: number = 0; // 移动日志计时器
+    protected readonly MOVE_LOG_INTERVAL: number = 1.0; // 移动日志间隔（秒）
     
     // 性能优化：复用Vec3对象，避免频繁创建
     protected tempVec3_1: Vec3 = new Vec3();
     protected tempVec3_2: Vec3 = new Vec3();
     protected tempVec3_3: Vec3 = new Vec3();
+    protected tempColor: Color = new Color(); // 临时颜色对象，避免 clone 创建
 
     // 性能优化：缓存 Camera 引用，避免重复查找（添加于 2026/04/08）
     protected cachedCamera: Camera | null = null;
@@ -221,10 +240,18 @@ export class Role extends Component {
     protected lastPosition: Vec3 = new Vec3(); // 上一帧的位置
     protected isStuck: boolean = false; // 是否卡住
     protected waitTimer: number = 0; // 等待计时器
+    protected lastHitDirection: Vec3 = new Vec3(); // 预创建，避免 takeDamage 中条件判断创建
     protected readonly WAIT_DURATION: number = 0.2; // 卡住后等待时间（秒）
+
+    // 调试：位置突变检测
+    private lastLogPos: { x: number; y: number } | null = null;
     
     // 对象池相关：预制体名称（用于对象池回收）
     public prefabName: string = ""; // 默认值，子类可以重写
+
+    // 单位唯一 ID（用于日志追踪）
+    public unitId: number = 0;
+    private static nextUnitId: number = 1; // 静态计数器，每次创建单位时递增
 
     // 对话框相关属性
     @property({ type: [CCString], tooltip: "战斗口号数组，每种单位可以配置自己的战斗口号" })
@@ -356,7 +383,10 @@ export class Role extends Component {
         // 性能优化：缓存 Camera 引用，避免重复查找（添加于 2026/04/08）
         const cameraNode = find('Canvas/Camera') || this.node.scene?.getChildByName('Camera');
         this.cachedCamera = cameraNode?.getComponent(Camera) || null;
-        
+
+        // 分配唯一 ID
+        this.unitId = Role.nextUnitId++;
+
         // 注意：不在 start() 中应用增幅，统一在 onEnable() 中处理
         // 这样可以确保首次创建和对象池复用时的行为一致
     }
@@ -385,7 +415,7 @@ export class Role extends Component {
             return;
         }
         
-        console.warn('[Role性能优化] 开始初始化节点缓存...');
+      //console.logwarn('[Role性能优化] 开始初始化节点缓存...');
         
         // 缓存常用节点
         Role.cachedCrystalNode = find('Crystal');
@@ -398,15 +428,15 @@ export class Role extends Component {
         
         Role.cacheInitialized = true;
         
-        console.warn('[Role性能优化] 节点缓存初始化完成:', {
-            crystal: !!Role.cachedCrystalNode,
-            towers: !!Role.cachedTowersNode,
-            hunters: !!Role.cachedHuntersNode,
-            mages: !!Role.cachedMagesNode,
-            elfSwordsmans: !!Role.cachedElfSwordsmansNode,
-            enemies: !!Role.cachedEnemiesNode,
-            minotaurWarriors: !!Role.cachedMinotaurWarriorsNode
-        });
+        // console.warn('[Role性能优化] 节点缓存初始化完成:', {
+        //     crystal: !!Role.cachedCrystalNode,
+        //     towers: !!Role.cachedTowersNode,
+        //     hunters: !!Role.cachedHuntersNode,
+        //     mages: !!Role.cachedMagesNode,
+        //     elfSwordsmans: !!Role.cachedElfSwordsmansNode,
+        //     enemies: !!Role.cachedEnemiesNode,
+        //     minotaurWarriors: !!Role.cachedMinotaurWarriorsNode
+        // });
     }
 
     /**
@@ -424,7 +454,7 @@ export class Role extends Component {
         }
         
         // 如果找不到，记录警告但不递归查找
-        console.warn('[Role性能优化] 未找到 UnitSelectionManager 节点');
+        //console.warn('[Role性能优化] 未找到 UnitSelectionManager 节点');
     }
 
     initAttackAnimation() {
@@ -571,7 +601,11 @@ export class Role extends Component {
      * - 血条/蓝条根据角色朝向翻转
      * - 对话框保持固定朝向，文字始终从左往右显示
      */
-    private refreshOverheadNodesScale() {
+    /**
+     * 更新血条/蓝条/对话框的缩放，使其跟随角色翻转
+     * 第三段待机动画拉宽时，对血条/蓝条/对话框做反向补偿，保持它们宽度不变
+     */
+    protected refreshOverheadNodesScale() {
         // 血条/蓝条需要根据角色朝向翻转
         const overheadScaleX = this.node.scale.x < 0 ? -1 : 1;
 
@@ -634,7 +668,7 @@ export class Role extends Component {
         this.ensureDialogRenderOrder(true);
 
         // 初始位置：跟随单位头顶（世界坐标）
-        const startPos = this.node.worldPosition.clone();
+        const startPos = this.tempVec3_1.set(this.node.worldPosition);
         startPos.y += 50;
         this.dialogNode.setWorldPosition(startPos);
         // 根据当前单位的朝向设置对话框scale，并在第三段待机拉宽时做反向补偿
@@ -693,13 +727,13 @@ export class Role extends Component {
             const dialog = this.dialogNode;
             if (!dialog || !dialog.isValid) return;
             const dParent = dialog.parent;
-            console.log(
-                `[Role.dialog.index][${tag}] dialog=${dialog.name}, parent=${dParent ? dParent.name : 'null'}, index=${dialog.getSiblingIndex()}`
-            );
+            // console.log(
+            //     `[Role.dialog.index][${tag}] dialog=${dialog.name}, parent=${dParent ? dParent.name : 'null'}, index=${dialog.getSiblingIndex()}`
+            // );
 
             const canvas = find('Canvas');
             if (!canvas || !canvas.isValid) {
-                console.log(`[Role.dialog.index][${tag}] Canvas not found`);
+                // console.log(`[Role.dialog.index][${tag}] Canvas not found`);
                 return;
             }
 
@@ -716,14 +750,6 @@ export class Role extends Component {
                 if (!hasStoneWallComp && !nameLikeStoneWall) continue;
 
                 hitCount++;
-                const p = n.parent;
-                console.log(
-                    `[Role.dialog.index][${tag}] stoneWall#${hitCount} node=${n.name}, parent=${p ? p.name : 'null'}, index=${n.getSiblingIndex()}`
-                );
-            }
-
-            if (hitCount === 0) {
-                console.log(`[Role.dialog.index][${tag}] no StoneWall nodes found under Canvas`);
             }
         } catch (e) {
             console.warn('[Role.dialog.index] log failed:', e);
@@ -914,7 +940,7 @@ export class Role extends Component {
 
         // 更新对话框位置（跟随单位，保持在血条上方）
         // 对话框挂在 Canvas 下，因此必须用 worldPosition 每帧同步。
-        const pos = this.node.worldPosition.clone();
+        const pos = this.tempVec3_1.set(this.node.worldPosition);
         pos.y += 50;
         this.dialogNode.setWorldPosition(pos);
 
@@ -991,7 +1017,7 @@ export class Role extends Component {
         
         // 如果找不到，记录警告但不递归查找（只在第一次警告）
         if (!Role.cachedGameManagerWarned) {
-            console.warn('[Role性能优化] 未找到 GameManager 节点，请确保 GameManager 在场景中');
+            //console.warn('[Role性能优化] 未找到 GameManager 节点，请确保 GameManager 在场景中');
             Role.cachedGameManagerWarned = true;
         }
     }
@@ -1030,7 +1056,7 @@ export class Role extends Component {
                //console.log(`[Role性能优化] 单位数量统计 - 敌人: ${enemyCount}, 我方: ${roleCount}, 使用UnitManager: 是`);
             } else {
                 // 降级方案：使用缓存节点（避免 find() 调用）
-                console.warn('[Role性能优化] UnitManager未初始化，使用缓存节点统计');
+                // console.warn('[Role性能优化] UnitManager未初始化，使用缓存节点统计');
                 const enemiesNode = Role.cachedEnemiesNode;
                 if (enemiesNode) {
                     enemyCount = enemiesNode.children.filter(node => node && node.isValid && node.active).length;
@@ -1140,7 +1166,7 @@ export class Role extends Component {
             const distanceSq = dx * dx + dy * dy;
             const arrivalThreshold = 10; // 到达阈值（像素）
             const arrivalThresholdSq = arrivalThreshold * arrivalThreshold;
-            
+
             if (distanceSq <= arrivalThresholdSq) {
                 // 到达手动移动目标，清除手动目标
                 this.manualMoveTarget = null!;
@@ -1173,16 +1199,36 @@ export class Role extends Component {
         }
 
         // 无论是否移动，都要检查碰撞（防止重叠）
-        const currentPos = this.node.worldPosition.clone();
-        const hasCollisionNow = this.checkCollisionAtPosition(currentPos);
+        // 使用局部变量存储坐标值，避免与 checkCollisionAndAdjust 中的 tempVec3 冲突
+        const currentPosX = this.node.worldPosition.x;
+        const currentPosY = this.node.worldPosition.y;
+
+        // 调试日志：检测位置突变
+        if (this.lastLogPos) {
+            const dx = currentPosX - this.lastLogPos.x;
+            const dy = currentPosY - this.lastLogPos.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > 50) {
+                console.warn(`[位置突变检测] ${this.unitName} (ID:${this.unitId}), 上帧=(${this.lastLogPos.x.toFixed(1)},${this.lastLogPos.y.toFixed(1)}), 本帧=(${currentPosX.toFixed(1)},${currentPosY.toFixed(1)}), 突变距离=${dist.toFixed(1)}`);
+            }
+        }
+        this.lastLogPos = { x: currentPosX, y: currentPosY };
+
+        const hasCollisionNow = this.checkCollisionAtPosition(this.tempVec3_3.set(currentPosX, currentPosY, 0));
         if (hasCollisionNow) {
             // 即使不移动，如果有碰撞也要推开
-            const pushDirection = this.calculatePushAwayDirection(currentPos);
+            const pushDirection = this.calculatePushAwayDirection(this.tempVec3_2.set(currentPosX, currentPosY, 0));
             if (pushDirection.length() > 0.1) {
                 const pushDistance = this.moveSpeed * deltaTime * 1.5;
-                const pushPos = new Vec3();
-                Vec3.scaleAndAdd(pushPos, currentPos, pushDirection, pushDistance);
-                const finalPushPos = this.checkCollisionAndAdjust(currentPos, pushPos);
+                // 计算推开目标位置（使用局部变量存储值，避免引用冲突）
+                const targetPushX = currentPosX + pushDirection.x * pushDistance;
+                const targetPushY = currentPosY + pushDirection.y * pushDistance;
+                const targetPushPos = this.tempVec3_1.set(targetPushX, targetPushY, 0);
+
+                const finalPushPos = this.checkCollisionAndAdjust(this.tempVec3_3.set(currentPosX, currentPosY, 0), targetPushPos);
+                if (finalPushPos.x < 50 && finalPushPos.y < 50) {
+                    console.warn(`[碰撞推开-异常] ${this.unitName}, 被传送到原点附近！原位置=(${currentPosX.toFixed(1)},${currentPosY.toFixed(1)}), 最终位置=(${finalPushPos.x.toFixed(1)},${finalPushPos.y.toFixed(1)})`);
+                }
                 this.node.setWorldPosition(finalPushPos);
             }
         }
@@ -1222,12 +1268,12 @@ export class Role extends Component {
                 const movementRangeSq = movementRange * movementRange;
                 if (distanceSq <= movementRangeSq) {
                     // 在移动范围内，尝试朝敌人移动
-                    const beforePos = this.node.worldPosition.clone();
+                    const beforePos = this.tempVec3_1.set(this.node.worldPosition);
                     // const moveStartTime = PerformanceMonitor.startTiming('Role.moveTowardsTarget');
                     this.moveTowardsTarget(deltaTime);
                     // PerformanceMonitor.endTiming('Role.moveTowardsTarget', moveStartTime, 3);
 
-                    const afterPos = this.node.worldPosition.clone();
+                    const afterPos = this.tempVec3_2.set(this.node.worldPosition);
                     const dx2 = afterPos.x - beforePos.x;
                     const dy2 = afterPos.y - beforePos.y;
                     const movedDistanceSq = dx2 * dx2 + dy2 * dy2;
@@ -1289,10 +1335,20 @@ export class Role extends Component {
             return;
         }
 
-        const towerPos = this.node.worldPosition.clone();
+        // 每秒输出一次日志
+        this.moveLogTimer += deltaTime;
+        if (this.moveLogTimer >= this.MOVE_LOG_INTERVAL) {
+            this.moveLogTimer = 0;
+          //console.log(`[Role.moveToPosition] ${this.unitName} (ID:${this.unitId}), pos=(${this.node.worldPosition.x.toFixed(1)},${this.node.worldPosition.y.toFixed(1)}), target=(${targetPos.x.toFixed(1)},${targetPos.y.toFixed(1)})`);
+        }
+
+        // 使用局部变量存储当前位置，避免被 checkCollisionAndAdjust 中的 tempVec3_1 覆盖
+        const currentPosX = this.node.worldPosition.x;
+        const currentPosY = this.node.worldPosition.y;
+
         // 性能优化：使用平方距离比较
-        const dx = targetPos.x - towerPos.x;
-        const dy = targetPos.y - towerPos.y;
+        const dx = targetPos.x - currentPosX;
+        const dy = targetPos.y - currentPosY;
         const distanceSq = dx * dx + dy * dy;
 
         // 如果已经到达目标位置，停止移动
@@ -1302,6 +1358,8 @@ export class Role extends Component {
         }
 
         // 手动移动：如果当前位置或目标方向上有障碍，只尝试有限次数避让，避让不开就直接停止移动
+        // 使用 tempVec3_3 存储当前位置，避免与 checkCollisionAndAdjust 中的 tempVec3_1 冲突
+        const towerPos = this.tempVec3_3.set(currentPosX, currentPosY, 0);
         const hasCollision = this.checkCollisionAtPosition(towerPos);
         if (hasCollision) {
             // 不再无限尝试挤出，直接结束手动移动
@@ -1315,16 +1373,16 @@ export class Role extends Component {
         Vec3.subtract(this.tempVec3_1, targetPos, towerPos);
         this.tempVec3_1.normalize();
 
-        // 计算移动方向
+        // 计算移动距离
         const moveDistance = this.moveSpeed * deltaTime;
         Vec3.scaleAndAdd(this.tempVec3_2, towerPos, this.tempVec3_1, moveDistance);
 
-        // 检查新位置是否有碰撞，并用三次避让逻辑调整
+        // 检查新位置是否有碰撞，并用避让逻辑调整
         const adjustedPos = this.checkCollisionAndAdjust(towerPos, this.tempVec3_2);
 
-        // 如果避让后仍然停在原地，说明三次避让全部失败，直接停止手动移动
-        const adjDx = adjustedPos.x - towerPos.x;
-        const adjDy = adjustedPos.y - towerPos.y;
+        // 如果避让后仍然停在原地，说明避让失败，直接停止手动移动
+        const adjDx = adjustedPos.x - currentPosX;
+        const adjDy = adjustedPos.y - currentPosY;
         const adjDistanceSq = adjDx * adjDx + adjDy * adjDy;
         if (adjDistanceSq < 0.01) {
             this.manualMoveTarget = null;
@@ -1370,6 +1428,7 @@ export class Role extends Component {
 
         const enemyScript = this.getEnemyScript(node);
         if (!enemyScript) {
+            // console.log(`[Role.isAliveEnemy] 未找到敌人脚本，节点=${node.name}`);
             return false;
         }
 
@@ -1403,10 +1462,14 @@ export class Role extends Component {
             return null;
         }
         
-        // 尝试获取所有可能的敌人组件类型（包括 Portal）
-        const possibleComponentNames = ['TrollSpearman', 'OrcWarrior', 'OrcWarlord', 'MinotaurWarrior', 'Boss', 'Enemy', 'Portal'];
+        // 尝试获取所有可能的敌人组件类型（包括 Portal 和 Bear）
+        const possibleComponentNames = ['TrollSpearman', 'OrcWarrior', 'OrcWarlord', 'MinotaurWarrior', 'Boss', 'Enemy', 'Portal', 'Bear'];
         for (const compName of possibleComponentNames) {
             const comp = node.getComponent(compName) as any;
+            // Bear 是中立单位，不需要检查 unitType
+            if (compName === 'Bear') {
+                return comp;
+            }
             if (comp && comp.unitType === UnitType.ENEMY) {
                 return comp;
             }
@@ -1440,14 +1503,47 @@ export class Role extends Component {
         let enemies: Node[] = [];
         
         if (this.unitManager) {
+            // 获取真正的敌人
             enemies = this.unitManager.getEnemiesInRange(
                 this.node.worldPosition,
                 maxDistance,
                 includeOnlyAlive
             );
+
+            // 额外添加中立/敌方巨熊（巨熊不在敌人容器中，需要单独获取）
+            const bearsNode = find('Canvas/Bears');
+            if (bearsNode && bearsNode.isValid) {
+                const allChildren = bearsNode.children || [];
+                const maxDistanceSq = maxDistance * maxDistance;
+                let bearCount = 0;
+
+                for (const bear of allChildren) {
+                    if (!bear || !bear.isValid || !bear.active) continue;
+
+                    // 排除自己（防止巨熊把自己当成敌人）
+                    if (bear === this.node) continue;
+
+                    const dx = bear.worldPosition.x - this.node.worldPosition.x;
+                    const dy = bear.worldPosition.y - this.node.worldPosition.y;
+                    const distSq = dx * dx + dy * dy;
+
+                    if (distSq > maxDistanceSq) continue;
+
+                    // 检查巨熊是否存活
+                    if (includeOnlyAlive) {
+                        const bearScript = bear.getComponent('Bear') as any;
+                        if (!bearScript) continue;
+                        if (bearScript.isAlive && !bearScript.isAlive()) continue;
+                        if (bearScript.currentHealth !== undefined && bearScript.currentHealth <= 0) continue;
+                    }
+
+                    bearCount++;
+                    enemies.push(bear);
+                }
+            }
         } else {
             // 降级方案：使用缓存的节点（避免 find() 调用）
-            console.warn('[Role性能优化] UnitManager未初始化，使用缓存节点降级方案');
+            // console.warn('[Role性能优化] UnitManager未初始化，使用缓存节点降级方案');
             // 合并 Canvas/Enemies 和 Canvas/MinotaurWarriors 的子节点
             const allEnemies: Node[] = [];
             if (Role.cachedEnemiesNode && Role.cachedEnemiesNode.isValid) {
@@ -1581,15 +1677,17 @@ export class Role extends Component {
         }
 
         // 性能优化：缓存 worldPosition，避免重复访问
-        const towerPos = this.node.worldPosition.clone(); // 使用clone确保获取最新位置
+        // 使用局部变量存储坐标值，避免与 tempVec3_1/2/3 引用冲突
+        const currentPosX = this.node.worldPosition.x;
+        const currentPosY = this.node.worldPosition.y;
         const targetPos = this.currentTarget.worldPosition;
-        
+
         // 使用平方距离比较，避免开方运算
-        const dx = targetPos.x - towerPos.x;
-        const dy = targetPos.y - towerPos.y;
+        const dx = targetPos.x - currentPosX;
+        const dy = targetPos.y - currentPosY;
         const distanceSq = dx * dx + dy * dy;
         const attackRangeSq = this.attackRange * this.attackRange;
-        
+
         // 如果已经在攻击范围内，停止移动
         if (distanceSq <= attackRangeSq) {
             this.stopMoving();
@@ -1600,10 +1698,10 @@ export class Role extends Component {
         }
 
         // 智能避让：检测是否卡住
-        const positionDx = towerPos.x - this.lastPosition.x;
-        const positionDy = towerPos.y - this.lastPosition.y;
+        const positionDx = currentPosX - this.lastPosition.x;
+        const positionDy = currentPosY - this.lastPosition.y;
         const movedDistanceSq = positionDx * positionDx + positionDy * positionDy;
-        
+
         if (movedDistanceSq < 0.01) { // 几乎没有移动
             this.stuckTimer += deltaTime;
             if (this.stuckTimer >= this.STUCK_THRESHOLD) {
@@ -1613,9 +1711,9 @@ export class Role extends Component {
             this.stuckTimer = 0;
             this.isStuck = false;
         }
-        
+
         // 保存当前位置供下一帧比较
-        this.lastPosition.set(towerPos);
+        this.lastPosition.set(currentPosX, currentPosY, 0);
 
         // 如果卡住了，等待一段时间让其他单位先走
         if (this.isStuck) {
@@ -1635,37 +1733,47 @@ export class Role extends Component {
         // 性能优化：降低碰撞检测频率
         this.collisionCheckTimer += deltaTime;
         let hasCollision = this.lastCollisionResult;
-        
+
         if (this.collisionCheckTimer >= this.COLLISION_CHECK_INTERVAL) {
             // 首先检查当前位置是否有碰撞，如果有，先推开
-            hasCollision = this.checkCollisionAtPosition(towerPos);
+            const towerPosCheck = this.tempVec3_3.set(currentPosX, currentPosY, 0);
+            hasCollision = this.checkCollisionAtPosition(towerPosCheck);
             this.lastCollisionResult = hasCollision;
             this.collisionCheckTimer = 0;
         }
-        
+
         if (hasCollision) {
             // 当前位置有碰撞，先推开
-            const pushDirection = this.calculatePushAwayDirection(towerPos);
+            // 使用局部变量存储坐标值，避免与 checkCollisionAndAdjust 中的 tempVec3 冲突
+            const pushDirection = this.calculatePushAwayDirection(this.tempVec3_3.set(currentPosX, currentPosY, 0));
             if (pushDirection.length() > 0.1) {
                 const pushDistance = this.moveSpeed * deltaTime * 1.5; // 推开速度更快
-                Vec3.scaleAndAdd(this.tempVec3_1, towerPos, pushDirection, pushDistance);
-                
+                // 计算推开目标位置（使用局部变量存储值，避免引用冲突）
+                const targetPushX = currentPosX + pushDirection.x * pushDistance;
+                const targetPushY = currentPosY + pushDirection.y * pushDistance;
+                const targetPushPos = this.tempVec3_1.set(targetPushX, targetPushY, 0);
+
                 // 确保推开后的位置没有碰撞
-                const finalPushPos = this.checkCollisionAndAdjust(towerPos, this.tempVec3_1);
+                const finalPushPos = this.checkCollisionAndAdjust(this.tempVec3_2.set(currentPosX, currentPosY, 0), targetPushPos);
+                if (finalPushPos.x < 50 || finalPushPos.y < 50) {
+                    console.warn(`[moveTowardsTarget- 异常] ${this.unitName} (ID:${this.unitId}), 被传送到原点附近！原位置=(${currentPosX.toFixed(1)},${currentPosY.toFixed(1)}), 最终位置=(${finalPushPos.x.toFixed(1)},${finalPushPos.y.toFixed(1)})`);
+                }
                 this.node.setWorldPosition(finalPushPos);
-                
+
                 return; // 先推开，下一帧再移动
             }
         }
 
         // 计算移动方向
+        // 修复：使用新的 Vec3 存储 towerPos，避免被 calculateAvoidanceDirection 中的 tempVec3_3 修改覆盖
+        const towerPos = new Vec3(currentPosX, currentPosY, 0);
         Vec3.subtract(this.tempVec3_1, targetPos, towerPos);
         this.tempVec3_1.normalize();
 
         // 智能避让：使用缓存的避让方向，减少频繁改变方向
         this.avoidDirectionTimer += deltaTime;
         let finalDirection: Vec3;
-        
+
         if (this.avoidDirectionTimer >= this.AVOID_DIRECTION_DURATION || this.cachedAvoidDirection.length() < 0.1) {
             // 重新计算避让方向
             finalDirection = this.calculateAvoidanceDirection(towerPos, this.tempVec3_1, deltaTime);
@@ -1842,6 +1950,7 @@ export class Role extends Component {
             const minDistance = this.collisionRadius + crystalRadius;
             const minDistanceSq = minDistance * minDistance;
             if (distanceSq < minDistanceSq) {
+                // LOG_THROTTLE: console.log('[Role.checkCollisionAtPosition] 与水晶碰撞！距离=' + Math.sqrt(distanceSq).toFixed(1) + ', 阈值=' + minDistance);
                 return true;
             }
         }
@@ -1863,6 +1972,7 @@ export class Role extends Component {
                             const minDistance = (this.collisionRadius + otherRadius) * 1.2;
                             const minDistanceSq = minDistance * minDistance;
                             if (distanceSq < minDistanceSq) {
+                                // LOG_THROTTLE: console.log('[Role.checkCollisionAtPosition] 与弓箭手碰撞！' + tower.name + ', 距离=' + Math.sqrt(distanceSq).toFixed(1) + ', 阈值=' + minDistance + ', 巨熊 radius=' + this.collisionRadius + ', 弓箭手 radius=' + otherRadius);
                                 return true;
                             }
                         }
@@ -1871,8 +1981,9 @@ export class Role extends Component {
                     const otherRadius = otherTowerScript.collisionRadius ? otherTowerScript.collisionRadius : this.collisionRadius;
                     const minDistance = (this.collisionRadius + otherRadius) * 1.2;
                     const minDistanceSq = minDistance * minDistance;
-                    
+
                     if (distanceSq < minDistanceSq) {
+                        // LOG_THROTTLE: console.log('[Role.checkCollisionAtPosition] 与 Role 碰撞！' + tower.name + ', 距离=' + Math.sqrt(distanceSq).toFixed(1) + ', 阈值=' + minDistance + ', 巨熊 radius=' + this.collisionRadius + ', 其他 radius=' + otherRadius);
                         return true;
                     }
                 }
@@ -1931,8 +2042,9 @@ export class Role extends Component {
                     const otherRadius = otherSwordsmanScript.collisionRadius ? otherSwordsmanScript.collisionRadius : this.collisionRadius;
                     const minDistance = (this.collisionRadius + otherRadius) * 1.2;
                     const minDistanceSq = minDistance * minDistance;
-                    
+
                     if (distanceSq < minDistanceSq) {
+                        // LOG_THROTTLE: console.log('[Role.checkCollisionAtPosition] 与精灵剑士碰撞！' + swordsman.name + ', 距离=' + Math.sqrt(distanceSq).toFixed(1) + ', 阈值=' + minDistance);
                         return true;
                     }
                 }
@@ -1981,8 +2093,9 @@ export class Role extends Component {
                     const otherRadius = otherHunterScript.collisionRadius ? otherHunterScript.collisionRadius : this.collisionRadius;
                     const minDistance = (this.collisionRadius + otherRadius) * 1.2;
                     const minDistanceSq = minDistance * minDistance;
-                    
+
                     if (distanceSq < minDistanceSq) {
+                        // LOG_THROTTLE: console.log('[Role.checkCollisionAtPosition] 与女猎手碰撞！' + hunter.name + ', 距离=' + Math.sqrt(distanceSq).toFixed(1) + ', 阈值=' + minDistance);
                         return true;
                     }
                 }
@@ -1990,7 +2103,7 @@ export class Role extends Component {
         } else {
             // 降级方案：使用缓存节点（避免递归查找）
             const huntersNode = Role.cachedHuntersNode;
-            
+
             if (huntersNode) {
                 const hunters = huntersNode.children || [];
                 for (const hunter of hunters) {
@@ -2006,8 +2119,9 @@ export class Role extends Component {
                         const otherRadius = otherHunterScript.collisionRadius ? otherHunterScript.collisionRadius : this.collisionRadius;
                         const minDistance = (this.collisionRadius + otherRadius) * 1.2;
                         const minDistanceSq = minDistance * minDistance;
-                        
+
                         if (distanceSq < minDistanceSq) {
+                            // LOG_THROTTLE: console.log('[Role.checkCollisionAtPosition] 与女猎手碰撞！' + hunter.name + ', 距离=' + Math.sqrt(distanceSq).toFixed(1) + ', 阈值=' + minDistance);
                             return true;
                         }
                     }
@@ -2032,6 +2146,7 @@ export class Role extends Component {
                     const minDistance = (this.collisionRadius + otherRadius) * 1.2;
                     const minDistanceSq = minDistance * minDistance;
                     if (distanceSq < minDistanceSq) {
+                        // LOG_THROTTLE: console.log('[Role.checkCollisionAtPosition] 与法师碰撞！' + mage.name + ', 距离=' + Math.sqrt(distanceSq).toFixed(1) + ', 阈值=' + minDistance);
                         return true;
                     }
                 }
@@ -2054,6 +2169,7 @@ export class Role extends Component {
                         const minDistance = (this.collisionRadius + otherRadius) * 1.2;
                         const minDistanceSq = minDistance * minDistance;
                         if (distanceSq < minDistanceSq) {
+                            // LOG_THROTTLE: console.log('[Role.checkCollisionAtPosition] 与法师碰撞！' + mage.name + ', 距离=' + Math.sqrt(distanceSq).toFixed(1) + ', 阈值=' + minDistance);
                             return true;
                         }
                     }
@@ -2073,6 +2189,7 @@ export class Role extends Component {
                 const minDistance = this.collisionRadius + enemyRadius;
                 const minDistanceSq = minDistance * minDistance;
                 if (distanceSq < minDistanceSq) {
+                    // LOG_THROTTLE: console.log('[Role.checkCollisionAtPosition] 与敌人碰撞！敌人名称=' + enemy.name + ', 距离=' + Math.sqrt(distanceSq).toFixed(1) + ', 阈值=' + minDistance);
                     return true;
                 }
             }
@@ -2085,7 +2202,7 @@ export class Role extends Component {
                 if (!wall || !wall.active || !wall.isValid) continue;
                 const wallScript = wall.getComponent('StoneWall') as any;
                 if (!wallScript || !wallScript.isAlive || !wallScript.isAlive()) continue;
-                
+
                 const wallPos = wall.worldPosition;
                 const dx = position.x - wallPos.x;
                 const dy = position.y - wallPos.y;
@@ -2093,8 +2210,9 @@ export class Role extends Component {
                 const wallRadius = wallScript.collisionRadius ?? 25;
                 const minDistance = this.collisionRadius + wallRadius;
                 const minDistanceSq = minDistance * minDistance;
-                
+
                 if (distanceSq < minDistanceSq) {
+                    // LOG_THROTTLE: console.log('[Role.checkCollisionAtPosition] 与石墙碰撞！' + wall.name + ', 距离=' + Math.sqrt(distanceSq).toFixed(1) + ', 阈值=' + minDistance + ', 巨熊 radius=' + this.collisionRadius + ', 石墙 radius=' + wallRadius);
                     return true;
                 }
             }
@@ -2116,7 +2234,7 @@ export class Role extends Component {
                 const thunderTowerScript = tower.getComponent('ThunderTower') as any;
                 const towerScript = watchTowerScript || iceTowerScript || thunderTowerScript;
                 if (!towerScript || !towerScript.isAlive || !towerScript.isAlive()) continue;
-                
+
                 const towerPos = tower.worldPosition;
                 const dx = position.x - towerPos.x;
                 const dy = position.y - towerPos.y;
@@ -2125,8 +2243,9 @@ export class Role extends Component {
                 const towerRadius = baseRadius * 0.6;
                 const minDistance = this.collisionRadius + towerRadius;
                 const minDistanceSq = minDistance * minDistance;
-                
+
                 if (distanceSq < minDistanceSq) {
+                    // LOG_THROTTLE: console.log('[Role.checkCollisionAtPosition] 与防御塔碰撞！' + tower.name + ', 距离=' + Math.sqrt(distanceSq).toFixed(1) + ', 阈值=' + minDistance + ', 巨熊 radius=' + this.collisionRadius + ', 防御塔 radius=' + towerRadius);
                     return true;
                 }
             }
@@ -2175,67 +2294,85 @@ export class Role extends Component {
      * 智能避让：减少尝试次数，优先使用较大角度避让
      */
     checkCollisionAndAdjust(currentPos: Vec3, newPos: Vec3): Vec3 {
-        // 首先限制在屏幕范围内
+        // 保存传入参数的原始值（用于调试）
+        const origCurX = currentPos.x;
+        const origCurY = currentPos.y;
+        const origNewX = newPos.x;
+        const origNewY = newPos.y;
         const clampedNewPos = this.clampPositionToScreen(newPos);
-        
+
         // 如果新位置没有碰撞，直接返回
         if (!this.checkCollisionAtPosition(clampedNewPos)) {
             return clampedNewPos;
         }
 
         // 如果有碰撞，尝试寻找替代路径
-        Vec3.subtract(this.tempVec3_1, clampedNewPos, currentPos);
-        
-        // 使用平方距离比较
-        const dx = clampedNewPos.x - currentPos.x;
-        const dy = clampedNewPos.y - currentPos.y;
+        // 重要：创建新的 Vec3 对象存储 moveDir，避免与 currentPos/newPos 引用冲突
+        // 因为调用方可能传入 tempVec3_1/2/3 作为参数，使用方法内的临时对象会导致引用冲突
+        const currentPosXVal = currentPos.x;
+        const currentPosYVal = currentPos.y;
+        const moveDir = new Vec3(clampedNewPos.x - currentPosXVal, clampedNewPos.y - currentPosYVal, 0);
+
+        // 使用平方距离比较（使用保存的值，避免被修改）
+        const dx = clampedNewPos.x - currentPosXVal;
+        const dy = clampedNewPos.y - currentPosYVal;
         const moveDistanceSq = dx * dx + dy * dy;
-        
+
         if (moveDistanceSq < 0.01) {
             // 移动距离太小，尝试推开
-            const pushDir = this.calculatePushAwayDirection(currentPos);
+            const pushDir = this.calculatePushAwayDirection(this.tempVec3_2.set(currentPosXVal, currentPosYVal, 0));
             if (pushDir.length() > 0.1) {
-                Vec3.scaleAndAdd(this.tempVec3_2, currentPos, pushDir, this.collisionRadius * 0.5);
+                Vec3.scaleAndAdd(this.tempVec3_2, this.tempVec3_2.set(currentPosXVal, currentPosYVal, 0), pushDir, this.collisionRadius * 0.5);
                 const clampedPushPos = this.clampPositionToScreen(this.tempVec3_2);
                 if (!this.checkCollisionAtPosition(clampedPushPos)) {
+                    console.log(`[checkCollisionAndAdjust] 距离太小推开：原=(${origCurX.toFixed(1)},${origCurY.toFixed(1)}), 返回=(${clampedPushPos.x.toFixed(1)},${clampedPushPos.y.toFixed(1)})`);
                     return clampedPushPos;
                 }
             }
-            return currentPos;
+            console.log(`[checkCollisionAndAdjust] 距离太小不推开：原=(${origCurX.toFixed(1)},${origCurY.toFixed(1)}), 返回=(${origCurX.toFixed(1)},${origCurY.toFixed(1)})`);
+            return new Vec3(currentPosXVal, currentPosYVal, 0);
         }
 
         const moveDistance = Math.sqrt(moveDistanceSq);
-        this.tempVec3_1.normalize();
+        moveDir.normalize();
 
         // 智能避让：减少尝试次数，使用更大的角度偏移
         // 优先尝试较大角度（60度、90度），避免小角度频繁调整导致抽搐
-        const offsetAngles = [60, -60, 90, -90, 120, -120, 150, -150, 30, -30];
         let tryCount = 0;
         const maxTries = 2; // 减少到2次尝试，避免过度计算
 
-        for (const angle of offsetAngles) {
-            const rad = angle * Math.PI / 180;
-            const cosRad = Math.cos(rad);
-            const sinRad = Math.sin(rad);
-            const offsetDirX = this.tempVec3_1.x * cosRad - this.tempVec3_1.y * sinRad;
-            const offsetDirY = this.tempVec3_1.x * sinRad + this.tempVec3_1.y * cosRad;
-            
-            // 归一化
-            const offsetDirLen = Math.sqrt(offsetDirX * offsetDirX + offsetDirY * offsetDirY);
-            const normOffsetDirX = offsetDirX / offsetDirLen;
-            const normOffsetDirY = offsetDirY / offsetDirLen;
+        for (let i = 0; i < OFFSET_ANGLES.length; i++) {
+            // 查表获取预计算的 sin/cos 值
+            const cosRad = OFFSET_COS[i];
+            const sinRad = OFFSET_SIN[i];
 
-            // 只尝试完整距离，不尝试部分距离
+            // 旋转方向向量（使用 moveDir 而不是 tempVec3_1，避免引用冲突）
+            const offsetDirX = moveDir.x * cosRad - moveDir.y * sinRad;
+            const offsetDirY = moveDir.x * sinRad + moveDir.y * cosRad;
+
+            // 归一化（使用平方距离避免开方）
+            const offsetDirLenSq = offsetDirX * offsetDirX + offsetDirY * offsetDirY;
+            if (offsetDirLenSq < 0.0001) continue; // 避免除零
+            const offsetDirLen = 1.0 / Math.sqrt(offsetDirLenSq);
+            const normOffsetDirX = offsetDirX * offsetDirLen;
+            const normOffsetDirY = offsetDirY * offsetDirLen;
+
+            // 只尝试完整距离，不尝试部分距离（使用保存的 currentPos 值）
             this.tempVec3_2.set(
-                currentPos.x + normOffsetDirX * moveDistance,
-                currentPos.y + normOffsetDirY * moveDistance,
+                currentPosXVal + normOffsetDirX * moveDistance,
+                currentPosYVal + normOffsetDirY * moveDistance,
                 0
             );
             const clampedTestPos = this.clampPositionToScreen(this.tempVec3_2);
 
+            // LOG_THROTTLE: console.log(`[checkCollisionAndAdjust] 尝试避让方向 ${i}: offsetDir=(${normOffsetDirX.toFixed(3)},${normOffsetDirY.toFixed(3)}), moveDistance=${moveDistance.toFixed(1)}, testPos=(${clampedTestPos.x.toFixed(1)},${clampedTestPos.y.toFixed(1)})`);
+
             tryCount++;
 
             if (!this.checkCollisionAtPosition(clampedTestPos)) {
+                if (clampedTestPos.x < 50 || clampedTestPos.y < 50) {
+                    console.warn(`[checkCollisionAndAdjust- 异常] ${this.unitName} (ID:${this.unitId}), 避让成功但位置异常！原=(${origCurX.toFixed(1)},${origCurY.toFixed(1)}), 返回=(${clampedTestPos.x.toFixed(1)},${clampedTestPos.y.toFixed(1)})`);
+                }
                 return clampedTestPos;
             }
 
@@ -2246,9 +2383,9 @@ export class Role extends Component {
         }
 
         // 如果所有方向都有碰撞，尝试推开
-        const pushDir = this.calculatePushAwayDirection(currentPos);
+        const pushDir = this.calculatePushAwayDirection(this.tempVec3_2.set(currentPosXVal, currentPosYVal, 0));
         if (pushDir.length() > 0.1) {
-            Vec3.scaleAndAdd(this.tempVec3_2, currentPos, pushDir, this.collisionRadius * 0.3);
+            Vec3.scaleAndAdd(this.tempVec3_2, this.tempVec3_2.set(currentPosXVal, currentPosYVal, 0), pushDir, this.collisionRadius * 0.3);
             const clampedPushPos = this.clampPositionToScreen(this.tempVec3_2);
             if (!this.checkCollisionAtPosition(clampedPushPos)) {
                 return clampedPushPos;
@@ -2256,7 +2393,7 @@ export class Role extends Component {
         }
 
         // 如果所有方法都失败，保持当前位置
-        return currentPos;
+        return new Vec3(currentPosXVal, currentPosYVal, 0);
     }
 
     /**
@@ -2402,8 +2539,8 @@ export class Role extends Component {
 
         if (obstacleCount > 0 && pushForce.length() > 0.1) {
             pushForce.normalize();
-            Vec3.multiplyScalar(this.tempVec3_2, pushForce, Math.min(maxPushStrength, 2.0));
-            return this.tempVec3_2;
+            // 返回新的 Vec3 对象，避免与 tempVec3_2 引用冲突
+            return new Vec3(pushForce.x * Math.min(maxPushStrength, 2.0), pushForce.y * Math.min(maxPushStrength, 2.0), 0);
         }
 
         return new Vec3(0, 0, 0);
@@ -2578,11 +2715,10 @@ export class Role extends Component {
             avoidanceForce.normalize();
             // 根据障碍物强度调整混合比例
             // 如果障碍物很近（maxStrength > 1），优先避障
-            const avoidanceWeight = maxStrength > 2.0 ? 0.9 : (maxStrength > 1.0 ? 0.7 : 0.5); // 50%-90%避障
+            const avoidanceWeight = maxStrength > 2.0 ? 0.9 : (maxStrength > 1.0 ? 0.7 : 0.5); // 50%-90% 避障
             Vec3.lerp(this.tempVec3_3, desiredDirection, avoidanceForce, avoidanceWeight);
             this.tempVec3_3.normalize();
-            
-            return this.tempVec3_3;
+            return new Vec3(this.tempVec3_3.x, this.tempVec3_3.y, this.tempVec3_3.z);
         }
 
         // 没有障碍物，返回期望方向
@@ -3310,7 +3446,7 @@ export class Role extends Component {
         }
 
         // 设置初始位置（弓箭手位置）
-        const startPos = this.node.worldPosition.clone();
+        const startPos = this.tempVec3_1.set(this.node.worldPosition);
         arrow.setWorldPosition(startPos);
 
         // 确保节点激活
@@ -3369,9 +3505,8 @@ export class Role extends Component {
         bullet.setWorldPosition(this.node.worldPosition);
 
         // 简单的子弹移动逻辑（可以创建Bullet脚本）
-        const direction = new Vec3();
-        Vec3.subtract(direction, this.currentTarget.worldPosition, this.node.worldPosition);
-        direction.normalize();
+        Vec3.subtract(this.tempVec3_1, this.currentTarget.worldPosition, this.node.worldPosition);
+        this.tempVec3_1.normalize();
 
         // 直接造成伤害（简化处理）
         // 获取敌人脚本，支持所有敌人类型
@@ -3394,7 +3529,6 @@ export class Role extends Component {
     }
 
     // 最近一次受击方向（用于伤害数字沿攻击方向飘动）
-    private lastHitDirection: Vec3 | null = null;
 
     takeDamage(damage: number, hitDirection?: Vec3) {
         if (this.isDestroyed) {
@@ -3403,9 +3537,6 @@ export class Role extends Component {
 
         // 记录最近一次受击方向（标准化后的力方向）
         if (hitDirection && hitDirection.length() > 0.001) {
-            if (!this.lastHitDirection) {
-                this.lastHitDirection = new Vec3();
-            }
             this.lastHitDirection.set(hitDirection);
             this.lastHitDirection.normalize();
         }
@@ -3514,7 +3645,7 @@ export class Role extends Component {
         }
 
         // 设置位置（在Tower上方）
-        healNode.setWorldPosition(this.node.worldPosition.clone().add3f(0, 30, 0));
+        this.tempVec3_1.set(this.node.worldPosition); this.tempVec3_1.y += 30; healNode.setWorldPosition(this.tempVec3_1);
 
         // 添加Label组件显示+号（黑边绿字）
         const label = healNode.addComponent(Label);
@@ -3530,8 +3661,8 @@ export class Role extends Component {
         uiTransform.setContentSize(40, 30);
 
         // 动画：向上移动并淡出
-        const startPos = healNode.worldPosition.clone();
-        const endPos = startPos.clone();
+        const startPos = this.tempVec3_1.set(healNode.worldPosition);
+        const endPos = this.tempVec3_2.set(startPos);
         endPos.y += 30; // 向上移动30像素
 
         tween(healNode)
@@ -3579,7 +3710,7 @@ export class Role extends Component {
         }
         
         // 起始位置：在单位上方一点
-        const startPos = this.node.worldPosition.clone();
+        const startPos = this.tempVec3_1.set(this.node.worldPosition);
         startPos.y += 30;
         damageNode.setWorldPosition(startPos);
         
@@ -3616,24 +3747,22 @@ export class Role extends Component {
         }
 
         // 飘动方向：沿攻击方向飘动
-        const floatDir = new Vec3();
         const sourceDir = hitDirection && hitDirection.length() > 0.001
             ? hitDirection
             : (this.lastHitDirection && this.lastHitDirection.length() > 0.001 ? this.lastHitDirection : null);
 
         if (sourceDir) {
-            floatDir.set(sourceDir);
-            floatDir.normalize();
+            this.tempVec3_2.set(sourceDir);
+            this.tempVec3_2.normalize();
         } else {
             // 如果没有记录受击方向，默认向上
-            floatDir.set(0, 1, 0);
+            this.tempVec3_2.set(0, 1, 0);
         }
 
         // 飘动距离与敌人保持一致（缩短版）
         const floatDistance = isCritical ? 40 : 25;
-        const offset = new Vec3();
-        Vec3.scaleAndAdd(offset, startPos, floatDir, floatDistance);
-        const endWorldPos = offset;
+        Vec3.scaleAndAdd(this.tempVec3_3, startPos, this.tempVec3_2, floatDistance);
+        const endWorldPos = this.tempVec3_3;
 
         // 渐隐飘动动画
         const uiOpacity = damageNode.getComponent(UIOpacity) || damageNode.addComponent(UIOpacity);
@@ -3771,9 +3900,9 @@ export class Role extends Component {
             this.node.setScale(this.defaultScale);
             this.node.angle = 0;
             if (this.sprite) {
-                const color = this.sprite.color.clone();
-                color.a = 255;
-                this.sprite.color = color;
+                this.tempColor.set(this.sprite.color);
+                this.tempColor.a = 255;
+                this.sprite.color = this.tempColor;
             }
         }
         
@@ -3806,8 +3935,6 @@ export class Role extends Component {
 
         // 重置增幅标志，让每次从对象池获取时都能重新安排自动上移
         this._enhancementsApplied = false;
-        console.log(`[Role.onEnable] ${this.unitName}, _enhancementsApplied=false, wasManuallyControlled=${this.wasManuallyControlled}, autoRoamScheduled=${this.autoRoamScheduled}`);
-
         // 从对象池获取时，重新初始化状态
         // 注意：sprite等组件引用在start中已经初始化，这里只需要重置状态
         if (this.sprite && this.defaultSpriteFrame) {
@@ -3852,9 +3979,9 @@ export class Role extends Component {
             this.node.setScale(this.defaultScale);
             this.node.angle = 0;
             if (this.sprite) {
-                const color = this.sprite.color.clone();
-                color.a = 255;
-                this.sprite.color = color;
+                this.tempColor.set(this.sprite.color);
+                this.tempColor.a = 255;
+                this.sprite.color = this.tempColor;
             }
         }
         
@@ -3962,7 +4089,7 @@ export class Role extends Component {
                     }
                     // 若已被手动控制过，则取消自动上移
                     if (this.wasManuallyControlled) {
-                        console.log(`[Role.autoRoam] ${this.unitName}, wasManuallyControlled=true, 取消自动上移`);
+                        // console.log(`[Role.autoRoam] ${this.unitName}, wasManuallyControlled=true, 取消自动上移`);
                         return;
                     }
                     // 若在6秒内已经被下达了移动/集结指令（manualMoveTarget 有值或被标记为手动控制），则不干预
@@ -3985,10 +4112,14 @@ export class Role extends Component {
                     // 计算上方 400-500 像素的随机位置
                     const dy = 400 + Math.floor(Math.random() * 101); // [400, 500]
                     const cur = this.node.worldPosition;
-                    const target = new Vec3(cur.x, cur.y + dy, 0);
+                    const target = this.tempVec3_1.set(cur.x, cur.y + dy, 0);
                     // 自动上移：直接设置移动目标，不标记 wasManuallyControlled
                     const adjustedPos = this.findAvailableMovePosition(target);
-                    this.manualMoveTarget = adjustedPos.clone();
+                    // 使用持久化对象，避免引用临时 Vec3
+                    if (!this.manualMoveTarget) {
+                        this.manualMoveTarget = new Vec3();
+                    }
+                    this.manualMoveTarget.set(adjustedPos);
                     this.isManuallyControlled = true;
                     this.currentTarget = null!;
                 };
@@ -4054,9 +4185,8 @@ export class Role extends Component {
 
         // 如果已选中此单位，检查点击是否在选中区域内
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
-            const touchPos = this.tempVec3_1.set(touchLocation.x, touchLocation.y, 0);
             const camera = this.cachedCamera;
-            if (camera && !this.isPointInSelectionArea(touchPos, camera)) {
+            if (camera && !this.isPointInSelectionArea(touchLocation.x, touchLocation.y, camera)) {
                 // 点击不在选中区域内，不阻止事件冒泡，让 Canvas 的 onGlobalTouchEnd 检测其他单位
 // 设置移动目标但不阻止冒泡
                 this.setManualMoveTarget(event, true);
@@ -4070,8 +4200,7 @@ export class Role extends Component {
         // 首次选中：检查点击是否在 1.5 倍宽 3 倍高的选中区域内
         const camera = this.cachedCamera;
         if (camera) {
-            const touchPos = this.tempVec3_1.set(touchLocation.x, touchLocation.y, 0);
-            const isInSelectionArea = this.isPointInSelectionArea(touchPos, camera);
+            const isInSelectionArea = this.isPointInSelectionArea(touchLocation.x, touchLocation.y, camera);
 if (!isInSelectionArea) {
                 // 点击不在当前单位的选中区域内，不阻止事件冒泡，让下方的单位有机会接收事件
                 // 检查是否有其他单位被选中（说明用户想控制已选中的单位移动）
@@ -4080,8 +4209,8 @@ if (!isInSelectionArea) {
                     const prevUnitRole = previouslySelectedUnit.getComponent('Role') as any;
                     if (prevUnitRole && prevUnitRole.setManualMoveTargetPosition) {
                         // 将屏幕坐标转换为世界坐标
-                        const screenPos = new Vec3(touchLocation.x, touchLocation.y, 0);
-                        const worldPos = new Vec3();
+                        const screenPos = this.tempVec3_1.set(touchLocation.x, touchLocation.y, 0);
+                        const worldPos = this.tempVec3_2;
                         camera.screenToWorld(screenPos, worldPos);
                         worldPos.z = 0;
                         prevUnitRole.setManualMoveTargetPosition(worldPos);
@@ -4234,8 +4363,11 @@ if (!isInSelectionArea) {
         // 智能调整目标位置，避免与单位重叠
         const adjustedPos = this.findAvailableMovePosition(worldPos);
 
-        // 设置手动移动目标
-        this.manualMoveTarget = adjustedPos.clone();
+        // 设置手动移动目标（使用持久化对象，避免引用临时 Vec3）
+        if (!this.manualMoveTarget) {
+            this.manualMoveTarget = new Vec3();
+        }
+        this.manualMoveTarget.set(adjustedPos);
         this.isManuallyControlled = true;
 
         // 清除当前自动寻敌目标，优先执行手动移动
@@ -4253,19 +4385,22 @@ if (!isInSelectionArea) {
      * @param camera 相机组件
      * @returns 是否在碰撞半径内
      */
-    protected isPointInCollisionRadius(touchLocation: Vec3, camera: Camera): boolean {
+    protected isPointInCollisionRadius(touchX: number, touchY: number, camera: Camera): boolean {
+        if (!camera) {
+            return false;
+        }
         const unitWorldPos = this.node.worldPosition;
-        const unitScreenPos = new Vec3();
+        const unitScreenPos = this.tempVec3_1;
         camera.worldToScreen(unitWorldPos, unitScreenPos);
 
         // 将世界坐标的碰撞半径转换为屏幕坐标
-        const testWorldPos = new Vec3(unitWorldPos.x + this.collisionRadius, unitWorldPos.y, unitWorldPos.z);
-        const testScreenPos = new Vec3();
+        const testWorldPos = this.tempVec3_2.set(unitWorldPos.x + this.collisionRadius, unitWorldPos.y, unitWorldPos.z);
+        const testScreenPos = this.tempVec3_3;
         camera.worldToScreen(testWorldPos, testScreenPos);
         const collisionRadiusScreen = Math.abs(testScreenPos.x - unitScreenPos.x);
 
-        const dx = touchLocation.x - unitScreenPos.x;
-        const dy = touchLocation.y - unitScreenPos.y;
+        const dx = touchX - unitScreenPos.x;
+        const dy = touchY - unitScreenPos.y;
         const distanceToUnit = Math.sqrt(dx * dx + dy * dy);
 
         return distanceToUnit <= collisionRadiusScreen;
@@ -4273,18 +4408,22 @@ if (!isInSelectionArea) {
 
     /**
      * 检查点是否在单位选中区域内（1.5 倍宽 3 倍高矩形区域）
-     * @param touchLocation 触摸位置（屏幕坐标）
+     * @param touchX 触摸位置 X（屏幕坐标）
+     * @param touchY 触摸位置 Y（屏幕坐标）
      * @param camera 相机组件
      * @returns 是否在选中区域内
      */
-    protected isPointInSelectionArea(touchLocation: Vec3, camera: Camera): boolean {
+    protected isPointInSelectionArea(touchX: number, touchY: number, camera: Camera): boolean {
+        if (!camera) {
+            return false;
+        }
         const unitWorldPos = this.node.worldPosition;
-        const unitScreenPos = new Vec3();
+        const unitScreenPos = this.tempVec3_1;
         camera.worldToScreen(unitWorldPos, unitScreenPos);
 
         // 将世界坐标的碰撞半径转换为屏幕坐标
-        const testWorldPos = new Vec3(unitWorldPos.x + this.collisionRadius, unitWorldPos.y, unitWorldPos.z);
-        const testScreenPos = new Vec3();
+        const testWorldPos = this.tempVec3_2.set(unitWorldPos.x + this.collisionRadius, unitWorldPos.y, unitWorldPos.z);
+        const testScreenPos = this.tempVec3_3;
         camera.worldToScreen(testWorldPos, testScreenPos);
         const collisionRadiusScreen = Math.abs(testScreenPos.x - unitScreenPos.x);
 
@@ -4292,8 +4431,8 @@ if (!isInSelectionArea) {
         const selectionHalfWidth = collisionRadiusScreen * 1.5;
         const selectionHalfHeight = collisionRadiusScreen * 3;
 
-        const dx = Math.abs(touchLocation.x - unitScreenPos.x);
-        const dy = Math.abs(touchLocation.y - unitScreenPos.y);
+        const dx = Math.abs(touchX - unitScreenPos.x);
+        const dy = Math.abs(touchY - unitScreenPos.y);
 
         return dx <= selectionHalfWidth && dy <= selectionHalfHeight;
     }
@@ -4306,9 +4445,10 @@ if (!isInSelectionArea) {
         // 使用公共方法检测碰撞（性能优化点 2）
         const camera = this.cachedCamera;
         if (camera) {
-            // event.getLocation() 返回 Vec2，需要转换为 Vec3
-            const touchPos = this.tempVec3_1.set(touchLocation.x, touchLocation.y, 0);
-            if (this.isPointInCollisionRadius(touchPos, camera)) {
+            // 使用局部变量存储触摸位置，避免与 isPointInCollisionRadius 中的 tempVec3_1 冲突
+            const touchX = touchLocation.x;
+            const touchY = touchLocation.y;
+            if (this.isPointInCollisionRadius(touchX, touchY, camera)) {
                 return;
             }
         }
@@ -4328,14 +4468,14 @@ if (!isInSelectionArea) {
             return;
         }
         // 将屏幕坐标转换为世界坐标
-        const screenPos = new Vec3(touchLocation.x, touchLocation.y, 0);
-        const worldPos = new Vec3();
+        const screenPos = this.tempVec3_1.set(touchLocation.x, touchLocation.y, 0);
+        const worldPos = this.tempVec3_2;
         this.cachedCamera.screenToWorld(screenPos, worldPos);
         worldPos.z = 0;
         
         // 标记为已被手动控制过（取消自动上移）
         this.wasManuallyControlled = true;
-        console.log(`[Role.setManualMoveTarget] ${this.unitName}, wasManuallyControlled=true`);
+        // console.log(`[Role.setManualMoveTarget] ${this.unitName}, wasManuallyControlled=true`);
         
         // 使用setManualMoveTargetPosition方法设置移动目标
         this.setManualMoveTargetPosition(worldPos);

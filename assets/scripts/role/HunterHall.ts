@@ -286,8 +286,9 @@ export class HunterHall extends Build {
         hunter.active = false;
         
         hunter.setParent(this.hunterContainer);
-        hunter.setWorldPosition(spawnPos);
 
+        // 修复：在激活前先设置位置，确保 onEnable 时位置已正确（否则复活单位可能因为旧位置 y >= 500 而不安排自动上移）
+        hunter.setWorldPosition(spawnPos);
         // 设置Hunter的建造成本（如果需要）
         const hunterScript = hunter.getComponent('Hunter') as any;
         if (hunterScript) {
@@ -305,7 +306,7 @@ export class HunterHall extends Build {
         
         // 现在激活节点，只触发一次 onEnable()
         hunter.active = true;
-        
+
         if (hunterScript) {
            //console.info(`[HunterHall] 生产猎手，最终攻击力=${hunterScript.attackDamage}, 生命值=${hunterScript.maxHealth}`);
         }

@@ -33,7 +33,7 @@ export class Boss extends Component {
     attackRange: number = 70;
 
     @property
-    collisionRadius: number = 10; // 碰撞半径（像素）
+    collisionRadius: number = 2; // 碰撞半径（像素）
 
     @property({
         tooltip: "韧性（0-1）：1秒内遭受此百分比血量损失才会触发僵直。0表示没有抗性（受到攻击就会播放受击动画），1表示最大抗性（需要100%血量损失才触发僵直）"
@@ -164,6 +164,12 @@ export class Boss extends Component {
     protected isHit: boolean = false; // 表示敌人是否正在被攻击
     protected attackComplete: boolean = false; // 攻击动画是否完成
 
+    // 性能优化：缓存和复用对象
+    private tempVec3_1: Vec3 = new Vec3(); // 临时 Vec3 对象 1（复用）
+    private tempVec3_2: Vec3 = new Vec3(); // 临时 Vec3 对象 2（复用）
+    private tempVec3_3: Vec3 = new Vec3(); // 临时 Vec3 对象 3（复用）
+    private tempColor: Color = new Color(); // 临时 Color 对象（复用）
+
     // 伤害计算相关属性（韧性）
     protected recentDamage: number = 0; // 最近1秒内受到的总伤害
     protected damageTime: number = 0; // 最近一次伤害的时间戳
@@ -186,8 +192,17 @@ export class Boss extends Component {
         this.damageTime = 0;
         this.lastStaggerTime = -1; // 重置僵直时间
         this.isPlayingWarcryAnimation = false;
-        this.warcryBuffedEnemies.clear();
-        this.warcryBuffEndTime.clear();
+        // 修复：确保集合已初始化（对象池复用后可能为 null）
+        if (!this.warcryBuffedEnemies) {
+            this.warcryBuffedEnemies = new Set();
+        } else {
+            this.warcryBuffedEnemies.clear();
+        }
+        if (!this.warcryBuffEndTime) {
+            this.warcryBuffEndTime = new Map();
+        } else {
+            this.warcryBuffEndTime.clear();
+        }
         this.wasPlayingAttackBeforeWarcry = false;
         this.clearBloodRageVisualOnly();
         this.isBloodRageActive = false;
@@ -449,9 +464,16 @@ export class Boss extends Component {
                 const priestScript = this.currentTarget.getComponent('Priest') as any;
                 const mageScript = this.currentTarget.getComponent('Mage') as any;
                 const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-                const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript;
-                
-                if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
+                const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
+                const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
+                const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
+                const bearScript = this.currentTarget.getComponent('Bear') as any;
+                const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript || bearScript;
+
+                // 检查巨熊是否死亡
+                if (bearScript && (!bearScript.isAlive || !bearScript.isAlive() || bearScript.isDead || bearScript.isDestroyed)) {
+                    this.currentTarget = null!;
+                } else if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
                     // 当前目标已被摧毁，清除目标
                     this.currentTarget = null!;
                 }
@@ -827,6 +849,33 @@ export class Boss extends Component {
             }
         }
 
+        // 检查巨熊（中立状态时攻击所有单位，包括敌人）
+        const bearsNode = find('Canvas/Bears');
+        if (bearsNode) {
+            for (const bear of bearsNode.children) {
+                if (!bear || !bear.active || !bear.isValid) continue;
+
+                const bearScript = bear.getComponent('Bear') as any;
+                if (!bearScript || !bearScript.isAlive || !bearScript.isAlive()) continue;
+
+                const myPos = this.node.worldPosition;
+                const bearPos = bear.worldPosition;
+                const dx = myPos.x - bearPos.x;
+                const dy = myPos.y - bearPos.y;
+                const distanceSq = dx * dx + dy * dy;
+                const detectionRangeSq = detectionRange * detectionRange;
+                if (distanceSq <= detectionRangeSq) {
+                    const distance = Math.sqrt(distanceSq);
+                    if (PRIORITY.CHARACTER < targetPriority ||
+                        (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
+                        minDistance = distance;
+                        nearestTarget = bear;
+                        targetPriority = PRIORITY.CHARACTER;
+                    }
+                }
+            }
+        }
+
         // 如果找到目标，设置为当前目标
         // 但是，如果正在播放攻击动画，且当前目标仍然有效，不改变目标
         if (this.isPlayingAttackAnimation && this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
@@ -844,7 +893,8 @@ export class Boss extends Component {
             const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
             const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
             const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
-            const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
+            const bearScript = this.currentTarget.getComponent('Bear') as any;
+            const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript || bearScript;
             
             // 如果当前目标仍然存活，保持当前目标不变
             if (targetScript && targetScript.isAlive && targetScript.isAlive()) {
@@ -875,35 +925,33 @@ export class Boss extends Component {
             return;
         }
 
-        const direction = new Vec3();
-        Vec3.subtract(direction, this.currentTarget.worldPosition, this.node.worldPosition);
-        const distance = direction.length();
-        
+        // 使用复用的临时对象，避免每帧创建新 Vec3
+        Vec3.subtract(this.tempVec3_1, this.currentTarget.worldPosition, this.node.worldPosition);
+        const distance = this.tempVec3_1.length();
+
         if (distance > 0.1) {
-            direction.normalize();
-            
+            this.tempVec3_1.normalize();
+
             // 应用敌人避让逻辑
-            const finalDirection = this.calculateEnemyAvoidanceDirection(this.node.worldPosition, direction, deltaTime);
-            
-            const newPos = new Vec3();
-            Vec3.scaleAndAdd(newPos, this.node.worldPosition, finalDirection, this.moveSpeed * deltaTime);
-            
+            const finalDirection = this.calculateEnemyAvoidanceDirection(this.node.worldPosition, this.tempVec3_1, deltaTime);
+
+            Vec3.scaleAndAdd(this.tempVec3_2, this.node.worldPosition, finalDirection, this.moveSpeed * deltaTime);
+
             // 检查移动路径上是否有石墙阻挡（如果目标不是石墙）
             const targetScript = this.currentTarget.getComponent('StoneWall') as any;
             if (!targetScript) {
                 // 目标不是石墙，检查路径上是否有石墙阻挡
-                if (this.checkCollisionWithStoneWall(newPos)) {
+                if (this.checkCollisionWithStoneWall(this.tempVec3_2)) {
                     // 路径被石墙阻挡，尝试绕路
-                    const detourPos = this.calculateDetourPosition(direction, deltaTime);
+                    const detourPos = this.calculateDetourPosition(this.tempVec3_1, deltaTime);
                     if (detourPos) {
                         // 找到绕路位置，移动到该位置
                         const clampedPos = this.clampPositionToScreen(detourPos);
                         this.node.setWorldPosition(clampedPos);
-                        
+
                         // 根据移动方向翻转
-                        const detourDirection = new Vec3();
-                        Vec3.subtract(detourDirection, detourPos, this.node.worldPosition);
-                        this.flipDirection(detourDirection);
+                        Vec3.subtract(this.tempVec3_3, detourPos, this.node.worldPosition);
+                        this.flipDirection(this.tempVec3_3);
                         
                         // 播放行走动画
                         this.playWalkAnimation();
@@ -921,9 +969,9 @@ export class Boss extends Component {
                     }
                 }
             }
-            
-            // 限制位置在屏幕范围内
-            const clampedPos = this.clampPositionToScreen(newPos);
+
+            // 限制位置在屏幕范围内，使用 tempVec3_2（929 行计算的位置）
+            const clampedPos = this.clampPositionToScreen(this.tempVec3_2);
             this.node.setWorldPosition(clampedPos);
             
             // 根据移动方向翻转
@@ -949,34 +997,32 @@ export class Boss extends Component {
 
         const crystalWorldPos = this.targetCrystal.worldPosition;
         const enemyWorldPos = this.node.worldPosition;
-        
-        const direction = new Vec3();
-        Vec3.subtract(direction, crystalWorldPos, enemyWorldPos);
-        const distance = direction.length();
-        
+
+        // 使用复用的临时对象，避免每帧创建新 Vec3
+        Vec3.subtract(this.tempVec3_1, crystalWorldPos, enemyWorldPos);
+        const distance = this.tempVec3_1.length();
+
         if (distance > 0.1) {
-            direction.normalize();
-            
+            this.tempVec3_1.normalize();
+
             // 应用敌人避让逻辑
-            const finalDirection = this.calculateEnemyAvoidanceDirection(enemyWorldPos, direction, deltaTime);
-            
+            const finalDirection = this.calculateEnemyAvoidanceDirection(enemyWorldPos, this.tempVec3_1, deltaTime);
+
             const moveDistance = this.moveSpeed * deltaTime;
-            const newPos = new Vec3();
-            Vec3.scaleAndAdd(newPos, enemyWorldPos, finalDirection, moveDistance);
-            
+            Vec3.scaleAndAdd(this.tempVec3_2, enemyWorldPos, finalDirection, moveDistance);
+
             // 检查移动路径上是否有石墙阻挡
-            if (this.checkCollisionWithStoneWall(newPos)) {
+            if (this.checkCollisionWithStoneWall(this.tempVec3_2)) {
                 // 路径被石墙阻挡，尝试绕路
-                const detourPos = this.calculateDetourPosition(direction, deltaTime);
+                const detourPos = this.calculateDetourPosition(this.tempVec3_1, deltaTime);
                 if (detourPos) {
                     // 找到绕路位置，移动到该位置
                     const clampedPos = this.clampPositionToScreen(detourPos);
                     this.node.setWorldPosition(clampedPos);
-                    
+
                     // 根据移动方向翻转
-                    const detourDirection = new Vec3();
-                    Vec3.subtract(detourDirection, detourPos, this.node.worldPosition);
-                    this.flipDirection(detourDirection);
+                    Vec3.subtract(this.tempVec3_3, detourPos, this.node.worldPosition);
+                    this.flipDirection(this.tempVec3_3);
                     
                     // 播放行走动画
                     this.playWalkAnimation();
@@ -986,9 +1032,9 @@ export class Boss extends Component {
                     return;
                 }
             }
-            
-            // 限制位置在屏幕范围内
-            const clampedPos = this.clampPositionToScreen(newPos);
+
+            // 限制位置在屏幕范围内，使用 tempVec3_2（1003 行计算的位置）
+            const clampedPos = this.clampPositionToScreen(this.tempVec3_2);
             this.node.setWorldPosition(clampedPos);
             
             // 根据移动方向翻转
@@ -1004,34 +1050,32 @@ export class Boss extends Component {
      */
     calculateDetourPosition(direction: Vec3, deltaTime: number): Vec3 | null {
         const moveDistance = this.moveSpeed * deltaTime;
-        const perpendicular = new Vec3(-direction.y, direction.x, 0); // 垂直于移动方向的方向
-        
+        // 使用复用的临时对象，避免每帧创建新 Vec3
+        // perpendicular 使用 tempVec3_1 的 x,y 分量计算
+        this.tempVec3_1.set(-direction.y, direction.x, 0); // 垂直于移动方向的方向
+
         // 使用较小的偏移距离，让移动更平滑
         const offsetDistances = [30, 50, 80]; // 逐步增加偏移距离
-        
+
         // 尝试不同偏移距离的绕路
         for (const offsetDistance of offsetDistances) {
             // 尝试左侧绕路
-            const leftOffset = new Vec3();
-            Vec3.scaleAndAdd(leftOffset, this.node.worldPosition, perpendicular, offsetDistance);
-            const leftPos = new Vec3();
-            Vec3.scaleAndAdd(leftPos, leftOffset, direction, moveDistance);
-            
-            if (!this.checkCollisionWithStoneWall(leftPos)) {
-                return leftPos;
+            Vec3.scaleAndAdd(this.tempVec3_2, this.node.worldPosition, this.tempVec3_1, offsetDistance);
+            Vec3.scaleAndAdd(this.tempVec3_3, this.tempVec3_2, direction, moveDistance);
+
+            if (!this.checkCollisionWithStoneWall(this.tempVec3_3)) {
+                return this.tempVec3_3;
             }
-            
+
             // 尝试右侧绕路
-            const rightOffset = new Vec3();
-            Vec3.scaleAndAdd(rightOffset, this.node.worldPosition, perpendicular, -offsetDistance);
-            const rightPos = new Vec3();
-            Vec3.scaleAndAdd(rightPos, rightOffset, direction, moveDistance);
-            
-            if (!this.checkCollisionWithStoneWall(rightPos)) {
-                return rightPos;
+            Vec3.scaleAndAdd(this.tempVec3_2, this.node.worldPosition, this.tempVec3_1, -offsetDistance);
+            Vec3.scaleAndAdd(this.tempVec3_3, this.tempVec3_2, direction, moveDistance);
+
+            if (!this.checkCollisionWithStoneWall(this.tempVec3_3)) {
+                return this.tempVec3_3;
             }
         }
-        
+
         // 无法找到可行的绕路位置
         return null;
     }
@@ -1216,7 +1260,7 @@ export class Boss extends Component {
 
         const enemyPos = this.node.worldPosition;
         const crystalPos = this.targetCrystal.worldPosition;
-        const direction = new Vec3();
+        const direction = this.tempVec3_1;
         Vec3.subtract(direction, crystalPos, enemyPos);
         const distanceToCrystal = direction.length();
         
@@ -1233,7 +1277,7 @@ export class Boss extends Component {
         const blockingWalls: { wall: Node; distanceSq: number }[] = [];
 
         for (let i = 0; i <= checkSteps; i++) {
-            const checkPos = new Vec3();
+            const checkPos = this.tempVec3_2;
             Vec3.scaleAndAdd(checkPos, enemyPos, direction, stepSize * i);
 
             // 检查这个位置是否有石墙
@@ -1270,16 +1314,16 @@ export class Boss extends Component {
         const nearestWall = blockingWalls[0].wall;
 
         // 尝试左右绕行检测
-        const perpendicular = new Vec3(-direction.y, direction.x, 0); // 垂直于路径的方向
+        const perpendicular = this.tempVec3_2.set(-direction.y, direction.x, 0); // 垂直于路径的方向
         const offsetDistance = 80; // 绕行偏移距离
 
         // 检测左侧绕行
-        const leftOffset = new Vec3();
+        const leftOffset = this.tempVec3_3;
         Vec3.scaleAndAdd(leftOffset, enemyPos, perpendicular, offsetDistance);
         const leftPathClear = this.checkPathClear(leftOffset, crystalPos, stoneWalls);
 
         // 检测右侧绕行
-        const rightOffset = new Vec3();
+        const rightOffset = this.tempVec3_1;
         Vec3.scaleAndAdd(rightOffset, enemyPos, perpendicular, -offsetDistance);
         const rightPathClear = this.checkPathClear(rightOffset, crystalPos, stoneWalls);
 
@@ -1297,7 +1341,7 @@ export class Boss extends Component {
      * 子类（如 MinotaurWarrior）在重用路径检测逻辑时也会调用，因此使用 protected
      */
     protected checkPathClear(startPos: Vec3, endPos: Vec3, stoneWalls: Node[]): boolean {
-        const direction = new Vec3();
+        const direction = this.tempVec3_1;
         Vec3.subtract(direction, endPos, startPos);
         const distance = direction.length();
         
@@ -1310,7 +1354,7 @@ export class Boss extends Component {
         const stepSize = distance / checkSteps;
 
         for (let i = 0; i <= checkSteps; i++) {
-            const checkPos = new Vec3();
+            const checkPos = this.tempVec3_2;
             Vec3.scaleAndAdd(checkPos, startPos, direction, stepSize * i);
 
             for (const wall of stoneWalls) {
@@ -1626,9 +1670,13 @@ export class Boss extends Component {
         const hunterScript = this.currentTarget.getComponent('Hunter') as any;
         const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
         const priestScript = this.currentTarget.getComponent('Priest') as any;
+        const mageScript = this.currentTarget.getComponent('Mage') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
         const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
-        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript;
+        const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
+        const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
+        const bearScript = this.currentTarget.getComponent('Bear') as any;
+        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript || bearScript;
         
         if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
             // 目标已被摧毁，停止攻击动画
@@ -1930,15 +1978,31 @@ export class Boss extends Component {
         const hunterScript = this.currentTarget.getComponent('Hunter') as any;
         const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
         const priestScript = this.currentTarget.getComponent('Priest') as any;
+        const mageScript = this.currentTarget.getComponent('Mage') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
         const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
         const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
         const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
-        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
-        
+        const bearScript = this.currentTarget.getComponent('Bear') as any;
+
+        // 检查巨熊是否存活
+        if (bearScript) {
+            if (!bearScript.isAlive || !bearScript.isAlive() || bearScript.isDead || bearScript.isDestroyed) {
+                this.currentTarget = null!;
+                if (this.isPlayingAttackAnimation) {
+                    this.isPlayingAttackAnimation = false;
+                    this.attackComplete = false;
+                    this.playIdleAnimation();
+                }
+                return;
+            }
+        }
+
+        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript || bearScript;
+
         if (targetScript && targetScript.takeDamage) {
             targetScript.takeDamage(this.attackDamage);
-            
+
             // 检查目标是否仍然存活，特别是石墙
             if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
                 // 目标被摧毁，清除目标并停止攻击动画
@@ -1977,7 +2041,7 @@ export class Boss extends Component {
         }
 
         // 攻击时朝向目标方向
-        const direction = new Vec3();
+        const direction = this.tempVec3_1;
         Vec3.subtract(direction, this.currentTarget.worldPosition, this.node.worldPosition);
         this.flipDirection(direction);
 
@@ -2224,6 +2288,12 @@ export class Boss extends Component {
     }
     
     protected removeWarcryBuff(enemy: Node, enemyScript: any) {
+        // 修复：添加空值检查，避免在游戏结束后或对象池复用后访问 null 报错
+        if (!this.warcryBuffEndTime || !this.warcryBuffedEnemies) {
+            // 对象池已回收，Buff 集合已无效，直接返回
+            return;
+        }
+
         if (enemyScript._originalMoveSpeed) {
             enemyScript.moveSpeed = enemyScript._originalMoveSpeed;
         }
@@ -2233,9 +2303,9 @@ export class Boss extends Component {
         if (enemyScript._originalAttackInterval) {
             enemyScript.attackInterval = enemyScript._originalAttackInterval;
         }
-        
+
         this.removeRedGlowEffect(enemy);
-        
+
         this.warcryBuffedEnemies.delete(enemy);
         this.warcryBuffEndTime.delete(enemy);
     }
@@ -2303,8 +2373,17 @@ export class Boss extends Component {
                 }
             }
         }
-        this.warcryBuffedEnemies.clear();
-        this.warcryBuffEndTime.clear();
+        // 修复：确保集合已初始化（对象池复用后可能为 null）
+        if (!this.warcryBuffedEnemies) {
+            this.warcryBuffedEnemies = new Set();
+        } else {
+            this.warcryBuffedEnemies.clear();
+        }
+        if (!this.warcryBuffEndTime) {
+            this.warcryBuffEndTime = new Map();
+        } else {
+            this.warcryBuffEndTime.clear();
+        }
     }
 
     // ====== 死亡与对象池 ======
@@ -2422,8 +2501,17 @@ export class Boss extends Component {
         this.attackComplete = false;
         this.warcryTimer = 0;
         this.isPlayingWarcryAnimation = false;
-        this.warcryBuffedEnemies.clear();
-        this.warcryBuffEndTime.clear();
+        // 修复：确保集合已初始化（对象池复用后可能为 null）
+        if (!this.warcryBuffedEnemies) {
+            this.warcryBuffedEnemies = new Set();
+        } else {
+            this.warcryBuffedEnemies.clear();
+        }
+        if (!this.warcryBuffEndTime) {
+            this.warcryBuffEndTime = new Map();
+        } else {
+            this.warcryBuffEndTime.clear();
+        }
         this.wasPlayingAttackBeforeWarcry = false;
         this.clearBloodRageVisualOnly();
         this.isBloodRageActive = false;
@@ -2638,7 +2726,7 @@ export class Boss extends Component {
 
             if (distanceSq < detectionRangeSq2 && distanceSq > 0.01) {
                 const distance = Math.sqrt(distanceSq);
-                const avoidDir = new Vec3();
+                const avoidDir = this.tempVec3_2;
                 Vec3.subtract(avoidDir, currentPos, enemyPos);
                 avoidDir.normalize();
                 
@@ -2658,7 +2746,7 @@ export class Boss extends Component {
             avoidanceForce.normalize();
             
             const avoidanceWeight = maxStrength > 2.0 ? 0.7 : (maxStrength > 1.0 ? 0.5 : 0.3);
-            const finalDir = new Vec3();
+            const finalDir = this.tempVec3_3;
             Vec3.lerp(finalDir, desiredDirection, avoidanceForce, avoidanceWeight);
             finalDir.normalize();
             

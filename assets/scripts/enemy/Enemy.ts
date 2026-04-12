@@ -30,7 +30,7 @@ export class Enemy extends Component {
     attackRange: number = 0; // 增加攻击范围，确保大于石墙碰撞半径(40) + 敌人半径(20) = 60
 
     @property
-    collisionRadius: number = 5; // 敌人之间的碰撞半径（像素），统一固定为 5
+    collisionRadius: number = 2; // 敌人之间的碰撞半径（像素），统一固定为 2
 
     @property({
         tooltip: "韧性（0-1）：1秒内遭受此百分比血量损失才会触发僵直。0表示没有抗性（受到攻击就会播放受击动画），1表示最大抗性（需要100%血量损失才触发僵直）"
@@ -107,8 +107,11 @@ export class Enemy extends Component {
     // 性能优化：缓存和复用对象
     private cachedWorldPosition: Vec3 = new Vec3(); // 缓存世界位置，避免重复访问
     private tempVec3_1: Vec3 = new Vec3(); // 临时Vec3对象1（复用）
+    private tempVec3_2: Vec3 = new Vec3(); // 临时 Vec3 对象 2（复用）
+    private tempVec3_3: Vec3 = new Vec3(); // 临时 Vec3 对象 3（复用）
+    private tempColor: Color = new Color(); // 临时 Color 对象（复用）
     // 最近一次受击方向（世界坐标系下的力方向，用于伤害跳字反方向飘动）
-    private lastHitDirection: Vec3 | null = null;
+    private lastHitDirection: Vec3 = new Vec3(); // 预创建对象，避免条件判断中创建
     
     // 对象池相关：预制体名称（用于对象池回收）
     public prefabName: string = "Orc"; // 默认值，子类可以重写
@@ -832,45 +835,43 @@ export class Enemy extends Component {
             this.stopAllAnimations();
         }
 
-        // 计算移动方向
-        const direction = new Vec3();
-        Vec3.subtract(direction, this.currentTarget.worldPosition, this.node.worldPosition);
-        const distance = direction.length();
+        // 计算移动方向 - 使用复用的临时对象
+        Vec3.subtract(this.tempVec3_1, this.currentTarget.worldPosition, this.node.worldPosition);
+        const distance = this.tempVec3_1.length();
 
         // 如果距离太近，停止移动
         if (distance < 0.1) {
                 return;
             }
-            
-        // 归一化方向
-        direction.normalize();
 
-        // 计算新位置
+        // 归一化方向
+        this.tempVec3_1.normalize();
+
+        // 计算新位置 - 使用复用的临时对象
         const moveDistance = this.moveSpeed * deltaTime;
-        const newPos = new Vec3();
-        Vec3.scaleAndAdd(newPos, this.node.worldPosition, direction, moveDistance);
+        Vec3.scaleAndAdd(this.tempVec3_2, this.node.worldPosition, this.tempVec3_1, moveDistance);
 
         // 敌人之间碰撞体积检测与避让
-        const willCollide = this.checkCollisionWithEnemy(newPos);
+        const willCollide = this.checkCollisionWithEnemy(this.tempVec3_2);
         if (willCollide) {
             const currentPos = this.node.worldPosition;
-            const avoidanceDir = this.calculateEnemyAvoidanceDirection(currentPos, direction, deltaTime);
-            const avoidanceWeight = 0.3;
-            const finalDir = new Vec3();
-            Vec3.lerp(finalDir, direction, avoidanceDir, avoidanceWeight);
-            finalDir.normalize();
-            Vec3.scaleAndAdd(newPos, currentPos, finalDir, moveDistance);
+            // 修复：保存原始方向到独立对象，避免被 calculateEnemyAvoidanceDirection 修改（该函数会清空 tempVec3_1）
+            const originalDirection = new Vec3(this.tempVec3_1.x, this.tempVec3_1.y, this.tempVec3_1.z);
+            const avoidanceDir = this.calculateEnemyAvoidanceDirection(currentPos, originalDirection, deltaTime);
+            // calculateEnemyAvoidanceDirection 返回的是最终方向（tempVec3_3），直接使用
+            this.tempVec3_3.set(avoidanceDir);
+            Vec3.scaleAndAdd(this.tempVec3_2, currentPos, this.tempVec3_3, moveDistance);
             // 使用最终方向更新翻转方向
-            direction.set(finalDir);
+            this.tempVec3_1.set(this.tempVec3_3);
         }
 
         // 限制在屏幕范围内
-                const clampedPos = this.clampPositionToScreen(newPos);
+                const clampedPos = this.clampPositionToScreen(this.tempVec3_2);
                             this.node.setWorldPosition(clampedPos);
-                            
+
                             // 根据移动方向翻转
-            this.flipDirection(direction);
-            
+            this.flipDirection(this.tempVec3_1);
+
             // 播放行走动画
             this.playWalkAnimation();
     }
@@ -983,13 +984,13 @@ export class Enemy extends Component {
         const maxX = designResolution.width - collisionRadius;
         const minY = collisionRadius;
         const maxY = designResolution.height - collisionRadius;
-        
-        // 限制位置在屏幕范围内
-        const clampedPos = new Vec3(position);
-        clampedPos.x = Math.max(minX, Math.min(maxX, clampedPos.x));
-        clampedPos.y = Math.max(minY, Math.min(maxY, clampedPos.y));
-        
-        return clampedPos;
+
+        // 限制位置在屏幕范围内 - 使用复用的临时对象
+        this.tempVec3_1.set(position);
+        this.tempVec3_1.x = Math.max(minX, Math.min(maxX, this.tempVec3_1.x));
+        this.tempVec3_1.y = Math.max(minY, Math.min(maxY, this.tempVec3_1.y));
+
+        return this.tempVec3_1;
     }
 
     // 根据移动方向翻转敌人
@@ -1436,12 +1437,11 @@ export class Enemy extends Component {
         }
         // PerformanceMonitor.endTiming('Enemy.attack.distanceCheck', distanceCheckStartTime, 0);
 
-        // 4. 方向计算和翻转
+        // 4. 方向计算和翻转 - 使用复用的临时对象
         // const directionStartTime = PerformanceMonitor.startTiming('Enemy.attack.calculateDirection');
         // 攻击时朝向目标方向
-        const direction = new Vec3();
-        Vec3.subtract(direction, this.currentTarget.worldPosition, this.node.worldPosition);
-        this.flipDirection(direction);
+        Vec3.subtract(this.tempVec3_1, this.currentTarget.worldPosition, this.node.worldPosition);
+        this.flipDirection(this.tempVec3_1);
         // PerformanceMonitor.endTiming('Enemy.attack.calculateDirection', directionStartTime, 0);
 
         // 5. 播放攻击动画（使用动画帧，在updateAttackAnimation中造成伤害）
@@ -1489,18 +1489,18 @@ export class Enemy extends Component {
         const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
         const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
-        const iceTowerScript = this.currentTarget.getComponent('IceTower') as any; // 添加冰塔支持
-        const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any; // 添加雷塔支持
-        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || churchScript || priestScript || crystalScript || hunterScript || mageScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
+        const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
+        const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
+        const bearScript = this.currentTarget.getComponent('Bear') as any;
+        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || churchScript || priestScript || crystalScript || hunterScript || mageScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript || bearScript;
         
         if (targetScript && targetScript.takeDamage) {
-            // 计算受击方向：从敌人指向目标
-            const hitDir = new Vec3();
-            Vec3.subtract(hitDir, this.currentTarget.worldPosition, this.node.worldPosition);
-            if (hitDir.length() > 0.001) {
-                hitDir.normalize();
+            // 计算受击方向：从敌人指向目标 - 使用复用的临时对象
+            Vec3.subtract(this.tempVec3_1, this.currentTarget.worldPosition, this.node.worldPosition);
+            if (this.tempVec3_1.length() > 0.001) {
+                this.tempVec3_1.normalize();
             }
-            targetScript.takeDamage(this.attackDamage, hitDir);
+            targetScript.takeDamage(this.attackDamage, this.tempVec3_1);
             
             // 检查目标是否仍然存活，特别是石墙
             if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
@@ -1531,11 +1531,8 @@ export class Enemy extends Component {
             return;
         }
 
-        // 记录最近一次受击方向（标准化后的力方向）
+        // 记录最近一次受击方向（标准化后的力方向）- lastHitDirection 已预创建，直接使用
         if (hitDirection && hitDirection.length() > 0.001) {
-            if (!this.lastHitDirection) {
-                this.lastHitDirection = new Vec3();
-            }
             this.lastHitDirection.set(hitDirection);
             this.lastHitDirection.normalize();
         }
@@ -1768,25 +1765,23 @@ export class Enemy extends Component {
             label.fontSize = label.fontSize * 1.2;
         }
 
-        // 飘动方向：沿箭矢/攻击方向飘动（与受击方向一致）
-        const floatDir = new Vec3();
+        // 飘动方向：沿箭矢/攻击方向飘动（与受击方向一致） - 使用复用的临时对象
         const sourceDir = hitDirection && hitDirection.length() > 0.001
             ? hitDirection
             : (this.lastHitDirection && this.lastHitDirection.length() > 0.001 ? this.lastHitDirection : null);
 
         if (sourceDir) {
-            floatDir.set(sourceDir);
-            floatDir.normalize();
+            this.tempVec3_1.set(sourceDir);
+            this.tempVec3_1.normalize();
         } else {
             // 如果没有记录受击方向，默认向上
-            floatDir.set(0, 1, 0);
+            this.tempVec3_1.set(0, 1, 0);
         }
 
         // 飘动距离缩短一半
         const floatDistance = isCritical ? 40 : 25;
-        const offset = new Vec3();
-        Vec3.scaleAndAdd(offset, startPos, floatDir, floatDistance);
-        const endWorldPos = offset;
+        Vec3.scaleAndAdd(this.tempVec3_2, startPos, this.tempVec3_1, floatDistance);
+        const endWorldPos = this.tempVec3_2;
 
         // 调试日志：伤害数字飘动方向与位置
         // console.info('[Enemy.showDamageNumber]', this.unitName || this.node.name,
@@ -2328,7 +2323,20 @@ export class Enemy extends Component {
             }
         }
 
-        // 5. 水晶
+        // 5. 巨熊（中立状态时攻击所有单位，包括敌人）
+        const bearsNode = find('Canvas/Bears');
+        if (bearsNode) {
+            for (const bear of bearsNode.children) {
+                if (bear && bear.active && bear.isValid) {
+                    const bearScript = bear.getComponent('Bear') as any;
+                    if (bearScript && bearScript.isAlive && bearScript.isAlive() && !bearScript.isDead && !bearScript.isDestroyed) {
+                        allTargets.push(bear);
+                    }
+                }
+            }
+        }
+
+        // 6. 水晶
         if (this.targetCrystal && this.targetCrystal.isValid) {
             const crystalScript = this.targetCrystal.getComponent('Crystal') as any;
             if (crystalScript && crystalScript.isAlive && crystalScript.isAlive()) {
@@ -2363,24 +2371,24 @@ export class Enemy extends Component {
         }
 
         const moveDistance = this.moveSpeed * deltaTime;
-        const direction = new Vec3(0, -1, 0); // 向下
-        const newPos = new Vec3();
-        Vec3.scaleAndAdd(newPos, this.node.worldPosition, direction, moveDistance);
+        // 使用复用的临时对象
+        this.tempVec3_1.set(0, -1, 0); // 向下
+        Vec3.scaleAndAdd(this.tempVec3_2, this.node.worldPosition, this.tempVec3_1, moveDistance);
 
         // 敌人之间碰撞体积检测与避让
-        const willCollide = this.checkCollisionWithEnemy(newPos);
+        const willCollide = this.checkCollisionWithEnemy(this.tempVec3_2);
         if (willCollide) {
             const currentPos = this.node.worldPosition;
-            const avoidanceDir = this.calculateEnemyAvoidanceDirection(currentPos, direction, deltaTime);
-            const avoidanceWeight = 0.3;
-            const finalDir = new Vec3();
-            Vec3.lerp(finalDir, direction, avoidanceDir, avoidanceWeight);
-            finalDir.normalize();
-            Vec3.scaleAndAdd(newPos, currentPos, finalDir, moveDistance);
+            // 修复：保存原始方向到独立对象，避免被 calculateEnemyAvoidanceDirection 修改（该函数会清空 tempVec3_1）
+            const originalDirection = new Vec3(this.tempVec3_1.x, this.tempVec3_1.y, this.tempVec3_1.z);
+            const avoidanceDir = this.calculateEnemyAvoidanceDirection(currentPos, originalDirection, deltaTime);
+            // calculateEnemyAvoidanceDirection 返回的是最终方向（tempVec3_3），直接使用
+            this.tempVec3_3.set(avoidanceDir);
+            Vec3.scaleAndAdd(this.tempVec3_2, currentPos, this.tempVec3_3, moveDistance);
         }
 
         // 限制在屏幕范围内
-        const clampedPos = this.clampPositionToScreen(newPos);
+        const clampedPos = this.clampPositionToScreen(this.tempVec3_2);
         this.node.setWorldPosition(clampedPos);
 
         // 播放行走动画
@@ -2521,7 +2529,7 @@ export class Enemy extends Component {
      * @returns 调整后的移动方向
      */
     private calculateEnemyAvoidanceDirection(currentPos: Vec3, desiredDirection: Vec3, deltaTime: number): Vec3 {
-        const avoidanceForce = new Vec3(0, 0, 0);
+        this.tempVec3_1.set(0, 0, 0); // this.tempVec3_1
         let obstacleCount = 0;
         let maxStrength = 0;
 
@@ -2585,36 +2593,35 @@ export class Enemy extends Component {
 
             if (distanceSq < detectionRangeSq && distanceSq > 0.01) {
                 const distance = Math.sqrt(distanceSq);
-                const avoidDir = new Vec3();
-                Vec3.subtract(avoidDir, currentPos, enemyPos);
-                avoidDir.normalize();
-                
+                // 使用复用的临时对象
+                Vec3.subtract(this.tempVec3_2, currentPos, enemyPos);
+                this.tempVec3_2.normalize();
+
                 // 距离越近，避障力越强
                 let strength = 1 - (distance / detectionRange);
-                
+
                 // 如果已经在碰撞范围内，大幅增强避障力
                 if (distanceSq < minDistanceSq) {
                     strength = 2.0; // 强制避障
                 }
-                
-                Vec3.scaleAndAdd(avoidanceForce, avoidanceForce, avoidDir, strength);
+
+                Vec3.scaleAndAdd(this.tempVec3_1, this.tempVec3_1, this.tempVec3_2, strength);
                 maxStrength = Math.max(maxStrength, strength);
                 obstacleCount++;
             }
         }
 
         // 如果有障碍物，应用避障力
-        if (obstacleCount > 0 && avoidanceForce.length() > 0.1) {
-            avoidanceForce.normalize();
+        if (obstacleCount > 0 && this.tempVec3_1.length() > 0.1) {
+            this.tempVec3_1.normalize();
             
             // 根据障碍物强度调整混合比例
             // 如果障碍物很近（maxStrength > 1），优先避障
             const avoidanceWeight = maxStrength > 2.0 ? 0.7 : (maxStrength > 1.0 ? 0.5 : 0.3);
-            const finalDir = new Vec3();
-            Vec3.lerp(finalDir, desiredDirection, avoidanceForce, avoidanceWeight);
-            finalDir.normalize();
-            
-            return finalDir;
+            Vec3.lerp(this.tempVec3_3, desiredDirection, this.tempVec3_1, avoidanceWeight);
+            this.tempVec3_3.normalize();
+
+            return this.tempVec3_3;
         }
 
         // 没有障碍物，返回期望方向

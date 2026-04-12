@@ -249,8 +249,9 @@ export class Church extends Build {
         priest.active = false;
         
         priest.setParent(this.priestContainer);
-        priest.setWorldPosition(spawnPos);
 
+        // 修复：在激活前先设置位置，确保 onEnable 时位置已正确（否则复活单位可能因为旧位置 y >= 500 而不安排自动上移）
+        priest.setWorldPosition(spawnPos);
         const priestScript = priest.getComponent(Priest) as Priest | null;
         if (priestScript) {
             // 设置prefabName（用于对象池回收）
@@ -266,7 +267,7 @@ export class Church extends Build {
         
         // 现在激活节点，只触发一次 onEnable()
         priest.active = true;
-        
+
         if (priestScript) {
            //console.info(`[Church] 生产牧师，最终攻击力=${(priestScript as any).attackDamage}, 生命值=${(priestScript as any).maxHealth}`);
         }

@@ -128,11 +128,11 @@ export class UnitSelectionManager extends Component {
         // 延迟一帧清除选择，确保单位的globalTouchHandler先执行
         // 使用scheduleOnce延迟到下一帧，让Role.globalTouchHandler先处理移动
         this.scheduleOnce(() => {
-        console.log('[UnitSelectionManager] 准备延迟清除选择');
+          //console.log('[UnitSelectionManager] 准备延迟清除选择');
             // 延迟清除选择，确保单位的globalTouchHandler先执行
             // 此时如果单位已经处理了移动，globalTouchHandler会被清除，不会重复处理
             this.clearSelection();
-            console.log('[UnitSelectionManager] clearSelection 被调用');
+              //console.log('[UnitSelectionManager] clearSelection 被调用');
         }, 0.01);
     }
 
@@ -169,7 +169,7 @@ export class UnitSelectionManager extends Component {
      * @param unitInfo 单位信息
      */
     selectUnit(unitNode: Node, unitInfo: UnitInfo) {
-        console.log('[UnitSelectionManager] selectUnit called, unitNode:', unitNode?.name, 'unitInfoPanel:', this.unitInfoPanel != null);
+          //console.log('[UnitSelectionManager] selectUnit called, unitNode:', unitNode?.name, 'unitInfoPanel:', this.unitInfoPanel != null);
         // 保存之前选中的单位，用于清除其globalTouchHandler
         const previousUnit = this.currentSelectedUnit;
         const previousUnits = [...this.currentSelectedUnits];
@@ -199,7 +199,7 @@ export class UnitSelectionManager extends Component {
 
         // 显示范围
         this.showRangeDisplay(unitNode, unitInfo);
-        console.log('[UnitSelectionManager] selectUnit completed');
+          //console.log('[UnitSelectionManager] selectUnit completed');
     }
 
     /**

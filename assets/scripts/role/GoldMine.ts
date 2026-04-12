@@ -47,6 +47,7 @@ export class GoldMine extends Build {
 
     // 金币产出相关
     private goldOutputTimer: number = 0; // 金币产出计时器
+    private tempVec3_1: Vec3 = new Vec3(); // 临时 Vec3 对象，避免 clone 创建
 
     // 动画相关 - 在预制体中配置动画帧序列
     @property([SpriteFrame])
@@ -181,10 +182,10 @@ export class GoldMine extends Build {
             this.battleCryTimer += deltaTime;
             if (this.battleCryTimer >= this.BATTLE_CRY_INTERVAL) {
                 this.battleCryTimer = 0;
-                console.log(`[GoldMine] 口号判定：随机数=${Math.random()}, 阈值=${this.battleCryChance}, 我方单位数=${friendlyCount}, 占领状态=${this.captureState}`);
+                  //console.log(`[GoldMine] 口号判定：随机数=${Math.random()}, 阈值=${this.battleCryChance}, 我方单位数=${friendlyCount}, 占领状态=${this.captureState}`);
                 // 30% 概率触发口号
                 if (Math.random() < this.battleCryChance) {
-                    console.log(`[GoldMine] 触发言号！`);
+                      //console.log(`[GoldMine] 触发言号！`);
                     this.tryPlayBattleCryForUnit();
                 }
             }
@@ -220,7 +221,7 @@ export class GoldMine extends Build {
                 this.captureState = CaptureState.Friendly;
                 this.captureProgress = 0;
                 this.hideCaptureIndicator();
-                console.log('[GoldMine] 被我方占领');
+                  //console.log('[GoldMine] 被我方占领');
                 // 播放占领成功音效
                 this.playCaptureSuccessSound();
             }
@@ -235,7 +236,7 @@ export class GoldMine extends Build {
                 this.captureState = CaptureState.Enemy;
                 this.captureProgress = 0;
                 this.hideCaptureIndicator();
-                console.log('[GoldMine] 被敌方占领');
+                  //console.log('[GoldMine] 被敌方占领');
                 // 播放被敌人占领音效
                 this.playEnemyCaptureSound();
             }
@@ -503,7 +504,7 @@ export class GoldMine extends Build {
         const parentNode = canvas || this.node.scene || this.node.parent;
         if (!parentNode) return;
 
-        const basePos = this.node.worldPosition.clone();
+        const basePos = this.tempVec3_1.set(this.node.worldPosition);
         basePos.y += 50; // 在金矿上方显示
 
         const n = new Node('GoldRewardText');
@@ -592,26 +593,17 @@ export class GoldMine extends Build {
         // 根据占领状态选择口号数组
         const cries = this.captureState === CaptureState.Friendly ? this.friendlyBattleCries : this.enemyBattleCries;
 
-        if (cries.length === 0) {
-            console.log(`[GoldMine] 口号数组为空`);
-            return;
-        }
-
         // 获取进入范围的我方单位（取第一个）
         const unit = this.getFirstFriendlyUnitNodeInRange(this.node.worldPosition, this.captureRange);
-        console.log(`[GoldMine] 获取单位结果：${unit ? '找到' : '未找到'}`);
+          //console.log(`[GoldMine] 获取单位结果：${unit ? '找到' : '未找到'}`);
         if (unit && unit.isValid && unit.active) {
             // 调用单位的 createDialog 方法发出口号
             const unitScript = unit.getComponent('Role') as any;
             if (unitScript && unitScript.createDialog) {
                 const cry = cries[Math.floor(Math.random() * cries.length)];
-                console.log(`[GoldMine] 单位 ${unit.name} 发出口号：${cry}`);
+                  //console.log(`[GoldMine] 单位 ${unit.name} 发出口号：${cry}`);
                 unitScript.createDialog(cry, false);
-            } else {
-                console.log(`[GoldMine] 单位没有 Role 组件或 createDialog 方法`);
             }
-        } else {
-            console.log(`[GoldMine] 未找到有效单位`);
         }
     }
 

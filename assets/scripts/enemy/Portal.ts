@@ -613,7 +613,17 @@ export class Portal extends Component {
             const damage = Math.max(1, Math.floor(this.attackDamage));
             fireballScript.init(startPos, targetNode, damage, (dmg: number, hitDir: Vec3) => {
                 if (!targetNode || !targetNode.isValid) return;
-                // 优先作为角色单位受击
+                // 优先作为角色单位受击（包括巨熊）
+                const bear = targetNode.getComponent('Bear') as any;
+                if (bear) {
+                    // 检查巨熊是否存活
+                    if (!bear.isAlive || !bear.isAlive() || bear.isDead || bear.isDestroyed) return;
+                    if (typeof bear.takeDamage === 'function') {
+                        bear.takeDamage(dmg, hitDir);
+                        this.tryShowFirstPortalAttackIntro();
+                    }
+                    return;
+                }
                 const role =
                     (targetNode.getComponent('Role') as any) ||
                     (targetNode.getComponent('Arrower') as any) ||
@@ -663,7 +673,8 @@ export class Portal extends Component {
             'Canvas/ElfSwordsmans', // 实际项目中剑士容器常用命名
             'Canvas/Swordsmen',
             'Canvas/Priests',
-            'Canvas/Mages'
+            'Canvas/Mages',
+            'Canvas/Bears'         // 巨熊（中立状态时也是目标）
         ];
         const center = this.node.worldPosition;
         let best: Node | null = null;
@@ -673,6 +684,15 @@ export class Portal extends Component {
             if (!container) continue;
             for (const child of container.children) {
                 if (!child.active || !child.isValid) continue;
+
+                // 检查巨熊是否存活
+                if (path === 'Canvas/Bears') {
+                    const bearScript = child.getComponent('Bear') as any;
+                    if (!bearScript || !bearScript.isAlive || !bearScript.isAlive() || bearScript.isDead || bearScript.isDestroyed) {
+                        continue;
+                    }
+                }
+
                 const pos = child.worldPosition;
                 const dx = pos.x - center.x;
                 const dy = pos.y - center.y;

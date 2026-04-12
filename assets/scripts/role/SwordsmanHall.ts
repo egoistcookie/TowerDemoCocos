@@ -261,8 +261,9 @@ export class SwordsmanHall extends Build {
         swordsman.active = false;
         
         swordsman.setParent(this.swordsmanContainer);
-        swordsman.setWorldPosition(spawnPos);
 
+        // 修复：在激活前先设置位置，确保 onEnable 时位置已正确（否则复活单位可能因为旧位置 y >= 500 而不安排自动上移）
+        swordsman.setWorldPosition(spawnPos);
         // 设置ElfSwordsman的建造成本（如果需要）
         const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
         if (swordsmanScript) {
@@ -280,7 +281,7 @@ export class SwordsmanHall extends Build {
         
         // 现在激活节点，只触发一次 onEnable()
         swordsman.active = true;
-        
+
         if (swordsmanScript) {
            //console.info(`[SwordsmanHall] 生产剑士，最终攻击力=${swordsmanScript.attackDamage}, 生命值=${swordsmanScript.maxHealth}`);
         }

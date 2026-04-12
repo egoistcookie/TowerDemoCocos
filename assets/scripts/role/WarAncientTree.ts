@@ -505,8 +505,10 @@ export class WarAncientTree extends Build {
         const treePos = this.node.worldPosition.clone();
         let spawnPos = new Vec3(treePos.x, treePos.y - this.spawnOffset, treePos.z);
 
+
         // 检查生成位置是否有单位，如果有则左右平移
         spawnPos = this.findAvailableSpawnPosition(spawnPos);
+        console.log('[WarAncientTree.produceTower] 生成位置=(' + spawnPos.x.toFixed(1) + ',' + spawnPos.y.toFixed(1) + ')');
 
         // 增加人口（在创建Tower之前）
         if (this.gameManager) {
@@ -559,6 +561,8 @@ export class WarAncientTree extends Build {
         tower.active = false;
         
         tower.setParent(this.towerContainer);
+
+        // 修复：在激活前先设置位置，确保 onEnable 时位置已正确（否则复活单位可能因为旧位置 y >= 500 而不安排自动上移）
         tower.setWorldPosition(spawnPos);
         
         // 设置Tower的建造成本（如果需要）（使用字符串避免循环依赖）
@@ -587,7 +591,7 @@ export class WarAncientTree extends Build {
         
         // 现在激活节点，只触发一次 onEnable()
         tower.active = true;
-        
+
         // 节点激活后，确保穿透箭技能已正确初始化（创建蓝条等）
         if (towerScript && typeof towerScript.isPenetrateArrowEnabled === 'boolean' && towerScript.isPenetrateArrowEnabled) {
             // 延迟一帧确保 onEnable 已执行完毕

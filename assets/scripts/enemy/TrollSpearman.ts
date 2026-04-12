@@ -12,7 +12,7 @@ export class TrollSpearman extends Enemy {
     attackDamage: number = 6;
     attackInterval: number = 1.8;
     attackRange: number = 200;
-    collisionRadius: number = 20; // 碰撞半径（像素）
+    collisionRadius: number = 2; // 碰撞半径（像素）
     unitName: string = "巨魔投矛手";
     unitDescription: string = "远程攻击的巨魔投矛手，拥有较远的攻击距离，但血量较低。";
     goldReward: number = 3;

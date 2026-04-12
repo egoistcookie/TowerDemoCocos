@@ -121,9 +121,9 @@ export class Wisp extends Role {
         
         if (wasManuallyControlled) {
             if (!this.manualControlActive) {
-                console.log('[Wisp] ===== MANUAL CONTROL ACTIVATED =====');
-                console.log('[Wisp] isManuallyControlled:', this.isManuallyControlled);
-                console.log('[Wisp] manualMoveTarget:', this.manualMoveTarget);
+                //console.log('[Wisp] ===== MANUAL CONTROL ACTIVATED =====');
+                //console.log('[Wisp] isManuallyControlled:', this.isManuallyControlled);
+                //console.log('[Wisp] manualMoveTarget:', this.manualMoveTarget);
                 this.manualControlActive = true;
                 this.repairTarget = null!;
                 this.isRepairing = false;
@@ -139,7 +139,7 @@ export class Wisp extends Role {
         
         if (!isStillManuallyControlled && this.manualControlActive) {
             // 父类可能已经完成了移动，现在可以停用手动控制
-            console.log('[Wisp] ===== MANUAL CONTROL DEACTIVATED =====');
+            //console.log('[Wisp] ===== MANUAL CONTROL DEACTIVATED =====');
             this.manualControlActive = false;
         }
 

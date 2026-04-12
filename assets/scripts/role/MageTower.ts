@@ -139,7 +139,6 @@ export class MageTower extends Build {
 		const collisionRadius = Math.max(20, Math.min(120, tmpMageScript?.collisionRadius ?? 40));
 		// 尝试在落点附近寻找不与已存在友军（尤其法师）重叠的位置
 		spawnPos = this.findNonOverlappingPosition(spawnPos, collisionRadius * 1.6, 18);
-		mage.setWorldPosition(spawnPos);
         const mageScript = mage.getComponent('Mage') as any;
         if (mageScript && (!mageScript.prefabName || mageScript.prefabName === '')) {
             mageScript.prefabName = 'Mage';
@@ -148,6 +147,8 @@ export class MageTower extends Build {
         if (this.gameManager && mageScript) {
             this.gameManager.checkUnitFirstAppearance('Mage', mageScript);
         }
+        // 修复：在激活前先设置位置，确保 onEnable 时位置已正确（否则复活单位可能因为旧位置 y >= 500 而不安排自动上移）
+        mage.setWorldPosition(spawnPos);
         mage.active = true;
         this.producedMages.push(mage);
         const idx = this.producedMages.length - 1;

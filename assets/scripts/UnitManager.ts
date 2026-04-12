@@ -436,6 +436,79 @@ export class UnitManager extends Component {
         ////console.info(`[UnitManager.getEnemiesInRange] 返回 ${result.length} 个符合条件的敌人`);
         return result;
     }
+
+    /**
+     * 在指定范围内查找所有单位（中立巨熊使用）
+     * @param center 中心位置
+     * @param maxDistance 最大距离
+     * @param includeOnlyAlive 是否只包含存活的单位
+     */
+    getAllUnitsInRange(center: Vec3, maxDistance: number, includeOnlyAlive: boolean = true): Node[] {
+        const result: Node[] = [];
+        const maxDistanceSq = maxDistance * maxDistance;
+
+        // 获取所有可移动单位（友方）
+        const friendlies = this.getFriendlies();
+        for (const friendly of friendlies) {
+            if (!friendly || !friendly.isValid || !friendly.active) continue;
+
+            const dx = friendly.worldPosition.x - center.x;
+            const dy = friendly.worldPosition.y - center.y;
+            const distanceSq = dx * dx + dy * dy;
+
+            if (distanceSq <= maxDistanceSq) {
+                if (includeOnlyAlive) {
+                    const script = this.getFriendlyScript(friendly);
+                    if (!script || !this.isAliveFriendly(script)) continue;
+                }
+                result.push(friendly);
+            }
+        }
+
+        // 获取所有敌方单位
+        const enemies = this.getEnemiesInRange(center, maxDistance, includeOnlyAlive);
+        result.push(...enemies);
+
+        return result;
+    }
+
+    /**
+     * 获取所有友方单位
+     */
+    getFriendlies(): Node[] {
+        return [
+            ...this.towers,     // 包括弓箭手（Arrower）在 towers 容器中
+            ...this.hunters,
+            ...this.mages,
+            ...this.elfSwordsmans
+        ].filter(node => node && node.isValid && node.active);
+    }
+
+    /**
+     * 获取友方单位的脚本
+     */
+    private getFriendlyScript(node: Node): any {
+        const possibleNames = ['Hunter', 'Mage', 'ElfSwordsman', 'Arrower', 'Priest'];
+        for (const name of possibleNames) {
+            const script = node.getComponent(name);
+            if (script) return script;
+        }
+        return null;
+    }
+
+    /**
+     * 检查友方单位是否存活
+     */
+    private isAliveFriendly(script: any): boolean {
+        if (script.isAlive && typeof script.isAlive === 'function') {
+            return script.isAlive();
+        } else if (script.currentHealth !== undefined) {
+            return script.currentHealth > 0;
+        } else if (script.health !== undefined) {
+            return script.health > 0;
+        }
+        return true;
+    }
     
     /**
      * 在指定范围内查找建筑物
@@ -501,7 +574,76 @@ export class UnitManager extends Component {
         
         return true;
     }
-    
+
+    /**
+     * 获取所有可攻击目标（包括敌人、中立巨熊、友方单位）
+     * 中立巨熊使用：攻击所有单位
+     * @param center 中心位置
+     * @param maxDistance 最大距离
+     * @param includeOnlyAlive 是否只包含存活的单位
+     */
+    getAllTargetsInRange(center: Vec3, maxDistance: number, includeOnlyAlive: boolean = true): Node[] {
+        const result: Node[] = [];
+        const maxDistanceSq = maxDistance * maxDistance;
+
+        // 获取敌人
+        const enemies = this.getEnemiesInRange(center, maxDistance, includeOnlyAlive);
+        result.push(...enemies);
+
+        // 获取友方单位（弓箭手、女猎手、法师、精灵剑士等）
+        const friendlies = this.getFriendlies();
+        let friendlyCount = 0;
+        //console.log(`[UnitManager] getAllTargetsInRange: 敌人=${enemies.length}, 友方=${friendlies.length}`);
+        for (const friendly of friendlies) {
+            if (!friendly || !friendly.isValid || !friendly.active) continue;
+
+            const dx = friendly.worldPosition.x - center.x;
+            const dy = friendly.worldPosition.y - center.y;
+            const distSq = dx * dx + dy * dy;
+
+            if (distSq > maxDistanceSq) continue;
+
+            // 检查是否存活
+            if (includeOnlyAlive) {
+                const script = this.getFriendlyScript(friendly);
+                if (!script || !this.isAliveFriendly(script)) continue;
+            }
+
+            friendlyCount++;
+            result.push(friendly);
+        }
+
+        // 获取中立巨熊（用于归顺后的巨熊攻击其他巨熊）
+        const bearsNode = find('Canvas/Bears');
+        let bearCount = 0;
+        if (bearsNode && bearsNode.isValid) {
+            const allChildren = bearsNode.children || [];
+            for (const bear of allChildren) {
+                if (!bear || !bear.isValid || !bear.active) continue;
+
+                const dx = bear.worldPosition.x - center.x;
+                const dy = bear.worldPosition.y - center.y;
+                const distSq = dx * dx + dy * dy;
+
+                if (distSq > maxDistanceSq) continue;
+
+                // 检查巨熊是否存活
+                if (includeOnlyAlive) {
+                    const bearScript = bear.getComponent('Bear') as any;
+                    if (!bearScript) continue;
+                    if (bearScript.isAlive && !bearScript.isAlive()) continue;
+                    if (bearScript.currentHealth !== undefined && bearScript.currentHealth <= 0) continue;
+                }
+
+                bearCount++;
+                result.push(bear);
+            }
+        }
+
+        //console.log(`[UnitManager] getAllTargetsInRange: 敌人=${enemies.length}, 友方=${friendlyCount}, 巨熊=${bearCount}, 总目标=${result.length}`);
+        return result;
+    }
+
     /**
      * 手动刷新单位列表（当单位被创建或销毁时调用）
      */

@@ -13,7 +13,7 @@ export class OrcShaman extends Enemy {
     attackDamage: number = 25; // 攻击力很高
     attackInterval: number = 2.0;
     attackRange: number = 200; // 远程攻击范围
-    collisionRadius: number = 20; // 碰撞半径（像素）
+    collisionRadius: number = 2; // 碰撞半径（像素）
     tenacity: number = 0.3; // 韧性与督军保持一致（0.3）
     unitName: string = "兽人萨满";
     unitDescription: string = "强大的兽人萨满，释放绿色法球攻击，移动缓慢但攻击力极高。";

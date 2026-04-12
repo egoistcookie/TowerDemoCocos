@@ -25,7 +25,7 @@ export class OrcWarlord extends Boss {
     attackRange: number = 70;
 
     @property({ override: true })
-    collisionRadius: number = 18;
+    collisionRadius: number = 2;
 
     @property({ override: true, tooltip: "韧性（0-1）：1秒内遭受此百分比血量损失才会触发僵直。" })
     tenacity: number = 0.45;
@@ -237,6 +237,14 @@ export class OrcWarlord extends Boss {
             // 安排在剩余时间结束时，单独移除每个敌人的 Buff
             for (const { enemy, delayMs } of removals) {
                 setTimeout(() => {
+                    // 修复：检查督军节点是否仍然有效，避免访问已回收的对象池对象
+                    if (!this.node || !this.node.isValid || this.isDestroyed) {
+                        return;
+                    }
+                    // 检查 Buff 集合是否有效（对象池复用后可能被重置）
+                    if (!this.warcryBuffEndTime || !this.warcryBuffedEnemies) {
+                        return;
+                    }
                     if (!enemy || !enemy.isValid) return;
                     const enemyScript =
                         (enemy.getComponent('Enemy') as any) ||

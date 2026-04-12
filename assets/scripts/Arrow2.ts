@@ -178,7 +178,7 @@ export class Arrow2 extends Component {
      * 检查是否命中敌人
      */
     checkHitEnemies(currentPos: Vec3) {
-        // 合并 Canvas/Enemies 和 Canvas/MinotaurWarriors 的子节点
+        // 合并 Canvas/Enemies、Canvas/MinotaurWarriors 和 Canvas/Bears 的子节点
         const allEnemies: Node[] = [];
 
         const enemiesNode = find('Canvas/Enemies');
@@ -193,6 +193,13 @@ export class Arrow2 extends Component {
             allEnemies.push(...minotaurChildren);
         }
 
+        // 添加巨熊容器（中立巨熊也是目标）
+        const bearsNode = find('Canvas/Bears');
+        if (bearsNode) {
+            const bearChildren = bearsNode.children || [];
+            allEnemies.push(...bearChildren);
+        }
+
         if (allEnemies.length === 0) {
             return;
         }
@@ -204,14 +211,15 @@ export class Arrow2 extends Component {
                 continue;
             }
 
-            // 检查是否是敌人（包括牛头人领主和 Boss）
+            // 检查是否是敌人（包括兽人督军、牛头人、巨熊等）
             const enemyScript = (enemy.getComponent('OrcWarlord') as any) ||
                                (enemy.getComponent('OrcWarrior') as any) ||
                                (enemy.getComponent('Enemy') as any) ||
                                (enemy.getComponent('TrollSpearman') as any) ||
                                (enemy.getComponent('Portal') as any) ||
                                (enemy.getComponent('MinotaurWarrior') as any) ||
-                               (enemy.getComponent('Boss') as any);
+                               (enemy.getComponent('Boss') as any) ||
+                               (enemy.getComponent('Bear') as any);
 
             if (!enemyScript) {
                 continue;

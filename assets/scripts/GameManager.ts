@@ -5191,6 +5191,11 @@ export class GameManager extends Component {
             this.scheduleOnce(() => {
                 this.spawnGoldMines();
             }, 0.2);
+
+            // 生成中立兽穴（X=50, Y=400）
+            this.scheduleOnce(() => {
+                this.spawnBeastDen();
+            }, 0.3);
         } else if (this.gameState !== GameState.Playing) {
             // 如果游戏已结束，重新开始游戏
             this.restartGame();
@@ -5632,7 +5637,7 @@ export class GameManager extends Component {
             node.setParent(container);
             node.setWorldPosition(position);
             node.active = true;
-            console.log('[GoldMine] spawned at', position.x, position.y);
+            // console.log('[GoldMine] spawned at', position.x, position.y);
         };
 
         // 计算中央左右位置
@@ -5671,6 +5676,174 @@ export class GameManager extends Component {
                 }
                 trySpawnGoldMine(prefab as Prefab, leftPos);
                 trySpawnGoldMine(prefab as Prefab, rightPos);
+            });
+        }
+    }
+
+    /**
+     * 生成中立兽穴（X=50, Y=400）
+     */
+    private spawnBeastDen() {
+        // 创建兽穴容器
+        const createContainer = () => {
+            const canvas = find('Canvas');
+            if (!canvas) return null;
+            let container = find('Canvas/BeastDen');
+            if (!container) {
+                container = new Node('BeastDen');
+                canvas.addChild(container);
+            }
+            // 调整容器层级：在 GoldMines 之后
+            try {
+                const goldMinesNode = find('Canvas/GoldMines');
+                if (goldMinesNode) {
+                    container.setSiblingIndex(goldMinesNode.getSiblingIndex() + 1);
+                } else {
+                    container.setSiblingIndex(4);
+                }
+            } catch {}
+            return container;
+        };
+        const container = createContainer();
+        if (!container) {
+            console.warn('[GameManager] spawnBeastDen: no container');
+            return;
+        }
+
+        // 兽穴位置（X=50, Y=900，掩映在树木之中）
+        const denPos = new Vec3(50, 900, 0);
+
+        // 加载兽穴预制体
+        const trySpawnBeastDen = (prefab: Prefab | null, position: Vec3) => {
+            if (!prefab) {
+                console.warn('[GameManager] spawnBeastDen: BeastDen prefab null');
+                return;
+            }
+            const node = instantiate(prefab);
+            node.setParent(container);
+            node.setWorldPosition(position);
+            node.active = true;
+            // console.log('[BeastDen] spawned at', position.x, position.y);
+        };
+
+        // 从 prefabs_sub 分包加载兽穴预制体
+        const sub = assetManager.getBundle('prefabs_sub');
+        if (sub) {
+            sub.load('BeastDen', Prefab, (err, prefab) => {
+                if (err || !prefab) {
+                    console.warn('[BeastDen] subbundle load BeastDen failed, fallback to resources', err);
+                    resources.load('BeastDen', Prefab, (e2, p2) => {
+                        if (e2 || !p2) {
+                            console.warn('[BeastDen] resources load BeastDen failed', e2);
+                            return;
+                        }
+                        trySpawnBeastDen(p2 as Prefab, denPos);
+                    });
+                    return;
+                }
+                trySpawnBeastDen(prefab, denPos);
+            });
+        } else {
+            // 回退到 resources
+            resources.load('BeastDen', Prefab, (err, prefab) => {
+                if (err) {
+                    console.warn('[BeastDen] resources load BeastDen failed', err);
+                    return;
+                }
+                trySpawnBeastDen(prefab as Prefab, denPos);
+            });
+        }
+    }
+
+    /**
+     * 生成巨熊（由兽穴触发）
+     * @param position 生成位置
+     * @param denNode 兽穴节点
+     * @param isTamed 是否归顺状态
+     */
+    public spawnBear(position: Vec3, denNode: Node, isTamed: boolean = false) {
+        // 创建巨熊容器
+        const createContainer = () => {
+            const canvas = find('Canvas');
+            if (!canvas) return null;
+            let container = find('Canvas/Bears');
+            if (!container) {
+                container = new Node('Bears');
+                canvas.addChild(container);
+            }
+            // 调整容器层级：在 Wisps 之后（避免被建筑遮挡）
+            try {
+                const wispsNode = find('Canvas/Wisps');
+                if (wispsNode) {
+                    container.setSiblingIndex(wispsNode.getSiblingIndex() + 1);
+                } else {
+                    // 如果 Wisps 不存在，放在 44（在单位层之上）
+                    container.setSiblingIndex(44);
+                }
+            } catch {}
+            return container;
+        };
+        const container = createContainer();
+        if (!container) {
+            console.warn('[GameManager] spawnBear: no container');
+            return;
+        }
+
+        // 加载巨熊预制体
+        const trySpawnBear = (prefab: Prefab | null, pos: Vec3, den: Node, tamed: boolean) => {
+            if (!prefab) {
+                console.warn('[GameManager] spawnBear: Bear prefab null');
+                return;
+            }
+            const node = instantiate(prefab);
+            node.setParent(container);
+            node.setWorldPosition(pos);
+            node.active = true;
+
+            // 获取巨熊脚本并初始化
+            const bearScript = node.getComponent('Bear') as any;
+            if (bearScript) {
+                const denScript = den.getComponent('BeastDen') as any;
+                if (!denScript) {
+                    console.warn('[GameManager] spawnBear: denScript 不存在');
+                    return;
+                }
+                if (tamed) {
+                    bearScript.setTamedState(den, denScript);
+                    denScript.setBearNode(node, bearScript);
+                } else {
+                    bearScript.setNeutralState(den, denScript);
+                    denScript.setBearNode(node, bearScript);
+                }
+                console.log('[Bear] spawned at', pos.x, pos.y, tamed ? '(归顺)' : '(中立)');
+            }
+        };
+
+        // 从 prefabs_sub 分包加载巨熊预制体
+        const sub = assetManager.getBundle('prefabs_sub');
+        if (sub) {
+            sub.load('Bear', Prefab, (err, prefab) => {
+                if (err || !prefab) {
+                    console.warn('[Bear] subbundle load Bear failed, fallback to resources', err);
+                    resources.load('Bear', Prefab, (e2, p2) => {
+                        if (e2 || !p2) {
+                            console.warn('[Bear] resources load Bear failed', e2);
+                            return;
+                        }
+                        trySpawnBear(p2 as Prefab, position, denNode, isTamed);
+                    });
+                    return;
+                }
+                trySpawnBear(prefab, position, denNode, isTamed);
+            });
+        } else {
+            // 回退到 resources
+            resources.load('Bear', Prefab, (err, prefab) => {
+                if (err) {
+                    console.warn('[Bear] resources load Bear failed', err);
+                    return;
+                }
+                trySpawnBear(prefab as Prefab, position, denNode, isTamed);
             });
         }
     }
@@ -6724,19 +6897,20 @@ export class GameManager extends Component {
         // 最佳：click > 20
         // 一般：10-20
         // 最差：<10
+        // 增幅提升为原来的一倍（去掉 * 0.5 的系数）
         if (clicks < 10) {
-            return { damageBoostPercent: 0, speedBoostPercent: 0 };
+            return { damageBoostPercent: 0, speedBoostPercent: 0 }; 
         }
         if (clicks <= 20) {
             const t = (clicks - 10) / 10; // 0..1
-            const damageBoostPercent = Math.round((10 + t * 15) * 0.5); // 原值一半：5..12(约)
-            const speedBoostPercent = Math.round((6 + t * 9) * 0.5); // 原值一半：3..8(约)
+            const damageBoostPercent = Math.round(10 + t * 15); // 10..25
+            const speedBoostPercent = Math.round(6 + t * 9); // 6..15
             return { damageBoostPercent, speedBoostPercent };
         }
         const extra = Math.min(clicks - 20, 10); // 1..10
         const t = extra / 10; // 0..1
-        const damageBoostPercent = Math.round((25 + t * 15) * 0.5); // 原值一半：12..20(约)
-        const speedBoostPercent = Math.round((15 + t * 15) * 0.5); // 原值一半：8..15(约)
+        const damageBoostPercent = Math.round(25 + t * 15); // 25..40
+        const speedBoostPercent = Math.round(15 + t * 15); // 15..30
         return { damageBoostPercent, speedBoostPercent };
     }
 
