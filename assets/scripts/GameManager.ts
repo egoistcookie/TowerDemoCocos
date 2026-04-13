@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, instantiate, BlockInputEvents, sys, Texture2D, ImageAsset, Mask, UIOpacity, LabelOutline, AudioSource, tween } from 'cc';
+import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, instantiate, BlockInputEvents, sys, Texture2D, ImageAsset, Mask, UIOpacity, LabelOutline, AudioSource, tween, ScrollView } from 'cc';
 // 微信小游戏全局对象声明（避免 TypeScript 报错）
 declare const wx: any;
 import { Crystal } from './role/Crystal';
@@ -21,6 +21,7 @@ import { AudioManager } from './AudioManager';
 import { SoundManager } from './SoundManager';
 import { AnalyticsManager, OperationType } from './AnalyticsManager';
 import { PlayerProfilePopup } from './PlayerProfilePopup';
+import { PlayerDetailPopup, PlayerDetailData } from './PlayerDetailPopup';
 import { WeChatShareManager } from './WeChatShareManager';
 const { ccclass, property } = _decorator;
 
@@ -213,6 +214,7 @@ export class GameManager extends Component {
     private playerNameLabel: Label | null = null; // 玩家名称标签
     private levelExpBarNode: Node | null = null;
     private playerProfilePopup: PlayerProfilePopup | null = null; // 玩家信息编辑弹窗
+    private playerDetailPopup: PlayerDetailPopup | null = null; // 玩家详情弹窗
     private playerName: string = ''; // 当前玩家名称
     private playerAvatar: string = ''; // 当前玩家头像
     // 顶部 HUD 进度条宽度，适当放大（原来 120，整体增加约 20%）
@@ -2334,7 +2336,19 @@ export class GameManager extends Component {
         g.fillColor = new Color(0, 0, 0, 0);
         g.rect(-vs.width / 2, -vs.height / 2, vs.width, vs.height);
         g.fill();
-        overlay.on(Node.EventType.TOUCH_END, () => {
+        overlay.on(Node.EventType.TOUCH_END, (event: any) => {
+            // 检查点击位置是否在贡献榜面板内
+            if (this.killRankPanelNode && this.killRankPanelNode.isValid) {
+                const clickPos = event.getLocation();
+                const panelTrans = this.killRankPanelNode.getComponent(UITransform);
+                if (panelTrans) {
+                    const panelRect = panelTrans.getBoundingBox();
+                    // 如果点击在面板内，不关闭贡献榜
+                    if (panelRect.contains(clickPos)) {
+                        return;
+                    }
+                }
+            }
             this.hideKillRankPanel();
         }, this);
         this.killRankCloseOverlayNode = overlay;
@@ -2427,13 +2441,35 @@ export class GameManager extends Component {
         }, this);
         shareBtn.node.on(Button.EventType.CLICK, this.onKillRankShareClick, this);
         
-        // 排行内容容器
+        // 排行内容容器 - ScrollView
         const listNode = new Node('KillRankList');
         listNode.setParent(panelNode);
         const listTrans = listNode.addComponent(UITransform);
         listTrans.setContentSize(panelWidth - 40, panelHeight - 220);
         listTrans.setAnchorPoint(0.5, 1);
         listNode.setPosition(0, -90, 0);
+
+        // 添加 ScrollView 组件实现滚动
+        const scrollView = listNode.addComponent(ScrollView);
+        scrollView.vertical = true;
+        scrollView.horizontal = false;
+        scrollView.inertia = true;
+        scrollView.brake = 0.5;
+        scrollView.elastic = true;
+
+        // 添加 Mask 组件裁剪超出边界的内容
+        const mask = listNode.addComponent(Mask);
+        const rectType = (Mask.Type as any).RECT;
+        mask.type = rectType;
+
+        // 创建内容容器节点（实际放置排行条目的地方）
+        const contentNode = new Node('Content');
+        contentNode.setParent(listNode);
+        const contentTrans = contentNode.addComponent(UITransform);
+        contentTrans.setContentSize(listTrans.width, 800); // 初始高度，会在填充时动态调整
+        contentTrans.setAnchorPoint(0.5, 1);
+        contentNode.setPosition(0, 0, 0);
+        scrollView.content = contentNode;
         
         // 底部感谢语
         const footerNode = new Node('KillRankFooter');
@@ -2465,12 +2501,126 @@ export class GameManager extends Component {
         const shareManager = WeChatShareManager.getInstance();
         shareManager.shareAppMessage(title);
     }
-    
+
+    /**
+     * 显示玩家详情弹窗
+     */
+    private showPlayerDetailPopup(playerId: string, playerName: string, playerAvatar: string, totalKills: number, maxLevel: number) {
+        // 创建玩家详情弹窗（如果不存在）
+        if (!this.playerDetailPopup) {
+            this.createPlayerDetailPopup();
+        }
+
+        if (!this.playerDetailPopup) {
+            console.error('[GameManager] playerDetailPopup 创建失败');
+            return;
+        }
+
+        // 从服务器获取玩家的游戏记录
+        this.fetchPlayerGameRecord(playerId).then((gameRecord) => {
+            const data: PlayerDetailData = {
+                player_id: playerId,
+                player_name: playerName,
+                player_avatar: playerAvatar,
+                total_kills: totalKills,
+                max_level: maxLevel,
+                game_record: gameRecord,
+            };
+            this.playerDetailPopup.show(data);
+        }).catch((err) => {
+            console.error('[GameManager] 获取玩家游戏记录失败:', err);
+            // 即使获取失败也显示弹窗，只是不显示阵容
+            const data: PlayerDetailData = {
+                player_id: playerId,
+                player_name: playerName,
+                player_avatar: playerAvatar,
+                total_kills: totalKills,
+                max_level: maxLevel,
+            };
+            this.playerDetailPopup.show(data);
+        });
+    }
+
+    /**
+     * 从服务器获取玩家的游戏记录
+     */
+    private async fetchPlayerGameRecord(playerId: string): Promise<any> {
+        const url = `https://www.egoistcookie.top/api/analytics/player/${encodeURIComponent(playerId)}/game-records`;
+        console.log('[GameManager] fetchPlayerGameRecord playerId:', playerId, 'url:', url);
+
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.timeout = 5000;
+
+            xhr.onreadystatechange = () => {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        try {
+                            const resp = JSON.parse(xhr.responseText);
+                            console.log('[GameManager] fetchPlayerGameRecord response:', resp);
+                            if (resp && resp.success && resp.data) {
+                                resolve(resp.data);
+                            } else {
+                                console.warn('[GameManager] fetchPlayerGameRecord: no data in response');
+                                resolve(null);
+                            }
+                        } catch (e) {
+                            console.error('[GameManager] 解析游戏记录响应失败:', e);
+                            reject(e);
+                        }
+                    } else {
+                        console.warn('[GameManager] 请求游戏记录失败:', xhr.status);
+                        reject(new Error(`HTTP ${xhr.status}`));
+                    }
+                }
+            };
+
+            xhr.onerror = () => {
+                console.error('[GameManager] 请求游戏记录网络错误');
+                reject(new Error('Network error'));
+            };
+            xhr.ontimeout = () => {
+                console.error('[GameManager] 请求游戏记录超时');
+                reject(new Error('Timeout'));
+            };
+
+            xhr.open('GET', url, true);
+            xhr.send();
+        });
+    }
+
+    /**
+     * 创建玩家详情弹窗组件
+     */
+    private createPlayerDetailPopup() {
+        const canvas = find('Canvas');
+        if (!canvas) {
+            console.warn('[GameManager] createPlayerDetailPopup: Canvas not found');
+            return;
+        }
+
+        console.log('[GameManager] createPlayerDetailPopup, canvas children:', canvas.children.length);
+
+        // 创建弹窗节点
+        const popupNode = new Node('PlayerDetailPopup');
+        popupNode.setParent(canvas);
+
+        // 立即设置到最上层
+        popupNode.setSiblingIndex(canvas.children.length - 1);
+
+        // 添加 PlayerDetailPopup 组件
+        const playerDetailPopup = popupNode.addComponent(PlayerDetailPopup);
+
+        console.log('[GameManager] popup created, node:', popupNode, 'component:', playerDetailPopup);
+
+        this.playerDetailPopup = playerDetailPopup;
+    }
+
     /**
      * 从服务器拉取杀敌排行榜前十并填充卷轴
      */
     private async fetchKillLeaderboard() {
-        const url = 'https://www.egoistcookie.top/api/analytics/leaderboard/kill-top?limit=10';
+        const url = 'https://www.egoistcookie.top/api/analytics/leaderboard/kill-top?limit=20';
         
         return new Promise<void>((resolve) => {
             const xhr = new XMLHttpRequest();
@@ -2515,18 +2665,23 @@ export class GameManager extends Component {
         if (!this.killRankPanelNode || !this.killRankPanelNode.isValid) return;
         const listNode = this.killRankPanelNode.getChildByName('KillRankList');
         if (!listNode) return;
-        
+
+        // 获取内容容器节点（ScrollView 的 content）
+        const contentNode = listNode.getChildByName('Content');
+        if (!contentNode) return;
+
         // 清理旧内容
-        const children = [...listNode.children];
+        const children = [...contentNode.children];
         for (const c of children) {
             c.destroy();
         }
-        
+
         // 每行稍微加高一点，给三列排版留空间
         const entryHeight = 44;
         let y = -20;
-        
-        for (let i = 0; i < rows.length && i < 10; i++) {
+        const maxRows = Math.min(rows.length, 20);
+
+        for (let i = 0; i < maxRows; i++) {
             const row = rows[i];
             const rank = i + 1;
             const playerId = row.player_id || '';
@@ -2537,15 +2692,20 @@ export class GameManager extends Component {
             const totalKills = row.total_kills || 0;
             const maxLevel = row.max_level || 0;
             const avatar = row.player_avatar || '';
-            
+
             const entryNode = new Node(`Entry_${rank}`);
-            entryNode.setParent(listNode);
+            entryNode.setParent(contentNode);
             const entryTrans = entryNode.addComponent(UITransform);
-            entryTrans.setContentSize(listNode.getComponent(UITransform)!.width, entryHeight);
+            entryTrans.setContentSize(contentNode.getComponent(UITransform)!.width, entryHeight);
             entryTrans.setAnchorPoint(0.5, 1);
             entryNode.setPosition(0, y, 0);
             y -= entryHeight + 4;
-            
+
+            // 添加点击事件：打开玩家详情弹窗
+            entryNode.on(Node.EventType.TOUCH_END, () => {
+                this.showPlayerDetailPopup(playerId, displayName, avatar, totalKills, maxLevel);
+            }, this);
+
             // 背景
             const g = entryNode.addComponent(Graphics);
             let bgColor = new Color(255, 255, 255, 30);
@@ -2555,7 +2715,7 @@ export class GameManager extends Component {
             g.fillColor = bgColor;
             g.roundRect(-entryTrans.width / 2, -entryHeight, entryTrans.width, entryHeight - 4, 10);
             g.fill();
-            
+
             // 头像（小圆）
             const avatarNode = new Node('Avatar');
             avatarNode.setParent(entryNode);
@@ -2580,7 +2740,7 @@ export class GameManager extends Component {
                 avatarSprite.sizeMode = Sprite.SizeMode.CUSTOM;
                 this.loadSpriteFromBase64(avatar, avatarSprite);
             }
-            
+
             // 三列文本：昵称 / 杀敌数 / 最大通关，全部左对齐
             const columnsTotalWidth = entryTrans.width - 80; // 去掉头像左侧占位
             const colWidth = columnsTotalWidth / 3;
@@ -2629,8 +2789,15 @@ export class GameManager extends Component {
             // 第 2 列：最大通关数
             createColumnLabel('LevelLabel', `最大通关 ${maxLevel}`, 2);
         }
+
+        // 动态调整 content 高度以支持滚动
+        const contentHeight = Math.max(800, maxRows * (entryHeight + 4) + 40);
+        const contentTrans = contentNode.getComponent(UITransform);
+        if (contentTrans) {
+            contentTrans.setContentSize(contentTrans.width, contentHeight);
+        }
     }
-    
+
     /**
      * 显示玩家信息编辑弹窗
      */

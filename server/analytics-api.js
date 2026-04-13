@@ -572,6 +572,77 @@ app.get('/api/analytics/leaderboard/kill-top', async (req, res) => {
 });
 
 /**
+ * 查询玩家的游戏记录（最近一次）
+ * GET /api/analytics/player/:playerId/game-records
+ * 返回玩家最近一次的 game_records 记录，包含 operations_json 和 unit_levels_json
+ */
+app.get('/api/analytics/player/:playerId/game-records', async (req, res) => {
+    try {
+        const playerId = req.params.playerId;
+
+        if (!playerId) {
+            return res.status(400).json({
+                success: false,
+                message: '缺少 playerId 参数'
+            });
+        }
+
+        // 查询玩家最近一次的游戏记录
+        const [rows] = await pool.execute(
+            `SELECT
+                operations_json,
+                unit_levels_json
+             FROM game_records
+             WHERE player_id = ?
+             ORDER BY end_time DESC
+             LIMIT 1`,
+            [playerId]
+        );
+
+        if (rows.length === 0) {
+            // 没有记录，返回空数据
+            res.json({
+                success: true,
+                data: null
+            });
+            return;
+        }
+
+        const record = rows[0];
+        let operationsJson = [];
+        let unitLevelsJson = {};
+
+        // 解析 JSON 字段
+        try {
+            operationsJson = record.operations_json ? JSON.parse(record.operations_json) : [];
+        } catch (e) {
+            console.warn('[Analytics] 解析 operations_json 失败:', e);
+        }
+
+        try {
+            unitLevelsJson = record.unit_levels_json ? JSON.parse(record.unit_levels_json) : {};
+        } catch (e) {
+            console.warn('[Analytics] 解析 unit_levels_json 失败:', e);
+        }
+
+        res.json({
+            success: true,
+            data: {
+                operations_json: operationsJson,
+                unit_levels_json: unitLevelsJson
+            }
+        });
+    } catch (error) {
+        console.error('[Analytics] 查询玩家游戏记录失败:', error);
+        res.status(500).json({
+            success: false,
+            message: '查询失败',
+            error: error.message
+        });
+    }
+});
+
+/**
  * 查询关卡统计
  * GET /api/analytics/levels
  */
