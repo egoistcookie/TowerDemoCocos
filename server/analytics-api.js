@@ -973,12 +973,12 @@ app.put('/api/analytics/player/:playerId/profile', async (req, res) => {
 app.get('/api/analytics/player/:playerId/profile', async (req, res) => {
     try {
         const { playerId } = req.params;
-        
+
         const [rows] = await pool.execute(
             'SELECT player_id, player_name, player_avatar FROM player_statistics WHERE player_id = ?',
             [playerId]
         );
-        
+
         if (rows.length === 0) {
             return res.json({
                 success: true,
@@ -989,14 +989,110 @@ app.get('/api/analytics/player/:playerId/profile', async (req, res) => {
                 }
             });
         }
-        
+
         res.json({
             success: true,
             data: rows[0]
         });
-        
+
     } catch (error) {
         console.error('[Analytics] 查询玩家信息失败:', error);
+        res.status(500).json({
+            success: false,
+            message: '查询失败',
+            error: error.message
+        });
+    }
+});
+
+/**
+ * 查询玩家称号列表
+ * GET /api/analytics/player/:playerId/titles
+ *
+ * 称号规则：
+ * 1. 剑士等级最高的玩家 → 骑士王 (icon/称号 - 皇冠.png)
+ * 2. 弓箭手等级最高的玩家 → 神射手 (icon/称号 - 弓箭.png)
+ * 3. 牧师等级最高的玩家 → 天使 (icon/称号 - 天使.png)
+ * 4. 女猎手等级最高的玩家 → 龙卷 (icon/称号 - 龙卷.png)
+ * 5. 法师等级最高的玩家 → 法神 (icon/称号 - 陨石.png)
+ * 6. 杀敌数排名前五的玩家 → 兽人杀手 (icon/称号 - 杀手.png)
+ * 7. 通关数排名前五的玩家 → 精灵之光 (icon/称号 - 希望.png)
+ */
+app.get('/api/analytics/player/:playerId/titles', async (req, res) => {
+    try {
+        const { playerId } = req.params;
+        console.log('[Analytics] titles request:', { playerId });
+
+        const titles = [];
+
+        // 1. 查询各角色等级最高的玩家（从 game_records 的 unit_levels_json 中提取）
+        // 需要分别查询每个角色的最高等级玩家
+        const roleQueries = [
+            { roleId: 'ElfSwordsman', titleName: '骑士王', iconPath: '称号 - 皇冠.png' },
+            { roleId: 'Arrower', titleName: '神射手', iconPath: '称号 - 弓箭.png' },
+            { roleId: 'Priest', titleName: '天使', iconPath: '称号 - 天使.png' },
+            { roleId: 'Hunter', titleName: '龙卷', iconPath: '称号 - 龙卷.png' },
+            { roleId: 'Mage', titleName: '法神', iconPath: '称号 - 陨石.png' }
+        ];
+
+        for (const role of roleQueries) {
+            // 查询该角色等级最高的玩家
+            // 从 game_records 中提取 unit_levels_json 里的角色等级
+            const [rows] = await pool.execute(
+                `SELECT
+                    gr.player_id,
+                    COALESCE(ps.player_name, gr.player_id) AS player_name
+                 FROM game_records gr
+                 LEFT JOIN player_statistics ps ON ps.player_id = gr.player_id
+                 WHERE gr.unit_levels_json IS NOT NULL
+                   AND JSON_EXTRACT(gr.unit_levels_json, '$.${role.roleId}') IS NOT NULL
+                 ORDER BY JSON_EXTRACT(gr.unit_levels_json, '$.${role.roleId}') DESC
+                 LIMIT 1`
+            );
+
+            if (rows.length > 0 && rows[0].player_id === playerId) {
+                titles.push({
+                    titleName: role.titleName,
+                    iconPath: role.iconPath,
+                    description: `${role.roleId === 'ElfSwordsman' ? '剑士' : role.roleId === 'Arrower' ? '弓箭手' : role.roleId === 'Priest' ? '牧师' : role.roleId === 'Hunter' ? '女猎手' : '法师'}等级最高`
+                });
+            }
+        }
+
+        // 2. 查询杀敌数排名前五的玩家
+        const [killRows] = await pool.execute(
+            `SELECT player_id FROM player_kill_rank ORDER BY total_kills DESC LIMIT 5`
+        );
+
+        if (killRows.some(row => row.player_id === playerId)) {
+            titles.push({
+                titleName: '兽人杀手',
+                iconPath: '称号 - 杀手.png',
+                description: '杀敌数排名前五'
+            });
+        }
+
+        // 3. 查询通关数排名前五的玩家
+        const [levelRows] = await pool.execute(
+            `SELECT player_id FROM player_leaderboard ORDER BY max_level DESC, success_games DESC LIMIT 5`
+        );
+
+        if (levelRows.some(row => row.player_id === playerId)) {
+            titles.push({
+                titleName: '精灵之光',
+                iconPath: '称号 - 希望.png',
+                description: '通关数排名前五'
+            });
+        }
+
+        console.log('[Analytics] titles result:', titles);
+        res.json({
+            success: true,
+            data: titles
+        });
+
+    } catch (error) {
+        console.error('[Analytics] 查询玩家称号失败:', error);
         res.status(500).json({
             success: false,
             message: '查询失败',

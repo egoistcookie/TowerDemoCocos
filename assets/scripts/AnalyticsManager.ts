@@ -29,6 +29,7 @@ export enum OperationType {
     SELECT_BUFF_CARD = 'select_buff_card',           // 选择增益卡片
     USE_TALENT_POINT = 'use_talent_point',           // 使用天赋点
     REVIVE = 'revive',                               // 复活（失败结算页看视频复活）
+    TRIGGER_BEAR = 'trigger_bear',                   // 触发巨熊（中立巨熊被击败后开始驯化）
 }
 
 /**

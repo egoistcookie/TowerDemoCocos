@@ -3409,26 +3409,39 @@ export class UIManager extends Component {
      */
     private initWeChatShare() {
         console.log('[UIManager] initWeChatShare() 开始初始化微信转发功能');
-        
+
         const shareManager = WeChatShareManager.getInstance();
         shareManager.initShare();
-        
-        // 监听小游戏回到前台事件（可选）
+
+        // 广告场景值：从广告跳转进来时自动开始游戏
+        // 1035: 小程序广告，1044: 朋友圈广告，1036: APP 分享卡片，1037: 小程序推广计划
+        const AD_SCENES = [1035, 1044, 1036, 1037];
+
+        // 处理从广告/分享卡片进入时自动开始游戏的逻辑
+        const handleAdLaunch = (res: any) => {
+            const scene = res?.scene;
+            const isFromAd = AD_SCENES.indexOf(scene) >= 0;
+
+            if (isFromAd) {
+                console.log('[UIManager] 从广告跳转进入 (scene=' + scene + ')，将自动开始游戏');
+                this.scheduleOnce(() => {
+                    this.findGameManager();
+                    if (this.gameManager) {
+                        console.log('[UIManager] 自动开始游戏');
+                        this.gameManager.startGame();
+                    } else {
+                        console.warn('[UIManager] 未能找到 GameManager，无法自动开始游戏');
+                    }
+                }, 0.5);
+            }
+        };
+
+        // 监听小游戏回到前台事件（冷启动和热启动都会触发）
         shareManager.onShow((res: any) => {
-            console.log('[UIManager] 小游戏回到前台，参数:', res);
-            // 可以在这里处理从转发卡片返回的逻辑
-            // 例如：根据 res.query 参数给予奖励等
+            console.log('[UIManager] 小游戏回到前台，场景值:', res.scene, 'query:', res.query);
+            handleAdLaunch(res);
         });
-        
-        // 获取启动参数（可选）
-        const launchOptions = shareManager.getLaunchOptions();
-        if (launchOptions && launchOptions.query) {
-            console.log('[UIManager] 启动参数:', launchOptions.query);
-            // 可以在这里处理启动参数，例如：
-            // - 从转发卡片进入时给予奖励
-            // - 根据邀请码绑定好友关系等
-        }
-        
+
         console.log('[UIManager] initWeChatShare() 微信转发功能初始化完成');
     }
 

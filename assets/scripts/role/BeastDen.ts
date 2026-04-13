@@ -3,6 +3,8 @@ import { Build } from './Build';
 import { GameManager } from '../GameManager';
 import { UnitManager } from '../UnitManager';
 import { GameState } from '../GameState';
+import { AnalyticsManager } from '../AnalyticsManager';
+import { OperationType } from '../AnalyticsManager';
 const { ccclass, property } = _decorator;
 
 // 兽穴状态枚举
@@ -305,11 +307,38 @@ export class BeastDen extends Build {
         if (this.isTriggered) return;
         this.isTriggered = true;
 
+        // console.log('[BeastDen] 触发巨熊：三个感叹号已出现，记录操作');
+
         // 第三个感叹号出现后，等待 2 秒再显示虚影（感叹号保留，让其自然显示 2 秒）
         this.bearGhostWaitTimer = 0;
 
         // 不再立即清除感叹号，而是等到虚影出现时再清除
         // this.clearExclamations();
+
+        // 记录操作：触发巨熊（三个感叹号出现后）- 使用强制记录确保一定能被记录
+        const analytics = AnalyticsManager.getInstance();
+        if (!analytics) {
+            console.warn('[BeastDen] 无法记录巨熊触发：AnalyticsManager 不存在');
+            return;
+        }
+
+        // 直接从 Canvas/GameManager 路径获取 GameManager
+        const gmNode = find('Canvas/GameManager');
+        if (!gmNode) {
+            console.warn('[BeastDen] 无法记录巨熊触发：GameManager 节点不存在');
+            return;
+        }
+        const gm = gmNode.getComponent('GameManager' as any);
+        if (!gm) {
+            console.warn('[BeastDen] 无法记录巨熊触发：GameManager 组件不存在');
+            return;
+        }
+
+        const gameTime = (gm as any).getGameTime ? (gm as any).getGameTime() : 0;
+        // console.log('[BeastDen] 记录巨熊触发操作，gameTime:', gameTime);
+        analytics.recordOperationForce(OperationType.TRIGGER_BEAR, gameTime, {
+            position: { x: this.node.worldPosition.x, y: this.node.worldPosition.y }
+        });
     }
 
     private preloadBear() {

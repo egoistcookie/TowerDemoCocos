@@ -19,6 +19,15 @@ export interface PlayerDetailData {
 }
 
 /**
+ * 称号数据接口
+ */
+export interface TitleData {
+    titleName: string;      // 称号名称
+    iconPath: string;       // 图标路径（不含前缀）
+    description?: string;   // 称号描述
+}
+
+/**
  * 角色展示项
  */
 export interface RoleDisplayItem {
@@ -36,6 +45,7 @@ export class PlayerDetailPopup extends Component {
     private gameManager: any = null!; // GameManager 引用
     private currentData: PlayerDetailData | null = null; // 当前显示的数据
     private closeButton: Node | null = null; // 关闭按钮
+    private playerTitles: TitleData[] = []; // 玩家称号列表
 
     // 建筑到角色的映射（包含训练建筑、防御塔和石墙）
     private readonly BUILDING_TO_ROLE: Record<string, { roleId: string; roleName: string; iconPath: string; isTower?: boolean }> = {
@@ -62,6 +72,14 @@ export class PlayerDetailPopup extends Component {
         'Wisp': '小精灵',
         'Arrower': '弓箭手',
         'Mage': '法师',
+    };
+
+    // 防御塔/石墙的 roleId 到信息的映射（用于从 towerCountMap 恢复显示信息）
+    private readonly TOWER_ROLE_INFO: Record<string, { roleName: string; iconPath: string }> = {
+        'WatchTower': { roleName: '哨塔', iconPath: 'textures/role/WatchTower' },
+        'ThunderTower': { roleName: '雷塔', iconPath: 'textures/role/ThunderTower' },
+        'IceTower': { roleName: '冰塔', iconPath: 'textures/role/IceTower' },
+        'StoneWall': { roleName: '石墙', iconPath: 'textures/role/StoneWall' },
     };
 
     onLoad() {
@@ -407,9 +425,8 @@ export class PlayerDetailPopup extends Component {
         const leftHeight = leftTrans ? leftTrans.height : 600;
         const centerX = 0; // 锚点已改为 0.5,0.5，中心 X 为 0
 
-        // 计算垂直居中：从面板中心向上偏移 100 像素开始排列
-        // 头像 + 名称 + 杀敌数 + 最大通关 ≈ 160 + 50 + 40 + 40 = 290
-        const startY = 50; // 从中心向上 50 像素（原本 0，现在向上挪 100，头像中心在 50）
+        // 计算垂直居中：头像上移 100 像素
+        const startY = 150; // 头像中心 Y 坐标，从原来的 50 上移 100 像素
 
         // 玩家头像（左侧面板中心）
         const avatarNode = new Node('Avatar');
@@ -418,14 +435,15 @@ export class PlayerDetailPopup extends Component {
         avatarTrans.setContentSize(160, 160); // 宽高扩大一倍
         avatarNode.setPosition(centerX, startY, 0);
 
-        // 头像背景圆
+        // 头像背景（方形，适配玩家上传的图片）
         const avatarBgG = avatarNode.addComponent(Graphics);
         avatarBgG.fillColor = new Color(60, 60, 60, 255);
-        avatarBgG.circle(0, 0, 80); // 半径扩大一倍
+        // 绘制方形背景，边长 160（与节点尺寸一致）
+        avatarBgG.rect(-80, -80, 160, 160);
         avatarBgG.fill();
         avatarBgG.lineWidth = 4; // 边框加粗
         avatarBgG.strokeColor = new Color(200, 160, 60, 255);
-        avatarBgG.circle(0, 0, 80);
+        avatarBgG.rect(-80, -80, 160, 160);
         avatarBgG.stroke();
 
         // 加载头像
@@ -442,14 +460,19 @@ export class PlayerDetailPopup extends Component {
             }
         }
 
-        // 玩家 ID / 名称（头像下方居中）
+        // 声明名称、杀敌数、通关数节点变量（在闭包中使用）
+        let nameNode: Node;
+        let killsNode: Node;
+        let maxLevelNode: Node;
+
+        // 玩家 ID / 名称（先创建节点，位置在获取称号后设置）
         const playerId = data.player_id || '';
         const displayName = data.player_name || (playerId.length > 8 ? playerId.slice(-8) : playerId);
-        const nameNode = new Node('PlayerName');
+        nameNode = new Node('PlayerName');
         nameNode.setParent(leftNode);
         const nameLabel = nameNode.addComponent(Label);
         nameLabel.string = displayName;
-        nameLabel.fontSize = 24; // 加大字号
+        nameLabel.fontSize = 24;
         nameLabel.color = new Color(255, 255, 255, 255);
         nameLabel.enableOutline = true;
         nameLabel.outlineColor = new Color(0, 0, 0, 255);
@@ -457,10 +480,9 @@ export class PlayerDetailPopup extends Component {
         nameLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         const nameTrans = nameNode.addComponent(UITransform);
         nameTrans.setContentSize(leftWidth - 20, 40);
-        nameNode.setPosition(centerX, startY - 140, 0); // 头像下方
 
-        // 杀敌数（居中）
-        const killsNode = new Node('KillCount');
+        // 杀敌数（名称下方 30px）
+        killsNode = new Node('KillCount');
         killsNode.setParent(leftNode);
         const killsLabel = killsNode.addComponent(Label);
         killsLabel.string = `杀敌数：${data.total_kills || 0}`;
@@ -472,10 +494,9 @@ export class PlayerDetailPopup extends Component {
         killsLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         const killsTrans = killsNode.addComponent(UITransform);
         killsTrans.setContentSize(leftWidth - 20, 36);
-        killsNode.setPosition(centerX, startY - 190, 0);
 
-        // 最大通关数（居中）
-        const maxLevelNode = new Node('MaxLevel');
+        // 最大通关数（杀敌数下方 30px）
+        maxLevelNode = new Node('MaxLevel');
         maxLevelNode.setParent(leftNode);
         const maxLevelLabel = maxLevelNode.addComponent(Label);
         maxLevelLabel.string = `最大通关：${data.max_level || 0}`;
@@ -487,7 +508,174 @@ export class PlayerDetailPopup extends Component {
         maxLevelLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         const maxLevelTrans = maxLevelNode.addComponent(UITransform);
         maxLevelTrans.setContentSize(leftWidth - 20, 36);
-        maxLevelNode.setPosition(centerX, startY - 235, 0);
+
+        // 获取称号列表
+        this.fetchPlayerTitles(data.player_id).then((titles) => {
+            this.playerTitles = titles;
+            if (titles.length > 0) {
+                // 有称号：渲染称号，名称放在最后一个称号下方 30px
+                const titlesHeight = this.renderTitles(leftNode, centerX, startY);
+                const nameY = startY - 80 - titlesHeight - 30; // 最后一个称号下方 30px
+                nameNode.setPosition(centerX, nameY, 0);
+                killsNode.setPosition(centerX, nameY - 30, 0);
+                maxLevelNode.setPosition(centerX, nameY - 60, 0);
+            } else {
+                // 无称号：名称在头像下方 30px
+                const nameY = startY - 80 - 30; // 头像下边缘（startY-80）下方 30px
+                nameNode.setPosition(centerX, nameY, 0);
+                killsNode.setPosition(centerX, nameY - 30, 0);
+                maxLevelNode.setPosition(centerX, nameY - 60, 0);
+            }
+        }).catch((err) => {
+            console.error('[PlayerDetailPopup] 获取玩家称号失败:', err);
+            // 获取失败时按无称号处理
+            const nameY = startY - 80 - 30;
+            nameNode.setPosition(centerX, nameY, 0);
+            killsNode.setPosition(centerX, nameY - 30, 0);
+            maxLevelNode.setPosition(centerX, nameY - 60, 0);
+        });
+    }
+
+    /**
+     * 渲染称号列表（头像下方 30px 开始，从上往下排列）
+     * @returns 称号区域总高度
+     */
+    private renderTitles(leftNode: Node, centerX: number, startY: number): number {
+        if (!this.playerTitles || this.playerTitles.length === 0) {
+            return 0;
+        }
+
+        // 获取左侧面板宽度
+        const leftTrans = leftNode.getComponent(UITransform);
+        const leftWidth = leftTrans ? leftTrans.width : 280;
+
+        // 称号从头像下方 30px 开始排列
+        // 头像中心 Y = startY, 头像半径 = 80, 头像下边缘 Y = startY - 80
+        // 第一个称号 Y = 头像下边缘 - 30 = startY - 110
+        const titleHeight = 36; // 每个称号占用的高度（图标 30x30 + 上下间距）
+        const iconSize = 35; // 图标大小
+
+        this.playerTitles.forEach((title, index) => {
+            // 从上往下排列，第一个称号在头像下方 30px
+            const y = startY - 110 - (index * titleHeight);
+
+            // 创建称号容器节点（居中显示）
+            const titleNode = new Node(`Title_${index}`);
+            titleNode.setParent(leftNode);
+            const titleTrans = titleNode.addComponent(UITransform);
+            titleTrans.setContentSize(leftWidth - 20, titleHeight);
+            titleNode.setPosition(centerX, y, 0);
+
+            // 加载称号图标（在名称前方/左侧）
+            const iconNode = new Node('TitleIcon');
+            iconNode.setParent(titleNode);
+            const iconTrans = iconNode.addComponent(UITransform);
+            iconTrans.setContentSize(iconSize, iconSize);
+            iconNode.setPosition(-40, 0, 0); // 图标在左侧
+            const iconSprite = iconNode.addComponent(Sprite);
+            iconSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+            iconSprite.type = Sprite.Type.SIMPLE;
+
+            // 从 resources 加载称号图标
+            this.loadTitleIcon(title.iconPath, iconSprite);
+
+            // 称号名称（在图标右侧，左对齐，与图标间距再加 3px）
+            const nameLabelNode = new Node('TitleName');
+            nameLabelNode.setParent(titleNode);
+            const nameLabelTrans = nameLabelNode.addComponent(UITransform);
+            nameLabelTrans.setContentSize(leftWidth - 100, titleHeight);
+            nameLabelNode.setPosition(18, 0, 0); // 名称节点向右偏移，与图标间距再加 3px
+            const titleLabel = nameLabelNode.addComponent(Label);
+            titleLabel.string = title.titleName;
+            titleLabel.fontSize = 18;
+            titleLabel.color = new Color(255, 215, 0, 255); // 金色
+            titleLabel.enableOutline = true;
+            titleLabel.outlineColor = new Color(0, 0, 0, 255);
+            titleLabel.outlineWidth = 2;
+            titleLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
+        });
+
+        // 返回称号区域总高度
+        return this.playerTitles.length * titleHeight;
+    }
+
+    /**
+     * 加载称号图标
+     */
+    private loadTitleIcon(iconPath: string, sprite: Sprite) {
+        // iconPath 是如 "称号 - 杀手.png" 格式，需要去掉 .png 后缀
+        const resourceName = iconPath.replace('.png', '');
+        // 加载路径：textures/icon/称号 - 杀手/spriteFrame
+        const loadPath = `textures/icon/${resourceName}/spriteFrame`;
+        console.log('[PlayerDetailPopup] loadTitleIcon:', { iconPath, resourceName, loadPath });
+
+        resources.load(loadPath, SpriteFrame, (err, spriteFrame) => {
+            if (err) {
+                console.error('[PlayerDetailPopup] 加载称号图标失败:', resourceName, err);
+                // 加载失败时创建占位图标
+                this.createPlaceholderTitleIcon(sprite.node);
+            } else if (spriteFrame && sprite.node.isValid) {
+                sprite.spriteFrame = spriteFrame;
+            }
+        });
+    }
+
+    /**
+     * 创建占位称号图标
+     */
+    private createPlaceholderTitleIcon(iconNode: Node) {
+        const g = iconNode.addComponent(Graphics);
+        g.fillColor = new Color(150, 150, 150, 255);
+        g.circle(0, 0, 12);
+        g.fill();
+    }
+
+    /**
+     * 从服务器获取玩家称号列表
+     */
+    private async fetchPlayerTitles(playerId: string): Promise<TitleData[]> {
+        const url = `https://www.egoistcookie.top/api/analytics/player/${encodeURIComponent(playerId)}/titles`;
+        console.log('[PlayerDetailPopup] fetchPlayerTitles playerId:', playerId, 'url:', url);
+
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.timeout = 5000;
+
+            xhr.onreadystatechange = () => {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        try {
+                            const resp = JSON.parse(xhr.responseText);
+                            console.log('[PlayerDetailPopup] fetchPlayerTitles response:', resp);
+                            if (resp && resp.success && Array.isArray(resp.data)) {
+                                resolve(resp.data);
+                            } else {
+                                console.warn('[PlayerDetailPopup] fetchPlayerTitles: no data in response');
+                                resolve([]);
+                            }
+                        } catch (e) {
+                            console.error('[PlayerDetailPopup] 解析称号响应失败:', e);
+                            reject(e);
+                        }
+                    } else {
+                        console.warn('[PlayerDetailPopup] 请求称号失败:', xhr.status);
+                        reject(new Error(`HTTP ${xhr.status}`));
+                    }
+                }
+            };
+
+            xhr.onerror = () => {
+                console.error('[PlayerDetailPopup] 请求称号网络错误');
+                reject(new Error('Network error'));
+            };
+            xhr.ontimeout = () => {
+                console.error('[PlayerDetailPopup] 请求称号超时');
+                reject(new Error('Timeout'));
+            };
+
+            xhr.open('GET', url, true);
+            xhr.send();
+        });
     }
 
     /**
@@ -505,14 +693,17 @@ export class PlayerDetailPopup extends Component {
         const towerCountMap: Record<string, number> = {};
 
         // 遍历所有操作，统计防御塔建造次数
+        console.log('[PlayerDetailPopup] 遍历 operations，数量:', operations?.length);
         for (const op of operations) {
             const opType = op.type;
             const mapping = this.BUILDING_TO_ROLE[opType];
+            console.log('[PlayerDetailPopup] 检查操作:', opType, 'mapping:', mapping);
 
             if (mapping) {
                 if (mapping.isTower) {
                     // 防御塔/石墙：统计建造次数
                     towerCountMap[mapping.roleId] = (towerCountMap[mapping.roleId] || 0) + 1;
+                    console.log('[PlayerDetailPopup] 防御塔计数:', mapping.roleId, '当前数量:', towerCountMap[mapping.roleId]);
                 } else if (!addedRoleIds.has(mapping.roleId)) {
                     // 训练建筑：只显示一次
                     addedRoleIds.add(mapping.roleId);
@@ -529,16 +720,43 @@ export class PlayerDetailPopup extends Component {
         }
 
         // 将防御塔/石墙添加到结果中
-        for (const [roleId, count] of Object.entries(towerCountMap)) {
-            const mapping = Object.values(this.BUILDING_TO_ROLE).find(m => m.roleId === roleId);
-            if (mapping) {
+        console.log('[PlayerDetailPopup] 准备添加防御塔到 roles，towerCountMap:', towerCountMap);
+        for (const roleId of Object.keys(towerCountMap)) {
+            const count = towerCountMap[roleId];
+            const towerInfo = this.TOWER_ROLE_INFO[roleId];
+            console.log('[PlayerDetailPopup] 添加防御塔到 roles:', { roleId, count, towerInfo });
+            if (towerInfo) {
                 roles.push({
-                    roleId: mapping.roleId,
-                    roleName: mapping.roleName,
+                    roleId: roleId,
+                    roleName: towerInfo.roleName,
                     roleLevel: count, // 用 roleLevel 存储数量
-                    iconPath: mapping.iconPath,
+                    iconPath: towerInfo.iconPath,
                     towerCount: count, // 标记为防御塔数量
                 });
+                console.log('[PlayerDetailPopup] 已添加防御塔到 roles:', roleId, '数量:', count);
+            }
+        }
+
+        // 如果 towerCountMap 为空，尝试从 unitLevels 中获取防御塔/石墙信息
+        if (Object.keys(towerCountMap).length === 0 && unitLevels && Object.keys(unitLevels).length > 0) {
+            console.log('[PlayerDetailPopup] towerCountMap 为空，尝试从 unitLevels 获取防御塔:', unitLevels);
+            for (const unitId of Object.keys(unitLevels)) {
+                const level = unitLevels[unitId];
+                // 检查是否是防御塔/石墙单位
+                const towerInfo = this.TOWER_ROLE_INFO[unitId];
+                if (towerInfo && level > 0) {
+                    // 从 unitLevels 中获取的数量可能是等级，这里需要转换一下
+                    // 如果是石墙，level 可能是数量；如果是防御塔，level 可能是等级
+                    // 暂时将 level 作为数量显示
+                    roles.push({
+                        roleId: unitId,
+                        roleName: towerInfo.roleName,
+                        roleLevel: level,
+                        iconPath: towerInfo.iconPath,
+                        towerCount: level,
+                    });
+                    console.log('[PlayerDetailPopup] 从 unitLevels 添加防御塔:', unitId, '数量:', level);
+                }
             }
         }
 
@@ -591,7 +809,10 @@ export class PlayerDetailPopup extends Component {
             emptyLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
             const emptyTrans = emptyNode.addComponent(UITransform);
             emptyTrans.setContentSize(200, 40);
-            emptyNode.setPosition(0, 0, 0);
+            // 标题放在右侧面板顶部居中
+            const rightTrans = rightNode.getComponent(UITransform);
+            const rightHeight = rightTrans ? rightTrans.height : 600;
+            emptyNode.setPosition(0, rightHeight / 2 - 60, 0);
             return;
         }
 

@@ -2118,7 +2118,7 @@ export class GameManager extends Component {
             killRankHintTrans.setContentSize(killRankWidth, 24);
             killRankHintNode.setPosition(killRankPosX, -38, 0);
             this.killRankHintLabel = killRankHintNode.addComponent(Label);
-            this.killRankHintLabel.string = '（点击可查看贡献榜）';
+            this.killRankHintLabel.string = '（点击可查看贡献榜与玩家阵容）';
             this.killRankHintLabel.fontSize = 16;
             this.killRankHintLabel.color = new Color(230, 230, 230, 255);
             this.killRankHintLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
@@ -2365,7 +2365,7 @@ export class GameManager extends Component {
         }
         
         // 指挥官排行榜整体尺寸：原基础上宽+50、高+100
-        const panelWidth = 570;
+        const panelWidth = 670;
         const panelHeight = 820;
         
         const panelNode = new Node('KillRankPanel');
