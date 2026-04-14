@@ -63,7 +63,7 @@ select * from game_records where DATE(created_at) = CURDATE()
 order by created_at desc;
 select * from game_records where defend_time !=0 order by created_at desc;
 --玩家信息表
-select * from player_statistics where created_at>'20260408' order by created_at desc;
+select * from player_statistics where created_at>'20260414' order by created_at desc;
 select * from player_statistics where player_id like '%player_1774104641493_9000';
 --操作类型统计表
 select * from operation_statistics os ;
