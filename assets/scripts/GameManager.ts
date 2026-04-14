@@ -3323,15 +3323,46 @@ export class GameManager extends Component {
             return;
         }
 
+        // 获取来源渠道和场景信息（微信小游戏环境）
+        let channel = 'unknown';
+        let scene = 'unknown';
+        let wxLaunchOptions: any = null;
+        try {
+            if (sys.platform === sys.Platform.WECHAT_GAME && typeof window !== 'undefined') {
+                const wx = (window as any).wx;
+                if (wx && typeof wx.getLaunchOptionsSync === 'function') {
+                    wxLaunchOptions = wx.getLaunchOptionsSync();
+                    if (wxLaunchOptions) {
+                        // 场景值判断来源渠道
+                        const adScenes = [1035, 1044, 1036, 1037]; // 1035 小程序广告，1044 朋友圈广告，1036 分享卡片，1037 小程序推广
+                        if (adScenes.indexOf(wxLaunchOptions.scene) >= 0) {
+                            channel = 'ad_' + wxLaunchOptions.scene;
+                        } else if (wxLaunchOptions.scene === 1001 || wxLaunchOptions.scene === 1005) {
+                            channel = 'launcher'; // 顶部搜索或历史
+                        } else if (wxLaunchOptions.scene === 1043) {
+                            channel = 'public_account'; // 公众号
+                        } else if (wxLaunchOptions.scene === 1089) {
+                            channel = 'nearby'; // 附近的小程序
+                        } else {
+                            channel = 'scene_' + wxLaunchOptions.scene;
+                        }
+                        scene = 'launcher_' + wxLaunchOptions.scene;
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('[KillRank] 获取微信启动参数失败:', e);
+        }
+
         // 异步请求，失败不影响流程
-        const url = `https://www.egoistcookie.top/api/analytics/player/${encodeURIComponent(playerId)}/kill-rank`;
+        const url = `https://www.egoistcookie.top/api/analytics/player/${encodeURIComponent(playerId)}/kill-rank?channel=${encodeURIComponent(channel)}&scene=${encodeURIComponent(scene)}`;
         const xhr = new XMLHttpRequest();
         xhr.timeout = 3000;
         this.killRankFetchInFlight = true;
         this.lastKillRankFetchAt = now;
         this.lastKillRankPlayerId = playerId;
         const reqSeq = ++this.killRankReqSeq;
-       //console.info('[KillRank] 请求开始:', { playerId, url });
+       //console.info('[KillRank] 请求开始:', { playerId, url, channel, scene });
         xhr.onreadystatechange = () => {
             if (xhr.readyState !== 4) return;
             this.killRankFetchInFlight = false;

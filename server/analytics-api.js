@@ -14,6 +14,21 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3001; // 支持通过环境变量设置端口
 
+// 日期时间格式化函数
+function formatDateTime(timestamp = Date.now()) {
+    const d = new Date(timestamp);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+           `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+// 中间件：记录每个请求的开始时间和基本信息
+app.use((req, res, next) => {
+    req.startTime = Date.now();
+    req.startTimeStr = formatDateTime(req.startTime);
+    next();
+});
+
 // 中间件配置
 app.use(cors()); // 允许跨域
 app.use(bodyParser.json({ limit: '10mb' })); // 解析JSON请求体
@@ -57,7 +72,7 @@ app.post('/api/analytics/report', async (req, res) => {
             });
         }
         
-        console.log(`[Analytics] 收到玩家 ${data.playerId} 的数据，关卡 ${data.level}，操作数 ${data.operations.length}`);
+        console.log(`${req.startTimeStr} [Analytics] 收到玩家 ${data.playerId} 的数据，关卡 ${data.level}，操作数 ${data.operations.length}`);
         
         // 开启事务
         const connection = await pool.getConnection();
@@ -442,16 +457,40 @@ app.get('/api/analytics/player/:playerId', async (req, res) => {
 /**
  * 查询玩家击杀榜排名（超越人数/百分比、前百分比）
  * GET /api/analytics/player/:playerId/kill-rank
- *
+ * 支持查询参数：channel(来源渠道), scene(访问场景)
  * 数据来源：player_kill_rank 视图（单表查询）
  */
 app.get('/api/analytics/player/:playerId/kill-rank', async (req, res) => {
     try {
         const { playerId } = req.params;
-        console.log('[Analytics] kill-rank request:', { playerId });
+        const { channel, scene } = req.query;
+
+        // 记录游客访问来源（无论玩家是否有数据都记录）
+        if (channel || scene) {
+            // 异步记录，不阻塞响应
+            pool.execute(
+                `INSERT INTO visitor_source_records (player_id, channel, scene, first_access_time, last_access_time)
+                 VALUES (?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE
+                    channel = VALUES(channel),
+                    scene = VALUES(scene),
+                    access_count = access_count + 1,
+                    last_access_time = VALUES(last_access_time)`,
+                [playerId, channel || 'unknown', scene || 'unknown', Date.now(), Date.now()]
+            ).catch(err => {
+                // 表不存在时创建表（首次运行时）
+                if (err && err.code === 'ER_NO_SUCH_TABLE') {
+                    console.warn('[Analytics] visitor_source_records 表不存在，请先运行建表 SQL');
+                } else {
+                    console.warn('[Analytics] 记录游客来源失败:', err?.message || err);
+                }
+            });
+        }
+
+        console.log(`${req.startTimeStr} [Analytics] kill-rank request:`, { playerId, channel, scene });
 
         const [rows] = await pool.execute(
-            `SELECT 
+            `SELECT
                 player_id,
                 total_kills,
                 kill_rank,
@@ -481,7 +520,7 @@ app.get('/api/analytics/player/:playerId/kill-rank', async (req, res) => {
             });
         }
 
-        console.log('[Analytics] kill-rank ok:', rows[0]);
+        console.log(`${req.startTimeStr} [Analytics] kill-rank ok:`, rows[0]);
         res.json({
             success: true,
             data: rows[0]
