@@ -1007,7 +1007,7 @@ export class GameManager extends Component {
 
         // 添加Label组件
         const waveLabel = waveLabelNode.addComponent(Label);
-        waveLabel.string = '当前波次: --';
+        waveLabel.string = '波次: --/--';
         waveLabel.fontSize = this.timerLabel.fontSize || 24;
         waveLabel.color = new Color(255, 255, 255, 255); // 白色字体
         waveLabel.horizontalAlign = this.timerLabel.horizontalAlign;
@@ -1770,12 +1770,12 @@ export class GameManager extends Component {
                 const currentWave = enemySpawner.getCurrentWaveNumber();
                 const totalWaves = enemySpawner.getTotalWaves();
                 if (totalWaves > 0) {
-                    this.waveLabel.string = `当前波次: 第${currentWave}波`;
+                    this.waveLabel.string = `波次: ${currentWave}/${totalWaves}`;
                 } else {
-                    this.waveLabel.string = `当前波次: --`;
+                    this.waveLabel.string = `波次: --/--`;
                 }
             } else {
-                this.waveLabel.string = `当前波次: --`;
+                this.waveLabel.string = `波次: --/--`;
             }
         }
 
@@ -2550,7 +2550,7 @@ export class GameManager extends Component {
 
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
-            xhr.timeout = 5000;
+            xhr.timeout = 30000; // 微信小游戏调试模式下网络请求会被延迟，增加到 30 秒
 
             xhr.onreadystatechange = () => {
                 if (xhr.readyState === 4) {
@@ -2624,7 +2624,7 @@ export class GameManager extends Component {
         
         return new Promise<void>((resolve) => {
             const xhr = new XMLHttpRequest();
-            xhr.timeout = 5000;
+            xhr.timeout = 30000; // 微信小游戏调试模式下网络请求会被延迟，增加到 30 秒
             
             xhr.onreadystatechange = () => {
                 if (xhr.readyState === 4) {
@@ -3080,7 +3080,7 @@ export class GameManager extends Component {
     private async fetchPlayerProfile(playerId: string): Promise<any> {
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
-            xhr.timeout = 3000;
+            xhr.timeout = 30000; // 微信小游戏调试模式下网络请求会被延迟，增加到 30 秒
             
             xhr.onreadystatechange = () => {
                 if (xhr.readyState === 4) {
@@ -3100,6 +3100,7 @@ export class GameManager extends Component {
             xhr.onerror = () => reject(new Error('网络错误'));
             xhr.ontimeout = () => reject(new Error('请求超时'));
             
+            console.log('[Profile] 请求开始：playerId=', playerId);
             xhr.open('GET', `https://www.egoistcookie.top/api/analytics/player/${encodeURIComponent(playerId)}/profile`, true);
             xhr.send();
         });
@@ -3233,6 +3234,23 @@ export class GameManager extends Component {
     /**
      * 首页：更新击杀榜标签（杀敌数 + 超越百分比/前百分比）
      * 数据来源：后台 /api/analytics/player/:playerId/kill-rank（单表查询 player_kill_rank 视图）
+     *
+     * 来源渠道说明（后端日志格式：channel + '_' + scene）：
+     * - launcher_1001: 发现栏小程序主入口 (1 人，581 次访问，100% 转化)
+     * - launcher_1005: 顶部搜索框的搜索结果页
+     * - launcher_1035: 公众号自定义菜单
+     * - launcher_1036: APP 分享卡片
+     * - launcher_1037: 小程序推广计划
+     * - launcher_1043: 公众号模板消息
+     * - launcher_1044: 朋友圈广告
+     * - launcher_1045: 公众号自定义菜单 (2 人，0% 转化)
+     * - launcher_1069: 移动应用（最大游客来源，105 人，开始转化率 4.76%）※ 实际多为 H5 广告跳转，按广告渠道处理
+     * - launcher_1089: 附近的小程序 (6 人，83.33% 开始转化率，50% 完成转化率)
+     * - launcher_1095: 小程序广告组件 (34 人，23.53% 开始转化率)
+     * - launcher_1145: 未知场景 (1 人，0% 转化)
+     * - launcher_1256: PC 端小程序面板「最近使用」列表 (1 人，100% 转化)
+     * - launcher_1274: 优量汇广告打开小程序（腾讯广告联盟，17 人 5.88% 开始转化率）
+     * - launcher_XXX: 其他微信小程序场景值
      */
     private updateHomeKillRankLabel() {
         if (!this.killRankLabel || !this.killRankLabel.node || !this.killRankLabel.node.isValid) {
@@ -3451,7 +3469,7 @@ export class GameManager extends Component {
         // 异步请求，失败不影响流程
         const url = `https://www.egoistcookie.top/api/analytics/player/${encodeURIComponent(playerId)}/kill-rank?channel=${encodeURIComponent(channel)}&scene=${encodeURIComponent(scene)}`;
         const xhr = new XMLHttpRequest();
-        xhr.timeout = 3000;
+        xhr.timeout = 30000; // 微信小游戏调试模式下网络请求会被延迟，增加到 30 秒
         this.killRankFetchInFlight = true;
         this.lastKillRankFetchAt = now;
         this.lastKillRankPlayerId = playerId;
@@ -3476,14 +3494,20 @@ export class GameManager extends Component {
                 return;
             }
 
-            if (xhr.status !== 200) {
-                console.warn('[KillRank] HTTP 非200，返回占位文案，responseText(截断):', (xhr.responseText || '').slice(0, 200));
-                // 请求失败时保持/恢复上一次成功的值
+            // status=0 可能是跨域问题，但可能有 responseText，尝试解析
+            if (xhr.status !== 200 && xhr.status !== 0) {
+                console.warn('[KillRank] HTTP 非 200，返回占位文案，status=', xhr.status);
                 setKillRankTextSafe(formatKillRankTextFromCache(), new Color(200, 200, 200, 255));
                 return;
             }
             try {
                 const rawText = xhr.responseText || '';
+                // status=0 但如果有 responseText，尝试解析（PC 端可能的情况）
+                if (!rawText && xhr.status === 0) {
+                    console.warn('[KillRank] 响应为空 (status=0)，使用缓存');
+                    setKillRankTextSafe(formatKillRankTextFromCache(), new Color(200, 200, 200, 255));
+                    return;
+                }
                //console.info('[KillRank] responseText(截断):', rawText.slice(0, 300));
                 const resp = JSON.parse(xhr.responseText || '{}');
                 if (!resp || !resp.success || !resp.data) {
