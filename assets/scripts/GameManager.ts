@@ -3337,7 +3337,7 @@ export class GameManager extends Component {
         if (this.killRankFetchInFlight) {
             return;
         }
-        if (this.lastKillRankPlayerId === playerId && now - this.lastKillRankFetchAt < 5000) {
+        if (this.lastKillRankPlayerId === playerId && now - this.lastKillRankFetchAt < 10000) {
             return;
         }
 
@@ -5278,129 +5278,27 @@ export class GameManager extends Component {
                 // bundle 成功，进度到 20%
                 this.updateLoadingProgress(0.2);
 
-                // 直接按名字加载分包中的几个建筑预制体（石墙、冰塔、雷塔、哨塔、战争古树、猎手大厅、剑士小屋、教堂）
-                //console.info('[GameManager] 开始从分包 prefabs_sub 加载建筑预制体 StoneWall / IceTower / ThunderTower / WatchTower / WarAncientTree / HunterHall / SwordsmanHall / Church');
+                // 第一关优化：只先加载石墙和哨塔，其他建筑延迟加载
+                const currentLevel = this.getCurrentLevelSafe();
+                const isLevel1 = currentLevel === 1;
 
-                const loadPrefab = (name: string, stepIndex: number, totalSteps: number, onLoaded: (prefab: Prefab | null) => void) => {
-                    bundle.load(name, Prefab, (err2, prefab) => {
-                        if (err2 || !prefab) {
-                            console.error('[GameManager] 从分包 prefabs_sub 加载预制体失败:', name, err2);
-                            onLoaded(null);
-                        } else {
-                            //console.info('[GameManager] 从分包 prefabs_sub 成功加载预制体:', name);
-                            onLoaded(prefab as Prefab);
-                        }
-
-                        // 每个预制体完成后更新进度：0.2 ~ 1.0 之间线性分配
-                        const base = 0.2;
-                        const remain = 0.8;
-                        const p = base + remain * (stepIndex / totalSteps);
-                        this.updateLoadingProgress(p);
+                if (isLevel1) {
+                    // 第一关：只加载石墙和哨塔 2 个必需预制体，快速进入游戏
+                    this.loadLevel1MinimalPrefabs(bundle, () => {
+                        this._startGameInternal();
+                        // 延迟加载其他建筑（进入游戏后 0.5 秒）
+                        this.scheduleOnce(() => {
+                            this.loadRemainingPrefabsAfterGameStart(bundle);
+                        }, 0.5);
                     });
-                };
-
-                // 仅在第二关加载 MageTower，避免拖慢第一关
-                const currentLevelForPrefabLoad = this.getCurrentLevelSafe();
-                const shouldLoadMageTower = currentLevelForPrefabLoad !== 1;
-                // 顺序加载基础建筑预制体；MageTower 仅在第二关追加为第9步
-                const totalSteps = shouldLoadMageTower ? 9 : 8;
-
-                const finalizeInjection = (
-                    stoneWallPrefab: Prefab | null,
-                    iceTowerPrefab: Prefab | null,
-                    thunderTowerPrefab: Prefab | null,
-                    watchTowerPrefab: Prefab | null,
-                    warAncientTreePrefab: Prefab | null,
-                    hunterHallPrefab: Prefab | null,
-                    swordsmanHallPrefab: Prefab | null,
-                    churchPrefab: Prefab | null,
-                    mageTowerPrefab: Prefab | null
-                ) => {
-                    try {
-                        const towerBuilder = this.findComponentInScene('TowerBuilder') as any;
-                        if (towerBuilder) {
-                            if (stoneWallPrefab && typeof towerBuilder.setStoneWallPrefab === 'function') {
-                                towerBuilder.setStoneWallPrefab(stoneWallPrefab);
-                            }
-                            if (iceTowerPrefab && typeof towerBuilder.setIceTowerPrefab === 'function') {
-                                towerBuilder.setIceTowerPrefab(iceTowerPrefab);
-                            }
-                            if (thunderTowerPrefab && typeof towerBuilder.setThunderTowerPrefab === 'function') {
-                                towerBuilder.setThunderTowerPrefab(thunderTowerPrefab);
-                            }
-                            if (watchTowerPrefab && typeof towerBuilder.setWatchTowerPrefab === 'function') {
-                                towerBuilder.setWatchTowerPrefab(watchTowerPrefab);
-                            }
-                            if (warAncientTreePrefab && typeof towerBuilder.setWarAncientTreePrefab === 'function') {
-                                towerBuilder.setWarAncientTreePrefab(warAncientTreePrefab);
-                            }
-                            if (hunterHallPrefab && typeof towerBuilder.setHunterHallPrefab === 'function') {
-                                towerBuilder.setHunterHallPrefab(hunterHallPrefab);
-                            }
-                            if (swordsmanHallPrefab && typeof towerBuilder.setSwordsmanHallPrefab === 'function') {
-                                towerBuilder.setSwordsmanHallPrefab(swordsmanHallPrefab);
-                            }
-                            if (churchPrefab && typeof towerBuilder.setChurchPrefab === 'function') {
-                                towerBuilder.setChurchPrefab(churchPrefab);
-                            }
-
-                            if (shouldLoadMageTower) {
-                                if (mageTowerPrefab && typeof towerBuilder.setMageTowerPrefab === 'function') {
-                                  //console.info('[GameManager] non-level1: MageTower prefab loaded, injecting to TowerBuilder');
-                                    towerBuilder.setMageTowerPrefab(mageTowerPrefab as Prefab);
-                                } else {
-                                    console.warn('[GameManager] non-level1: MageTower prefab load failed or TowerBuilder lacks setMageTowerPrefab');
-                                }
-                            } else {
-                              //console.info('[GameManager] level1: skip MageTower prefab load');
-                            }
-
-                            if (typeof towerBuilder.refreshBuildingTypes === 'function') {
-                                towerBuilder.refreshBuildingTypes();
-                            }
-                        } else {
-                            console.warn('[GameManager] TowerBuilder 组件不存在，无法注入分包预制体');
-                        }
-                    } catch (e) {
-                        console.error('[GameManager] 注入分包建筑预制体到 TowerBuilder 时出错:', e);
-                    }
-
-                    this.prefabsSubLoaded = true;
-                    this.isLoadingPrefabsSub = false;
-                    this.updateLoadingProgress(1);
-                    this.hideLoadingOverlay();
-                    this._startGameInternal();
-                };
-
-                loadPrefab('StoneWall', 1, totalSteps, (stoneWallPrefab) => {
-                    loadPrefab('IceTower', 2, totalSteps, (iceTowerPrefab) => {
-                        loadPrefab('ThunderTower', 3, totalSteps, (thunderTowerPrefab) => {
-                            loadPrefab('WatchTower', 4, totalSteps, (watchTowerPrefab) => {
-                                loadPrefab('WarAncientTree', 5, totalSteps, (warAncientTreePrefab) => {
-                                    loadPrefab('HunterHall', 6, totalSteps, (hunterHallPrefab) => {
-                                        loadPrefab('SwordsmanHall', 7, totalSteps, (swordsmanHallPrefab) => {
-                                            loadPrefab('Church', 8, totalSteps, (churchPrefab) => {
-                                                if (shouldLoadMageTower) {
-                                                    loadPrefab('MageTower', 9, totalSteps, (mageTowerPrefab) => {
-                                                        finalizeInjection(
-                                                            stoneWallPrefab, iceTowerPrefab, thunderTowerPrefab, watchTowerPrefab,
-                                                            warAncientTreePrefab, hunterHallPrefab, swordsmanHallPrefab, churchPrefab, mageTowerPrefab
-                                                        );
-                                                    });
-                                                } else {
-                                                    finalizeInjection(
-                                                        stoneWallPrefab, iceTowerPrefab, thunderTowerPrefab, watchTowerPrefab,
-                                                        warAncientTreePrefab, hunterHallPrefab, swordsmanHallPrefab, churchPrefab, null
-                                                    );
-                                                }
-                                            });
-                                        });
-                                    });
-                                });
-                            });
-                        });
+                } else {
+                    // 非第一关：加载全部建筑预制体
+                    const shouldLoadMageTower = currentLevel !== 1;
+                    const totalSteps = shouldLoadMageTower ? 9 : 8;
+                    this.loadAllBuildingPrefabs(bundle, shouldLoadMageTower, totalSteps, () => {
+                        this._startGameInternal();
                     });
-                });
+                }
             });
 
             return;
@@ -9391,6 +9289,356 @@ export class GameManager extends Component {
             }
             (this.uiManager as any).changeBackground(level);
         }
+    }
+
+    /**
+     * 第一关最小化加载：加载石墙、哨塔、战争古树（必需的首发建筑）
+     * @param bundle 分包 bundle
+     * @param onLoaded 加载完成回调
+     */
+    private loadLevel1MinimalPrefabs(bundle: any, onLoaded: () => void) {
+        let loadedCount = 0;
+        const totalSteps = 3; // 石墙、哨塔、战争古树（弓箭手小屋）
+        let stoneWallPrefab: Prefab | null = null;
+        let watchTowerPrefab: Prefab | null = null;
+        let warAncientTreePrefab: Prefab | null = null;
+
+        const checkComplete = () => {
+            loadedCount++;
+            if (loadedCount >= totalSteps) {
+                // 注入预制体
+                const towerBuilder = this.findComponentInScene('TowerBuilder') as any;
+                if (towerBuilder) {
+                    if (stoneWallPrefab && typeof towerBuilder.setStoneWallPrefab === 'function') {
+                        towerBuilder.setStoneWallPrefab(stoneWallPrefab);
+                    }
+                    if (watchTowerPrefab && typeof towerBuilder.setWatchTowerPrefab === 'function') {
+                        towerBuilder.setWatchTowerPrefab(watchTowerPrefab);
+                    }
+                    if (warAncientTreePrefab && typeof towerBuilder.setWarAncientTreePrefab === 'function') {
+                        towerBuilder.setWarAncientTreePrefab(warAncientTreePrefab);
+                    }
+                    if (typeof towerBuilder.refreshBuildingTypes === 'function') {
+                        towerBuilder.refreshBuildingTypes();
+                    }
+                }
+
+                this.updateLoadingProgress(1);
+                this.hideLoadingOverlay();
+                onLoaded();
+            }
+        };
+
+        // 加载石墙
+        bundle.load('StoneWall', Prefab, (err: any, prefab: Prefab | null) => {
+            if (err || !prefab) {
+                console.error('[GameManager] 从分包 prefabs_sub 加载 StoneWall 失败:', err);
+            } else {
+                stoneWallPrefab = prefab as Prefab;
+                //console.info('[GameManager] 从分包 prefabs_sub 成功加载 StoneWall');
+            }
+            // 进度：0.2 + 0.8 * (1/3)
+            this.updateLoadingProgress(0.2 + 0.8 * (1 / totalSteps));
+            checkComplete();
+        });
+
+        // 加载哨塔
+        bundle.load('WatchTower', Prefab, (err: any, prefab: Prefab | null) => {
+            if (err || !prefab) {
+                console.error('[GameManager] 从分包 prefabs_sub 加载 WatchTower 失败:', err);
+            } else {
+                watchTowerPrefab = prefab as Prefab;
+                //console.info('[GameManager] 从分包 prefabs_sub 成功加载 WatchTower');
+            }
+            // 进度：0.2 + 0.8 * (2/3)
+            this.updateLoadingProgress(0.2 + 0.8 * (2 / totalSteps));
+            checkComplete();
+        });
+
+        // 加载战争古树（弓箭手小屋）
+        bundle.load('WarAncientTree', Prefab, (err: any, prefab: Prefab | null) => {
+            if (err || !prefab) {
+                console.error('[GameManager] 从分包 prefabs_sub 加载 WarAncientTree 失败:', err);
+            } else {
+                warAncientTreePrefab = prefab as Prefab;
+                //console.info('[GameManager] 从分包 prefabs_sub 成功加载 WarAncientTree (弓箭手小屋)');
+            }
+            // 进度：0.2 + 0.8 * (3/3) = 1.0
+            this.updateLoadingProgress(0.2 + 0.8 * (3 / totalSteps));
+            checkComplete();
+        });
+    }
+
+    /**
+     * 加载全部建筑预制体（非第一关或第一关延迟加载）
+     * @param bundle 分包 bundle
+     * @param shouldLoadMageTower 是否加载法师塔
+     * @param totalSteps 总步数
+     * @param onLoaded 加载完成回调
+     */
+    private loadAllBuildingPrefabs(bundle: any, shouldLoadMageTower: boolean, totalSteps: number, onLoaded: () => void) {
+        const loadPrefab = (name: string, stepIndex: number, onLoadedCb: (prefab: Prefab | null) => void) => {
+            bundle.load(name, Prefab, (err2: any, prefab: Prefab | null) => {
+                if (err2 || !prefab) {
+                    console.error('[GameManager] 从分包 prefabs_sub 加载预制体失败:', name, err2);
+                } else {
+                    //console.info('[GameManager] 从分包 prefabs_sub 成功加载预制体:', name);
+                }
+                onLoadedCb(prefab as Prefab | null);
+            });
+        };
+
+        const finalizeInjection = (
+            stoneWallPrefab: Prefab | null,
+            iceTowerPrefab: Prefab | null,
+            thunderTowerPrefab: Prefab | null,
+            watchTowerPrefab: Prefab | null,
+            warAncientTreePrefab: Prefab | null,
+            hunterHallPrefab: Prefab | null,
+            swordsmanHallPrefab: Prefab | null,
+            churchPrefab: Prefab | null,
+            mageTowerPrefab: Prefab | null
+        ) => {
+            try {
+                const towerBuilder = this.findComponentInScene('TowerBuilder') as any;
+                if (towerBuilder) {
+                    if (stoneWallPrefab && typeof towerBuilder.setStoneWallPrefab === 'function') {
+                        towerBuilder.setStoneWallPrefab(stoneWallPrefab);
+                    }
+                    if (iceTowerPrefab && typeof towerBuilder.setIceTowerPrefab === 'function') {
+                        towerBuilder.setIceTowerPrefab(iceTowerPrefab);
+                    }
+                    if (thunderTowerPrefab && typeof towerBuilder.setThunderTowerPrefab === 'function') {
+                        towerBuilder.setThunderTowerPrefab(thunderTowerPrefab);
+                    }
+                    if (watchTowerPrefab && typeof towerBuilder.setWatchTowerPrefab === 'function') {
+                        towerBuilder.setWatchTowerPrefab(watchTowerPrefab);
+                    }
+                    if (warAncientTreePrefab && typeof towerBuilder.setWarAncientTreePrefab === 'function') {
+                        towerBuilder.setWarAncientTreePrefab(warAncientTreePrefab);
+                    }
+                    if (hunterHallPrefab && typeof towerBuilder.setHunterHallPrefab === 'function') {
+                        towerBuilder.setHunterHallPrefab(hunterHallPrefab);
+                    }
+                    if (swordsmanHallPrefab && typeof towerBuilder.setSwordsmanHallPrefab === 'function') {
+                        towerBuilder.setSwordsmanHallPrefab(swordsmanHallPrefab);
+                    }
+                    if (churchPrefab && typeof towerBuilder.setChurchPrefab === 'function') {
+                        towerBuilder.setChurchPrefab(churchPrefab);
+                    }
+
+                    if (shouldLoadMageTower) {
+                        if (mageTowerPrefab && typeof towerBuilder.setMageTowerPrefab === 'function') {
+                            //console.info('[GameManager] non-level1: MageTower prefab loaded, injecting to TowerBuilder');
+                            towerBuilder.setMageTowerPrefab(mageTowerPrefab as Prefab);
+                        } else {
+                            console.warn('[GameManager] non-level1: MageTower prefab load failed or TowerBuilder lacks setMageTowerPrefab');
+                        }
+                    }
+
+                    if (typeof towerBuilder.refreshBuildingTypes === 'function') {
+                        towerBuilder.refreshBuildingTypes();
+                    }
+                } else {
+                    console.warn('[GameManager] TowerBuilder 组件不存在，无法注入分包预制体');
+                }
+            } catch (e) {
+                console.error('[GameManager] 注入分包建筑预制体到 TowerBuilder 时出错:', e);
+            }
+
+            // 标记分包已加载完成
+            this.prefabsSubLoaded = true;
+            this.isLoadingPrefabsSub = false;
+            this.updateLoadingProgress(1);
+            this.hideLoadingOverlay();
+            onLoaded();
+        };
+
+        loadPrefab('StoneWall', 1, (stoneWallPrefab) => {
+            loadPrefab('IceTower', 2, (iceTowerPrefab) => {
+                loadPrefab('ThunderTower', 3, (thunderTowerPrefab) => {
+                    loadPrefab('WatchTower', 4, (watchTowerPrefab) => {
+                        loadPrefab('WarAncientTree', 5, (warAncientTreePrefab) => {
+                            loadPrefab('HunterHall', 6, (hunterHallPrefab) => {
+                                loadPrefab('SwordsmanHall', 7, (swordsmanHallPrefab) => {
+                                    loadPrefab('Church', 8, (churchPrefab) => {
+                                        if (shouldLoadMageTower) {
+                                            loadPrefab('MageTower', 9, (mageTowerPrefab) => {
+                                                finalizeInjection(
+                                                    stoneWallPrefab, iceTowerPrefab, thunderTowerPrefab, watchTowerPrefab,
+                                                    warAncientTreePrefab, hunterHallPrefab, swordsmanHallPrefab, churchPrefab, mageTowerPrefab
+                                                );
+                                            });
+                                        } else {
+                                            finalizeInjection(
+                                                stoneWallPrefab, iceTowerPrefab, thunderTowerPrefab, watchTowerPrefab,
+                                                warAncientTreePrefab, hunterHallPrefab, swordsmanHallPrefab, churchPrefab, null
+                                            );
+                                        }
+                                    });
+                                });
+                            });
+                        });
+                    });
+                });
+            });
+        });
+    }
+
+    /**
+     * 第一关进入游戏后延迟加载剩余预制体（建筑 + 敌人）
+     * 参考金矿加载逻辑，不阻塞游戏进程
+     * @param bundle 分包 bundle
+     */
+    private loadRemainingPrefabsAfterGameStart(bundle: any) {
+        // 延迟加载剩余建筑：冰塔、雷塔、猎手大厅、剑士小屋、教堂（WarAncientTree/弓箭手小屋已在初始加载）
+        const remainingBuildings = ['IceTower', 'ThunderTower', 'HunterHall', 'SwordsmanHall', 'Church']; // WarAncientTree(弓箭手小屋) 已在初始加载
+
+        remainingBuildings.forEach((name) => {
+            bundle.load(name, Prefab, (err: any, prefab: Prefab | null) => {
+                if (err || !prefab) {
+                    console.warn('[GameManager] 延迟加载建筑预制体失败:', name, err);
+                    return;
+                }
+                //console.info('[GameManager] 延迟加载建筑预制体成功:', name);
+
+                // 注入到 TowerBuilder
+                const towerBuilder = this.findComponentInScene('TowerBuilder') as any;
+                if (towerBuilder) {
+                    const setterMap: { [key: string]: string } = {
+                        'IceTower': 'setIceTowerPrefab',
+                        'ThunderTower': 'setThunderTowerPrefab',
+                        'HunterHall': 'setHunterHallPrefab',
+                        'SwordsmanHall': 'setSwordsmanHallPrefab',
+                        'Church': 'setChurchPrefab'
+                    };
+                    const setterName = setterMap[name];
+                    if (setterName && typeof towerBuilder[setterName] === 'function') {
+                        towerBuilder[setterName](prefab);
+                        // 刷新建筑类型列表
+                        if (typeof towerBuilder.refreshBuildingTypes === 'function') {
+                            towerBuilder.refreshBuildingTypes();
+                        }
+                    }
+                }
+            });
+        });
+
+        // 标记分包已加载完成
+        this.prefabsSubLoaded = true;
+        this.isLoadingPrefabsSub = false;
+
+        // 延迟加载敌人预制体：1 秒内加载兽人，第 2 波前加载投矛手，第 3 波前加载其他
+        this.scheduleEnemyPrefabLoading(bundle);
+    }
+
+    /**
+     * 调度敌人预制体延迟加载（第一关专用）
+     * - 1 秒内：加载兽人 (Orc)
+     * - 第 2 波前（约 5 秒）：加载投矛手 (TrollSpearman)
+     * - 第 3 波前（约 10 秒）：加载其他敌人 (OrcWarrior, OrcWarlord, Dragon 等)
+     * @param bundle 分包 bundle
+     */
+    private scheduleEnemyPrefabLoading(bundle: any) {
+        // 1 秒内加载兽人 (Orc) - 第一波主力敌人
+        this.scheduleOnce(() => {
+            this.loadEnemyPrefabFromSubpackage(bundle, ['orc'], 'Orc', () => {
+                //console.info('[GameManager] 延迟加载敌人预制体：Orc');
+            });
+        }, 0.3);
+
+        // 第 2 波前（约 5 秒）加载投矛手 (TrollSpearman)
+        this.scheduleOnce(() => {
+            this.loadEnemyPrefabFromSubpackage(bundle, ['TrollSpearman', 'trollSpearman', 'troll_spearman'], 'TrollSpearman', () => {
+                //console.info('[GameManager] 延迟加载敌人预制体：TrollSpearman');
+            });
+        }, 4);
+
+        // 第 3 波前（约 10 秒）加载其他敌人 (OrcWarrior, OrcWarlord, Dragon 等)
+        this.scheduleOnce(() => {
+            // 兽人战士
+            this.loadEnemyPrefabFromSubpackage(bundle, ['OrcWarrior', 'orcwarrior', 'orc_warrior'], 'OrcWarrior', () => {});
+            // 督军
+            this.loadEnemyPrefabFromSubpackage(bundle, ['OrcWarlord', 'orcwarlord', 'orc_warlord'], 'OrcWarlord', () => {});
+            // 飞龙（第 8 波才出现，可以更晚加载）
+            this.loadEnemyPrefabFromSubpackage(bundle, ['Dragon', 'dragon'], 'Dragon', () => {});
+            // 萨满（如果有）
+            this.loadEnemyPrefabFromSubpackage(bundle, ['OrcShaman', 'orcshaman', 'orc_shaman'], 'OrcShaman', () => {});
+            //console.info('[GameManager] 延迟加载敌人预制体：OrcWarrior, OrcWarlord, Dragon, OrcShaman');
+        }, 9);
+    }
+
+    /**
+     * 从分包加载单个敌人预制体（注入到 EnemySpawner 的共享静态变量）
+     * @param bundle 分包 bundle
+     * @param tryNames 尝试的资源名列表
+     * @param enemyType 敌人类型名称（用于注入到 EnemySpawner）
+     * @param onLoaded 加载完成回调
+     */
+    private loadEnemyPrefabFromSubpackage(bundle: any, tryNames: string[], enemyType: string, onLoaded: () => void) {
+        const tryLoadByIndex = (index: number) => {
+            if (index >= tryNames.length) {
+                console.warn('[GameManager] 加载敌人预制体失败，候选名称:', tryNames);
+                onLoaded();
+                return;
+            }
+
+            const name = tryNames[index];
+            bundle.load(name, Prefab, (err: any, prefab: Prefab | null) => {
+                if (err || !prefab) {
+                    //console.info('[GameManager] 加载敌人预制体失败，名称:', name, '继续尝试下一个');
+                    tryLoadByIndex(index + 1);
+                    return;
+                }
+
+                //console.info('[GameManager] 成功加载敌人预制体:', name);
+
+                // 注入到 EnemySpawner 的共享静态变量
+                const EnemySpawnerClass = this.getClassByName('EnemySpawner') as any;
+                if (EnemySpawnerClass) {
+                    const propMap: { [key: string]: string } = {
+                        'Orc': 'sharedOrcPrefab',
+                        'TrollSpearman': 'sharedTrollSpearmanPrefab',
+                        'OrcWarrior': 'sharedOrcWarriorPrefab',
+                        'OrcWarlord': 'sharedOrcWarlordPrefab',
+                        'Dragon': 'sharedDragonPrefab',
+                        'OrcShaman': 'sharedOrcShamanPrefab'
+                    };
+                    const propName = propMap[enemyType];
+                    if (propName) {
+                        EnemySpawnerClass[propName] = prefab;
+                        // 标记已加载
+                        const loadedPropName = propName.replace('shared', '') + 'Loaded';
+                        EnemySpawnerClass[loadedPropName] = true;
+                    }
+                }
+
+                // 同时注入到当前 EnemySpawner 实例的映射表
+                const enemySpawner = this.findComponentInScene('EnemySpawner') as any;
+                if (enemySpawner && enemySpawner.enemyPrefabMap) {
+                    enemySpawner.enemyPrefabMap.set(enemyType, prefab);
+                    // 刷新对象池
+                    if (enemySpawner.enemyPool && typeof enemySpawner.enemyPool.registerPrefab === 'function') {
+                        enemySpawner.enemyPool.registerPrefab(enemyType, prefab);
+                    }
+                }
+
+                onLoaded();
+            });
+        };
+
+        tryLoadByIndex(0);
+    }
+
+    /**
+     * 通过类名获取组件类（用于访问静态变量）
+     */
+    private getClassByName(className: string): any {
+        // 在 Cocos Creator 3.x 中，组件类通常在全局作用域
+        if (typeof window !== 'undefined' && (window as any)[className]) {
+            return (window as any)[className];
+        }
+        return null;
     }
 }
 
