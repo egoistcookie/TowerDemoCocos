@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, find, Graphics, UITransform, Color, EventTouch, Camera, Vec3, Vec2, Sprite, SpriteFrame, resources } from 'cc';
+import { _decorator, Component, Node, find, Graphics, UITransform, Color, EventTouch, Camera, Vec3, Vec2, Sprite, SpriteFrame, resources, UIOpacity } from 'cc';
 import { UnitInfoPanel, UnitInfo } from './UnitInfoPanel';
 import { Build } from './role/Build';
 const { ccclass, property } = _decorator;
@@ -176,6 +176,8 @@ export class UnitSelectionManager extends Component {
         
         // 清除之前的选择（不清除globalTouchHandler）
         this.clearSelection();
+        // 选中角色时，关闭石墙防御塔的建造弹窗
+        this.hideBuildingSelectionPanel();
 
         // 设置当前选中的单位
         this.currentSelectedUnit = unitNode;
@@ -200,6 +202,29 @@ export class UnitSelectionManager extends Component {
         // 显示范围
         this.showRangeDisplay(unitNode, unitInfo);
           //console.log('[UnitSelectionManager] selectUnit completed');
+    }
+
+    /**
+     * 隐藏建造弹窗
+     */
+    private hideBuildingSelectionPanel() {
+        // 隐藏建筑物选择面板（BuildingSelectionPanel）
+        const buildingSelectionPanelNode = find('Canvas/BuildingSelectionPanel');
+        if (buildingSelectionPanelNode) {
+            const buildingPanel = buildingSelectionPanelNode.getComponent('BuildingSelectionPanel') as any;
+            if (buildingPanel && buildingPanel.hide) {
+                buildingPanel.hide();
+            }
+        }
+
+        // 隐藏石墙网格上的建造选择面板（GridBuildingSelectionPanel）
+        const gridBuildingSelectionPanelNode = find('Canvas/GridBuildingSelectionPanel');
+        if (gridBuildingSelectionPanelNode) {
+            const gridBuildingPanel = gridBuildingSelectionPanelNode.getComponent('GridBuildingSelectionPanel') as any;
+            if (gridBuildingPanel && gridBuildingPanel.hide) {
+                gridBuildingPanel.hide();
+            }
+        }
     }
 
     /**
