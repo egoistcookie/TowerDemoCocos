@@ -865,15 +865,15 @@ export class Enemy extends Component {
             this.tempVec3_1.set(this.tempVec3_3);
         }
 
+        // 根据移动方向翻转（必须在 clampPositionToScreen 之前调用，避免 tempVec3_1 被覆盖）
+        this.flipDirection(this.tempVec3_1);
+
         // 限制在屏幕范围内
-                const clampedPos = this.clampPositionToScreen(this.tempVec3_2);
-                            this.node.setWorldPosition(clampedPos);
+        const clampedPos = this.clampPositionToScreen(this.tempVec3_2);
+        this.node.setWorldPosition(clampedPos);
 
-                            // 根据移动方向翻转
-            this.flipDirection(this.tempVec3_1);
-
-            // 播放行走动画
-            this.playWalkAnimation();
+        // 播放行走动画
+        this.playWalkAnimation();
     }
 
 
@@ -991,33 +991,6 @@ export class Enemy extends Component {
         this.tempVec3_1.y = Math.max(minY, Math.min(maxY, this.tempVec3_1.y));
 
         return this.tempVec3_1;
-    }
-
-    // 根据移动方向翻转敌人
-    flipDirection(direction: Vec3) {
-        if (direction.x < 0) {
-            // 向左移动，翻转
-            this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-            // 血条反向翻转，保持正常朝向
-            if (this.healthBarNode && this.healthBarNode.isValid) {
-                this.healthBarNode.setScale(-1, 1, 1);
-            }
-            // 对话框反向翻转，保持正常朝向（文字从左往右）
-            if (this.dialogNode && this.dialogNode.isValid) {
-                this.dialogNode.setScale(-1, 1, 1);
-            }
-        } else {
-            // 向右移动，正常朝向
-            this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-            // 血条正常朝向
-            if (this.healthBarNode && this.healthBarNode.isValid) {
-                this.healthBarNode.setScale(1, 1, 1);
-            }
-            // 对话框正常朝向（文字从左往右）
-            if (this.dialogNode && this.dialogNode.isValid) {
-                this.dialogNode.setScale(1, 1, 1);
-            }
-        }
     }
 
     stopMoving() {
@@ -2385,7 +2358,12 @@ export class Enemy extends Component {
             // calculateEnemyAvoidanceDirection 返回的是最终方向（tempVec3_3），直接使用
             this.tempVec3_3.set(avoidanceDir);
             Vec3.scaleAndAdd(this.tempVec3_2, currentPos, this.tempVec3_3, moveDistance);
+            // 使用最终方向更新翻转方向
+            this.tempVec3_1.set(this.tempVec3_3);
         }
+
+        // 根据移动方向翻转（必须在 clampPositionToScreen 之前调用，避免 tempVec3_1 被覆盖）
+        this.flipDirection(this.tempVec3_1);
 
         // 限制在屏幕范围内
         const clampedPos = this.clampPositionToScreen(this.tempVec3_2);
@@ -2394,6 +2372,38 @@ export class Enemy extends Component {
         // 播放行走动画
         this.playWalkAnimation();
     }
+
+    /**
+     * 根据移动方向翻转敌人贴图朝向
+     * direction.x < 0 时翻转（向左），否则保持正常朝向（向右或垂直移动）
+     * @param direction 移动方向向量（已归一化）
+     */
+    flipDirection(direction: Vec3) {
+        if (direction.x < 0) {
+            // 向左移动，翻转
+            this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+            // 血条反向翻转，保持正常朝向
+            if (this.healthBarNode && this.healthBarNode.isValid) {
+                this.healthBarNode.setScale(-1, 1, 1);
+            }
+            // 对话框反向翻转，保持正常朝向（文字从左往右）
+            if (this.dialogNode && this.dialogNode.isValid) {
+                this.dialogNode.setScale(-1, 1, 1);
+            }
+        } else {
+            // 向右移动或垂直移动，正常朝向
+            this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+            // 血条正常朝向
+            if (this.healthBarNode && this.healthBarNode.isValid) {
+                this.healthBarNode.setScale(1, 1, 1);
+            }
+            // 对话框正常朝向（文字从左往右）
+            if (this.dialogNode && this.dialogNode.isValid) {
+                this.dialogNode.setScale(1, 1, 1);
+            }
+        }
+    }
+
     /**
      * 重置敌人状态（用于对象池回收）
      */
@@ -2509,7 +2519,7 @@ export class Enemy extends Component {
             const distanceSq = dx * dx + dy * dy;
             
             // 获取敌人的碰撞半径（如果有collisionRadius属性）
-            const otherRadius = enemyScript.collisionRadius || 5;
+            const otherRadius = enemyScript.collisionRadius ?? 2;
             const minDistance = this.collisionRadius + otherRadius;
             const minDistanceSq = minDistance * minDistance;
 
@@ -2586,7 +2596,7 @@ export class Enemy extends Component {
             const distanceSq = dx * dx + dy * dy;
             
             // 获取敌人的碰撞半径
-            const otherRadius = enemyScript.collisionRadius || 5;
+            const otherRadius = enemyScript.collisionRadius ?? 2;
             const minDistance = this.collisionRadius + otherRadius;
             const minDistanceSq = minDistance * minDistance;
             const detectionRangeSq = detectionRange * detectionRange;

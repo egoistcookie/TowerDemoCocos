@@ -128,13 +128,24 @@ select * from player_feedback_comments pfc ;
 select * from player_feedback_votes pfv ;
 
 
-select * from visitor_source_records;
+select * from visitor_source_records order by created_at desc ;
+select * from visitor_source_records where player_id like '%4565%'
 select scene,count(*) from visitor_source_records where  player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381'
 ,'player_1775652153130_8335','player_1772722064044_978','player_1772465771074_4106')  group by scene;
 
 
 select * from player_statistics ps where ps.player_id ='player_1773885661760_9201';;
 
+--查询某角色等级最高的玩家
+SELECT
+	gr.player_id,JSON_EXTRACT(gr.unit_levels_json, '$.ElfSwordsman'),
+    COALESCE(ps.player_name, gr.player_id) AS player_name
+ FROM game_records gr
+ LEFT JOIN player_statistics ps ON ps.player_id = gr.player_id
+ WHERE gr.unit_levels_json IS NOT NULL
+   AND JSON_EXTRACT(gr.unit_levels_json, '$.ElfSwordsman') IS NOT NULL
+ ORDER BY JSON_EXTRACT(gr.unit_levels_json, '$.ElfSwordsman') DESC
+ LIMIT 50
 
 
 
