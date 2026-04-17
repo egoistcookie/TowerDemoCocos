@@ -81,7 +81,8 @@ export class GameManager extends Component {
     private playerDataManager: PlayerDataManager = null!;
     private hasShownPopulationLimitWarning: boolean = false; // 是否已显示过人口上限提示
     private hasShownFirstArrowerDeathPopup: boolean = false; // 是否已显示过第一个弓箭手死亡提示
-    private hasTriggeredFirstArrowerBowstringMiniGame: boolean = false; // 首个弓箭手“紧弓弦”互动仅触发一次
+    private hasKilledDragonInLevel1: boolean = false; // 第一关是否已击败过飞龙（用于龙肉掉落）
+    private hasTriggeredFirstArrowerBowstringMiniGame: boolean = false; // 首个弓箭手”紧弓弦”互动仅触发一次
     private hasTriggeredFirstSwordsmanSharpenMiniGame: boolean = false; // 首个剑士“磨剑”互动仅触发一次
     private hasShownArrowerNeedPriestDialog: boolean = false; // 一局一次：弓箭手受伤且场上无牧师
     private hasShownPriestProtectBuildingDialog: boolean = false; // 一局一次：牧师在场且防御建筑掉血
@@ -9639,6 +9640,431 @@ export class GameManager extends Component {
             return (window as any)[className];
         }
         return null;
+    }
+
+    // ========== 龙肉掉落相关 ==========
+    // 龙肉掉落标记
+    private hasDragonMeatAvailable: boolean = false;
+    private dragonMeatSpriteFrame: SpriteFrame | null = null;
+    // 龙肉喂养结果贴图（来自飞龙预制体）
+    private bearFeedResultSpriteFrame: SpriteFrame | null = null;
+    private pantherFeedResultSpriteFrame: SpriteFrame | null = null;
+    private eagleFeedResultSpriteFrame: SpriteFrame | null = null;
+
+    /**
+     * 处理飞龙掉落龙肉
+     * @param spriteFrame 龙肉贴图（可选，来自飞龙预制体）
+     * @param dragonNode 飞龙节点（用于获取喂养结果贴图）
+     */
+    public onDragonMeatDropped(spriteFrame: SpriteFrame | null, dragonNode: Node | null = null) {
+        this.hasDragonMeatAvailable = true;
+        this.dragonMeatSpriteFrame = spriteFrame;
+
+        // 从飞龙节点获取喂养结果贴图
+        if (dragonNode) {
+            const dragonScript = dragonNode.getComponent('Dragon') as any;
+            if (dragonScript) {
+                this.bearFeedResultSpriteFrame = dragonScript.bearFeedResultSpriteFrame || null;
+                this.pantherFeedResultSpriteFrame = dragonScript.pantherFeedResultSpriteFrame || null;
+                this.eagleFeedResultSpriteFrame = dragonScript.eagleFeedResultSpriteFrame || null;
+            }
+        }
+
+        // 获取第一个弓箭手
+        const arrower = this.getFirstArrower();
+        if (arrower) {
+            // 显示弓箭手提示："指挥官，太幸运啦，我们捡到了一块龙肉！"
+            // 使用 UnitIntroPopup 直接显示，支持 onCloseCallback
+            this.autoCreateUnitIntroPopup();
+            if (!this.unitIntroPopup) return;
+
+            // 加载弓箭手开心贴图
+            resources.load('textures/arrower/arrowerHappy/spriteFrame', SpriteFrame, (err, spriteFrame) => {
+                if (err) {
+                    console.warn('[GameManager] 加载弓箭手开心贴图失败', err);
+                }
+                this.unitIntroPopup.show({
+                    unitIcon: spriteFrame,
+                    unitName: '弓箭手',
+                    unitDescription: '指挥官，太幸运啦，我们捡到了一块龙肉！',
+                    unitType: 'Arrower',
+                    onCloseCallback: () => {
+                        // 点击关闭后，立即暂停游戏（因为 UnitIntroPopup.hide() 已经调用了 resumeGame()）
+                        this.pauseGame();
+                        // 显示龙肉选择框
+                        this.showDragonMeatSelectionPanel();
+                    }
+                });
+            });
+        }
+    }
+
+    /**
+     * 获取第一个弓箭手
+     */
+    private getFirstArrower(): any {
+        const towersContainer = find('Canvas/Towers');
+        if (!towersContainer) return null;
+
+        for (const tower of towersContainer.children) {
+            if (!tower || !tower.active || !tower.isValid) continue;
+            const arrowerScript = tower.getComponent('Arrower') as any;
+            if (arrowerScript) {
+                return arrowerScript;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 显示龙肉选择框（上下结构：上方贴图单独一行，下方介绍词 + 三个按钮）
+     */
+    private showDragonMeatSelectionPanel() {
+        if (!this.unitIntroPopup) {
+            this.autoCreateUnitIntroPopup();
+        }
+        if (!this.unitIntroPopup) return;
+
+        // 创建自定义选择框
+        const canvas = find('Canvas');
+        if (!canvas) return;
+
+        const containerNode = new Node('DragonMeatSelectionPanel');
+        containerNode.setParent(canvas);
+
+        const uiTransform = containerNode.addComponent(UITransform);
+        uiTransform.setContentSize(500, 500);
+        containerNode.setPosition(0, 0, 0);
+
+        // 添加 Graphics 背景
+        const graphics = containerNode.addComponent(Graphics);
+        graphics.fillColor = new Color(0, 0, 0, 220);
+        graphics.roundRect(-250, -250, 500, 500, 15);
+        graphics.fill();
+        graphics.strokeColor = new Color(255, 215, 0, 255); // 金色边框
+        graphics.lineWidth = 4;
+        graphics.roundRect(-250, -250, 500, 500, 15);
+        graphics.stroke();
+
+        // 设置最上层
+        containerNode.setSiblingIndex(Number.MAX_SAFE_INTEGER);
+
+        // 第一部分：龙肉贴图（单独一行，居中）
+        const meatRowNode = new Node('MeatRow');
+        meatRowNode.setParent(containerNode);
+        meatRowNode.setPosition(0, 160, 0);
+        const meatRowTransform = meatRowNode.addComponent(UITransform);
+        meatRowTransform.setContentSize(460, 120);
+
+        const meatIconNode = new Node('MeatIcon');
+        meatIconNode.setParent(meatRowNode);
+        meatIconNode.setPosition(0, 0, 0);
+        const meatIconTransform = meatIconNode.addComponent(UITransform);
+        meatIconTransform.setContentSize(100, 100);
+        const meatIconSprite = meatIconNode.addComponent(Sprite);
+        meatIconSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+
+        // 如果有龙肉贴图，使用上传的；否则留空（空白贴图）
+        if (this.dragonMeatSpriteFrame) {
+            meatIconSprite.spriteFrame = this.dragonMeatSpriteFrame;
+        } else {
+            // 加载默认龙肉贴图（如果没有上传，留空）
+            resources.load('textures/items/dragonMeat/spriteFrame', SpriteFrame, (err, spriteFrame) => {
+                if (err) {
+                    console.warn('[GameManager] 加载默认龙肉贴图失败，显示空白');
+                } else if (spriteFrame && meatIconSprite && meatIconSprite.isValid) {
+                    meatIconSprite.spriteFrame = spriteFrame;
+                }
+            });
+        }
+
+        // 第二部分：介绍文字（单独一行）
+        const descNode = new Node('Description');
+        descNode.setParent(containerNode);
+        descNode.setPosition(0, 60, 0);
+        const descTransform = descNode.addComponent(UITransform);
+        descTransform.setContentSize(440, 80);
+        const descLabel = descNode.addComponent(Label);
+        descLabel.string = '飞龙掉落的稀有龙肉，魔兽的最爱。';
+        descLabel.fontSize = 22;
+        descLabel.color = new Color(255, 255, 255, 255);
+        descLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        descLabel.verticalAlign = Label.VerticalAlign.CENTER;
+
+        // 第三部分：三个按钮（居中排列，带边框）
+        const buttonRowNode = new Node('ButtonRow');
+        buttonRowNode.setParent(containerNode);
+        buttonRowNode.setPosition(0, -60, 0);
+        const buttonRowTransform = buttonRowNode.addComponent(UITransform);
+        buttonRowTransform.setContentSize(460, 140);
+
+        // 创建三个按钮
+        const buttonWidth = 120;
+        const buttonHeight = 50;
+        const buttonSpacing = 20;
+        const totalWidth = buttonWidth * 3 + buttonSpacing * 2;
+        const startX = -totalWidth / 2;
+
+        // 按钮 1：供养巨熊
+        const bearButton = this.createDragonMeatButton(
+            buttonRowNode,
+            'BearButton',
+            '供养巨熊',
+            new Vec3(startX, 0, 0),
+            buttonWidth,
+            buttonHeight,
+            () => {
+                containerNode.destroy();
+                this.onFeedBear();
+            }
+        );
+
+        // 按钮 2：喂养黑豹
+        const pantherButton = this.createDragonMeatButton(
+            buttonRowNode,
+            'PantherButton',
+            '喂养黑豹',
+            new Vec3(startX + buttonWidth + buttonSpacing, 0, 0),
+            buttonWidth,
+            buttonHeight,
+            () => {
+                containerNode.destroy();
+                this.onFeedPanther();
+            }
+        );
+
+        // 按钮 3：喂养角鹰
+        const eagleButton = this.createDragonMeatButton(
+            buttonRowNode,
+            'EagleButton',
+            '喂养角鹰',
+            new Vec3(startX + (buttonWidth + buttonSpacing) * 2, 0, 0),
+            buttonWidth,
+            buttonHeight,
+            () => {
+                containerNode.destroy();
+                this.onFeedEagle();
+            }
+        );
+
+        // 添加关闭按钮（右上角）
+        const closeButton = this.createDragonMeatButton(
+            containerNode,
+            'CloseButton',
+            '×',
+            new Vec3(220, 220, 0),
+            40,
+            40,
+            () => {
+                containerNode.destroy();
+                this.resumeGame();
+            }
+        );
+    }
+
+    /**
+     * 创建龙肉选择框按钮
+     */
+    private createDragonMeatButton(parent: Node, name: string, text: string, pos: Vec3, width: number, height: number, onClick: () => void): Node {
+        const buttonNode = new Node(name);
+        buttonNode.setParent(parent);
+        buttonNode.setPosition(pos);
+
+        const btnTransform = buttonNode.addComponent(UITransform);
+        btnTransform.setContentSize(width, height);
+
+        // 按钮背景和边框 - 使用同一个 Graphics 组件
+        const graphics = buttonNode.addComponent(Graphics);
+        // 先绘制填充
+        graphics.fillColor = new Color(60, 60, 60, 255);
+        graphics.roundRect(-width / 2, -height / 2, width, height, 8);
+        graphics.fill();
+        // 再绘制边框
+        graphics.strokeColor = new Color(255, 255, 255, 255);
+        graphics.lineWidth = 4;
+        graphics.roundRect(-width / 2, -height / 2, width, height, 8);
+        graphics.stroke();
+
+        // 按钮文字
+        const labelNode = new Node('Label');
+        labelNode.setParent(buttonNode);
+        labelNode.setPosition(0, 0, 0);
+        const labelTransform = labelNode.addComponent(UITransform);
+        labelTransform.setContentSize(width - 10, height);
+        const label = labelNode.addComponent(Label);
+        label.string = text;
+        label.fontSize = name === 'CloseButton' ? 30 : 18;
+        label.color = new Color(255, 255, 255, 255);
+        label.horizontalAlign = Label.HorizontalAlign.CENTER;
+        label.verticalAlign = Label.VerticalAlign.CENTER;
+
+        // 添加点击事件
+        buttonNode.on(Node.EventType.TOUCH_END, onClick, this);
+
+        return buttonNode;
+    }
+
+    /**
+     * 供养巨熊：巨熊归顺
+     */
+    private onFeedBear() {
+        // 显示巨熊归顺提示
+        if (!this.unitIntroPopup) {
+            this.autoCreateUnitIntroPopup();
+        }
+        if (!this.unitIntroPopup) return;
+
+        // 使用上传的巨熊贴图，或显示默认描述
+        this.unitIntroPopup.show({
+            unitIcon: this.bearFeedResultSpriteFrame,
+            unitName: '巨熊',
+            unitDescription: '巨熊归顺！',
+            unitType: 'Bear',
+            onCloseCallback: () => {
+                // 触发巨熊归顺逻辑（triggerBearTame 内部会调用 resumeGame）
+                this.triggerBearTame();
+            }
+        });
+    }
+
+    /**
+     * 触发巨熊归顺逻辑
+     */
+    private triggerBearTame() {
+        // 查找兽穴（尝试多个可能的路径）
+        let beastDenNode = find('Canvas/BeastDen');
+        if (!beastDenNode) {
+            beastDenNode = find('Canvas/BeastDens');
+        }
+
+        console.log('[GameManager] triggerBearTame - BeastDen node:', beastDenNode ? 'found' : 'not found');
+
+        if (beastDenNode && beastDenNode.children.length > 0) {
+            console.log('[GameManager] triggerBearTame - Checking', beastDenNode.name, 'with', beastDenNode.children.length, 'children');
+            for (const den of beastDenNode.children) {
+                const denScript = den.getComponent('BeastDen') as any;
+                if (denScript && denScript.startTameProgress) {
+                    console.log('[GameManager] triggerBearTame - Found BeastDen on', den.name, 'and calling startTameProgress');
+                    denScript.startTameProgress();
+                    this.resumeGame();
+                    return;
+                }
+            }
+        }
+
+        // 如果没有找到兽穴，尝试从 Towers 容器中查找（可能在初始建造位置）
+        const towersNode = find('Canvas/Towers');
+        if (towersNode) {
+            console.log('[GameManager] triggerBearTame - Checking Towers with', towersNode.children.length, 'children');
+            for (const tower of towersNode.children) {
+                const denScript = tower.getComponent('BeastDen') as any;
+                if (denScript && denScript.startTameProgress) {
+                    console.log('[GameManager] triggerBearTame - Found BeastDen on', tower.name, 'in Towers and calling startTameProgress');
+                    denScript.startTameProgress();
+                    this.resumeGame();
+                    return;
+                }
+            }
+        }
+
+        // 最后尝试在整个 Canvas 下搜索所有带有 BeastDen 组件的节点
+        const canvas = find('Canvas');
+        if (canvas) {
+            console.log('[GameManager] triggerBearTame - Searching all Canvas children for BeastDen component');
+            for (const child of canvas.children) {
+                const denScript = child.getComponent('BeastDen') as any;
+                if (denScript && denScript.startTameProgress) {
+                    console.log('[GameManager] triggerBearTame - Found BeastDen on', child.name, 'in Canvas and calling startTameProgress');
+                    denScript.startTameProgress();
+                    this.resumeGame();
+                    return;
+                }
+            }
+        }
+
+        console.warn('[GameManager] triggerBearTame - No BeastDen found anywhere');
+        // 如果没有兽穴，显示提示（不生成巨熊）
+        GamePopup.showMessage('当前没有可用的兽穴', true, 2);
+        this.resumeGame();
+    }
+
+    /**
+     * 喂养黑豹：增幅女猎手移速和攻击力
+     */
+    private onFeedPanther() {
+        // 暂停游戏（因为 UnitIntroPopup 关闭时会恢复游戏）
+        this.pauseGame();
+
+        // 查找所有女猎手并增幅
+        const huntersContainer = find('Canvas/Hunters');
+        if (huntersContainer) {
+            let buffedCount = 0;
+            for (const hunter of huntersContainer.children) {
+                if (hunter && hunter.isValid && hunter.active) {
+                    const hunterScript = hunter.getComponent('Hunter') as any;
+                    if (hunterScript) {
+                        // 增幅移速和攻击力（参考弓箭手控弦小游戏后的属性增幅）
+                        const speedBoost = 0.3; // 移速 +30%
+                        const damageBoost = 0.5; // 攻击力 +50%
+
+                        hunterScript.moveSpeed = (hunterScript.moveSpeed || 100) * (1 + speedBoost);
+                        hunterScript.attackDamage = (hunterScript.attackDamage || 10) * (1 + damageBoost);
+                        buffedCount++;
+                    }
+                }
+            }
+
+            // 显示提示
+            if (!this.unitIntroPopup) {
+                this.autoCreateUnitIntroPopup();
+            }
+            if (this.unitIntroPopup) {
+                // 先显示女猎手感谢提示框（使用上传的贴图，参考 showSwordsmanThanksIntro 逻辑）
+                this.unitIntroPopup.show({
+                    unitIcon: this.pantherFeedResultSpriteFrame,
+                    unitName: '女猎手',
+                    unitDescription: '谢了，指挥官。',
+                    unitType: 'Hunter',
+                    onCloseCallback: () => {
+                        // 关闭感谢框后，显示增幅信息
+                        GamePopup.showMessage(`全体女猎手移速提升 30%，攻击力提升 50%`, true, 2.5);
+                        // 恢复游戏
+                        this.resumeGame();
+                    }
+                });
+            }
+        } else {
+            // 没有女猎手时提示
+            GamePopup.showMessage('当前没有可用的女猎手', true, 2);
+            this.resumeGame();
+        }
+    }
+
+    /**
+     * 喂养角鹰：提示第四关解锁
+     */
+    private onFeedEagle() {
+        // 暂停游戏（因为 UnitIntroPopup 关闭时会恢复游戏）
+        this.pauseGame();
+
+        // 显示角鹰解锁提示（使用上传的贴图）
+        if (!this.unitIntroPopup) {
+            this.autoCreateUnitIntroPopup();
+        }
+        if (this.unitIntroPopup) {
+            this.unitIntroPopup.show({
+                unitIcon: this.eagleFeedResultSpriteFrame,
+                unitName: '角鹰',
+                unitDescription: '第四关后即可解锁角鹰',
+                unitType: 'Eagle',
+                onCloseCallback: () => {
+                    this.resumeGame();
+                }
+            });
+        } else {
+            GamePopup.showMessage('第四关后即可解锁角鹰', true, 2);
+            this.resumeGame();
+        }
     }
 }
 

@@ -21,6 +21,20 @@ export class Dragon extends Enemy {
     @property(Prefab)
     fireballPrefab: Prefab = null!; // 火球预制体
 
+    // 龙肉掉落相关
+    @property({ type: SpriteFrame, tooltip: "龙肉贴图（可上传到预制体）" })
+    dragonMeatSpriteFrame: SpriteFrame | null = null;
+
+    // 龙肉喂养结果贴图（可上传到预制体）
+    @property({ type: SpriteFrame, tooltip: "供养巨熊结果贴图（巨熊归顺）" })
+    bearFeedResultSpriteFrame: SpriteFrame | null = null;
+
+    @property({ type: SpriteFrame, tooltip: "喂养黑豹结果贴图（女猎手增幅）" })
+    pantherFeedResultSpriteFrame: SpriteFrame | null = null;
+
+    @property({ type: SpriteFrame, tooltip: "喂养角鹰结果贴图（角鹰解锁）" })
+    eagleFeedResultSpriteFrame: SpriteFrame | null = null;
+
     // 重写父类属性，设置飞龙的默认值
     maxHealth: number = 100;
     moveSpeed: number = 60;
@@ -888,6 +902,9 @@ export class Dragon extends Enemy {
         // 显示 +xGold 飘字
         this.showGoldRewardText();
 
+        // 处理龙肉掉落
+        this.handleDragonMeatDrop();
+
         // 销毁血条节点
         if (this.healthBarNode && this.healthBarNode.isValid) {
             this.healthBarNode.destroy();
@@ -974,5 +991,43 @@ export class Dragon extends Enemy {
                 if (n && n.isValid) n.destroy();
             })
             .start();
+    }
+
+    /**
+     * 处理龙肉掉落逻辑
+     * - 第一关第一次击败飞龙 100% 掉落
+     * - 之后击败飞龙 50% 概率掉落
+     */
+    private handleDragonMeatDrop() {
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        if (!this.gameManager) return;
+
+        const gm = this.gameManager as any;
+
+        // 获取当前关卡
+        let currentLevel = 1;
+        const uiManagerNode = find('UIManager') || find('Canvas/UIManager');
+        if (uiManagerNode) {
+            const uiManager = uiManagerNode.getComponent('UIManager') as any;
+            if (uiManager && typeof uiManager.getCurrentLevel === 'function') {
+                currentLevel = uiManager.getCurrentLevel();
+            }
+        }
+
+        // 检查是否是第一关第一次击败飞龙
+        const hasKilledDragonInLevel1 = gm.hasKilledDragonInLevel1 || false;
+        const shouldDrop = currentLevel === 1 && !hasKilledDragonInLevel1 ? true : (Math.random() < 0.5);
+
+        if (shouldDrop) {
+            // 标记第一关已击败过飞龙
+            if (currentLevel === 1) {
+                gm.hasKilledDragonInLevel1 = true;
+            }
+
+            // 触发龙肉掉落事件
+            gm.onDragonMeatDropped(this.dragonMeatSpriteFrame, this.node);
+        }
     }
 }
