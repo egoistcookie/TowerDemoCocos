@@ -43,6 +43,9 @@ export class BeastDen extends Build {
     private bearNode: Node = null!;
     private bearScript: any = null!;
 
+    // 龙肉喂养标记：追踪是否是玩家主动喂养龙肉触发的归顺（vs 自然驯化）
+    private hasBeenFedDragonMeat: boolean = false;
+
     // 感叹号相关
     private exclamationNodes: Node[] = [];
     private exclamationTimer: number = 0;
@@ -96,6 +99,7 @@ export class BeastDen extends Build {
         this.createBearGhost();
 
         this.denState = BeastDenState.Neutral;
+        this.hasBeenFedDragonMeat = false; // 初始化龙肉喂养标记
     }
 
     onEnable() {
@@ -109,6 +113,7 @@ export class BeastDen extends Build {
         this.tameProgress = 0;
         this.tameTimer = 0;
         this.hasShownArcherWarningDialog = false; // 重置弓箭手警告标记
+        // 注意：不重置 hasBeenFedDragonMeat，因为这是持久状态，即使兽穴被禁用/启用也要保留
         this.clearExclamations();
 
         if (this.bearGhostNode && this.bearGhostNode.isValid) {
@@ -223,6 +228,8 @@ export class BeastDen extends Build {
                 this.updateTameIndicator(progress);
 
                 if (progress >= 1.0) {
+                    // 读条完成，生成巨熊（只生成一次）
+                    this.tameTimer = this.tameDuration + 0.001; // 确保超过阈值，防止重复调用
                     this.resurrectBear();
                     this.tameIndicator.active = false;
                 }
@@ -406,6 +413,11 @@ export class BeastDen extends Build {
      * 更新巨熊出生流程：等待 2 秒 → 虚影出现 2 秒凝实 → 生成真实巨熊
      */
     private updateBearSpawnPhase(deltaTime: number) {
+        // 如果已经通过龙肉喂养触发了归顺，停止自然驯化流程
+        if (this.denState === BeastDenState.Tamed && this.hasBeenFedDragonMeat) {
+            return;
+        }
+
         // 第一阶段：第三个感叹号后等待 2 秒
         if (this.bearGhostWaitTimer < 2.0) {
             this.bearGhostWaitTimer += deltaTime;
@@ -428,7 +440,6 @@ export class BeastDen extends Build {
                     }
                     if (sprite) {
                         if (sprite.sizeMode !== Sprite.SizeMode.CUSTOM || !sprite.spriteFrame) {
-                            console.log(`[BeastDen] 虚影显示前：sprite.sizeMode=${sprite.sizeMode}, spriteFrame=${!!sprite.spriteFrame}`);
                         }
                     } else {
                         console.warn('[BeastDen] 虚影 Sprite 组件不存在，尝试重新添加');
@@ -444,7 +455,11 @@ export class BeastDen extends Build {
                     tween(this.bearGhostOpacity)
                         .to(this.BEAR_GHOST_FADE_IN_DURATION, { opacity: 255 })
                         .call(() => {
-                            // 淡入完成后生成真实巨熊
+                            // 淡入完成后生成真实巨熊，但先检查是否应该生成
+                            if (this.denState === BeastDenState.Tamed && this.hasBeenFedDragonMeat) {
+                                this.bearGhostFadeInComplete = true;
+                                return;
+                            }
                             this.bearGhostFadeInComplete = true;
                             this.spawnActualBear();
                         })
@@ -463,11 +478,14 @@ export class BeastDen extends Build {
     }
 
     private spawnActualBear() {
-        if (this.bearNode && this.bearNode.isValid) return;
+        // 如果已经通过龙肉喂养触发了归顺，跳过自然驯化流程的生成（即使 bearNode 还未被设置，因为异步加载还在进行中）
+        if (this.denState === BeastDenState.Tamed && this.hasBeenFedDragonMeat) {
+            return;
+        }
 
-        // 重置驯化计时器，以便下次死亡时重新开始读条
-        this.tameTimer = 0;
-        this.tameProgress = 0;
+        if (this.bearNode && this.bearNode.isValid) {
+            return;
+        }
 
         // 使用预加载的预制体直接生成巨熊
         if (this.bearPrefab && this.node && this.node.isValid) {
@@ -497,7 +515,12 @@ export class BeastDen extends Build {
 
                 const bearScript = bearNode.getComponent('Bear') as any;
                 if (bearScript) {
-                    bearScript.setNeutralState(this.node, this);
+                    // 如果是龙肉喂养触发的归顺，直接设置为归顺状态；否则为中立状态（自然驯化）
+                    if (this.hasBeenFedDragonMeat) {
+                        bearScript.setTamedState(this.node, this);
+                    } else {
+                        bearScript.setNeutralState(this.node, this);
+                    }
                     this.bearNode = bearNode;
                     this.bearScript = bearScript;
 
@@ -595,10 +618,6 @@ export class BeastDen extends Build {
     }
 
     private resurrectBear() {
-        // 重置驯化计时器，以便下次死亡时重新开始读条
-        this.tameTimer = 0;
-        this.tameProgress = 0;
-
         const gameManager = this.getGameManager();
         if (gameManager) {
             const bearPos = this.node.worldPosition.clone();
@@ -734,13 +753,36 @@ export class BeastDen extends Build {
         }
     }
 
-    public startTameProgress() {
-        if (this.denState !== BeastDenState.Neutral) return;
+    public startTameProgress(isDragonMeatFed: boolean = false) {
+        // 立即停止自然驯化流程，防止生成第二只巨熊
+        this.isTriggered = false;
+        this.bearGhostWaitTimer = 0;
+        this.bearGhostTimer = 0;
+        this.bearGhostFadeInComplete = false;
+        this.clearExclamations();
+
+        // 记录是否是龙肉喂养触发的归顺（即使 denState 已经是 Tamed 也要记录，这样后续生成的巨熊才会归顺）
+        if (isDragonMeatFed) {
+            this.hasBeenFedDragonMeat = true;
+        }
+
+        if (this.denState !== BeastDenState.Neutral) {
+            // 即使 denState 不是 Neutral，如果巨熊存在，也应该设置归顺状态
+            if (this.bearNode && this.bearNode.isValid && this.bearScript && this.bearScript.setTamedState) {
+                this.bearScript.setTamedState(this.node, this);
+            }
+            return;
+        }
 
         this.denState = BeastDenState.Tamed;
         this.tameTimer = 0;
         this.tameProgress = 0;
         this.updateBorderColor();
+
+        // 设置巨熊为归顺状态
+        if (this.bearNode && this.bearNode.isValid && this.bearScript && this.bearScript.setTamedState) {
+            this.bearScript.setTamedState(this.node, this);
+        }
 
         // 激活读条指示器
         if (this.tameIndicator && this.tameIndicator.isValid) {

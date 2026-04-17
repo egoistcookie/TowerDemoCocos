@@ -1204,14 +1204,14 @@ export class Role extends Component {
         const currentPosY = this.node.worldPosition.y;
 
         // 调试日志：检测位置突变
-        if (this.lastLogPos) {
-            const dx = currentPosX - this.lastLogPos.x;
-            const dy = currentPosY - this.lastLogPos.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist > 50) {
-                console.warn(`[位置突变检测] ${this.unitName} (ID:${this.unitId}), 上帧=(${this.lastLogPos.x.toFixed(1)},${this.lastLogPos.y.toFixed(1)}), 本帧=(${currentPosX.toFixed(1)},${currentPosY.toFixed(1)}), 突变距离=${dist.toFixed(1)}`);
-            }
-        }
+        // if (this.lastLogPos) {
+        //     const dx = currentPosX - this.lastLogPos.x;
+        //     const dy = currentPosY - this.lastLogPos.y;
+        //     const dist = Math.sqrt(dx * dx + dy * dy);
+        //     if (dist > 50) {
+        //         console.warn(`[位置突变检测] ${this.unitName} (ID:${this.unitId}), 上帧=(${this.lastLogPos.x.toFixed(1)},${this.lastLogPos.y.toFixed(1)}), 本帧=(${currentPosX.toFixed(1)},${currentPosY.toFixed(1)}), 突变距离=${dist.toFixed(1)}`);
+        //     }
+        // }
         this.lastLogPos = { x: currentPosX, y: currentPosY };
 
         const hasCollisionNow = this.checkCollisionAtPosition(this.tempVec3_3.set(currentPosX, currentPosY, 0));
@@ -1535,6 +1535,11 @@ export class Role extends Component {
                         if (!bearScript) continue;
                         if (bearScript.isAlive && !bearScript.isAlive()) continue;
                         if (bearScript.currentHealth !== undefined && bearScript.currentHealth <= 0) continue;
+
+                        // 关键修复：检查巨熊状态，归顺的巨熊（Tamed）不应该被视为敌人
+                        if (bearScript.bearState !== undefined && bearScript.bearState === 1) { // BearState.Tamed = 1
+                            continue; // 跳过归顺的巨熊
+                        }
                     }
 
                     bearCount++;

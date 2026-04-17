@@ -50,9 +50,9 @@ export class Bear extends Role {
     @property
     moveSpeed: number = 80;
 
-    // 返回兽穴相关
+    // 索敌范围
     @property
-    returnDistance: number = 400;
+    detectRange: number = 200; // 方圆 200 内搜索敌人
 
     // 韧性（0-1）：1 秒内遭受此百分比血量损失才会触发僵直
     @property({ tooltip: "韧性（0-1）：1 秒内遭受此百分比血量损失才会触发僵直。0.2 表示需要承受 20% 最大生命值的伤害才会播放受击动画" })
@@ -71,10 +71,6 @@ export class Bear extends Role {
     private damageInWindow: number = 0; // 1 秒内累积的伤害
     private damageWindowTimer: number = 0; // 伤害窗口计时器
 
-    // 返回逻辑相关
-    protected isReturning: boolean = false;
-    protected returnTarget: Vec3 = null!;
-
     // 目标选择相关
     protected currentTarget: Node = null!;
     protected targetFindTimer: number = 0;
@@ -84,7 +80,6 @@ export class Bear extends Role {
 
     start() {
         super.start(); // 调用父类 start() 创建血条等组件
-          //console.log.log('[Bear] super.start() 调用完成，healthBar=' + !!((this as any).healthBar));
 
         // 设置巨熊的碰撞半径（15 像素，比弓箭手大）
         this.collisionRadius = 15;
@@ -100,14 +95,19 @@ export class Bear extends Role {
         this.unitName = "巨熊";
         this.unitDescription = "中立肉盾单位，初始时攻击所有单位，被击败后可归顺我方。";
         this.currentHealth = this.maxHealth;
-        this.bearState = BearState.Neutral;
-        //console.log('[Bear] 巨熊初始化完成');
+        // 关键修复：只有在 bearState 为默认值（未初始化）时才设置为 Neutral
+        // 如果已经被 setTamedState 设置为 Tamed，则不要重置
+        if (this.bearState !== BearState.Tamed) {
+            this.bearState = BearState.Neutral;
+        }
     }
 
     onEnable() {
         this.currentHealth = this.maxHealth;
-        this.bearState = BearState.Neutral;
-        this.isReturning = false;
+        // 注意：不重置 bearState，因为归顺状态需要保留
+        // this.bearState = BearState.Neutral;
+        this.isDead = false;
+        this.isDestroyed = false;
         this.attackTimer = 0;
         this.targetFindTimer = 0;
         this.currentTarget = null!;
@@ -137,27 +137,24 @@ export class Bear extends Role {
 
         if (this.bearState === BearState.Neutral || this.bearState === BearState.Tamed) {
             this.updateCombatState(deltaTime);
-        } else if (this.bearState === BearState.Returning) {
-            this.updateReturningState(deltaTime);
         }
-
-        this.checkReturnDistance(deltaTime);
     }
 
     private updateCombatState(deltaTime: number) {
         this.targetFindTimer += deltaTime;
         if (this.targetFindTimer >= this.TARGET_FIND_INTERVAL || !this.currentTarget || !this.currentTarget.isValid) {
             this.targetFindTimer = 0;
-          //console.log('[Bear] 开始寻找新目标，当前 target=' + (this.currentTarget?.name || 'null'));
             this.findNewTarget();
-          //console.log('[Bear] 寻找目标完成，新 target=' + (this.currentTarget?.name || 'null'));
         }
 
         if (this.currentTarget && this.currentTarget.isValid) {
             const dist = this.getDistanceToTarget();
-          //console.log('[Bear] 当前目标距离=' + dist.toFixed(2) + ', attackRange=' + this.attackRange + ', 目标=' + this.currentTarget.name);
+            const enemyComp = this.currentTarget.getComponent('Enemy');
+            const isAlive = enemyComp && (enemyComp as any).isAlive ? (enemyComp as any).isAlive() : 'N/A';
+            const hasEnemyComp = !!this.currentTarget.getComponent('Enemy');
+            const hasOrcComp = !!this.currentTarget.getComponent('Orc');
+            // console.log(`[Bear] 当前目标：${this.currentTarget.name}, 距离：${dist.toFixed(1)}, 位置：(${this.currentTarget.worldPosition.x.toFixed(1)}, ${this.currentTarget.worldPosition.y.toFixed(1)}), isAlive=${isAlive}, hasEnemy=${hasEnemyComp}, hasOrc=${hasOrcComp}`);
             if (dist <= this.attackRange) {
-              //console.log('[Bear] 进入攻击范围，停止移动');
                 this.stopMovement();
 
                 this.attackTimer += deltaTime;
@@ -167,18 +164,26 @@ export class Bear extends Role {
                 }
                 this.faceTarget(this.currentTarget);
             } else {
-              //console.log('[Bear] 移动向目标，当前位置=' + this.node.worldPosition.x.toFixed(1) + ',' + this.node.worldPosition.y.toFixed(1));
+                // console.log(`[Bear] 距离过远 ${dist.toFixed(1)} > ${this.attackRange}，向目标移动`);
                 this.moveTowards(this.currentTarget.worldPosition, deltaTime);
-              //console.log('[Bear] 移动后位置=' + this.node.worldPosition.x.toFixed(1) + ',' + this.node.worldPosition.y.toFixed(1));
             }
         } else {
-          //console.log('[Bear] 没有有效目标，停止移动');
+            // 没有目标时，停止移动并播放待机动画
+            console.log('[Bear] 没有有效目标，停止移动');
             this.stopMovement();
+            // 重置 idleBlockTimer，让待机动画可以立即播放
+            this.idleBlockTimer = 0;
+            this.checkAndPlayIdleAnimation();
         }
     }
 
     private performAttack() {
-        if (!this.currentTarget || !this.currentTarget.isValid) return;
+        if (!this.currentTarget || !this.currentTarget.isValid) {
+            console.warn('[Bear] performAttack: 当前目标无效，取消攻击');
+            return;
+        }
+
+        // console.log(`[Bear] 开始攻击，目标=${this.currentTarget.name}, 位置=(${this.currentTarget.worldPosition.x.toFixed(1)}, ${this.currentTarget.worldPosition.y.toFixed(1)})`);
 
         // 播放攻击动画
         this.playAttackAnimation(() => {
@@ -186,6 +191,8 @@ export class Bear extends Role {
             if (this.currentTarget && this.currentTarget.isValid) {
                 this.dealDamageToTarget();
                 //console.log('[Bear] 巨熊攻击目标（第 2 段伤害 - 动画结束）');
+            } else {
+                console.warn('[Bear] 第 2 段伤害时目标已失效');
             }
         });
 
@@ -194,12 +201,17 @@ export class Bear extends Role {
             if (this.currentTarget && this.currentTarget.isValid) {
                 this.dealDamageToTarget();
                 //console.log('[Bear] 巨熊攻击目标（第 1 段伤害 - 动画一半）');
+            } else {
+                console.warn('[Bear] 第 1 段伤害时目标已失效');
             }
         }, this.attackAnimationDuration / 2);
     }
 
     private dealDamageToTarget() {
-        if (!this.currentTarget || !this.currentTarget.isValid) return;
+        if (!this.currentTarget || !this.currentTarget.isValid) {
+            console.warn('[Bear] dealDamageToTarget: 目标无效，未造成伤害');
+            return;
+        }
 
         const targetScript = this.currentTarget.getComponent('Enemy') as any ||
                             this.currentTarget.getComponent('Portal') as any ||
@@ -208,24 +220,9 @@ export class Bear extends Role {
 
         if (targetScript && targetScript.takeDamage) {
             targetScript.takeDamage(this.attackDamage);
-        }
-    }
-
-    private updateReturningState(deltaTime: number) {
-        if (!this.returnTarget) return;
-
-        // 使用平方距离比较，避免开方运算
-        const dx = this.node.worldPosition.x - this.returnTarget.x;
-        const dy = this.node.worldPosition.y - this.returnTarget.y;
-        const distSq = dx * dx + dy * dy;
-        const returnDistSq = 50 * 50;
-
-        if (distSq <= returnDistSq) {
-            this.isReturning = false;
-            this.bearState = BearState.Neutral;
-            this.stopMovement();
+            // console.log(`[Bear] 对目标 ${this.currentTarget.name} 造成伤害 ${this.attackDamage}`);
         } else {
-            this.moveTowards(this.returnTarget, deltaTime);
+            console.warn(`[Bear] 目标 ${this.currentTarget.name} 没有 takeDamage 方法，未造成伤害`);
         }
     }
 
@@ -233,7 +230,6 @@ export class Bear extends Role {
         if (!this.unitManager) {
             this.unitManager = UnitManager.getInstance();
             if (!this.unitManager) {
-              //console.log('[Bear] findNewTarget: UnitManager 不存在');
                 return;
             }
         }
@@ -241,20 +237,21 @@ export class Bear extends Role {
         const myPos = this.node.worldPosition;
         let targets: Node[] = [];
 
-      //console.log('[Bear] findNewTarget: 当前位置=' + myPos.x.toFixed(1) + ',' + myPos.y.toFixed(1) + ', bearState=' + this.bearState);
-
         if (this.bearState === BearState.Neutral) {
-            targets = this.unitManager.getAllTargetsInRange(myPos, 500);
-            // 排除自己
+            targets = this.unitManager.getAllTargetsInRange(myPos, this.detectRange);
             targets = targets.filter(t => t !== this.node);
-          //console.log('[Bear] findNewTarget: 中立状态，找到目标数=' + targets.length);
         } else if (this.bearState === BearState.Tamed) {
-            targets = this.unitManager.getEnemiesInRange(myPos, 500, true);
-          //console.log('[Bear] findNewTarget: 归顺状态，找到敌人数=' + targets.length);
+            targets = this.unitManager.getEnemiesInRange(myPos, this.detectRange, true);
         }
 
+        // console.log(`[Bear] 找目标：状态=${this.bearState === BearState.Neutral ? '中立' : '归顺'}, 范围内目标数=${targets.length}`);
+
         if (targets.length === 0) {
-          //console.log('[Bear] findNewTarget: 没有有效目标，返回');
+            // 范围内没有目标，清空当前目标
+            if (this.currentTarget) {
+                console.log(`[Bear] 范围内无目标，清空旧目标：${this.currentTarget.name}`);
+            }
+            this.currentTarget = null!;
             return;
         }
 
@@ -262,7 +259,10 @@ export class Bear extends Role {
         let nearestDistSq = Infinity;
 
         for (const target of targets) {
-            if (!target || !target.isValid || !target.active) continue;
+            if (!target || !target.isValid || !target.active) {
+                console.log(`[Bear] 跳过无效目标：${target?.name || 'unknown'}`);
+                continue;
+            }
 
             const targetScript = target.getComponent('Enemy') ||
                                 target.getComponent('Orc') ||
@@ -273,12 +273,16 @@ export class Bear extends Role {
                                 target.getComponent('Priest') ||
                                 target.getComponent('Mage');
 
-            if (targetScript && (targetScript as any).isAlive && !(targetScript as any).isAlive()) continue;
+            if (targetScript && (targetScript as any).isAlive && !(targetScript as any).isAlive()) {
+                console.log(`[Bear] 跳过已死亡目标：${target.name}`);
+                continue;
+            }
 
-            // 使用平方距离比较，避免开方运算
             const dx = target.worldPosition.x - myPos.x;
             const dy = target.worldPosition.y - myPos.y;
             const distSq = dx * dx + dy * dy;
+
+            // console.log(`[Bear] 候选目标：${target.name}, 距离平方=${distSq.toFixed(1)}, 位置=(${target.worldPosition.x.toFixed(1)}, ${target.worldPosition.y.toFixed(1)})`);
 
             if (distSq < nearestDistSq) {
                 nearestDistSq = distSq;
@@ -287,10 +291,10 @@ export class Bear extends Role {
         }
 
         if (nearestTarget && nearestTarget.isValid) {
+            console.log(`[Bear] ✓ 选择新目标：${nearestTarget.name}, 距离=${Math.sqrt(nearestDistSq).toFixed(1)}`);
             this.currentTarget = nearestTarget;
-          //console.log('[Bear] findNewTarget: 设置新目标=' + nearestTarget.name + ', 距离=' + Math.sqrt(nearestDistSq).toFixed(1));
         } else {
-          //console.log('[Bear] findNewTarget: 没有找到有效的最近目标');
+            console.log('[Bear] 未找到有效目标');
         }
     }
 
@@ -345,7 +349,7 @@ export class Bear extends Role {
           //console.log('[Bear] moveTowards: 被卡住，移动距离太小');
             // 被卡住，不播放移动动画
             return;
-        }
+        } 
 
         this.node.worldPosition = adjustedPos;
 
@@ -380,44 +384,10 @@ export class Bear extends Role {
         }
     }
 
-    private checkReturnDistance(deltaTime: number) {
-        if (this.bearState !== BearState.Tamed) return;
-        if (this.isReturning) return;
-
-        if (!this.beastDenNode || !this.beastDenNode.isValid) return;
-
-        const denPos = this.beastDenNode.worldPosition;
-        const myPos = this.node.worldPosition;
-
-        // 使用平方距离比较，避免开方运算
-        const dx = myPos.x - denPos.x;
-        const dy = myPos.y - denPos.y;
-        const distSq = dx * dx + dy * dy;
-        const returnDistanceSq = this.returnDistance * this.returnDistance;
-
-        if (distSq > returnDistanceSq) {
-            // 停止攻击，立即返回
-            this.stopMovement();
-            this.currentTarget = null!;
-            this.attackTimer = 0;
-            this.startReturning(denPos);
-        }
-    }
-
-    private startReturning(denPos: Vec3) {
-        this.isReturning = true;
-        this.bearState = BearState.Returning;
-        this.returnTarget = denPos.clone();
-        this.currentTarget = null!;
-    }
-
     public setTamedState(denNode: Node, denScript: any) {
-        //console.log('[Bear] 巨熊归顺我方');
-
         this.beastDenNode = denNode;
         this.beastDenScript = denScript;
         this.bearState = BearState.Tamed;
-        this.isReturning = false;
         this.currentHealth = this.maxHealth;
         this.damageWindowTimer = 0;
         this.damageInWindow = 0;
@@ -430,11 +400,9 @@ export class Bear extends Role {
     }
 
     public setNeutralState(denNode: Node, denScript: any) {
-        //console.log('[Bear] 巨熊重置为中立状态');
         this.beastDenNode = denNode;
         this.beastDenScript = denScript;
         this.bearState = BearState.Neutral;
-        this.isReturning = false;
         this.currentTarget = null!;
         this.damageWindowTimer = 0;
         this.damageInWindow = 0;
@@ -536,7 +504,7 @@ export class Bear extends Role {
         } else if (this.bearState === BearState.Neutral) {
             //console.log('[Bear] 中立巨熊被击败，通知兽穴开始驯化读条');
             if (this.beastDenScript && this.beastDenScript.startTameProgress) {
-                this.beastDenScript.startTameProgress();
+                this.beastDenScript.startTameProgress(false); // 自然驯化
             } else {
                 console.warn('[Bear] beastDenScript.startTameProgress 方法不存在');
             }
@@ -593,7 +561,7 @@ export class Bear extends Role {
         }
     }
 
-    public setBearNode(bearNode: Node, bearScript: any) {
+    public setBearNode(_bearNode: Node, _bearScript: any) {
         // 此方法用于 BeastDen 调用，保持兼容性
     }
 

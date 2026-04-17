@@ -793,9 +793,9 @@ export class Dragon extends Enemy {
             return;
         }
 
-        // 获取飞龙所在的容器（应该是 Enemies）
-        const enemiesNode = this.node.parent;
-        if (!enemiesNode || enemiesNode.parent !== canvas) {
+        // 获取飞龙所在的容器（应该是 Dragons）
+        const dragonsNode = this.node.parent;
+        if (!dragonsNode || dragonsNode.parent !== canvas) {
             return;
         }
 
@@ -803,11 +803,11 @@ export class Dragon extends Enemy {
         const stoneWallsNode = find('Canvas/StoneWalls');
         if (stoneWallsNode && stoneWallsNode.parent === canvas) {
             const stoneWallsIndex = stoneWallsNode.getSiblingIndex();
-            const enemiesIndex = enemiesNode.getSiblingIndex();
+            const dragonsIndex = dragonsNode.getSiblingIndex();
             
             // 如果Enemies的索引小于或等于StoneWalls，强制将其移到StoneWalls之后
-            if (enemiesIndex <= stoneWallsIndex) {
-                enemiesNode.setSiblingIndex(stoneWallsIndex + 1);
+            if (dragonsIndex <= stoneWallsIndex) {
+                dragonsNode.setSiblingIndex(stoneWallsIndex + 1);
             }
         }
 
@@ -824,7 +824,13 @@ export class Dragon extends Enemy {
             'WatchTowers',
             'IceTowers',
             'ThunderTowers',
-            'Crystal'
+            'Crystal',
+            'Enemies',
+            'Orcs',
+            'TrollSpearmans',
+            'OrcWarriors',
+            'OrcWarlords',
+            'MinotaurWarriors'
         ];
 
         // 查找UI容器（通常命名为UI或UIManager等）
@@ -872,10 +878,10 @@ export class Dragon extends Enemy {
         }
         targetIndex = Math.max(0, Math.min(targetIndex, canvas.children.length - 1));
 
-        // 将敌人容器移到目标位置
-        const enemiesIndex = enemiesNode.getSiblingIndex();
-        if (enemiesIndex !== targetIndex) {
-            enemiesNode.setSiblingIndex(targetIndex);
+        // 将飞龙容器移到目标位置
+        const dragonsIndex = dragonsNode.getSiblingIndex();
+        if (dragonsIndex !== targetIndex) {
+            dragonsNode.setSiblingIndex(targetIndex);
         }
     }
 
@@ -996,7 +1002,7 @@ export class Dragon extends Enemy {
     /**
      * 处理龙肉掉落逻辑
      * - 第一关第一次击败飞龙 100% 掉落
-     * - 之后击败飞龙 50% 概率掉落
+     * - 之后击败飞龙 25% 概率掉落
      */
     private handleDragonMeatDrop() {
         if (!this.gameManager) {
@@ -1018,7 +1024,7 @@ export class Dragon extends Enemy {
 
         // 检查是否是第一关第一次击败飞龙
         const hasKilledDragonInLevel1 = gm.hasKilledDragonInLevel1 || false;
-        const shouldDrop = currentLevel === 1 && !hasKilledDragonInLevel1 ? true : (Math.random() < 0.5);
+        const shouldDrop = currentLevel === 1 && !hasKilledDragonInLevel1 ? true : (Math.random() < 0.25);
 
         if (shouldDrop) {
             // 标记第一关已击败过飞龙

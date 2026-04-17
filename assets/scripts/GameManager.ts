@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, instantiate, BlockInputEvents, sys, Texture2D, ImageAsset, Mask, UIOpacity, LabelOutline, AudioSource, tween, ScrollView } from 'cc';
+import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, instantiate, BlockInputEvents, sys, Texture2D, ImageAsset, Mask, UIOpacity, LabelOutline, AudioSource, tween, ScrollView, EventTouch } from 'cc';
 // 微信小游戏全局对象声明（避免 TypeScript 报错）
 declare const wx: any;
 import { Crystal } from './role/Crystal';
@@ -6030,7 +6030,6 @@ export class GameManager extends Component {
                     bearScript.setNeutralState(den, denScript);
                     denScript.setBearNode(node, bearScript);
                 }
-                console.log('[Bear] spawned at', pos.x, pos.y, tamed ? '(归顺)' : '(中立)');
             }
         };
 
@@ -9729,30 +9728,49 @@ export class GameManager extends Component {
         const canvas = find('Canvas');
         if (!canvas) return;
 
+        // 创建遮罩层（阻止点击穿透到下层游戏元素）
+        const maskLayer = new Node('DragonMeatMask');
+        maskLayer.setParent(canvas);
+        const maskTransform = maskLayer.addComponent(UITransform);
+        const visibleSize = view.getVisibleSize();
+        maskTransform.setContentSize(visibleSize.width * 2, visibleSize.height * 2);
+        maskLayer.setPosition(0, 0, 0);
+        const maskGraphics = maskLayer.addComponent(Graphics);
+        maskGraphics.fillColor = new Color(0, 0, 0, 180); // 半透明黑色背景
+        maskGraphics.rect(-visibleSize.width, -visibleSize.height, visibleSize.width * 2, visibleSize.height * 2);
+        maskGraphics.fill();
+        // 阻止所有触摸事件穿透
+        maskLayer.on(Node.EventType.TOUCH_START, (event: EventTouch) => { event.propagationStopped = true; }, this, true);
+        maskLayer.on(Node.EventType.TOUCH_MOVE, (event: EventTouch) => { event.propagationStopped = true; }, this, true);
+        maskLayer.on(Node.EventType.TOUCH_END, (event: EventTouch) => { event.propagationStopped = true; }, this, true);
+        maskLayer.on(Node.EventType.TOUCH_CANCEL, (event: EventTouch) => { event.propagationStopped = true; }, this, true);
+        // 设置遮罩层在选择框之下
+        maskLayer.setSiblingIndex(Number.MAX_SAFE_INTEGER - 1);
+
         const containerNode = new Node('DragonMeatSelectionPanel');
         containerNode.setParent(canvas);
 
         const uiTransform = containerNode.addComponent(UITransform);
-        uiTransform.setContentSize(500, 500);
+        uiTransform.setContentSize(500, 355);
         containerNode.setPosition(0, 0, 0);
 
         // 添加 Graphics 背景
         const graphics = containerNode.addComponent(Graphics);
         graphics.fillColor = new Color(0, 0, 0, 220);
-        graphics.roundRect(-250, -250, 500, 500, 15);
+        graphics.roundRect(-250, -177.5, 500, 355, 15);
         graphics.fill();
         graphics.strokeColor = new Color(255, 215, 0, 255); // 金色边框
         graphics.lineWidth = 4;
-        graphics.roundRect(-250, -250, 500, 500, 15);
+        graphics.roundRect(-250, -177.5, 500, 355, 15);
         graphics.stroke();
 
-        // 设置最上层
+        // 设置最上层（在遮罩层之上）
         containerNode.setSiblingIndex(Number.MAX_SAFE_INTEGER);
 
         // 第一部分：龙肉贴图（单独一行，居中）
         const meatRowNode = new Node('MeatRow');
         meatRowNode.setParent(containerNode);
-        meatRowNode.setPosition(0, 160, 0);
+        meatRowNode.setPosition(0, 80, 0);
         const meatRowTransform = meatRowNode.addComponent(UITransform);
         meatRowTransform.setContentSize(460, 120);
 
@@ -9781,7 +9799,7 @@ export class GameManager extends Component {
         // 第二部分：介绍文字（单独一行）
         const descNode = new Node('Description');
         descNode.setParent(containerNode);
-        descNode.setPosition(0, 60, 0);
+        descNode.setPosition(0, -10, 0);
         const descTransform = descNode.addComponent(UITransform);
         descTransform.setContentSize(440, 80);
         const descLabel = descNode.addComponent(Label);
@@ -9794,7 +9812,7 @@ export class GameManager extends Component {
         // 第三部分：三个按钮（居中排列，带边框）
         const buttonRowNode = new Node('ButtonRow');
         buttonRowNode.setParent(containerNode);
-        buttonRowNode.setPosition(0, -60, 0);
+        buttonRowNode.setPosition(58, -110, 0);
         const buttonRowTransform = buttonRowNode.addComponent(UITransform);
         buttonRowTransform.setContentSize(460, 140);
 
@@ -9814,7 +9832,9 @@ export class GameManager extends Component {
             buttonWidth,
             buttonHeight,
             () => {
+                maskLayer.destroy();
                 containerNode.destroy();
+                // 不立即恢复游戏，onFeedBear 内部会通过 UnitIntroPopup 管理状态
                 this.onFeedBear();
             }
         );
@@ -9828,7 +9848,9 @@ export class GameManager extends Component {
             buttonWidth,
             buttonHeight,
             () => {
+                maskLayer.destroy();
                 containerNode.destroy();
+                // 不立即恢复游戏，onFeedPanther 内部会管理暂停/恢复状态
                 this.onFeedPanther();
             }
         );
@@ -9842,7 +9864,9 @@ export class GameManager extends Component {
             buttonWidth,
             buttonHeight,
             () => {
+                maskLayer.destroy();
                 containerNode.destroy();
+                // 不立即恢复游戏，onFeedEagle 内部会管理暂停/恢复状态
                 this.onFeedEagle();
             }
         );
@@ -9852,10 +9876,11 @@ export class GameManager extends Component {
             containerNode,
             'CloseButton',
             '×',
-            new Vec3(220, 220, 0),
+            new Vec3(220, 145, 0),
             40,
             40,
             () => {
+                maskLayer.destroy();
                 containerNode.destroy();
                 this.resumeGame();
             }
@@ -9912,13 +9937,16 @@ export class GameManager extends Component {
         if (!this.unitIntroPopup) {
             this.autoCreateUnitIntroPopup();
         }
-        if (!this.unitIntroPopup) return;
+        if (!this.unitIntroPopup) {
+            return;
+        }
 
         // 使用上传的巨熊贴图，或显示默认描述
         this.unitIntroPopup.show({
             unitIcon: this.bearFeedResultSpriteFrame,
             unitName: '巨熊',
             unitDescription: '巨熊归顺！',
+            iconHeightScale: 0.7, // 图片高度缩放为原来的一半，避免拉伸过高
             unitType: 'Bear',
             onCloseCallback: () => {
                 // 触发巨熊归顺逻辑（triggerBearTame 内部会调用 resumeGame）
@@ -9937,15 +9965,11 @@ export class GameManager extends Component {
             beastDenNode = find('Canvas/BeastDens');
         }
 
-        console.log('[GameManager] triggerBearTame - BeastDen node:', beastDenNode ? 'found' : 'not found');
-
         if (beastDenNode && beastDenNode.children.length > 0) {
-            console.log('[GameManager] triggerBearTame - Checking', beastDenNode.name, 'with', beastDenNode.children.length, 'children');
             for (const den of beastDenNode.children) {
                 const denScript = den.getComponent('BeastDen') as any;
                 if (denScript && denScript.startTameProgress) {
-                    console.log('[GameManager] triggerBearTame - Found BeastDen on', den.name, 'and calling startTameProgress');
-                    denScript.startTameProgress();
+                    denScript.startTameProgress(true); // 传入 true 表示龙肉喂养触发
                     this.resumeGame();
                     return;
                 }
@@ -9955,12 +9979,10 @@ export class GameManager extends Component {
         // 如果没有找到兽穴，尝试从 Towers 容器中查找（可能在初始建造位置）
         const towersNode = find('Canvas/Towers');
         if (towersNode) {
-            console.log('[GameManager] triggerBearTame - Checking Towers with', towersNode.children.length, 'children');
             for (const tower of towersNode.children) {
                 const denScript = tower.getComponent('BeastDen') as any;
                 if (denScript && denScript.startTameProgress) {
-                    console.log('[GameManager] triggerBearTame - Found BeastDen on', tower.name, 'in Towers and calling startTameProgress');
-                    denScript.startTameProgress();
+                    denScript.startTameProgress(true); // 传入 true 表示龙肉喂养触发
                     this.resumeGame();
                     return;
                 }
@@ -9970,12 +9992,10 @@ export class GameManager extends Component {
         // 最后尝试在整个 Canvas 下搜索所有带有 BeastDen 组件的节点
         const canvas = find('Canvas');
         if (canvas) {
-            console.log('[GameManager] triggerBearTame - Searching all Canvas children for BeastDen component');
             for (const child of canvas.children) {
                 const denScript = child.getComponent('BeastDen') as any;
                 if (denScript && denScript.startTameProgress) {
-                    console.log('[GameManager] triggerBearTame - Found BeastDen on', child.name, 'in Canvas and calling startTameProgress');
-                    denScript.startTameProgress();
+                    denScript.startTameProgress(true); // 传入 true 表示龙肉喂养触发
                     this.resumeGame();
                     return;
                 }
@@ -10022,9 +10042,10 @@ export class GameManager extends Component {
                 // 先显示女猎手感谢提示框（使用上传的贴图，参考 showSwordsmanThanksIntro 逻辑）
                 this.unitIntroPopup.show({
                     unitIcon: this.pantherFeedResultSpriteFrame,
-                    unitName: '女猎手',
-                    unitDescription: '谢了，指挥官。',
+                    unitName: '黑豹',
+                    unitDescription: '黑豹被强化了！',
                     unitType: 'Hunter',
+                    iconHeightScale: 0.5, // 图片高度缩放为原来的一半，避免拉伸过高
                     onCloseCallback: () => {
                         // 关闭感谢框后，显示增幅信息
                         GamePopup.showMessage(`全体女猎手移速提升 30%，攻击力提升 50%`, true, 2.5);
@@ -10054,8 +10075,8 @@ export class GameManager extends Component {
         if (this.unitIntroPopup) {
             this.unitIntroPopup.show({
                 unitIcon: this.eagleFeedResultSpriteFrame,
-                unitName: '角鹰',
-                unitDescription: '第四关后即可解锁角鹰',
+                unitName: '角鹰？',
+                unitDescription: '指挥官，我们还没有角鹰呢！',
                 unitType: 'Eagle',
                 onCloseCallback: () => {
                     this.resumeGame();

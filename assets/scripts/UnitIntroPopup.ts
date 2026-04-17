@@ -24,7 +24,8 @@ export class UnitIntroPopup extends Component {
     private maskLayer: Node = null!; // 遮罩层节点
     private lastShownUnitType: string = ''; // 当前显示的介绍框对应的单位类型（用于小精灵关闭后触发新手教程）
     private currentCloseCallback: (() => void) | null = null; // 弹窗关闭回调（可选）
-    
+    private unitIconOriginalHeight: number = 100; // 保存 unitIcon 的原始高度，用于恢复默认尺寸
+
     start() {
         // 尝试多种方式查找GameManager（使用字符串避免循环依赖）
         let gmNode = find('Canvas/GameManager');
@@ -56,6 +57,14 @@ export class UnitIntroPopup extends Component {
         // 绑定容器点击事件
         if (this.container) {
             this.container.on('touch-end', this.onClose, this);
+        }
+
+        // 保存 unitIcon 的原始高度（用于后续恢复默认尺寸）
+        if (this.unitIcon && this.unitIcon.node) {
+            const uiTransform = this.unitIcon.node.getComponent(UITransform);
+            if (uiTransform) {
+                this.unitIconOriginalHeight = uiTransform.height;
+            }
         }
     }
     
@@ -261,21 +270,31 @@ export class UnitIntroPopup extends Component {
         this.currentCloseCallback = (unitInfo && typeof unitInfo.onCloseCallback === 'function')
             ? unitInfo.onCloseCallback
             : null;
-        
+
         // 退出建造模式并关闭建造面板
         this.exitBuildingMode();
-        
+
         // 暂停游戏
         if (this.gameManager) {
             this.gameManager.pauseGame();
         }
-        
+
         // 禁用建造按钮
         this.disableBuildButton();
-        
+
         // 设置单位信息
         if (unitInfo.unitIcon && this.unitIcon) {
             this.unitIcon.spriteFrame = unitInfo.unitIcon;
+            // 调整图标高度：如果传入了 iconHeightScale 则缩放，否则恢复原始高度
+            if (this.unitIcon.node) {
+                const uiTransform = this.unitIcon.node.getComponent(UITransform);
+                if (uiTransform) {
+                    const targetHeight = unitInfo.iconHeightScale
+                        ? this.unitIconOriginalHeight * unitInfo.iconHeightScale
+                        : this.unitIconOriginalHeight;
+                    uiTransform.setContentSize(uiTransform.width, targetHeight);
+                }
+            }
         }
         
         if (unitInfo.unitName && this.unitName) {
