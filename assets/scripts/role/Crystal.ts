@@ -761,7 +761,8 @@ export class Crystal extends Component {
             }
             const gm = this.gameManager as any;
             if (gm && gm.checkUnitFirstAppearance) {
-                const unitType = wispScript.unitType || 'Wisp';
+                // 使用 prefabName 或 unitName，而不是 unitType（因为 unitType 是 CHARACTER 枚举）
+                const unitType = wispScript.prefabName || wispScript.unitName || 'Wisp';
                 gm.checkUnitFirstAppearance(unitType, wispScript);
             }
 

@@ -559,6 +559,15 @@ export class UnitInfoPanel extends Component {
             return '未知单位';
         }
 
+        // 优先检查 Eagle（飞行单位），因为 Eagle 也继承自 Role
+        const eagleScript = unitNode.getComponent('Eagle') as any;
+        if (eagleScript) {
+            if (eagleScript.unitName && eagleScript.unitName.trim() !== '') {
+                return eagleScript.unitName;
+            }
+            return '角鹰';
+        }
+
         // 尝试从Role组件获取单位名称
         const roleScript = unitNode.getComponent('Role') as any;
         if (roleScript && roleScript.unitName) {

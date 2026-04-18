@@ -16,10 +16,15 @@ export class UnitSelectionManager extends Component {
     private currentSelectedUnit: Node | null = null; // 当前选中的单位节点（单选）
     private currentSelectedUnits: Node[] = []; // 当前选中的单位节点数组（多选）
     private currentRangeDisplayNode: Node | null = null; // 当前范围显示节点
+    private multiSelectTouchHandler: ((event: EventTouch) => void) | null = null!; // 多选移动命令处理器
+    private canvas: Node | null = null; // Canvas 节点缓存
 
     start() {
         this.initUnitInfoPanel();
         this.setupGlobalClickHandler();
+
+        // 缓存 Canvas 节点
+        this.canvas = find('Canvas');
     }
     
     /**
@@ -268,6 +273,61 @@ export class UnitSelectionManager extends Component {
 
         // 多选时不显示攻击范围
         // this.showRangeDisplay(firstUnit, unitInfo);
+
+        // 注册移动命令监听，让多选单位可以响应点击移动
+        this.registerMoveCommandForMultipleUnits();
+    }
+
+    /**
+     * 为多选单位注册移动命令监听
+     */
+    private registerMoveCommandForMultipleUnits() {
+        if (!this.canvas) {
+            return;
+        }
+
+        // 移除之前的监听
+        if (this.multiSelectTouchHandler) {
+            this.canvas.off(Node.EventType.TOUCH_END, this.multiSelectTouchHandler, this);
+        }
+
+        // 创建新的监听
+        this.multiSelectTouchHandler = (event: EventTouch) => {
+            // 检查是否点击在 UI 元素上
+            const targetNode = event.target as Node;
+            if (this.isUIElement(targetNode)) {
+                return;
+            }
+
+            // 获取点击位置（世界坐标）
+            const touchLocation = event.getLocation();
+            const worldPos = this.screenToWorld(touchLocation);
+
+            // 计算分散位置
+            const formationPositions = this.calculateFormationPositions(worldPos, this.currentSelectedUnits);
+
+            // 让所有选中的单位移动到各自的分散位置
+            for (let i = 0; i < this.currentSelectedUnits.length; i++) {
+                const unitNode = this.currentSelectedUnits[i];
+                if (unitNode && unitNode.isValid) {
+                    const roleScript = unitNode.getComponent('Role') as any;
+                    if (roleScript && roleScript.setManualMoveTargetPosition) {
+                        if (i < formationPositions.length) {
+                            roleScript.setManualMoveTargetPosition(formationPositions[i]);
+                        }
+                    }
+                }
+            }
+
+            // 移除移动命令监听
+            this.canvas.off(Node.EventType.TOUCH_END, this.multiSelectTouchHandler, this);
+            this.multiSelectTouchHandler = null!;
+
+            // 清除选择
+            this.clearSelection();
+        };
+
+        this.canvas.on(Node.EventType.TOUCH_END, this.multiSelectTouchHandler, this);
     }
 
     /**
@@ -279,6 +339,36 @@ export class UnitSelectionManager extends Component {
         }
 
 
+
+        // 优先检查 Eagle（飞行单位），因为 Eagle 也继承自 Role，需要特殊处理
+        const eagleScript = unitNode.getComponent('Eagle') as any;
+        if (eagleScript) {
+            const level = eagleScript.level || 1;
+            const upgradeCost = level < 3 ? (10 + (level - 1) * 10) : undefined;
+            const currentHealth = eagleScript.currentHealth || eagleScript.maxHealth || 0;
+            const maxHealth = eagleScript.maxHealth || 0;
+            // 如果 unitName 为空，使用默认值"角鹰"（预制体可能覆盖了默认值）
+            const unitName = (eagleScript.unitName && eagleScript.unitName.trim() !== '') ? eagleScript.unitName : '角鹰';
+            return {
+                name: unitName,
+                level: level,
+                currentHealth: currentHealth,
+                maxHealth: maxHealth,
+                attackDamage: eagleScript.attackDamage || 0,
+                populationCost: 0, // 角鹰不占用人口
+                icon: eagleScript.cardIcon || eagleScript.defaultSpriteFrame,
+                collisionRadius: eagleScript.collisionRadius,
+                attackRange: eagleScript.attackRange,
+                attackFrequency: eagleScript.attackInterval ? 1.0 / eagleScript.attackInterval : 0,
+                moveSpeed: eagleScript.moveSpeed,
+                isDefending: eagleScript.isDefending !== undefined ? eagleScript.isDefending : false,
+                isFlying: true, // 飞行单位
+                upgradeCost: upgradeCost,
+                onUpgradeClick: level < 3 ? () => eagleScript.onUpgradeClick && eagleScript.onUpgradeClick() : undefined,
+                onSellClick: () => eagleScript.onSellClick && eagleScript.onSellClick(),
+                onDefendClick: () => eagleScript.onDefendClick && eagleScript.onDefendClick()
+            };
+        }
         // 首先尝试使用Role组件（所有单位都继承自Role）
         // 使用字符串 'Role' 避免循环引用（Role.ts 导入了 UnitSelectionManager）
         const roleScript = unitNode.getComponent('Role') as any;
@@ -442,6 +532,12 @@ export class UnitSelectionManager extends Component {
      * 清除选择
      */
     clearSelection() {
+        // 移除多选移动命令监听器
+        if (this.multiSelectTouchHandler && this.canvas) {
+            this.canvas.off(Node.EventType.TOUCH_END, this.multiSelectTouchHandler, this);
+            this.multiSelectTouchHandler = null!;
+        }
+
         // 隐藏信息面板
         if (this.unitInfoPanel) {
             this.unitInfoPanel.hide();
@@ -720,6 +816,70 @@ export class UnitSelectionManager extends Component {
         if (this.currentSelectedUnit && this.currentSelectedUnit.isValid && this.currentRangeDisplayNode && this.currentRangeDisplayNode.isValid) {
             this.currentRangeDisplayNode.setWorldPosition(this.currentSelectedUnit.worldPosition);
         }
+    }
+
+    /**
+     * 检查是否是 UI 元素
+     */
+    private isUIElement(targetNode: Node): boolean {
+        if (!targetNode) return false;
+
+        // 检查目标节点或其父节点是否是 UI 元素
+        let currentNode: Node | null = targetNode;
+        while (currentNode) {
+            // 检查节点名称是否是 UI 相关
+            if (currentNode.name === 'Canvas' ||
+                currentNode.name === 'UnitInfoPanel' ||
+                currentNode.name.includes('Panel') ||
+                currentNode.name.includes('Button') ||
+                currentNode.name.includes('UI')) {
+                return true;
+            }
+            currentNode = currentNode.parent;
+        }
+        return false;
+    }
+
+    /**
+     * 屏幕坐标转世界坐标
+     */
+    private screenToWorld(screenPos: Vec2): Vec3 {
+        const cameraNode = find('Canvas/Camera');
+        if (!cameraNode) {
+            return new Vec3(0, 0, 0);
+        }
+
+        const camera = cameraNode.getComponent(Camera);
+        if (!camera) {
+            return new Vec3(0, 0, 0);
+        }
+
+        const worldPos = new Vec3();
+        camera.screenToWorld(new Vec3(screenPos.x, screenPos.y, 0), worldPos);
+        worldPos.z = 0;
+        return worldPos;
+    }
+
+    /**
+     * 计算分散阵型位置
+     */
+    private calculateFormationPositions(centerPos: Vec3, units: Node[]): Vec3[] {
+        const positions: Vec3[] = [];
+        const unitCount = units.length;
+        if (unitCount === 0) return positions;
+
+        // 简单的圆形阵型
+        const angleStep = (Math.PI * 2) / unitCount;
+        const radius = 30; // 单位间距
+
+        for (let i = 0; i < unitCount; i++) {
+            const angle = i * angleStep;
+            const offsetX = Math.cos(angle) * radius;
+            const offsetY = Math.sin(angle) * radius;
+            positions.push(new Vec3(centerPos.x + offsetX, centerPos.y + offsetY, 0));
+        }
+
+        return positions;
     }
 }
 

@@ -110,7 +110,7 @@ export class GameManager extends Component {
     private appearedUnitTypes: Set<string> = new Set();
     private hasShownLevel2MageTowerUnlockIntro: boolean = false; // 第2关小精灵介绍后，法师塔解锁介绍仅弹一次
     private hasShownLevel2HunterTornadoAwakenIntro: boolean = false; // 第2关通关后，女猎手龙卷觉醒介绍仅弹一次
-    private hasShownLevel3EagleNestUnlockIntro: boolean = false; // 第 3 关通关后，角鹰兽栏解锁介绍仅弹一次
+    private hasShownLevel4EagleNestUnlockIntro: boolean = false; // 第 4 关通关后，角鹰兽栏解锁介绍仅弹一次
     private shownFirstBuffCardLevels: Set<number> = new Set(); // 每关“首次抽卡”标记（用于固定SP卡逻辑）
     private originalTimeScale: number = 1; // 保存原始时间缩放值
     
@@ -1101,7 +1101,7 @@ export class GameManager extends Component {
         this.shownFirstBuffCardLevels.clear();
         this.hasShownLevel2MageTowerUnlockIntro = false;
         this.hasShownLevel2HunterTornadoAwakenIntro = false;
-        this.hasShownLevel3EagleNestUnlockIntro = false;
+        this.hasShownLevel4EagleNestUnlockIntro = false;
         this.debugUnitTypes = [];
         this.hasShownArrowerNeedPriestDialog = false;
         this.hasShownPriestProtectBuildingDialog = false;
@@ -3641,7 +3641,7 @@ export class GameManager extends Component {
         loadAt(0);
     }
 
-    // 使用单位介绍框展示角鹰兽栏解锁，贴图直接从 resources/textures/jiaoying 加载
+    // 使用单位介绍框展示角鹰兽栏解锁，贴图直接从 resources/textures/角鹰兽栏.png 加载
     private showEagleNestUnlockViaIntro(onClosed?: () => void) {
         if (!this.unitIntroPopup) {
             if (onClosed) onClosed();
@@ -3650,20 +3650,19 @@ export class GameManager extends Component {
         const finish = (icon: SpriteFrame | null) => {
             this.unitIntroPopup.show({
                 unitName: '角鹰兽栏',
-                unitDescription: '已解锁新建筑：角鹰兽栏！\n训练的角鹰为空中单位，不占用人口。',
+                unitDescription: '已解锁新建筑：角鹰兽栏！',
                 unitIcon: icon,
                 unitType: 'EagleNest',
                 unitId: 'EagleNest',
                 onCloseCallback: () => { if (onClosed) onClosed(); }
             });
         };
-        resources.load('textures/jiaoying/角鹰兽栏', SpriteFrame, (err, sf) => {
+        resources.load('textures/角鹰兽栏/spriteFrame', SpriteFrame, (err, sf) => {
             if (!err && sf) {
                 finish(sf);
             } else {
-                resources.load('textures/jiaoying', SpriteFrame, (err2, sf2) => {
-                    finish(!err2 && sf2 ? sf2 : null);
-                });
+                console.error('[showEagleNestUnlockViaIntro] 加载角鹰兽栏贴图失败:', err);
+                finish(null);
             }
         });
     }
@@ -3698,9 +3697,9 @@ export class GameManager extends Component {
                 });
                 return;
             }
-            // 第三关胜利：解锁角鹰兽栏
-            if (finalState === GameState.Victory && level === 3 && !(this as any)._hasShownLevel3EagleNestUnlockOnce) {
-                (this as any)._hasShownLevel3EagleNestUnlockOnce = true;
+            // 第3关胜利：解锁角鹰兽栏
+            if (finalState === GameState.Victory && level === 3 && !(this as any)._hasShownLevel4EagleNestUnlockOnce) {
+                (this as any)._hasShownLevel4EagleNestUnlockOnce = true;
                 this.showEagleNestUnlockViaIntro(() => {
                     this.showGameResultPanel(state);
                 });
@@ -5099,7 +5098,7 @@ export class GameManager extends Component {
         this.shownFirstBuffCardLevels.clear();
         this.hasShownLevel2MageTowerUnlockIntro = false;
         this.hasShownLevel2HunterTornadoAwakenIntro = false;
-        this.hasShownLevel3EagleNestUnlockIntro = false;
+        this.hasShownLevel4EagleNestUnlockIntro = false;
         this.hasShownArrowerNeedPriestDialog = false;
         this.hasShownPriestProtectBuildingDialog = false;
         this.hasShownGoldReach100ArrowerDialog = false;
@@ -5333,7 +5332,7 @@ export class GameManager extends Component {
                 } else {
                     // 非第一关：加载全部建筑预制体
                     const shouldLoadMageTower = currentLevel !== 1;
-                    const shouldLoadEagleNest = currentLevel >= 3;
+                    const shouldLoadEagleNest = currentLevel >= 4;
                     const totalSteps = (shouldLoadMageTower ? 9 : 8) + (shouldLoadEagleNest ? 1 : 0);
                     this.loadAllBuildingPrefabs(bundle, shouldLoadMageTower, shouldLoadEagleNest, totalSteps, () => {
                         this._startGameInternal();
@@ -6110,11 +6109,13 @@ export class GameManager extends Component {
     checkUnitFirstAppearance(unitType: string, unitScript: any): boolean {
         // 使用单位名称作为唯一标识，确保每种单位只显示一次介绍框
         // 优先使用unitScript.unitName，否则使用unitType
-        const uniqueUnitType = unitScript.unitName || unitType;
+        const uniqueUnitType = unitScript.unitName || unitScript.prefabName || unitType;
 
         // 优化：第 2 关之后不再显示小精灵的出场提示
         const level = this.getCurrentLevelSafe();
-        if (level > 2 && (uniqueUnitType === '小精灵' || uniqueUnitType === 'Wisp')) {
+        console.log(`[GameManager] checkUnitFirstAppearance: unitType=${unitType}, uniqueUnitType=${uniqueUnitType}, level=${level}`);
+        if (level >= 2 && (uniqueUnitType === '小精灵' || uniqueUnitType === 'Wisp')) {
+            console.log(`[GameManager] 跳过小精灵出场提示（level=${level} >= 2）`);
             return false;
         }
 
@@ -10134,23 +10135,81 @@ export class GameManager extends Component {
     }
 
     /**
-     * 喂养角鹰：提示第四关解锁
+     * 喂养角鹰：第四关开始强化角鹰，第四关之前提示解锁
      */
     private onFeedEagle() {
         // 暂停游戏（因为 UnitIntroPopup 关闭时会恢复游戏）
         this.pauseGame();
 
-        // 显示角鹰解锁提示（使用上传的贴图）
+        // 获取当前关卡
+        const currentLevel = this.getCurrentLevelSafe();
+
+        // 第四关开始，强化角鹰
+        if (currentLevel >= 4) {
+            // 强化所有角鹰
+            const unitManager = UnitManager.getInstance();
+            if (unitManager) {
+                const eagles = unitManager.getEagles();
+                for (const eagleNode of eagles) {
+                    if (eagleNode && eagleNode.isValid) {
+                        const eagleScript = eagleNode.getComponent('Eagle') as any;
+                        if (eagleScript) {
+                            // 强化属性：提升生命值、攻击力、攻击速度
+                            const buffFactor = 1.5; // 提升 50%
+                            if (eagleScript.maxHealth !== undefined) {
+                                eagleScript.maxHealth = Math.floor(eagleScript.maxHealth * buffFactor);
+                            }
+                            if (eagleScript.attackDamage !== undefined) {
+                                eagleScript.attackDamage = Math.floor(eagleScript.attackDamage * buffFactor);
+                            }
+                            if (eagleScript.attackInterval !== undefined) {
+                                eagleScript.attackInterval = Math.max(0.3, eagleScript.attackInterval / buffFactor); // 攻击间隔缩短，但不低于 0.3 秒
+                            }
+                            // 恢复满生命值
+                            if (eagleScript.currentHealth !== undefined) {
+                                eagleScript.currentHealth = eagleScript.maxHealth;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 显示强化提示
+            if (!this.unitIntroPopup) {
+                this.autoCreateUnitIntroPopup();
+            }
+            if (this.unitIntroPopup && this.eagleFeedResultSpriteFrame) {
+                this.unitIntroPopup.show({
+                    unitIcon: this.eagleFeedResultSpriteFrame,
+                    unitName: '角鹰强化！',
+                    unitDescription: '角鹰被强化了！\n生命值 +50%\n攻击力 +50%\n攻击速度 +50%',
+                    unitType: 'Eagle',
+                    onCloseCallback: () => {
+                        this.resumeGame();
+                    }
+                });
+                return;
+            }
+        }
+
+        // 第四关之前，显示角鹰解锁提示（使用弓箭手的 arrowerHappy 贴图）
         if (!this.unitIntroPopup) {
             this.autoCreateUnitIntroPopup();
         }
         if (this.unitIntroPopup) {
-            this.unitIntroPopup.show({
-                unitIcon: this.eagleFeedResultSpriteFrame,
-                unitName: '角鹰？',
-                unitDescription: '指挥官，我们还没有角鹰呢！',
-                unitType: 'Eagle',
-                onCloseCallback: () => {
+            // 加载弓箭手 happy 贴图
+            resources.load('textures/arrower/arrowerHappy/spriteFrame', SpriteFrame, (err, spriteFrame) => {
+                if (this.unitIntroPopup) {
+                    this.unitIntroPopup.show({
+                        unitIcon: spriteFrame,
+                        unitName: '角鹰？',
+                        unitDescription: '指挥官，我们还没有角鹰呢！',
+                        unitType: 'Eagle',
+                        onCloseCallback: () => {
+                            this.resumeGame();
+                        }
+                    });
+                } else {
                     this.resumeGame();
                 }
             });

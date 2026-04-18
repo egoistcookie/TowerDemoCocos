@@ -613,7 +613,7 @@ export class Portal extends Component {
             const damage = Math.max(1, Math.floor(this.attackDamage));
             fireballScript.init(startPos, targetNode, damage, (dmg: number, hitDir: Vec3) => {
                 if (!targetNode || !targetNode.isValid) return;
-                // 优先作为角色单位受击（包括巨熊）
+                // 优先作为角色单位受击（包括巨熊和角鹰）
                 const bear = targetNode.getComponent('Bear') as any;
                 if (bear) {
                     // 检查巨熊是否存活
@@ -621,6 +621,14 @@ export class Portal extends Component {
                     if (typeof bear.takeDamage === 'function') {
                         bear.takeDamage(dmg, hitDir);
                         this.tryShowFirstPortalAttackIntro();
+                    }
+                    return;
+                }
+                // 检查角鹰
+                const eagle = targetNode.getComponent('Eagle') as any;
+                if (eagle) {
+                    if (typeof eagle.takeDamage === 'function') {
+                        eagle.takeDamage(dmg, hitDir);
                     }
                     return;
                 }
@@ -674,7 +682,8 @@ export class Portal extends Component {
             'Canvas/Swordsmen',
             'Canvas/Priests',
             'Canvas/Mages',
-            'Canvas/Bears'         // 巨熊（中立状态时也是目标）
+            'Canvas/Bears',         // 巨熊（中立状态时也是目标）
+            'Canvas/Eagles'         // 角鹰（飞行单位）
         ];
         const center = this.node.worldPosition;
         let best: Node | null = null;

@@ -25,6 +25,7 @@ export class UnitManager extends Component {
     private hunters: Node[] = []; // 女猎手列表
     private mages: Node[] = []; // 法师列表
     private elfSwordsmans: Node[] = []; // 精灵剑士列表
+    private eagles: Node[] = []; // 角鹰列表
     private crystal: Node = null!;
     
     // 节点引用缓存
@@ -41,6 +42,7 @@ export class UnitManager extends Component {
     private huntersNode: Node = null!; // 女猎手容器节点
     private magesNode: Node = null!; // 法师容器节点
     private elfSwordsmansNode: Node = null!; // 精灵剑士容器节点
+    private eaglesNode: Node = null!; // 角鹰容器节点
     
     // 更新频率控制
     private updateTimer: number = 0;
@@ -74,6 +76,7 @@ export class UnitManager extends Component {
         this.huntersNode = find('Canvas/Hunters');
         this.magesNode = find('Canvas/Mages') || find('Mages');
         this.elfSwordsmansNode = find('Canvas/ElfSwordsmans');
+        this.eaglesNode = find('Canvas/Eagles') || find('Eagles');
         this.crystal = find('Canvas/Crystal');
     }
     
@@ -240,13 +243,22 @@ export class UnitManager extends Component {
         
         // 更新精灵剑士列表（从对象池容器直接获取）
         if (this.elfSwordsmansNode && this.elfSwordsmansNode.isValid) {
-            this.elfSwordsmans = this.elfSwordsmansNode.children.filter(node => 
+            this.elfSwordsmans = this.elfSwordsmansNode.children.filter(node =>
                 node && node.isValid && node.active
             );
         } else {
             this.elfSwordsmans = [];
         }
-        
+
+        // 更新角鹰列表（从对象池容器直接获取）
+        if (this.eaglesNode && this.eaglesNode.isValid) {
+            this.eagles = this.eaglesNode.children.filter(node =>
+                node && node.isValid && node.active
+            );
+        } else {
+            this.eagles = [];
+        }
+
         // 更新水晶引用
         if (!this.crystal || !this.crystal.isValid) {
             this.crystal = find('Canvas/Crystal');
@@ -288,6 +300,9 @@ export class UnitManager extends Component {
         }
         if (!this.elfSwordsmansNode || !this.elfSwordsmansNode.isValid) {
             this.elfSwordsmansNode = find('Canvas/ElfSwordsmans');
+        }
+        if (!this.eaglesNode || !this.eaglesNode.isValid) {
+            this.eaglesNode = find('Canvas/Eagles') || find('Eagles');
         }
     }
     
@@ -383,7 +398,14 @@ export class UnitManager extends Component {
     getElfSwordsmans(): Node[] {
         return this.elfSwordsmans.filter(node => node && node.isValid && node.active);
     }
-    
+
+    /**
+     * 获取所有角鹰（已缓存，从对象池容器直接获取）
+     */
+    getEagles(): Node[] {
+        return this.eagles.filter(node => node && node.isValid && node.active);
+    }
+
     /**
      * 获取水晶节点（已缓存）
      */

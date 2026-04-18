@@ -230,6 +230,13 @@ export class EagleNest extends Build {
             eagleScript.prefabName = 'Eagle';
         }
 
+        // 应用配置文件中的属性（确保 attackRange 等属性正确）
+        const configManager = (this as any).unitConfigManager ||
+                              find('GameManager')?.getComponent('GameManager')?.['unitConfigManager'];
+        if (configManager && typeof configManager.applyConfigToUnit === 'function') {
+            configManager.applyConfigToUnit('Eagle', eagleScript, ['buildCost']);
+        }
+
         // 设置为完全体
         if (eagleScript) {
             eagleScript.setJuvenile(false);

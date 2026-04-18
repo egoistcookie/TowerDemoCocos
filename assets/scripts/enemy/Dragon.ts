@@ -214,6 +214,9 @@ export class Dragon extends Enemy {
 
             // 建筑物：战争古树、猎手大厅、剑士大厅、教堂
             const buildings = this.unitManager.getBuildings();
+            // 角鹰（飞行单位）
+            const eagles = this.unitManager.getEagles();
+            friendlyUnits.push(...eagles);
             friendlyUnits.push(...buildings);
         } else {
             // 降级方案：直接查找节点
@@ -699,8 +702,29 @@ export class Dragon extends Enemy {
             AudioManager.Instance.playSFX(this.attackSound);
         }
 
-        // 初始化火球
-        fireballScript.init(startPos, targetNode, this.attackDamage);
+        // 初始化火球，传递命中回调函数
+        if (fireballScript && typeof fireballScript.init === 'function') {
+            fireballScript.init(startPos, targetNode, this.attackDamage, (dmg: number, hitDir: Vec3) => {
+                if (!targetNode || !targetNode.isValid) return;
+                // 优先检查角鹰
+                const eagle = targetNode.getComponent('Eagle') as any;
+                if (eagle && typeof eagle.takeDamage === 'function') {
+                    eagle.takeDamage(dmg, hitDir);
+                    return;
+                }
+                // 检查其他 Role 单位
+                const role = targetNode.getComponent('Role') as any;
+                if (role && typeof role.takeDamage === 'function') {
+                    role.takeDamage(dmg, hitDir);
+                    return;
+                }
+                // 检查建筑
+                const build = targetNode.getComponent('Build') as any;
+                if (build && typeof build.takeDamage === 'function') {
+                    build.takeDamage(dmg, hitDir);
+                }
+            });
+        }
     }
 
     /**

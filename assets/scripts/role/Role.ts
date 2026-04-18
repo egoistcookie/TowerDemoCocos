@@ -66,6 +66,9 @@ export class Role extends Component {
     @property
     level: number = 0; // 单位等级
 
+    @property
+    populationCost: number = 1; // 占用人口数（飞行单位如角鹰为 0）
+
     // 攻击动画相关属性
     @property(SpriteFrame)
     attackAnimationFrames: SpriteFrame[] = []; // 攻击动画帧数组（推荐：在编辑器中手动设置）
@@ -144,6 +147,10 @@ export class Role extends Component {
     
     @property(SpriteFrame)
     unitIcon: SpriteFrame = null!;
+
+    // 飞行单位标志
+    @property({ visible: false })
+    isFlying: boolean = false; // 是否为飞行单位（子类可覆盖）
 
     protected currentHealth: number = 0;
     protected healthBar: HealthBar = null!;
@@ -228,8 +235,9 @@ export class Role extends Component {
     // 保存初始属性值（用于对象池回收时恢复）
     private _initialMaxHealth: number = 0;
     private _initialAttackDamage: number = 0;
-    private _initialAttackInterval: number = 0;
-    private _initialMoveSpeed: number = 0;
+    private _initialAttackRange: number = 0; // 初始攻击范围（用于对象池回收时恢复）
+    private _initialAttackInterval: number = 0; // 初始攻击间隔
+    private _initialMoveSpeed: number = 0; // 初始移动速度
     
     // 智能避让系统：防止抽搐式移动
     protected cachedAvoidDirection: Vec3 = new Vec3(); // 缓存的避让方向
@@ -321,12 +329,18 @@ export class Role extends Component {
                 this._initialAttackDamage = config.baseStats.attackDamage || this.attackDamage;
                 this._initialAttackInterval = config.baseStats.attackInterval || this.attackInterval;
                 this._initialMoveSpeed = config.baseStats.moveSpeed || this.moveSpeed;
+                this._initialAttackRange = config.baseStats.attackRange || this.attackRange;
+                // 如果配置中定义了 attackRange，应用到当前实例
+                if (config.baseStats.attackRange !== undefined) {
+                    this.attackRange = config.baseStats.attackRange;
+                }
             } else {
                 // 如果配置不存在，使用当前值
                 this._initialMaxHealth = this.maxHealth;
                 this._initialAttackDamage = this.attackDamage;
                 this._initialAttackInterval = this.attackInterval;
                 this._initialMoveSpeed = this.moveSpeed;
+                this._initialAttackRange = this.attackRange;
             }
         }
         
@@ -636,6 +650,17 @@ export class Role extends Component {
         this.dialogTimer = 0;
         this.dialogIntervalTimer = 0;
         this.dialogInterval = this.DIALOG_MIN_INTERVAL + Math.random() * (this.DIALOG_MAX_INTERVAL - this.DIALOG_MIN_INTERVAL);
+    }
+
+    /**
+     * 清理对话框（供子类 Eagle 调用）
+     */
+    protected cleanupDialog() {
+        if (this.dialogNode && this.dialogNode.isValid) {
+            this.dialogNode.destroy();
+        }
+        this.dialogNode = null;
+        this.dialogLabel = null;
     }
 
     /**
@@ -1510,6 +1535,10 @@ export class Role extends Component {
                 includeOnlyAlive
             );
 
+            // 调试日志：角鹰索敌
+            if (this.prefabName === 'Eagle') { // 角鹰索敌
+                console.log(`[Role-getEnemies] 角鹰 position=(${this.node.worldPosition.x.toFixed(0)},${this.node.worldPosition.y.toFixed(0)}), maxDistance=${maxDistance}, attackRange=${this.attackRange}, isFlying=${this.isFlying}, 找到${enemies.length}个敌人`);
+            }
             // 地面近战单位过滤掉飞行单位（无法攻击到空中目标）
             // 攻击范围小于 100 的单位视为近战单位
             if (!this.isFlying && this.attackRange < 100) {
@@ -3271,18 +3300,24 @@ export class Role extends Component {
             return;
         }
 
+        // 检查是否有受击动画帧
+        if (!this.hitAnimationFrames || this.hitAnimationFrames.length === 0) {
+            console.warn(`[Role] ${this.unitName || this.node.name} 没有设置受击动画帧`);
+            return;
+        }
+
         this.stopAllAnimations();
         this.isPlayingHitAnimation = true;
         this.isHit = true; // 设置被攻击标志
         this.animationTimer = 0;
         this.currentAnimationFrameIndex = -1;
-        
+
         // 立即播放第一帧
-        if (this.sprite && this.hitAnimationFrames.length > 0 && this.hitAnimationFrames[0]) {
+        if (this.sprite && this.hitAnimationFrames[0]) {
             this.sprite.spriteFrame = this.hitAnimationFrames[0];
             this.currentAnimationFrameIndex = 0;
         }
-        
+
         // 先取消之前的调度，避免重复调度
         this.unschedule(this.updateHitAnimation);
         // 开始动画更新
@@ -3297,17 +3332,23 @@ export class Role extends Component {
             return;
         }
 
+        // 检查是否有死亡动画帧
+        if (!this.deathAnimationFrames || this.deathAnimationFrames.length === 0) {
+            console.warn(`[Role] ${this.unitName || this.node.name} 没有设置死亡动画帧`);
+            return;
+        }
+
         this.stopAllAnimations();
         this.isPlayingDeathAnimation = true;
         this.animationTimer = 0;
         this.currentAnimationFrameIndex = -1;
-        
+
         // 立即播放第一帧
-        if (this.sprite && this.deathAnimationFrames.length > 0 && this.deathAnimationFrames[0]) {
+        if (this.sprite && this.deathAnimationFrames[0]) {
             this.sprite.spriteFrame = this.deathAnimationFrames[0];
             this.currentAnimationFrameIndex = 0;
         }
-        
+
         // 先取消之前的调度，避免重复调度
         this.unschedule(this.updateDeathAnimation);
         // 开始死亡动画更新
@@ -3818,15 +3859,14 @@ export class Role extends Component {
         // 播放死亡动画
         this.playDeathAnimation();
 
-        // 减少人口
-        // 如果buildCost为0，说明是由建筑生产的（WarAncientTree/HunterHall/SwordsmanHall），人口会在对应的cleanupDead方法中处理
-        // 如果buildCost不为0，说明是手动建造的（如果有），需要在这里减少人口
         if (!this.gameManager) {
             this.findGameManager();
         }
         if (this.gameManager) {
-            // 减少人口
-            this.gameManager.removePopulation(1);
+            // 减少人口（只有占用人口的单位才需要回退）
+            if (this.populationCost > 0) {
+                this.gameManager.removePopulation(this.populationCost);
+            }
         }
 
         // 移除点击事件监听
@@ -3872,11 +3912,12 @@ export class Role extends Component {
     /**
      * 重置单位状态（用于对象池回收）
      */
-    private resetRoleState() {
+    protected resetRoleState() {
         
         // 恢复初始属性值（移除所有增幅效果）
         this.maxHealth = this._initialMaxHealth;
         this.attackDamage = this._initialAttackDamage;
+        this.attackRange = this._initialAttackRange;
         this.attackInterval = this._initialAttackInterval;
         this.moveSpeed = this._initialMoveSpeed;
         

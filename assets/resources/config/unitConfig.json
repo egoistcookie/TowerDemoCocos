@@ -544,7 +544,7 @@
     },
     "displayInfo": {
       "name": "兽人萨满",
-      "description": "强大的兽人萨满，释放绿色法球攻击，移动缓慢但攻击力极高。每30秒释放一次图腾，治疗附近敌人。"
+      "description": "兽人萨满，移动缓慢但攻击力极高，能通过图腾治疗附近敌人。"
     },
     "displayStats": {
       "生命值": 80,
@@ -616,7 +616,7 @@
     },
     "displayInfo": {
       "name": "角鹰",
-      "description": "空中飞行单位。"
+      "description": "空中飞行单位，不占用人口。"
     },
     "displayStats": {
       "生命值": 80,

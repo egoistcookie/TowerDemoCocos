@@ -408,7 +408,18 @@ export class SelectionManager extends Component {
                     }
                 }
             }
-            
+
+            // 让所有选中的角鹰移动到各自的分散位置
+            for (let i = 0; i < this.selectedEagles.length; i++) {
+                const eagle = this.selectedEagles[i];
+                if (eagle && eagle.node && eagle.node.isValid) {
+                    const idx = this.selectedTowers.length + this.selectedHunters.length + this.selectedSwordsmen.length + this.selectedPriests.length + this.selectedMages.length + i;
+                    if (idx < formationPositions.length) {
+                        eagle.setManualMoveTargetPosition(formationPositions[idx]);
+                    }
+                }
+            }
+
             // 清除选择，取消高亮状态，确保每次只能移动一次
             this.clearSelection();
             return;
@@ -790,10 +801,10 @@ export class SelectionManager extends Component {
                 if (!eagleScript) {
                     continue;
                 }
-                // 检查角鹰是否存活（使用 Role 的 isAlive 方法或 currentHealth）
+                // 检查角鹰是否存活（使用 Role 的 isAlive 方法）
                 const isAlive = typeof eagleScript.isAlive === 'function'
                     ? eagleScript.isAlive()
-                    : (eagleScript.currentHealth !== undefined && eagleScript.currentHealth > 0);
+                    : true; // 兜底：如果没有 isAlive 方法，认为存活
                 if (!isAlive) {
                     continue;
                 }
@@ -903,6 +914,11 @@ export class SelectionManager extends Component {
             if (eagle && eagle.node && eagle.node.isValid) {
                 eagle.setHighlight(true);
             }
+        }
+
+        // 检查是否有选中的角鹰，如果有，注册移动命令
+        if (this.selectedEagles.length > 0) {
+            this.registerMoveCommand();
         }
     }
 
