@@ -2309,7 +2309,20 @@ export class Enemy extends Component {
             }
         }
 
-        // 6. 水晶
+        // 6. 角鹰（飞行单位）
+        const eaglesNode = find('Canvas/Eagles') || find('Eagles');
+        if (eaglesNode) {
+            for (const eagle of eaglesNode.children) {
+                if (eagle && eagle.active && eagle.isValid) {
+                    const eagleScript = eagle.getComponent('Eagle') as any;
+                    if (eagleScript && eagleScript.isAlive && eagleScript.isAlive()) {
+                        allTargets.push(eagle);
+                    }
+                }
+            }
+        }
+
+        // 7. 水晶
         if (this.targetCrystal && this.targetCrystal.isValid) {
             const crystalScript = this.targetCrystal.getComponent('Crystal') as any;
             if (crystalScript && crystalScript.isAlive && crystalScript.isAlive()) {
@@ -2318,7 +2331,20 @@ export class Enemy extends Component {
         }
 
         // 在所有目标中找到索敌范围内最近的目标
+        // 地面近战单位过滤掉飞行单位（无法攻击到空中目标）
+        // 攻击范围 < 100 的视为近战单位（兽人 attackRange=70, 兽人战士=60, 兽人督军=70）
+        // 投矛手 attackRange=200 是远程单位，可以攻击飞行单位
+        const isGroundMelee = this.attackRange < 100;
         for (const target of allTargets) {
+            // 地面近战单位跳过飞行目标
+            if (isGroundMelee) {
+                const targetScript = target.getComponent('Role') as any ||
+                                    target.getComponent('Eagle') as any;
+                if (targetScript && targetScript.isFlying === true) {
+                    continue;
+                }
+            }
+
             const dx = target.worldPosition.x - myPos.x;
             const dy = target.worldPosition.y - myPos.y;
             const distanceSq = dx * dx + dy * dy;

@@ -110,6 +110,7 @@ export class GameManager extends Component {
     private appearedUnitTypes: Set<string> = new Set();
     private hasShownLevel2MageTowerUnlockIntro: boolean = false; // 第2关小精灵介绍后，法师塔解锁介绍仅弹一次
     private hasShownLevel2HunterTornadoAwakenIntro: boolean = false; // 第2关通关后，女猎手龙卷觉醒介绍仅弹一次
+    private hasShownLevel3EagleNestUnlockIntro: boolean = false; // 第 3 关通关后，角鹰兽栏解锁介绍仅弹一次
     private shownFirstBuffCardLevels: Set<number> = new Set(); // 每关“首次抽卡”标记（用于固定SP卡逻辑）
     private originalTimeScale: number = 1; // 保存原始时间缩放值
     
@@ -1100,6 +1101,7 @@ export class GameManager extends Component {
         this.shownFirstBuffCardLevels.clear();
         this.hasShownLevel2MageTowerUnlockIntro = false;
         this.hasShownLevel2HunterTornadoAwakenIntro = false;
+        this.hasShownLevel3EagleNestUnlockIntro = false;
         this.debugUnitTypes = [];
         this.hasShownArrowerNeedPriestDialog = false;
         this.hasShownPriestProtectBuildingDialog = false;
@@ -3638,6 +3640,33 @@ export class GameManager extends Component {
         };
         loadAt(0);
     }
+
+    // 使用单位介绍框展示角鹰兽栏解锁，贴图直接从 resources/textures/jiaoying 加载
+    private showEagleNestUnlockViaIntro(onClosed?: () => void) {
+        if (!this.unitIntroPopup) {
+            if (onClosed) onClosed();
+            return;
+        }
+        const finish = (icon: SpriteFrame | null) => {
+            this.unitIntroPopup.show({
+                unitName: '角鹰兽栏',
+                unitDescription: '已解锁新建筑：角鹰兽栏！\n训练的角鹰为空中单位，不占用人口。',
+                unitIcon: icon,
+                unitType: 'EagleNest',
+                unitId: 'EagleNest',
+                onCloseCallback: () => { if (onClosed) onClosed(); }
+            });
+        };
+        resources.load('textures/jiaoying/角鹰兽栏', SpriteFrame, (err, sf) => {
+            if (!err && sf) {
+                finish(sf);
+            } else {
+                resources.load('textures/jiaoying', SpriteFrame, (err2, sf2) => {
+                    finish(!err2 && sf2 ? sf2 : null);
+                });
+            }
+        });
+    }
     
     /**
      * 显示游戏结算面板（统一方法，用于游戏结束和主动退出）
@@ -3665,6 +3694,14 @@ export class GameManager extends Component {
             if (finalState === GameState.Victory && level === 1 && !(this as any)._hasShownLevel1MageUnlockOnce) {
                 (this as any)._hasShownLevel1MageUnlockOnce = true;
                 this.showMageTowerUnlockViaIntro(() => {
+                    this.showGameResultPanel(state);
+                });
+                return;
+            }
+            // 第三关胜利：解锁角鹰兽栏
+            if (finalState === GameState.Victory && level === 3 && !(this as any)._hasShownLevel3EagleNestUnlockOnce) {
+                (this as any)._hasShownLevel3EagleNestUnlockOnce = true;
+                this.showEagleNestUnlockViaIntro(() => {
                     this.showGameResultPanel(state);
                 });
                 return;
@@ -5062,6 +5099,7 @@ export class GameManager extends Component {
         this.shownFirstBuffCardLevels.clear();
         this.hasShownLevel2MageTowerUnlockIntro = false;
         this.hasShownLevel2HunterTornadoAwakenIntro = false;
+        this.hasShownLevel3EagleNestUnlockIntro = false;
         this.hasShownArrowerNeedPriestDialog = false;
         this.hasShownPriestProtectBuildingDialog = false;
         this.hasShownGoldReach100ArrowerDialog = false;
@@ -5295,8 +5333,9 @@ export class GameManager extends Component {
                 } else {
                     // 非第一关：加载全部建筑预制体
                     const shouldLoadMageTower = currentLevel !== 1;
-                    const totalSteps = shouldLoadMageTower ? 9 : 8;
-                    this.loadAllBuildingPrefabs(bundle, shouldLoadMageTower, totalSteps, () => {
+                    const shouldLoadEagleNest = currentLevel >= 3;
+                    const totalSteps = (shouldLoadMageTower ? 9 : 8) + (shouldLoadEagleNest ? 1 : 0);
+                    this.loadAllBuildingPrefabs(bundle, shouldLoadMageTower, shouldLoadEagleNest, totalSteps, () => {
                         this._startGameInternal();
                     });
                 }
@@ -6073,14 +6112,20 @@ export class GameManager extends Component {
         // 优先使用unitScript.unitName，否则使用unitType
         const uniqueUnitType = unitScript.unitName || unitType;
 
+        // 优化：第 2 关之后不再显示小精灵的出场提示
+        const level = this.getCurrentLevelSafe();
+        if (level > 2 && (uniqueUnitType === '小精灵' || uniqueUnitType === 'Wisp')) {
+            return false;
+        }
+
         if (!this.appearedUnitTypes.has(uniqueUnitType)) {
             this.appearedUnitTypes.add(uniqueUnitType);
 
             // 更新调试数组
             this.debugUnitTypes = Array.from(this.appearedUnitTypes);
 
-            // 特殊建筑首次出现时不弹单位介绍框：弓箭手小屋 / 猎手大厅 / 法师塔 / 剑士小屋 / 教堂
-            const introBlockedNames = new Set<string>(['弓箭手小屋', '猎手大厅', '法师塔', '剑士小屋', '教堂']);
+            // 特殊建筑首次出现时不弹单位介绍框：弓箭手小屋 / 猎手大厅 / 法师塔 / 剑士小屋 / 教堂 / 角鹰兽栏
+            const introBlockedNames = new Set<string>(['弓箭手小屋', '猎手大厅', '法师塔', '剑士小屋', '教堂', '角鹰兽栏']);
             const shouldShowIntro = !introBlockedNames.has(uniqueUnitType);
             const isFirstArrower = unitType === 'Arrower' || unitScript?.unitType === 'Arrower' || unitScript?.prefabName === 'Arrower' || uniqueUnitType === '弓箭手';
             const isFirstSwordsman =
@@ -9373,10 +9418,11 @@ export class GameManager extends Component {
      * 加载全部建筑预制体（非第一关或第一关延迟加载）
      * @param bundle 分包 bundle
      * @param shouldLoadMageTower 是否加载法师塔
+     * @param shouldLoadEagleNest 是否加载角鹰兽栏
      * @param totalSteps 总步数
      * @param onLoaded 加载完成回调
      */
-    private loadAllBuildingPrefabs(bundle: any, shouldLoadMageTower: boolean, totalSteps: number, onLoaded: () => void) {
+    private loadAllBuildingPrefabs(bundle: any, shouldLoadMageTower: boolean, shouldLoadEagleNest: boolean, totalSteps: number, onLoaded: () => void) {
         const loadPrefab = (name: string, stepIndex: number, onLoadedCb: (prefab: Prefab | null) => void) => {
             bundle.load(name, Prefab, (err2: any, prefab: Prefab | null) => {
                 if (err2 || !prefab) {
@@ -9397,7 +9443,8 @@ export class GameManager extends Component {
             hunterHallPrefab: Prefab | null,
             swordsmanHallPrefab: Prefab | null,
             churchPrefab: Prefab | null,
-            mageTowerPrefab: Prefab | null
+            mageTowerPrefab: Prefab | null,
+            eagleNestPrefab: Prefab | null
         ) => {
             try {
                 const towerBuilder = this.findComponentInScene('TowerBuilder') as any;
@@ -9429,10 +9476,17 @@ export class GameManager extends Component {
 
                     if (shouldLoadMageTower) {
                         if (mageTowerPrefab && typeof towerBuilder.setMageTowerPrefab === 'function') {
-                            //console.info('[GameManager] non-level1: MageTower prefab loaded, injecting to TowerBuilder');
                             towerBuilder.setMageTowerPrefab(mageTowerPrefab as Prefab);
                         } else {
                             console.warn('[GameManager] non-level1: MageTower prefab load failed or TowerBuilder lacks setMageTowerPrefab');
+                        }
+                    }
+
+                    if (shouldLoadEagleNest) {
+                        if (eagleNestPrefab && typeof towerBuilder.setEagleNestPrefab === 'function') {
+                            towerBuilder.setEagleNestPrefab(eagleNestPrefab as Prefab);
+                        } else {
+                            console.warn('[GameManager] level>=4: EagleNest prefab load failed or TowerBuilder lacks setEagleNestPrefab');
                         }
                     }
 
@@ -9464,16 +9518,34 @@ export class GameManager extends Component {
                                     loadPrefab('Church', 8, (churchPrefab) => {
                                         if (shouldLoadMageTower) {
                                             loadPrefab('MageTower', 9, (mageTowerPrefab) => {
-                                                finalizeInjection(
-                                                    stoneWallPrefab, iceTowerPrefab, thunderTowerPrefab, watchTowerPrefab,
-                                                    warAncientTreePrefab, hunterHallPrefab, swordsmanHallPrefab, churchPrefab, mageTowerPrefab
-                                                );
+                                                if (shouldLoadEagleNest) {
+                                                    loadPrefab('EagleNest', 10, (eagleNestPrefab) => {
+                                                        finalizeInjection(
+                                                            stoneWallPrefab, iceTowerPrefab, thunderTowerPrefab, watchTowerPrefab,
+                                                            warAncientTreePrefab, hunterHallPrefab, swordsmanHallPrefab, churchPrefab, mageTowerPrefab, eagleNestPrefab
+                                                        );
+                                                    });
+                                                } else {
+                                                    finalizeInjection(
+                                                        stoneWallPrefab, iceTowerPrefab, thunderTowerPrefab, watchTowerPrefab,
+                                                        warAncientTreePrefab, hunterHallPrefab, swordsmanHallPrefab, churchPrefab, mageTowerPrefab, null
+                                                    );
+                                                }
                                             });
                                         } else {
-                                            finalizeInjection(
-                                                stoneWallPrefab, iceTowerPrefab, thunderTowerPrefab, watchTowerPrefab,
-                                                warAncientTreePrefab, hunterHallPrefab, swordsmanHallPrefab, churchPrefab, null
-                                            );
+                                            if (shouldLoadEagleNest) {
+                                                loadPrefab('EagleNest', 10, (eagleNestPrefab) => {
+                                                    finalizeInjection(
+                                                        stoneWallPrefab, iceTowerPrefab, thunderTowerPrefab, watchTowerPrefab,
+                                                        warAncientTreePrefab, hunterHallPrefab, swordsmanHallPrefab, churchPrefab, null, eagleNestPrefab
+                                                    );
+                                                });
+                                            } else {
+                                                finalizeInjection(
+                                                    stoneWallPrefab, iceTowerPrefab, thunderTowerPrefab, watchTowerPrefab,
+                                                    warAncientTreePrefab, hunterHallPrefab, swordsmanHallPrefab, churchPrefab, null, null
+                                                );
+                                            }
                                         }
                                     });
                                 });

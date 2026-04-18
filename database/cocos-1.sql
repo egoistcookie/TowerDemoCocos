@@ -30,12 +30,6 @@ select * from card_selection_events where DATE(created_at) = CURDATE()
 select * from card_selection_events where DATE(created_at) = CURDATE()
  and player_id  in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1775652153130_8335',
 'player_1772722064044_978','player_1772465771074_4106') order by created_at desc ;
---统计每天有多少UR
-select * from card_selection_events where DATE(created_at) = CURDATE()-1
- and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')  order by created_at desc ;
-select * from card_selection_events where cards_json like BINARY  '%SP%'
- and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')
-order by created_at desc ;
 --统计每天有多少广告抽卡(reroll和get_all只有看完了视频才会触发)
 select DATE(created_at),player_id,count(*) from card_selection_events where selection_mode  in ('get_all','reroll') 
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')
@@ -47,13 +41,7 @@ where a.selection_mode  in ('get_all','reroll')
  and a.player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')
  group by DATE(a.created_at),a.player_id,ps.created_at order by DATE(created_at) desc ;
 
-select * from play;
-
 select * from player_statistics where player_id='player_1774974647317_9849';
---统计每天有多少次抽卡
-select DATE(created_at),count(*) from card_selection_events where 
-  player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')
-group by DATE(created_at) order by DATE(created_at) desc ;
 
 --游戏记录主表
 select * from game_records where player_id='player_1774265446223_9255';

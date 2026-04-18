@@ -1510,6 +1510,21 @@ export class Role extends Component {
                 includeOnlyAlive
             );
 
+            // 地面近战单位过滤掉飞行单位（无法攻击到空中目标）
+            // 攻击范围小于 100 的单位视为近战单位
+            if (!this.isFlying && this.attackRange < 100) {
+                enemies = enemies.filter(enemy => {
+                    const enemyScript = enemy.getComponent('Enemy') as any ||
+                                       enemy.getComponent('Role') as any ||
+                                       enemy.getComponent('Dragon') as any;
+                    // 如果敌人是飞行单位，过滤掉
+                    if (enemyScript && enemyScript.isFlying === true) {
+                        return false;
+                    }
+                    return true;
+                });
+            }
+
             // 额外添加中立/敌方巨熊（巨熊不在敌人容器中，需要单独获取）
             const bearsNode = find('Canvas/Bears');
             if (bearsNode && bearsNode.isValid) {

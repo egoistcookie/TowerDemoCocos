@@ -35,6 +35,10 @@ export class Dragon extends Enemy {
     @property({ type: SpriteFrame, tooltip: "喂养角鹰结果贴图（角鹰解锁）" })
     eagleFeedResultSpriteFrame: SpriteFrame | null = null;
 
+    // 飞行单位标志
+    @property({ visible: false })
+    isFlying: boolean = true; // 飞龙是飞行单位
+
     // 重写父类属性，设置飞龙的默认值
     maxHealth: number = 100;
     moveSpeed: number = 60;
@@ -228,6 +232,12 @@ export class Dragon extends Enemy {
                 friendlyUnits.push(...swordsmenNode.children);
             }
 
+            // 角鹰（飞行单位）
+            const eaglesNode = find('Canvas/Eagles') || find('Eagles');
+            if (eaglesNode) {
+                friendlyUnits.push(...eaglesNode.children);
+            }
+
             // 建筑物
             const warAncientTreesNode = find('Canvas/WarAncientTrees');
             if (warAncientTreesNode) {
@@ -286,7 +296,8 @@ export class Dragon extends Enemy {
                               unit.getComponent('WarAncientTree') as any ||
                               unit.getComponent('HunterHall') as any ||
                               unit.getComponent('SwordsmanHall') as any ||
-                              unit.getComponent('Church') as any;
+                              unit.getComponent('Church') as any ||
+                              unit.getComponent('Eagle') as any;
 
             if (!unitScript || !unitScript.isAlive || !unitScript.isAlive()) {
                 continue;

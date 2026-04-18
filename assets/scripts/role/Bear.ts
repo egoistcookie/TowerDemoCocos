@@ -244,6 +244,18 @@ export class Bear extends Role {
             targets = this.unitManager.getEnemiesInRange(myPos, this.detectRange, true);
         }
 
+        // 巨熊是地面近战单位，过滤掉飞行单位（无法攻击到空中目标）
+        targets = targets.filter(target => {
+            const targetScript = target.getComponent('Enemy') as any ||
+                                target.getComponent('Role') as any ||
+                                target.getComponent('Dragon') as any;
+            // 如果目标是飞行单位，过滤掉
+            if (targetScript && targetScript.isFlying === true) {
+                return false;
+            }
+            return true;
+        });
+
         // console.log(`[Bear] 找目标：状态=${this.bearState === BearState.Neutral ? '中立' : '归顺'}, 范围内目标数=${targets.length}`);
 
         if (targets.length === 0) {

@@ -582,6 +582,50 @@
       "金币奖励": "10 金币",
       "经验奖励": "20 点"
     }
+  },
+  "EagleNest": {
+    "baseStats": {
+      "maxHealth": 80,
+      "buildCost": 0,
+      "level": 1,
+      "collisionRadius": 40,
+      "productionInterval": 3.0,
+      "growthDuration": 10.0
+    },
+    "displayInfo": {
+      "name": "角鹰兽栏",
+      "description": "训练角鹰的场地。"
+    },
+    "displayStats": {
+      "生命值": 80,
+      "建造成本": "0 金币",
+      "训练间隔": "3.0 秒",
+      "成长时间": "10.0 秒"
+    }
+  },
+  "Eagle": {
+    "baseStats": {
+      "maxHealth": 80,
+      "attackRange": 70,
+      "attackDamage": 25,
+      "attackInterval": 1.2,
+      "moveSpeed": 120,
+      "collisionRadius": 15,
+      "buildCost": 0,
+      "level": 1
+    },
+    "displayInfo": {
+      "name": "角鹰",
+      "description": "空中飞行单位。"
+    },
+    "displayStats": {
+      "生命值": 80,
+      "攻击力": 25,
+      "攻击范围": "70 像素",
+      "攻击间隔": "1.2 秒",
+      "移动速度": "120 像素/秒",
+      "人口占用": "0"
+    }
   }
 }
 

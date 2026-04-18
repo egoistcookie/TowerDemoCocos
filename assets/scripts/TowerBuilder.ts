@@ -79,6 +79,12 @@ export class TowerBuilder extends Component {
     @property(SpriteFrame)
     churchIcon: SpriteFrame = null!; // 教堂图标
 
+    // 角鹰兽栏预制体：由 GameManager 在运行时注入
+    private eagleNestPrefab: Prefab = null!;
+
+    @property(SpriteFrame)
+    eagleNestIcon: SpriteFrame = null!; // 角鹰兽栏图标
+
     @property(Node)
     buildingSelectionPanel: Node = null!; // 建筑物选择面板节点
 
@@ -124,6 +130,9 @@ export class TowerBuilder extends Component {
     churchContainer: Node = null!; // 教堂容器
 
     @property(Node)
+    eagleNestContainer: Node = null!; // 角鹰兽栏容器
+
+    @property(Node)
     buildingGridPanel: Node = null!; // 建筑物网格面板节点
 
     @property(Node)
@@ -161,6 +170,8 @@ export class TowerBuilder extends Component {
 
     @property
     churchCost: number = 10; // 教堂建造成本（10金币）
+    @property
+    eagleNestCost: number = 15; // 角鹰兽栏建造成本（15 金币）
 
     private isBuildingMode: boolean = false;
     private previewTower: Node = null!;
@@ -242,6 +253,11 @@ export class TowerBuilder extends Component {
     public setChurchPrefab(prefab: Prefab) {
         this.churchPrefab = prefab;
         // 预制体更新后，尝试从中提取图标
+        this.ensureIconsFromPrefabs();
+    }
+
+    public setEagleNestPrefab(prefab: Prefab) {
+        this.eagleNestPrefab = prefab;
         this.ensureIconsFromPrefabs();
     }
 
@@ -379,6 +395,23 @@ export class TowerBuilder extends Component {
                 description: '可以生产为友军治疗的牧师单位'
             });
         }
+        // 角鹰兽栏在第 3 关及以后解锁
+        if (this.eagleNestPrefab && currentLevel >= 3) {
+            let cost = this.eagleNestCost;
+            if (configManager.isConfigLoaded()) {
+                const configCost = this.getBuildCostFromConfig('EagleNest');
+                if (configCost > 0) {
+                    cost = this.getActualBuildCost('EagleNest', configCost);
+                }
+            }
+            buildingTypes.push({
+                name: '角鹰兽栏',
+                prefab: this.eagleNestPrefab,
+                cost: cost,
+                icon: this.eagleNestIcon || null!,
+                description: '可以生产角鹰单位（空中单位，不占用人口）'
+            });
+        }
         this.buildingPanel.setBuildingTypes(buildingTypes);
     }
 
@@ -452,6 +485,7 @@ export class TowerBuilder extends Component {
         this.mageTowerIcon = extractIconFromPrefab(this.mageTowerPrefab, this.mageTowerIcon) as SpriteFrame;
         this.swordsmanHallIcon = extractIconFromPrefab(this.swordsmanHallPrefab, this.swordsmanHallIcon) as SpriteFrame;
         this.churchIcon = extractIconFromPrefab(this.churchPrefab, this.churchIcon) as SpriteFrame;
+        this.eagleNestIcon = extractIconFromPrefab(this.eagleNestPrefab, this.eagleNestIcon) as SpriteFrame;
     }
 
     start() {
@@ -1456,6 +1490,18 @@ export class TowerBuilder extends Component {
             }
         }
 
+        // 检查是否与现有角鹰兽栏重叠
+        const eagleNests = this.eagleNestContainer?.children || [];
+        for (const nest of eagleNests) {
+            if (nest.active) {
+                const np = nest.worldPosition;
+                const ndx = position.x - np.x, ndy = position.y - np.y, ndz = position.z - np.z;
+                if (ndx * ndx + ndy * ndy + ndz * ndz < 80 * 80) { // 角鹰兽栏之间/与其他建筑的最小距离
+                    return false;
+                }
+            }
+        }
+
         // 检查是否与现有石墙重叠（其他建筑物不能与石墙重叠）
         const stoneWalls = this.stoneWallContainer?.children || [];
         for (const wall of stoneWalls) {
@@ -1489,7 +1535,8 @@ export class TowerBuilder extends Component {
             '石墙': 'StoneWall',
             '哨塔': 'WatchTower',
             '剑士小屋': 'SwordsmanHall',
-            '教堂': 'Church'
+            '教堂': 'Church',
+            '角鹰兽栏': 'EagleNest'
         };
         
         const unitId = buildingNameToUnitId[building.name];
@@ -1536,6 +1583,8 @@ export class TowerBuilder extends Component {
             this.buildSwordsmanHall(worldPosition);
         } else if (building.name === '教堂' || building.prefab === this.churchPrefab) {
             this.buildChurch(worldPosition);
+        } else if (building.name === '角鹰兽栏' || building.prefab === this.eagleNestPrefab) {
+            this.buildEagleNest(worldPosition);
         }
 
         // 只有在成功建造后才退出建造模式
@@ -2916,6 +2965,96 @@ export class TowerBuilder extends Component {
             );
         }
 
+    }
+
+    /**
+     * 建造角鹰兽栏
+     */
+    buildEagleNest(worldPosition: Vec3, skipCost: boolean = false) {
+        if (!this.eagleNestPrefab) {
+            return;
+        }
+
+        // 确保 gridPanel 存在
+        if (!this.gridPanel) {
+            this.findGridPanel();
+        }
+
+        // 从配置文件中获取建造成本
+        const actualCost = this.getActualBuildCost('EagleNest');
+
+        // 消耗金币（初始化赠送建筑可跳过扣费）
+        if (this.gameManager && !skipCost) {
+            this.gameManager.spendGold(actualCost);
+        }
+
+        // 从对象池获取建筑物
+        const buildingPool = BuildingPool.getInstance();
+        let eagleNest: Node | null = null;
+        if (buildingPool) {
+            const stats = buildingPool.getStats();
+            if (!stats['EagleNest']) {
+                buildingPool.registerPrefab('EagleNest', this.eagleNestPrefab);
+            }
+            eagleNest = buildingPool.get('EagleNest');
+        }
+
+        if (!eagleNest) {
+            eagleNest = instantiate(this.eagleNestPrefab);
+        }
+
+        // 设置父节点
+        const parent = this.eagleNestContainer || this.node;
+        if (parent && !parent.active) {
+            parent.active = true;
+        }
+
+        eagleNest.setParent(parent);
+        eagleNest.active = true;
+        eagleNest.setPosition(0, 0, 0);
+        eagleNest.setRotationFromEuler(0, 0, 0);
+        eagleNest.setScale(1, 1, 1);
+        eagleNest.setWorldPosition(worldPosition);
+
+        const eagleNestScript = eagleNest.getComponent('EagleNest') as any;
+        if (eagleNestScript) {
+            eagleNestScript.prefabName = 'EagleNest';
+
+            const configManager = UnitConfigManager.getInstance();
+            if (configManager.isConfigLoaded()) {
+                (configManager as any).applyConfigToUnit?.('EagleNest', eagleNestScript, ['buildCost']);
+            }
+
+            const talentEffectManager = TalentEffectManager.getInstance();
+            talentEffectManager.applyUnitEnhancements('EagleNest', eagleNestScript);
+            talentEffectManager.applyTalentEffects(eagleNestScript);
+
+            eagleNestScript.buildCost = actualCost;
+
+            // 记录网格位置并标记占用
+            if (this.gridPanel) {
+                const grid = this.gridPanel.worldToGrid(worldPosition);
+                if (grid) {
+                    eagleNestScript.gridX = grid.x;
+                    eagleNestScript.gridY = grid.y;
+                    this.gridPanel.occupyGrid(grid.x, grid.y, eagleNest);
+                }
+            }
+
+            if (this.gameManager) {
+                const unitType = eagleNestScript.unitType || 'EagleNest';
+                this.gameManager.checkUnitFirstAppearance(unitType, eagleNestScript);
+            }
+        }
+
+        const analytics = AnalyticsManager.getInstance();
+        if (analytics && this.gameManager) {
+            analytics.recordOperation(
+                OperationType.BUILD_CHURCH,
+                this.gameManager.getGameTime(),
+                { position: { x: eagleNestScript?.gridX, y: eagleNestScript?.gridY } }
+            );
+        }
     }
 
     // 可以通过按钮调用

@@ -25,6 +25,7 @@ export interface UnitInfo {
     // 防御单位属性
     attackFrequency?: number; // 攻击频率（防御单位，单位：次/秒）
     moveSpeed?: number; // 移动速度（防御单位，单位：像素/秒）
+    isFlying?: boolean; // 是否为飞行单位（空中单位，不占人口）
     // 按钮回调
     onUpgradeClick?: () => void; // 升级按钮点击回调
     onSellClick?: () => void; // 回收按钮点击回调

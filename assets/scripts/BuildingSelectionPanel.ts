@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Prefab, Sprite, SpriteFrame, Label, Color, UITransform, Graphics, EventTouch, Vec3, Vec2, tween, UIOpacity, find, instantiate, Camera } from 'cc';
+import { _decorator, Component, Node, Prefab, Sprite, SpriteFrame, Label, Color, UITransform, Graphics, EventTouch, Vec3, Vec2, tween, UIOpacity, find, instantiate, Camera, ScrollView, Mask } from 'cc';
 import { GameManager } from './GameManager';
 import { GamePopup } from './GamePopup';
 import { BuildingGridPanel } from './BuildingGridPanel';
@@ -717,57 +717,143 @@ export class BuildingSelectionPanel extends Component {
      * 更新面板内容
      */
     updatePanel() {
-        // 如果没有指定内容容器，尝试查找或创建
-        if (!this.panelContent) {
-            // 尝试查找Content子节点
-            const contentNode = this.node.getChildByName('Content');
-            if (contentNode) {
-                this.panelContent = contentNode;
-            } else {
-                // 如果没有，使用当前节点
-                this.panelContent = this.node;
+        // 设置面板固定宽度为 750（游戏画面宽度）
+        const panelWidth = 750;
+        const panelHeight = 220; // 拉高到建造按钮底部位置
+
+        // 获取 Canvas 节点，用于计算屏幕底部位置
+        const canvas = find('Canvas');
+        let canvasHeight = 1280; // 默认值
+        if (canvas) {
+            const canvasTransform = canvas.getComponent(UITransform);
+            if (canvasTransform) {
+                canvasHeight = canvasTransform.contentSize.height;
             }
         }
 
-        // 清空现有内容
-        if (this.panelContent) {
-            this.panelContent.removeAllChildren();
+        // 获取或创建面板的 UITransform
+        let panelTransform = this.node.getComponent(UITransform);
+        if (!panelTransform) {
+            panelTransform = this.node.addComponent(UITransform);
+        }
+        panelTransform.setContentSize(panelWidth, panelHeight);
+        // 面板锚点设置为 (0.5, 0.5) 中心对齐
+        panelTransform.anchorPoint = new Vec2(0.5, 0.5);
+
+        // 确保面板节点位置在屏幕底部中心
+        // Canvas 的原点在中心，底部位置是 -canvasHeight/2
+        // 面板中心应该在 -canvasHeight/2 + panelHeight/2 的位置
+        this.node.setPosition(0, -canvasHeight / 2 + panelHeight / 2, 0);
+
+        // 清空现有的 panelContent
+        if (this.panelContent && this.panelContent.parent) {
+            this.panelContent.parent.removeAllChildren();
         }
 
+        // 创建面板背景
+        const bgNode = new Node('Background');
+        bgNode.setParent(this.node);
+        bgNode.setPosition(0, 0, 0);
+        const bgTransform = bgNode.addComponent(UITransform);
+        bgTransform.setContentSize(panelWidth, panelHeight);
+        bgTransform.anchorPoint = new Vec2(0.5, 0.5);
+        const bgGraphics = bgNode.addComponent(Graphics);
+        bgGraphics.fillColor = new Color(30, 30, 30, 200);
+        bgGraphics.roundRect(-panelWidth / 2, -panelHeight / 2, panelWidth, panelHeight, 10);
+        bgGraphics.fill();
+
+        // 创建内容容器（直接作为 panelNode 的子节点，便于 GameManager 查找）
+        const contentNode = new Node('Content');
+        contentNode.setParent(this.node);
+        // 内容容器位置：因为面板锚点是 (0.5, 0.5)，原点在中心，所以要偏移到左边缘
+        // 内容容器锚点是 (0, 0.5)，原点在左侧，所以位置应该是 (-panelWidth/2, 0)
+        contentNode.setPosition(-panelWidth / 2, 0, 0);
+
+        const contentTransform = contentNode.addComponent(UITransform);
+        contentTransform.anchorPoint = new Vec2(0, 0.5);
+
+        this.panelContent = contentNode;
+
         // 创建建筑物选项
+        const itemWidth = 120;
+        const spacing = 20;
         this.buildingTypes.forEach((building, index) => {
-            const item = this.createBuildingItem(building, index);
+            const item = this.createBuildingItem(building, index, itemWidth, spacing);
             this.panelContent.addChild(item);
         });
+
+        // 更新内容容器宽度（根据建筑物数量）
+        if (this.panelContent && this.buildingTypes.length > 0) {
+            const totalWidth = this.buildingTypes.length * (itemWidth + spacing);
+            contentTransform.setContentSize(totalWidth, panelHeight);
+        }
+
+        // 添加遮罩组件来裁剪超出内容
+        const mask = this.node.addComponent(Mask);
+        mask.type = Mask.Type.RECT;
+
+        // 添加触摸滚动支持
+        // 内容容器初始位置是 -panelWidth/2，这样内容左边缘对齐面板左边缘
+        const contentStartX = -panelWidth / 2;
+        let isDragging = false;
+        let startX = 0;
+        let startScrollX = 0;
+
+        this.node.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
+            isDragging = false;
+            startX = event.touch!.getStartLocation().x;
+            startScrollX = contentNode.position.x;
+        }, this);
+
+        this.node.on(Node.EventType.TOUCH_MOVE, (event: EventTouch) => {
+            const touchX = event.touch!.getLocation().x;
+            const deltaX = touchX - startX;
+            const newScrollX = startScrollX + deltaX;
+
+            // 限制滚动范围
+            const contentWidth = this.buildingTypes.length * (itemWidth + spacing);
+            // 内容容器锚点 (0, 0.5)，原点在左侧
+            // 最大滚动位置：content 左边缘对齐面板左边缘（scrollX = -panelWidth/2）
+            // 最小滚动位置：content 右边缘对齐面板右边缘（scrollX = -panelWidth/2 + panelWidth - contentWidth）
+            const maxScrollX = contentStartX;
+            const minScrollX = contentStartX + panelWidth - contentWidth;
+
+            // 只有当内容宽度大于面板宽度时才允许滚动
+            if (contentWidth > panelWidth) {
+                if (newScrollX > maxScrollX) {
+                    contentNode.setPosition(maxScrollX, 0, 0);
+                } else if (newScrollX < minScrollX) {
+                    contentNode.setPosition(minScrollX, 0, 0);
+                } else {
+                    contentNode.setPosition(newScrollX, 0, 0);
+                }
+            }
+        }, this);
     }
 
     /**
      * 创建建筑物选项
      */
-    createBuildingItem(building: BuildingType, index: number): Node {
+    createBuildingItem(building: BuildingType, index: number, itemWidth: number, spacing: number): Node {
         const item = new Node(`BuildingItem_${building.name}`);
-        
-        // 添加UITransform
-        const transform = item.addComponent(UITransform);
-        transform.setContentSize(120, 120);
 
-        // 设置位置（水平排列）
-        const spacing = 140;
-        const startX = -(this.buildingTypes.length - 1) * spacing / 2;
-        item.setPosition(startX + index * spacing, 0, 0);
+        // 添加 UITransform
+        const transform = item.addComponent(UITransform);
+        transform.setContentSize(itemWidth, itemWidth);
+
+        // 设置位置（水平排列，从左到右，第一个元素中心距离左边缘 itemWidth/2 + spacing）
+        item.setPosition(itemWidth / 2 + spacing + index * (itemWidth + spacing), 0, 0);
 
         // 添加背景
         const bg = new Node('Background');
         bg.setParent(item);
         bg.setPosition(0, 0, 0);
         const bgTransform = bg.addComponent(UITransform);
-        bgTransform.setContentSize(110, 110);
-            const bgGraphics = bg.addComponent(Graphics);
+        bgTransform.setContentSize(itemWidth - 10, itemWidth - 10);
+        const bgGraphics = bg.addComponent(Graphics);
         bgGraphics.fillColor = new Color(50, 50, 50, 200);
-        bgGraphics.roundRect(-55, -55, 110, 110, 10);
+        bgGraphics.roundRect(-(itemWidth - 10) / 2, -(itemWidth - 10) / 2, itemWidth - 10, itemWidth - 10, 10);
         bgGraphics.fill();
-
-        // 添加图标
         if (building.icon) {
             const icon = new Node('Icon');
             icon.setParent(item);
