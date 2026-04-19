@@ -574,7 +574,7 @@ export class BeastDen extends Build {
     }
 
     /**
-     * 从 Canvas/Towers 容器中获取第一个弓箭手
+     * 从 Canvas/Towers 容器中获取第一个弓箭手（不包括角鹰射手）
      */
     private getFirstArrowerInTowers(): any {
         const towersContainer = find('Canvas/Towers');
@@ -584,6 +584,11 @@ export class BeastDen extends Build {
 
         for (const tower of towersContainer.children) {
             if (!tower || !tower.active || !tower.isValid) continue;
+            // 排除角鹰射手（EagleArcher 是 Arrower 的子类）
+            const eagleArcherScript = tower.getComponent('EagleArcher') as any;
+            if (eagleArcherScript) {
+                continue; // 跳过角鹰射手
+            }
             const arrowerScript = tower.getComponent('Arrower') as any;
             if (arrowerScript) {
                 return arrowerScript;
@@ -594,7 +599,7 @@ export class BeastDen extends Build {
     }
 
     /**
-     * 从友方单位中获取第一个弓箭手
+     * 从友方单位中获取第一个弓箭手（不包括角鹰射手）
      */
     private getFirstArrowerInFriendlies(): any {
         if (!this.unitManager) {
@@ -608,6 +613,11 @@ export class BeastDen extends Build {
         const friendlies = this.unitManager.getFriendlies();
         for (const friendly of friendlies) {
             if (!friendly || !friendly.isValid || !friendly.active) continue;
+            // 排除角鹰射手（EagleArcher 是 Arrower 的子类）
+            const eagleArcherScript = friendly.getComponent('EagleArcher') as any;
+            if (eagleArcherScript) {
+                continue; // 跳过角鹰射手
+            }
             const arrowerScript = friendly.getComponent('Arrower') as any;
             if (arrowerScript) {
                 return arrowerScript;

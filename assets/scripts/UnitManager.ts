@@ -407,6 +407,27 @@ export class UnitManager extends Component {
     }
 
     /**
+     * 获取所有角鹰射手（已缓存，从对象池容器直接获取）
+     */
+    getEagleArchers(): Node[] {
+        // 角鹰射手存储在 Towers 容器下，需要从 Canvas/Towers 获取
+        const towersNode = find('Canvas/Towers');
+        if (!towersNode || !towersNode.isValid) {
+            return [];
+        }
+        const result: Node[] = [];
+        for (const child of towersNode.children) {
+            if (child && child.isValid && child.active) {
+                const eagleArcherScript = child.getComponent('EagleArcher');
+                if (eagleArcherScript) {
+                    result.push(child);
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
      * 获取水晶节点（已缓存）
      */
     getCrystal(): Node | null {

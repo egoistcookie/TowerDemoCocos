@@ -33,6 +33,7 @@ export interface UnitInfo {
     onDefendClick?: () => void; // 防御按钮点击回调
     onSkillClick?: (event?: EventTouch) => void; // 技能按钮点击回调（可携带触摸事件）
     onSkill2Click?: () => void; // 第二技能按钮点击回调（用于弓箭手：调整弓弦）
+    onSkill3Click?: () => void; // 第三技能按钮点击回调（用于角鹰射手：狙击优先攻击）
     // 升级相关
     upgradeCost?: number; // 升级费用（用于显示）
     maxLevel?: number; // 最高等级（用于判断是否满级）
@@ -45,6 +46,9 @@ export interface UnitInfo {
     // 第二技能冷却（秒）
     skill2CooldownRemainingSec?: number; // 剩余冷却时间（秒）
     skill2CooldownTotalSec?: number; // 总冷却时间（秒）
+    // 第三技能（狙击）相关
+    priorityTargetType?: string | null; // 当前优先攻击目标类型
+    availableEnemyTypes?: string[]; // 本关卡内可能出现的所有单位类型
 }
 
 @ccclass('UnitInfoPanel')
@@ -348,7 +352,7 @@ export class UnitInfoPanel extends Component {
         // 移除文件扩展名，构建资源路径
         const normalPathWithoutExt = normalPath.replace(/\.(png|jpg|jpeg)$/i, '');
         const normalResourcePath = `textures/icon/${normalPathWithoutExt}/spriteFrame`;
-        
+
         resources.load(normalResourcePath, SpriteFrame, (err, spriteFrame) => {
             if (err) {
                 console.error(`Failed to load button sprite: ${normalPath} (path: ${normalResourcePath})`, err);
@@ -383,7 +387,7 @@ export class UnitInfoPanel extends Component {
         // 加载按下状态贴图
         const downPathWithoutExt = downPath.replace(/\.(png|jpg|jpeg)$/i, '');
         const downResourcePath = `textures/icon/${downPathWithoutExt}/spriteFrame`;
-        
+
         resources.load(downResourcePath, SpriteFrame, (err, downSpriteFrame) => {
             if (err) {
                 console.error(`Failed to load button down sprite: ${downPath} (path: ${downResourcePath})`, err);
@@ -401,6 +405,22 @@ export class UnitInfoPanel extends Component {
                 }
             }
         });
+    }
+
+    /**
+     * 获取单位类型中文名称
+     */
+    private getUnitTypeName(unitType: string): string {
+        const typeMap: Record<string, string> = {
+            'Orc': '兽人',
+            'OrcWarrior': '兽人战士',
+            'OrcWarlord': '兽人督军',
+            'TrollSpearman': '巨魔投矛手',
+            'Dragon': '飞龙',
+            'OrcShaman': '兽人萨满',
+            'MinotaurWarrior': '牛头人领主'
+        };
+        return typeMap[unitType] || unitType;
     }
 
     /**
@@ -1036,6 +1056,58 @@ export class UnitInfoPanel extends Component {
         }
 
         // 设置回收按钮（位置：右下，索引8）
+        // 九宫格第七格（索引 6）：角鹰射手狙击技能
+        if (unitInfo.name === '角鹰射手' && unitInfo.onSkill3Click && this.buttonNodes[6]) {
+            const skill3Button = this.buttonNodes[6];
+            skill3Button.active = true;
+
+            // 使用狙击图标
+            const normalIcon = 'juji1.png'  // 临时使用，需要创建 juji1.png;
+            const downIcon = 'juji2.png'  // 临时使用，需要创建 juji2.png;
+            this.loadButtonSprite(6, normalIcon, downIcon);
+
+            const btnComp = skill3Button.getComponent(Button);
+            const sprite = this.buttonSprites.get(6);
+            const labelNode = skill3Button.getChildByName('Label');
+            const label = labelNode ? labelNode.getComponent(Label) : null;
+
+            // 显示当前优先攻击目标类型（如果有）
+            if (labelNode && label) { 
+                labelNode.active = true;
+                const priorityType = unitInfo.priorityTargetType;
+                label.string = priorityType ? this.getUnitTypeName(priorityType) : '';
+                label.fontSize = 14;
+                label.color = new Color(255, 245, 200, 255);
+                label.horizontalAlign = Label.HorizontalAlign.CENTER;
+                label.verticalAlign = Label.VerticalAlign.CENTER;
+                labelNode.setPosition(0, 0, 0);
+            }
+
+            // 绑定点击事件
+            if (!btnComp || btnComp.interactable !== false) {
+                skill3Button.on(Node.EventType.TOUCH_START, () => {
+                    const s = this.buttonSprites.get(6);
+                    const down = this.buttonDownSprites.get(6);
+                    if (s && down && s.node && s.node.isValid) {
+                        s.spriteFrame = down;
+                    }
+                });
+                skill3Button.on(Node.EventType.TOUCH_END, () => {
+                    console.log('[UnitInfoPanel] 狙击按钮点击');
+                    const s = this.buttonSprites.get(6);
+                    const normal = this.buttonNormalSprites.get(6);
+                    if (s && normal && s.node && s.node.isValid) {
+                        s.spriteFrame = normal;
+                    }
+                    console.log('[UnitInfoPanel] onSkill3Click exists:', !!unitInfo.onSkill3Click);
+                    if (unitInfo.onSkill3Click) {
+                        console.log('[UnitInfoPanel] 调用 onSkill3Click');
+                        unitInfo.onSkill3Click();
+                    }
+                });
+            }
+        }
+
         if (unitInfo.onSellClick && this.buttonNodes[8]) {
             const sellButton = this.buttonNodes[8];
             sellButton.active = true;

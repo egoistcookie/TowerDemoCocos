@@ -4,6 +4,7 @@ select * from game_sessions  order by created_at desc;
 select * from game_sessions where DATE(created_at) = CURDATE() 
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')
 order by created_at desc ;
+select * from game_sessions where operations_json like '%trig%'  order by created_at desc
 select * from game_sessions where DATE(created_at) = CURDATE() -1
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')
 order by created_at desc ;

@@ -28,6 +28,7 @@ interface PlayerData {
     passedLevels?: number[];  // 已通过的关卡列表（关卡号）
     stamina?: number;  // 体力值（0-50）
     lastStaminaRecoverTime?: number;  // 最后恢复体力的时间戳（毫秒）
+    eagleReinsCount?: number;  // 角鹰缰绳数量（转职道具）
 }
 
 @ccclass('PlayerDataManager')
@@ -41,7 +42,8 @@ export class PlayerDataManager {
         unitEnhancements: {},
         passedLevels: [],   // 首次进入游戏时无过关记录，只能选第一关
         stamina: 50,  // 默认满体力
-        lastStaminaRecoverTime: Date.now()  // 默认当前时间
+        lastStaminaRecoverTime: Date.now(),  // 默认当前时间
+        eagleReinsCount: 0  // 角鹰缰绳数量默认为 0
     };
     private isLoaded: boolean = false;
     private loadPromise: Promise<void> | null = null;
@@ -575,6 +577,44 @@ export class PlayerDataManager {
     public hasEnoughStamina(amount: number): boolean {
         this.updateStaminaRecovery();
         return (this.playerData.stamina || 50) >= amount;
+    }
+
+    /**
+     * 获取角鹰缰绳数量
+     */
+    public getEagleReinsCount(): number {
+        return this.playerData.eagleReinsCount || 0;
+    }
+
+    /**
+     * 设置角鹰缰绳数量
+     */
+    public setEagleReinsCount(count: number): void {
+        this.playerData.eagleReinsCount = Math.max(0, count);
+        this.saveData();
+    }
+
+    /**
+     * 增加角鹰缰绳数量
+     */
+    public addEagleReins(count: number): void {
+        this.playerData.eagleReinsCount = (this.playerData.eagleReinsCount || 0) + count;
+        this.saveData();
+    }
+
+    /**
+     * 消耗角鹰缰绳
+     * @param count 消耗的数量
+     * @returns 是否成功消耗
+     */
+    public consumeEagleReins(count: number): boolean {
+        const current = this.playerData.eagleReinsCount || 0;
+        if (current >= count) {
+            this.playerData.eagleReinsCount = current - count;
+            this.saveData();
+            return true;
+        }
+        return false;
     }
 
     /**

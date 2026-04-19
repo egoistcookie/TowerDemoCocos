@@ -1536,9 +1536,9 @@ export class Role extends Component {
             );
 
             // 调试日志：角鹰索敌
-            if (this.prefabName === 'Eagle') { // 角鹰索敌
-                console.log(`[Role-getEnemies] 角鹰 position=(${this.node.worldPosition.x.toFixed(0)},${this.node.worldPosition.y.toFixed(0)}), maxDistance=${maxDistance}, attackRange=${this.attackRange}, isFlying=${this.isFlying}, 找到${enemies.length}个敌人`);
-            }
+            // if (this.prefabName === 'Eagle') { // 角鹰索敌
+            //     console.log(`[Role-getEnemies] 角鹰 position=(${this.node.worldPosition.x.toFixed(0)},${this.node.worldPosition.y.toFixed(0)}), maxDistance=${maxDistance}, attackRange=${this.attackRange}, isFlying=${this.isFlying}, 找到${enemies.length}个敌人`);
+            // }
             // 地面近战单位过滤掉飞行单位（无法攻击到空中目标）
             // 攻击范围小于 100 的单位视为近战单位
             if (!this.isFlying && this.attackRange < 100) {
@@ -1654,17 +1654,58 @@ export class Role extends Component {
         return this.attackRange * 2;
     }
     
-    findTarget() {
+   
+
+    /**
+     * 获取优先攻击的目标类型（可被子类重写，用于狙击等技能）
+     * @returns 优先攻击的目标类型，默认 null 表示无偏好
+     */
+    protected getPriorityTargetType(): string | null {
+        return null;
+    }
+ findTarget() {
         let nearestEnemy: Node = null!;
         let minDistanceSq = Infinity; // 使用平方距离，避免开方运算
         const detectionRange = this.getDetectionRange(); // 使用可重写的方法获取索敌范围
-        
-        
-        // 使用公共函数获取敌人（已优化，使用UnitManager）
+
+        // 获取优先攻击的目标类型（用于狙击技能）
+        const priorityTargetType = this.getPriorityTargetType();
+
+        // 使用公共函数获取敌人（已优化，使用 UnitManager）
         const enemies = this.getEnemies(true, detectionRange);
-        
-        
-        // 如果没有找到敌人，可能是UnitManager还没初始化或敌人列表为空，尝试使用降级方案
+
+        const myPos = this.node.worldPosition;
+
+        // 如果有优先攻击的目标类型，先查找匹配的目标
+        let priorityEnemy: Node = null!;
+        let minPriorityDistanceSq = Infinity;
+
+        if (priorityTargetType) {
+            for (const enemy of enemies) {
+                if (!enemy || !enemy.isValid || !enemy.active) continue;
+
+                // 检查敌人类型是否匹配
+                const enemyType = this.getEnemyType(enemy);
+                if (enemyType === priorityTargetType) {
+                    const dx = enemy.worldPosition.x - myPos.x;
+                    const dy = enemy.worldPosition.y - myPos.y;
+                    const distanceSq = dx * dx + dy * dy;
+
+                    if (distanceSq < minPriorityDistanceSq) {
+                        minPriorityDistanceSq = distanceSq;
+                        priorityEnemy = enemy;
+                    }
+                }
+            }
+        }
+
+        // 如果找到优先目标，直接使用
+        if (priorityEnemy) {
+            this.currentTarget = priorityEnemy;
+            return;
+        }
+
+        // 如果没有找到敌人，可能是 UnitManager 还没初始化或敌人列表为空，尝试使用降级方案
         if (enemies.length === 0 && this.unitManager) {
             // 强制更新一次敌人列表
             this.unitManager.refreshUnitLists();
@@ -1672,15 +1713,14 @@ export class Role extends Component {
             const enemiesRetry = this.getEnemies(true, detectionRange);
             if (enemiesRetry.length > 0) {
                 // 使用重新获取的敌人列表
-                const myPos = this.node.worldPosition;
                 for (const enemy of enemiesRetry) {
                     if (!enemy || !enemy.isValid || !enemy.active) continue;
-                    
+
                     // 使用平方距离比较，避免开方运算
                     const dx = enemy.worldPosition.x - myPos.x;
                     const dy = enemy.worldPosition.y - myPos.y;
                     const distanceSq = dx * dx + dy * dy;
-                    
+
                     // 选择最近的敌人
                     if (distanceSq < minDistanceSq) {
                         minDistanceSq = distanceSq;
@@ -1691,18 +1731,17 @@ export class Role extends Component {
                 return;
             }
         }
-        
-        const myPos = this.node.worldPosition;
+
         for (const enemy of enemies) {
             if (!enemy || !enemy.isValid || !enemy.active) {
                 continue;
             }
-            
+
             // 使用平方距离比较，避免开方运算
             const dx = enemy.worldPosition.x - myPos.x;
             const dy = enemy.worldPosition.y - myPos.y;
             const distanceSq = dx * dx + dy * dy;
-            
+
             // 选择最近的敌人
             if (distanceSq < minDistanceSq) {
                 minDistanceSq = distanceSq;
@@ -1711,6 +1750,23 @@ export class Role extends Component {
         }
 
         this.currentTarget = nearestEnemy;
+    }
+
+    /**
+     * 获取敌人的类型（用于狙击技能）
+     */
+    private getEnemyType(enemy: Node): string | null {
+        // 尝试获取各种敌人组件
+        const scripts = enemy.getComponentsInChildren(Component);
+        const enemyTypes = ['Orc', 'OrcWarrior', 'OrcWarlord', 'TrollSpearman', 'Dragon', 'OrcShaman', 'MinotaurWarrior'];
+        for (const script of scripts) {
+            const className = script.constructor.name;
+            // 返回匹配的敌人类型
+            if (enemyTypes.indexOf(className) !== -1) {
+                return className;
+            }
+        }
+        return null;
     }
 
     moveTowardsTarget(deltaTime: number) {

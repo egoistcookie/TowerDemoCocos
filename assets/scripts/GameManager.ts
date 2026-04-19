@@ -291,6 +291,10 @@ export class GameManager extends Component {
     private reviveVideoButtonSpriteFrame: SpriteFrame | null = null;
     private reviveVideoButtonSpriteFrameLoading: Promise<SpriteFrame | null> | null = null;
 
+    // 退出游戏标志
+    private isExitingGame: boolean = false; // 是否正在退出游戏中
+    private hasClaimedEagleReinsReward: boolean = false; // 是否已领取第四关角鹰缰绳奖励
+
     // 木材 UI 标签（左上角），在场景中通过代码创建并缓存
     private woodLabel: Label | null = null;
 
@@ -3818,7 +3822,13 @@ export class GameManager extends Component {
                     const currentLevel = this.uiManager.getCurrentLevel();
                     if (this.playerDataManager && currentLevel) {
                         this.playerDataManager.passLevel(currentLevel);
-                        //console.info(`[GameManager.showGameResultPanel] 关卡 ${currentLevel} 已标记为通过`);
+                        console.log(`[GameManager] 关卡 ${currentLevel} 已标记为通过，检查缰绳奖励`);
+                        // 第四关通关奖励：角鹰缰绳（仅发放一次）
+                        if (currentLevel === 4 && !this.hasClaimedEagleReinsReward) {
+                            console.log('[GameManager] 第四关通关，发放角鹰缰绳奖励');
+                            this.hasClaimedEagleReinsReward = true;
+                            this.onEagleReinsDropped();
+                        }
                     }
                 }
                 
@@ -4408,7 +4418,10 @@ export class GameManager extends Component {
             this.showGameResultPanel(null);
             return; // 显示结算面板后，等待用户再次点击退出按钮
         }
-        
+
+        // 设置退出游戏标志，阻止异步回调执行
+        this.isExitingGame = true;
+
         // 如果结算面板已显示，则真正退出游戏
         // 结算经验值（虽然已经在showGameResultPanel中结算了，但这里确保保存）
         if (this.playerDataManager) {
@@ -6135,6 +6148,8 @@ export class GameManager extends Component {
                 unitScript?.prefabName === 'ElfSwordsman' ||
                 uniqueUnitType === '精灵剑士' ||
                 uniqueUnitType === '剑士';
+            // 角鹰射手首次出现时显示狙击选择框
+            const isFirstEagleArcher = unitType === 'EagleArcher' || unitScript?.unitType === 'EagleArcher' || unitScript?.prefabName === 'EagleArcher' || uniqueUnitType === '角鹰射手';
 
             if (isFirstArrower && shouldShowIntro) {
                 const baseCloseCallback = this.getIntroCloseCallback(uniqueUnitType);
@@ -6156,6 +6171,26 @@ export class GameManager extends Component {
                 });
             } else if (isFirstSwordsman) {
                 this.triggerFirstSwordsmanSharpenFlow(unitScript);
+            } else if (isFirstEagleArcher) {
+                // 角鹰射手首次出现时直接显示狙击选择框
+                // 注意：GamePopup.showSnipeTargetSelection 内部会自动暂停/恢复游戏
+                const icon = unitScript?.cardIcon || unitScript?.unitIcon || unitScript?.defaultSpriteFrame || null;
+                const unitName = unitScript?.unitName || '角鹰射手';
+                GamePopup.showSnipeTargetSelection({
+                    unitIcon: icon,
+                    unitName: unitName,
+                    unitDescription: '指挥官，你来选择优先攻击目标，我都听你的！',
+                    availableEnemyTypes: this.getAvailableEnemyTypesForSnipe(),
+                    currentPriorityType: null,
+                    allowMaskClose: false // 首次出现时不允许点击遮罩层关闭
+                }, (selectedType: string | null) => {
+                    console.log('[GameManager] 角鹰射手首次出现，设置优先攻击目标：', selectedType);
+                    // 将选择的目标类型设置到角鹰射手脚本上
+                    if (unitScript && typeof unitScript.setPriorityTargetType === 'function') {
+                        unitScript.setPriorityTargetType(selectedType);
+                    }
+                    // 注意：不需要在这里恢复游戏，closePopup 已经处理了
+                });
             } else if (shouldShowIntro) {
                 this.showUnitIntro(unitScript, this.getIntroCloseCallback(uniqueUnitType));
             }
@@ -6167,7 +6202,22 @@ export class GameManager extends Component {
     }
 
     /**
-     * 首个弓箭手：延迟触发“紧弓弦”剧情与小游戏
+     * 获取狙击技能可用的敌人类型列表
+     */
+    private getAvailableEnemyTypesForSnipe(): string[] {
+        return [
+            'Orc',        // 兽人
+            'OrcWarrior', // 兽人战士
+            'OrcWarlord', // 兽人督军
+            'TrollSpearman', // 巨魔投矛手
+            'Dragon',     // 飞龙
+            'OrcShaman',  // 兽人萨满
+            'MinotaurWarrior' // 牛头人领主
+        ];
+    }
+
+    /**
+     * 首个弓箭手：延迟触发”紧弓弦”剧情与小游戏
      */
     private triggerFirstArrowerBowstringFlow(arrowerScript: any) {
         if (this.hasTriggeredFirstArrowerBowstringMiniGame) {
@@ -6541,7 +6591,12 @@ export class GameManager extends Component {
         // 获取当前选中单位
         const selectedUnit = usm.getCurrentSelectedUnit ? usm.getCurrentSelectedUnit() : null;
         if (!selectedUnit || !selectedUnit.isValid) return;
-        const arrower = selectedUnit.getComponent('Arrower') as any;
+        // 优先获取 EagleArcher 组件（继承自 Arrower，但有特殊的狙击技能）
+        let arrower: any = selectedUnit.getComponent('EagleArcher');
+        // 如果不是 EagleArcher，再尝试获取 Arrower 组件
+        if (!arrower) {
+            arrower = selectedUnit.getComponent('Arrower');
+        }
         if (!arrower) return;
         if (arrower.buildArrowerUnitInfo) {
             unitInfoPanel.updateButtons(arrower.buildArrowerUnitInfo());
@@ -6734,6 +6789,7 @@ export class GameManager extends Component {
                 for (let i = 0; i < children.length; i++) {
                     const n = children[i];
                     if (!n || !n.isValid || !n.active) continue;
+                    // 先尝试获取 Arrower 组件（包括 EagleArcher，因为它是 Arrower 的子类）
                     const a = n.getComponent('Arrower') as any;
                     if (!a || !a.node || !a.node.isValid || !a.node.active) continue;
                     const id = a.node.uuid || `${a.node.name}_${i}`;
@@ -7852,6 +7908,13 @@ export class GameManager extends Component {
             for (let i = 0; i < children.length; i++) {
                 const node = children[i];
                 if (!node || !node.isValid || !node.active) continue;
+                // 当查找 Arrower 时，排除角鹰射手（EagleArcher 是 Arrower 的子类）
+                if (componentName === 'Arrower') {
+                    const eagleArcherScript = node.getComponent('EagleArcher') as any;
+                    if (eagleArcherScript) {
+                        continue; // 跳过角鹰射手
+                    }
+                }
                 const script = node.getComponent(componentName) as any;
                 if (script && script.node && script.node.isValid && script.node.active) {
                     return script;
@@ -7869,6 +7932,11 @@ export class GameManager extends Component {
             for (let i = 0; i < children.length; i++) {
                 const node = children[i];
                 if (!node || !node.isValid || !node.active) continue;
+                // 排除角鹰射手（EagleArcher 是 Arrower 的子类）
+                const eagleArcherScript = node.getComponent('EagleArcher') as any;
+                if (eagleArcherScript) {
+                    continue; // 跳过角鹰射手
+                }
                 const ar = node.getComponent('Arrower') as any;
                 if (!ar || !ar.node || !ar.node.isValid || !ar.node.active) continue;
                 const cur = Number(ar.currentHealth);
@@ -8141,10 +8209,11 @@ export class GameManager extends Component {
      */
     getActiveUnitTypes(): string[] {
         const unitTypes = new Set<string>();
-        
+
         // 单位容器路径映射
         const unitContainers: Record<string, string[]> = {
             'Arrower': ['Canvas/Towers'],
+            'EagleArcher': ['Canvas/Towers'], // 角鹰射手容器
             'Hunter': ['Canvas/Hunters'],
             'Mage': ['Canvas/Mages'],
             // 剑士容器命名在不同场景/版本中可能不同，这里做兼容
@@ -8181,6 +8250,13 @@ export class GameManager extends Component {
                                 script = child.getComponent(unitType) as any;
                             } else {
                                 // 其他单位，必须精确匹配组件类名
+                                // 特殊处理：查找 Arrower 时排除 EagleArcher（避免转职单位被误识别为普通弓箭手）
+                                if (unitType === 'Arrower') {
+                                    const eagleArcherScript = child.getComponent('EagleArcher') as any;
+                                    if (eagleArcherScript) {
+                                        continue; // 跳过角鹰射手
+                                    }
+                                }
                                 script = child.getComponent(unitType) as any;
                                 // 如果找不到精确匹配，检查是否有unitType属性匹配
                                 if (!script) {
@@ -8238,7 +8314,7 @@ export class GameManager extends Component {
                 fixedSpUnitTypes.push('Arrower');
             } else {
                 // 第五关起：固定 石墙 + 哨塔 + 场上存在的一个 role
-                const roleTypes = ['Arrower', 'Hunter', 'ElfSwordsman', 'Priest', 'Mage'];
+                const roleTypes = ['Arrower', 'EagleArcher', 'Hunter', 'ElfSwordsman', 'Priest', 'Mage'];
                 const activeRoleTypes = activeUnitTypes.filter((t) => roleTypes.indexOf(t) !== -1);
                 const randomRole = activeRoleTypes.length > 0
                     ? activeRoleTypes[Math.floor(Math.random() * activeRoleTypes.length)]
@@ -8415,7 +8491,7 @@ export class GameManager extends Component {
      */
     private getUREligibleUnitTypes(activeUnitTypes: string[]): string[] {
         // 角色类型（继承Role的单位）
-        const roleTypes = ['Arrower', 'Hunter', 'ElfSwordsman', 'Priest', 'Mage'];
+        const roleTypes = ['Arrower', 'EagleArcher', 'Hunter', 'ElfSwordsman', 'Priest', 'Mage'];
         // 防御塔类型
         const towerTypes = ['WatchTower', 'IceTower', 'ThunderTower'];
         
@@ -8516,6 +8592,7 @@ export class GameManager extends Component {
         if (rarity === 'SP') {
             const spMap: Record<string, string[]> = {
                 Arrower: ['multiArrow'],
+                EagleArcher: ['penetrateArrow'], // 角鹰射手专属 SP 卡
                 Hunter: ['bouncyBoomerang'],
                 ElfSwordsman: ['heavyArmor'],
                 Priest: ['widePrayer'],
@@ -8702,6 +8779,7 @@ export class GameManager extends Component {
         // 使用与 getActiveUnitTypes 相同的容器路径映射
         const unitContainers: Record<string, string[]> = {
             'Arrower': ['Canvas/Towers', 'Canvas/Arrows', 'Canvas/Units'],
+            'EagleArcher': ['Canvas/Towers', 'Canvas/Arrows', 'Canvas/Units'], // 角鹰射手容器
             'Hunter': ['Canvas/Hunters'],
             'Mage': ['Canvas/Mages'],
             // 剑士容器兼容（部分场景使用 Canvas/ElfSwordsmans）
@@ -8735,6 +8813,13 @@ export class GameManager extends Component {
                         script = child.getComponent(unitType) as any;
                     } else {
                         // 其他单位，必须精确匹配组件类名
+                        // 特殊处理：查找 Arrower 时排除 EagleArcher（避免转职单位被误识别）
+                        if (unitType === 'Arrower') {
+                            const eagleArcherScript = child.getComponent('EagleArcher') as any;
+                            if (eagleArcherScript) {
+                                continue; // 跳过角鹰射手
+                            }
+                        }
                         script = child.getComponent(unitType) as any;
                         // 如果找不到精确匹配，检查是否有unitType属性匹配
                         if (!script) {
@@ -9755,6 +9840,16 @@ export class GameManager extends Component {
                 if (err) {
                     console.warn('[GameManager] 加载弓箭手开心贴图失败', err);
                 }
+                // 检查是否正在退出游戏
+                if (this.isExitingGame) {
+                    console.log('[GameManager] 正在退出游戏，跳过显示龙肉提示');
+                    return;
+                }
+                // 检查 unitIntroPopup 是否仍然有效
+                if (!this.unitIntroPopup || !this.unitIntroPopup.node || !this.unitIntroPopup.node.isValid) {
+                    console.log('[GameManager] unitIntroPopup 已销毁，跳过显示');
+                    return;
+                }
                 this.unitIntroPopup.show({
                     unitIcon: spriteFrame,
                     unitName: '弓箭手',
@@ -9765,6 +9860,60 @@ export class GameManager extends Component {
                         this.pauseGame();
                         // 显示龙肉选择框
                         this.showDragonMeatSelectionPanel();
+                    }
+                });
+            });
+        }
+    }
+
+    /**
+     * 处理第四关通关获得角鹰缰绳
+     */
+    public onEagleReinsDropped() {
+        console.log('[GameManager.onEagleReinsDropped] 开始发放角鹰缰绳奖励');
+        // 增加角鹰缰绳数量
+        if (this.playerDataManager) {
+            this.playerDataManager.addEagleReins(1);
+            console.log(`[GameManager.onEagleReinsDropped] 缰绳数量 +1，当前数量：${this.playerDataManager.getEagleReinsCount()}`);
+        } else {
+            console.warn('[GameManager.onEagleReinsDropped] playerDataManager 为空');
+        }
+
+        // 获取第一个弓箭手
+        const arrower = this.getFirstArrower();
+        console.log(`[GameManager.onEagleReinsDropped] 第一个弓箭手：${arrower ? '存在' : '不存在'}`);
+        if (arrower) {
+            // 显示弓箭手提示："指挥官，我们获得了角鹰缰绳！"
+            this.autoCreateUnitIntroPopup();
+            if (!this.unitIntroPopup) {
+                console.warn('[GameManager.onEagleReinsDropped] unitIntroPopup 为空');
+                return;
+            }
+
+            // 加载角鹰缰绳贴图
+            resources.load('textures/icon/角鹰缰绳/spriteFrame', SpriteFrame, (err, spriteFrame) => {
+                if (err) {
+                    console.warn('[GameManager] 加载角鹰缰绳贴图失败', err);
+                }
+                // 检查是否正在退出游戏
+                if (this.isExitingGame) {
+                    console.log('[GameManager] 正在退出游戏，跳过显示角鹰缰绳提示');
+                    return;
+                }
+                // 检查 unitIntroPopup 是否仍然有效
+                if (!this.unitIntroPopup || !this.unitIntroPopup.node || !this.unitIntroPopup.node.isValid) {
+                    console.log('[GameManager] unitIntroPopup 已销毁，跳过显示');
+                    return;
+                }
+                this.unitIntroPopup.show({
+                    unitIcon: spriteFrame,
+                    unitName: '角鹰缰绳',
+                    unitDescription: '指挥官，我们获得了角鹰缰绳！',
+                    unitType: 'Item',
+                    onCloseCallback: () => {
+                        // 点击关闭后，暂停游戏并显示转职选择框
+                        this.pauseGame();
+                        this.showEagleReinTransferPanel();
                     }
                 });
             });
@@ -10003,10 +10152,10 @@ export class GameManager extends Component {
     }
 
     /**
-     * 供养巨熊：巨熊归顺
+     * 供养巨熊：驯服巨熊
      */
     private onFeedBear() {
-        // 显示巨熊归顺提示
+        // 显示驯服巨熊提示
         if (!this.unitIntroPopup) {
             this.autoCreateUnitIntroPopup();
         }
@@ -10018,18 +10167,18 @@ export class GameManager extends Component {
         this.unitIntroPopup.show({
             unitIcon: this.bearFeedResultSpriteFrame,
             unitName: '巨熊',
-            unitDescription: '巨熊归顺！',
+            unitDescription: '驯服巨熊！',
             iconHeightScale: 0.7, // 图片高度缩放为原来的一半，避免拉伸过高
             unitType: 'Bear',
             onCloseCallback: () => {
-                // 触发巨熊归顺逻辑（triggerBearTame 内部会调用 resumeGame）
+                // 触发驯服巨熊逻辑（triggerBearTame 内部会调用 resumeGame）
                 this.triggerBearTame();
             }
         });
     }
 
     /**
-     * 触发巨熊归顺逻辑
+     * 触发驯服巨熊逻辑
      */
     private triggerBearTame() {
         // 查找兽穴（尝试多个可能的路径）
@@ -10144,11 +10293,12 @@ export class GameManager extends Component {
         // 获取当前关卡
         const currentLevel = this.getCurrentLevelSafe();
 
-        // 第四关开始，强化角鹰
+        // 第四关开始，强化角鹰和角鹰射手
         if (currentLevel >= 4) {
             // 强化所有角鹰
             const unitManager = UnitManager.getInstance();
             if (unitManager) {
+                // 强化角鹰
                 const eagles = unitManager.getEagles();
                 for (const eagleNode of eagles) {
                     if (eagleNode && eagleNode.isValid) {
@@ -10168,6 +10318,32 @@ export class GameManager extends Component {
                             // 恢复满生命值
                             if (eagleScript.currentHealth !== undefined) {
                                 eagleScript.currentHealth = eagleScript.maxHealth;
+                            }
+                        }
+                    }
+                }
+
+                // 强化所有角鹰射手
+                // @ts-ignore - getEagleArchers 方法已添加到 UnitManager
+                const eagleArchers = unitManager.getEagleArchers();
+                for (const eagleArcherNode of eagleArchers) {
+                    if (eagleArcherNode && eagleArcherNode.isValid) {
+                        const eagleArcherScript = eagleArcherNode.getComponent('EagleArcher') as any;
+                        if (eagleArcherScript) {
+                            // 强化属性：提升生命值、攻击力、攻击速度
+                            const buffFactor = 1.5; // 提升 50%
+                            if (eagleArcherScript.maxHealth !== undefined) {
+                                eagleArcherScript.maxHealth = Math.floor(eagleArcherScript.maxHealth * buffFactor);
+                            }
+                            if (eagleArcherScript.attackDamage !== undefined) {
+                                eagleArcherScript.attackDamage = Math.floor(eagleArcherScript.attackDamage * buffFactor);
+                            }
+                            if (eagleArcherScript.attackInterval !== undefined) {
+                                eagleArcherScript.attackInterval = Math.max(0.3, eagleArcherScript.attackInterval / buffFactor); // 攻击间隔缩短，但不低于 0.3 秒
+                            }
+                            // 恢复满生命值
+                            if (eagleArcherScript.currentHealth !== undefined) {
+                                eagleArcherScript.currentHealth = eagleArcherScript.maxHealth;
                             }
                         }
                     }
@@ -10217,6 +10393,172 @@ export class GameManager extends Component {
             GamePopup.showMessage('第四关后即可解锁角鹰', true, 2);
             this.resumeGame();
         }
+    }
+
+    /**
+     * 显示角鹰缰绳转职选择框
+     */
+    private showEagleReinTransferPanel() {
+        const canvas = find('Canvas');
+        if (!canvas) return;
+
+        // 创建遮罩层
+        const maskLayer = new Node('EagleReinMask');
+        maskLayer.setParent(canvas);
+        const maskTransform = maskLayer.addComponent(UITransform);
+        const visibleSize = view.getVisibleSize();
+        maskTransform.setContentSize(visibleSize.width * 2, visibleSize.height * 2);
+        maskLayer.setPosition(0, 0, 0);
+        const maskGraphics = maskLayer.addComponent(Graphics);
+        maskGraphics.fillColor = new Color(0, 0, 0, 180);
+        maskGraphics.rect(-visibleSize.width, -visibleSize.height, visibleSize.width * 2, visibleSize.height * 2);
+        maskGraphics.fill();
+        maskLayer.on(Node.EventType.TOUCH_START, (event: EventTouch) => { event.propagationStopped = true; }, this, true);
+        maskLayer.on(Node.EventType.TOUCH_MOVE, (event: EventTouch) => { event.propagationStopped = true; }, this, true);
+        maskLayer.on(Node.EventType.TOUCH_END, (event: EventTouch) => { event.propagationStopped = true; }, this, true);
+        maskLayer.on(Node.EventType.TOUCH_CANCEL, (event: EventTouch) => { event.propagationStopped = true; }, this, true);
+        maskLayer.setSiblingIndex(Number.MAX_SAFE_INTEGER - 1);
+
+        const containerNode = new Node('EagleReinTransferPanel');
+        containerNode.setParent(canvas);
+
+        const uiTransform = containerNode.addComponent(UITransform);
+        uiTransform.setContentSize(500, 300);
+        containerNode.setPosition(0, 0, 0);
+
+        // 添加背景
+        const graphics = containerNode.addComponent(Graphics);
+        graphics.fillColor = new Color(0, 0, 0, 220);
+        graphics.roundRect(-250, -150, 500, 300, 15);
+        graphics.fill();
+        graphics.strokeColor = new Color(255, 215, 0, 255);
+        graphics.lineWidth = 4;
+        graphics.roundRect(-250, -150, 500, 300, 15);
+        graphics.stroke();
+
+        containerNode.setSiblingIndex(Number.MAX_SAFE_INTEGER);
+
+        // 标题
+        const titleNode = new Node('Title');
+        titleNode.setParent(containerNode);
+        titleNode.setPosition(0, 100, 0);
+        const titleTransform = titleNode.addComponent(UITransform);
+        titleTransform.setContentSize(440, 60);
+        const titleLabel = titleNode.addComponent(Label);
+        titleLabel.string = '角鹰缰绳';
+        titleLabel.fontSize = 26;
+        titleLabel.color = new Color(255, 255, 255, 255);
+        titleLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+
+        // 描述文字
+        const descNode = new Node('Description');
+        descNode.setParent(containerNode);
+        descNode.setPosition(0, 40, 0);
+        const descTransform = descNode.addComponent(UITransform);
+        descTransform.setContentSize(440, 80);
+        const descLabel = descNode.addComponent(Label);
+        descLabel.string = '可以将一名弓箭手转职为角鹰射手\n';
+        descLabel.fontSize = 18;
+        descLabel.color = new Color(255, 255, 255, 255);
+        descLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        descLabel.verticalAlign = Label.VerticalAlign.CENTER;
+
+        // 按钮：给弓箭手
+        const buttonWidth = 160;
+        const buttonHeight = 50;
+        const transferButton = this.createEagleReinButton(
+            containerNode,
+            'TransferButton',
+            '分配给弓箭手',
+            new Vec3(0, -60, 0),
+            buttonWidth,
+            buttonHeight,
+            () => {
+                maskLayer.destroy();
+                containerNode.destroy();
+                this.onTransferToEagleArcher();
+            }
+        );
+    }
+
+    /**
+     * 创建角鹰缰绳按钮
+     */
+    private createEagleReinButton(parent: Node, name: string, text: string, pos: Vec3, width: number, height: number, onClick: () => void): Node {
+        const buttonNode = new Node(name);
+        buttonNode.setParent(parent);
+        buttonNode.setPosition(pos);
+
+        const btnTransform = buttonNode.addComponent(UITransform);
+        btnTransform.setContentSize(width, height);
+
+        const graphics = buttonNode.addComponent(Graphics);
+        graphics.fillColor = new Color(60, 60, 60, 255);
+        graphics.roundRect(-width / 2, -height / 2, width, height, 8);
+        graphics.fill();
+        graphics.strokeColor = new Color(255, 255, 255, 255);
+        graphics.lineWidth = 4;
+        graphics.roundRect(-width / 2, -height / 2, width, height, 8);
+        graphics.stroke();
+
+        const labelNode = new Node('Label');
+        labelNode.setParent(buttonNode);
+        labelNode.setPosition(0, 0, 0);
+        const labelTransform = labelNode.addComponent(UITransform);
+        labelTransform.setContentSize(width - 10, height);
+        const label = labelNode.addComponent(Label);
+        label.string = text;
+        label.fontSize = 18;
+        label.color = new Color(255, 255, 255, 255);
+        label.horizontalAlign = Label.HorizontalAlign.CENTER;
+        label.verticalAlign = Label.VerticalAlign.CENTER;
+
+        buttonNode.on(Node.EventType.TOUCH_END, onClick, this);
+
+        return buttonNode;
+    }
+
+    /**
+     * 处理弓箭手转职为角鹰射手
+     */
+    private onTransferToEagleArcher() {
+        // 查找战争古树并触发生产一个角鹰射手（消耗一个缰绳）
+        const warAncientTrees = find('Canvas/WarAncientTrees');
+        if (warAncientTrees && warAncientTrees.children.length > 0) {
+            for (const tree of warAncientTrees.children) {
+                const treeScript = tree.getComponent('WarAncientTree') as any;
+                if (treeScript && treeScript.produceTower) {
+                    console.log('[GameManager.onTransferToEagleArcher] 触发战争古树生产角鹰射手');
+                    treeScript.produceTower();
+                    break;
+                }
+            }
+        } else {
+            console.warn('[GameManager.onTransferToEagleArcher] 未找到战争古树');
+        }
+
+        // 显示弓箭手 happy 提示框
+        this.autoCreateUnitIntroPopup();
+        if (!this.unitIntroPopup) {
+            this.resumeGame();
+            return;
+        }
+
+        // 加载弓箭手开心贴图
+        resources.load('textures/arrower/arrowerHappy/spriteFrame', SpriteFrame, (err, spriteFrame) => {
+            if (err) {
+                console.warn('[GameManager] 加载弓箭手开心贴图失败', err);
+            }
+            this.unitIntroPopup.show({
+                unitIcon: spriteFrame,
+                unitName: '转职成功！',
+                unitDescription: '一名弓箭手成功转职为角鹰射手！\n在训练弓箭手时，将自动转职为角鹰射手。',
+                unitType: 'Arrower',
+                onCloseCallback: () => {
+                    this.resumeGame();
+                }
+            });
+        });
     }
 }
 

@@ -1,4 +1,5 @@
-import { _decorator, Component, Node, Vec3, tween, UIOpacity, UITransform, Sprite, SpriteFrame, Label, Color, Graphics, Prefab, instantiate, find, view, EventTouch, BlockInputEvents } from 'cc';
+import { _decorator, Component, Node, Vec3, tween, UIOpacity, UITransform, Sprite, SpriteFrame, Label, Color, Graphics, Prefab, instantiate, find, view, EventTouch, BlockInputEvents, director } from 'cc';
+import { GameManager } from './GameManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('GamePopup')
@@ -534,5 +535,371 @@ export class GamePopup extends Component {
             popup.show(message, autoHide, delay);
         } else {
         }
+    }
+
+    /**
+     * 显示狙击技能目标选择提示框
+     * @param options 配置选项
+     * @param options.unitIcon 单位图标 SpriteFrame
+     * @param options.unitName 单位名称
+     * @param options.unitDescription 单位描述
+     * @param options.availableEnemyTypes 可选的敌人类型列表
+     * @param options.currentPriorityType 当前已选择的优先攻击目标类型
+     * @param options.allowMaskClose 是否允许点击遮罩层关闭（默认 true）
+     * @param callback 回调函数，参数为选择的类型（null 表示清除选择）
+     */
+    static showSnipeTargetSelection(
+        options: {
+            unitIcon: SpriteFrame | null,
+            unitName: string,
+            unitDescription: string,
+            availableEnemyTypes: string[],
+            currentPriorityType: string | null,
+            allowMaskClose?: boolean
+        },
+        callback: (selectedType: string | null) => void
+    ) {
+        const canvas = find('Canvas');
+        if (!canvas) {
+            console.error('[GamePopup] Canvas not found');
+            return;
+        }
+
+        // 获取屏幕尺寸
+        const canvasTransform = canvas.getComponent(UITransform);
+        const screenWidth = canvasTransform?.width || 750;
+        const screenHeight = canvasTransform?.height || 1334;
+
+        // 设置弹窗尺寸（与 UnitIntroPopup 一致）
+        const popupHeight = screenHeight / 3;
+        const popupWidth = screenWidth - 100;
+
+        // 创建弹窗主节点
+        const popupNode = new Node('SnipeTargetPopup');
+        popupNode.setParent(canvas);
+        popupNode.setPosition(0, 0, 0);
+
+        // 设置弹窗尺寸和锚点
+        const uiTransform = popupNode.addComponent(UITransform);
+        uiTransform.setContentSize(popupWidth, popupHeight);
+        uiTransform.setAnchorPoint(0.5, 0.5); // 锚点设为中心，这样位置 (0,0) 就在屏幕中心
+
+        // 添加 UIOpacity 组件（用于淡入动画）
+        const uiOpacity = popupNode.addComponent(UIOpacity);
+        uiOpacity.opacity = 0;
+
+        // 添加背景 Graphics
+        const bgGraphics = popupNode.addComponent(Graphics);
+        bgGraphics.fillColor = new Color(0, 0, 0, 200);
+        bgGraphics.roundRect(-popupWidth / 2, -popupHeight / 2, popupWidth, popupHeight, 15);
+        bgGraphics.fill();
+
+        // 添加高亮边框
+        bgGraphics.strokeColor = new Color(100, 200, 255, 255);
+        bgGraphics.lineWidth = 3;
+        bgGraphics.roundRect(-popupWidth / 2, -popupHeight / 2, popupWidth, popupHeight, 15);
+        bgGraphics.stroke();
+
+        console.log('[GamePopup] 创建狙击目标选择弹窗');
+
+        // 计算左右区域的宽度
+        const halfWidth = popupWidth / 2;
+
+        // === 左侧：单位图标区域 ===
+        const iconNode = new Node('UnitIcon');
+        iconNode.setParent(popupNode);
+        iconNode.setPosition(-halfWidth / 2, 0, 0);
+        const iconTransform = iconNode.addComponent(UITransform);
+        iconTransform.setContentSize(halfWidth * 0.8, popupHeight * 0.8);
+
+        if (options.unitIcon) {
+            const iconSprite = iconNode.addComponent(Sprite);
+            iconSprite.spriteFrame = options.unitIcon;
+            iconSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        }
+
+        // === 右侧：内容区域 ===
+        const contentNode = new Node('Content');
+        contentNode.setParent(popupNode);
+        contentNode.setPosition(halfWidth / 2, 0, 0);
+        const contentTransform = contentNode.addComponent(UITransform);
+        contentTransform.setContentSize(halfWidth, popupHeight);
+
+        // 标题
+        const titleNode = new Node('Title');
+        titleNode.setParent(contentNode);
+        titleNode.setPosition(0, popupHeight / 2 - 40, 0);
+        const titleLabel = titleNode.addComponent(Label);
+        titleLabel.string = '角鹰射手';
+        titleLabel.fontSize = 32;
+        titleLabel.color = new Color(255, 255, 255, 255);
+        titleLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+
+        // 描述文本
+        const descNode = new Node('Description');
+        descNode.setParent(contentNode);
+        descNode.setPosition(0, popupHeight * 0.25 - 30, 0);
+        const descLabel = descNode.addComponent(Label);
+        descLabel.string = options.unitDescription;
+        descLabel.fontSize = 24;
+        descLabel.color = new Color(255, 255, 255, 255);
+        descLabel.overflow = Label.Overflow.RESIZE_HEIGHT;
+        descLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
+        descLabel.verticalAlign = Label.VerticalAlign.TOP;
+        const descTransform = descNode.addComponent(UITransform);
+        descTransform.setContentSize(halfWidth * 0.9, popupHeight * 0.2);
+
+        console.log('[GamePopup] 描述文本内容:', options.unitDescription);
+        console.log('[GamePopup] 描述文本位置:', descNode.position);
+        console.log('[GamePopup] 弹窗尺寸:', popupWidth, popupHeight);
+
+        // === 敌人类型按钮容器（在描述文字下方） ===
+        // 按钮容器位于右侧内容区域，y 坐标为负值表示在内容区域下方
+        const buttonContainer = new Node('ButtonContainer');
+        buttonContainer.setParent(contentNode);
+        buttonContainer.setPosition(0, 0, 0);
+        const buttonContainerTransform = buttonContainer.addComponent(UITransform);
+        buttonContainerTransform.setContentSize(halfWidth, popupHeight * 0.35);
+
+        // 创建敌人类型按钮
+        const enemyTypes = options.availableEnemyTypes;
+        const unitNames = GamePopup.getUnitTypeNameMap();
+        const cols = 3; // 每排 3 个按钮
+        const rows = Math.ceil(enemyTypes.length / cols);
+        const buttonWidth = 80;
+        const buttonHeight = 36;
+        const horizontalSpacing = 15;
+        const verticalSpacing = 12;
+        const startX = -((cols * buttonWidth + (cols - 1) * horizontalSpacing) / 2) + buttonWidth / 2;
+        const startY = -((rows - 1) * (buttonHeight + verticalSpacing)) / 2;
+
+        console.log('[GamePopup] 按钮容器位置:', buttonContainer.position);
+        console.log('[GamePopup] 按钮数量:', enemyTypes.length, '行列数:', rows, 'x', cols);
+        console.log('[GamePopup] 按钮尺寸:', buttonWidth, 'x', buttonHeight);
+
+        enemyTypes.forEach((enemyType, index) => {
+            const col = index % cols;
+            const row = Math.floor(index / cols);
+            const x = startX + col * (buttonWidth + horizontalSpacing);
+            const y = startY - row * (buttonHeight + verticalSpacing);
+
+            const btnNode = new Node('Btn_' + enemyType);
+            btnNode.setParent(buttonContainer);
+            btnNode.setPosition(x, y, 0);
+            const btnTransform = btnNode.addComponent(UITransform);
+            btnTransform.setContentSize(buttonWidth, buttonHeight);
+
+            // 按钮背景（圆角矩形）
+            const btnBgGraphics = btnNode.addComponent(Graphics);
+            btnBgGraphics.fillColor = new Color(50, 50, 50, 200);
+            btnBgGraphics.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 8);
+            btnBgGraphics.fill();
+
+            // 按钮边框
+            btnBgGraphics.strokeColor = new Color(100, 200, 255, 255);
+            btnBgGraphics.lineWidth = 2;
+            btnBgGraphics.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 8);
+            btnBgGraphics.stroke();
+
+            // 选中的高亮
+            if (options.currentPriorityType === enemyType) {
+                const highlightGraphics = btnNode.addComponent(Graphics);
+                highlightGraphics.fillColor = new Color(255, 200, 0, 100);
+                highlightGraphics.roundRect(-buttonWidth / 2 + 2, -buttonHeight / 2 + 2, buttonWidth - 4, buttonHeight - 4, 6);
+                highlightGraphics.fill();
+                highlightGraphics.strokeColor = new Color(255, 200, 0, 255);
+                highlightGraphics.lineWidth = 2;
+                highlightGraphics.roundRect(-buttonWidth / 2 + 2, -buttonHeight / 2 + 2, buttonWidth - 4, buttonHeight - 4, 6);
+                highlightGraphics.stroke();
+            }
+
+            // 按钮文本（敌人类型名称）- 最后添加，确保在最上层
+            const btnLabelNode = new Node('Label');
+            btnLabelNode.setParent(btnNode);
+            btnLabelNode.setPosition(0, 0, 1); // z 轴设为 1，确保在背景之上
+            const btnLabel = btnLabelNode.addComponent(Label);
+            btnLabel.string = unitNames[enemyType] || enemyType;
+            btnLabel.fontSize = 16;
+            btnLabel.color = new Color(255, 255, 255, 255);
+            btnLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            btnLabel.verticalAlign = Label.VerticalAlign.CENTER;
+
+            // 确保文本节点在子节点列表中处于最顶层
+            btnLabelNode.setSiblingIndex(Number.MAX_SAFE_INTEGER);
+
+            console.log('[GamePopup] 创建按钮:', enemyType, '文本:', unitNames[enemyType], '位置:', x, y);
+
+            // 触摸按下效果
+            btnNode.on(Node.EventType.TOUCH_START, () => {
+                const btnGraphics = btnNode.getComponent(Graphics);
+                if (btnGraphics) {
+                    btnGraphics.fillColor = new Color(80, 80, 80, 200);
+                    btnGraphics.clear();
+                    btnGraphics.fillColor = new Color(80, 80, 80, 200);
+                    btnGraphics.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 8);
+                    btnGraphics.fill();
+                    btnGraphics.strokeColor = new Color(150, 220, 255, 255);
+                    btnGraphics.lineWidth = 2;
+                    btnGraphics.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 8);
+                    btnGraphics.stroke();
+                }
+            });
+        });
+
+        // 清除选择按钮（与最后一排按钮保持 30 像素间隔）
+        const clearBtnNode = new Node('ClearBtn');
+        clearBtnNode.setParent(contentNode);
+        // 计算最后一排按钮的底部位置，然后向下 30 像素
+        const lastRowY = startY - (rows - 1) * (buttonHeight + verticalSpacing);
+        const clearBtnY = lastRowY - buttonHeight / 2 - 30;
+        clearBtnNode.setPosition(0, clearBtnY, 0);
+        const clearBtnTransform = clearBtnNode.addComponent(UITransform);
+        clearBtnTransform.setContentSize(160, 40);
+
+        const clearBtnGraphics = clearBtnNode.addComponent(Graphics);
+        clearBtnGraphics.fillColor = new Color(80, 80, 80, 200);
+        clearBtnGraphics.roundRect(-80, -20, 160, 40, 8);
+        clearBtnGraphics.fill();
+        clearBtnGraphics.strokeColor = new Color(150, 150, 150, 255);
+        clearBtnGraphics.lineWidth = 2;
+        clearBtnGraphics.roundRect(-80, -20, 160, 40, 8);
+        clearBtnGraphics.stroke();
+
+        const clearBtnLabelNode = new Node('Label');
+        clearBtnLabelNode.setParent(clearBtnNode);
+        clearBtnLabelNode.setPosition(0, 0, 1);
+        const clearBtnLabel = clearBtnLabelNode.addComponent(Label);
+        clearBtnLabel.string = '清除优先目标';
+        clearBtnLabel.fontSize = 18;
+        clearBtnLabel.color = new Color(200, 200, 200, 255);
+        clearBtnLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        clearBtnLabel.verticalAlign = Label.VerticalAlign.CENTER;
+
+        // 确保文本节点在子节点列表中处于最顶层
+        clearBtnLabelNode.setSiblingIndex(Number.MAX_SAFE_INTEGER);
+
+        // 创建遮罩层
+        const maskLayer = new Node('SnipePopupMask');
+        maskLayer.setParent(canvas);
+        const maskTransform = maskLayer.addComponent(UITransform);
+        const visibleSize = view.getVisibleSize();
+        maskTransform.setContentSize(visibleSize.width, visibleSize.height);
+        maskLayer.setPosition(0, 0, 0);
+
+        const maskGraphics = maskLayer.addComponent(Graphics);
+        maskGraphics.fillColor = new Color(0, 0, 0, 180);
+        maskGraphics.rect(-visibleSize.width / 2, -visibleSize.height / 2, visibleSize.width, visibleSize.height);
+        maskGraphics.fill();
+
+        // 注意：不添加 BlockInputEvents 组件，因为它可能会影响渲染
+        // 游戏已经暂停，输入事件本来就不会被处理
+
+        // 设置层级：遮罩层在下，弹窗在上
+        maskLayer.setSiblingIndex(Number.MAX_SAFE_INTEGER - 1);
+        popupNode.setSiblingIndex(Number.MAX_SAFE_INTEGER);
+
+        console.log('[GamePopup] 遮罩层尺寸:', visibleSize.width, 'x', visibleSize.height);
+
+        // 激活节点
+        maskLayer.active = true;
+        popupNode.active = true;
+
+        console.log('[GamePopup] 弹窗位置:', popupNode.position);
+        console.log('[GamePopup] 弹窗尺寸:', uiTransform.contentSize);
+        console.log('[GamePopup] 弹窗锚点:', uiTransform.anchorPoint);
+        console.log('[GamePopup] 弹窗父节点:', popupNode.parent?.name);
+        console.log('[GamePopup] 弹窗 siblingIndex:', popupNode.getSiblingIndex());
+        console.log('[GamePopup] 遮罩层 siblingIndex:', maskLayer.getSiblingIndex());
+
+        // 暂停游戏（在显示弹窗之前立即暂停，确保输入被阻挡）
+        // GameManager 在 Canvas 下，所以需要先获取 Canvas，再获取其子节点 GameManager
+        const gameManagerNode = canvas.getChildByName('GameManager');
+        const gameManager = gameManagerNode?.getComponent(GameManager);
+        let gamePausedByPopup = false;
+        if (gameManager) {
+            gameManager.pauseGame();
+            gamePausedByPopup = true;
+            console.log('[GamePopup] 游戏已暂停');
+        } else {
+            // 尝试通过 director 获取
+            console.log('[GamePopup] 未找到 GameManager，尝试直接暂停游戏时间');
+            director.getScheduler().setTimeScale(0);
+            gamePausedByPopup = true;
+        }
+
+        // 注意：不能使用 tween 动画，因为游戏已暂停（timeScale=0），动画不会播放
+        // 直接设置不透明度为 255
+        uiOpacity.opacity = 255;
+
+        console.log('[GamePopup] 弹窗创建完成，opacity=', uiOpacity.opacity);
+        console.log('[GamePopup] 弹窗是否激活:', popupNode.active);
+        console.log('[GamePopup] 遮罩层是否激活:', maskLayer.active);
+
+        // 定义关闭函数
+        const closePopup = () => {
+            console.log('[GamePopup] closePopup 被调用');
+            // 恢复游戏
+            if (gamePausedByPopup) {
+                if (gameManager) {
+                    gameManager.resumeGame();
+                    console.log('[GamePopup] 游戏已恢复 (GameManager)');
+                } else {
+                    director.getScheduler().setTimeScale(1);
+                    console.log('[GamePopup] 游戏已恢复 (director)');
+                }
+                gamePausedByPopup = false;
+            }
+            // 先销毁遮罩层，再销毁弹窗
+            maskLayer.destroy();
+            popupNode.destroy();
+            console.log('[GamePopup] 遮罩层和弹窗已销毁');
+        };
+
+        // 绑定按钮点击事件
+        buttonContainer.children.forEach((btnNode) => {
+            btnNode.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
+                event.propagationStopped = true; // 阻止事件传播
+                const enemyType = btnNode.name.replace('Btn_', '');
+                console.log(`[GamePopup] 点击狙击目标按钮：${enemyType}, 当前选择：${options.currentPriorityType || '无'}`);
+                callback(enemyType);
+                closePopup();
+            });
+        });
+
+        // 绑定清除选择按钮事件
+        const clearBtnNode2 = contentNode.getChildByName('ClearBtn');
+        if (clearBtnNode2) {
+            clearBtnNode2.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
+                event.propagationStopped = true; // 阻止事件传播
+                console.log(`[GamePopup] 点击清除狙击目标按钮`);
+                callback(null);
+                closePopup();
+            });
+        }
+
+        // 绑定遮罩点击事件（仅在 allowMaskClose 为 true 时允许关闭）
+        const allowMaskClose = options.allowMaskClose !== false; // 默认为 true
+        if (allowMaskClose) {
+            maskLayer.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
+                event.propagationStopped = true; // 阻止事件传播
+                console.log(`[GamePopup] 点击遮罩层关闭`);
+                callback(null);
+                closePopup();
+            });
+        } else {
+            console.log('[GamePopup] 禁用点击遮罩层关闭');
+        }
+    }
+
+    private static getUnitTypeNameMap(): Record<string, string> {
+        return {
+            'Orc': '兽人',
+            'OrcWarrior': '兽人战士',
+            'OrcWarlord': '兽人督军',
+            'TrollSpearman': '巨魔投矛手',
+            'Dragon': '飞龙',
+            'OrcShaman': '兽人萨满',
+            'MinotaurWarrior': '牛头人领主'
+        };
     }
 }

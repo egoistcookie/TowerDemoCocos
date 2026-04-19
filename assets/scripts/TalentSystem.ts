@@ -604,6 +604,7 @@ export class TalentSystem extends Component {
         // 角鹰需要第 3 关通过后才能显示
         if (hasPassedLevel4) {
             unitTypes.push({ id: 'Eagle', name: '角鹰', description: '空中飞行单位，拥有强大的攻击能力', icon: 'Eagle', unitType: 'CHARACTER' });
+            unitTypes.push({ id: 'EagleArcher', name: '角鹰射手', description: '由弓箭手转职而成的飞行单位，拥有更强的攻击力', icon: 'EagleArcher', unitType: 'CHARACTER' });
         }
         
         let cardWidth = 200;
@@ -1110,8 +1111,8 @@ export class TalentSystem extends Component {
         
         // 获取公共天赋增幅值（不需要实例化，只需要计算值）
 
-        // 角鹰和巨熊只显示生命值和攻击力
-        const isEagleOrBear = (unit.id === 'Eagle' || unit.id === 'Bear');
+        // 角鹰、角鹰射手和巨熊只显示生命值和攻击力
+        const isEagleBearOrEagleArcher = (unit.id === 'Eagle' || unit.id === 'EagleArcher' || unit.id === 'Bear');
 
         // 属性映射：显示名称 -> 属性键名（角色单位不显示护甲）
         const statMapping: Record<string, { key: string, format?: (val: number) => string }> = {
@@ -1120,7 +1121,7 @@ export class TalentSystem extends Component {
         };
 
         // 其他单位显示更多属性
-        if (!isEagleOrBear) {
+        if (!isEagleBearOrEagleArcher) {
             statMapping['攻击速度'] = { key: 'attackInterval', format: (v) => v.toFixed(2) + '秒' };
             statMapping['移动速度'] = { key: 'moveSpeed', format: (v) => Math.floor(v).toString() };
         }
@@ -1235,8 +1236,8 @@ export class TalentSystem extends Component {
             }
         } else {
             // 角色单位：根据单位类型确定可强化属性
-            // 角鹰和巨熊：只能强化生命值和攻击力
-            if (unit.id === 'Eagle' || unit.id === 'Bear') {
+            // 角鹰、角鹰射手和巨熊：只能强化生命值和攻击力
+            if (unit.id === 'Eagle' || unit.id === 'EagleArcher' || unit.id === 'Bear') {
                 enhancementOptions = [
                     { key: 'attackDamage', name: '攻击力', value: 1, unit: '' },
                     { key: 'maxHealth', name: '生命值', value: 2, unit: '' }
@@ -1391,6 +1392,7 @@ export class TalentSystem extends Component {
         // 角鹰需要第 4 关通过后才能显示
         if (hasPassedLevel4) {
             unitTypes.push({ id: 'Eagle', name: '角鹰', description: '空中飞行单位，拥有强大的攻击能力', icon: 'Eagle', unitType: 'CHARACTER' });
+            unitTypes.push({ id: 'EagleArcher', name: '角鹰射手', description: '由弓箭手转职而成的飞行单位，拥有更强的攻击力', icon: 'EagleArcher', unitType: 'CHARACTER' });
         }
         const unit = unitTypes.find(u => u.id === unitId);
         if (unit) {
@@ -1443,6 +1445,8 @@ export class TalentSystem extends Component {
                 'Bear': 'Bear',
                 'eagle': 'Eagle',
                 'Eagle': 'Eagle',
+                'eagle_archer': 'EagleArcher',
+                'EagleArcher': 'EagleArcher',
             };
             
             const normalizedUnitId = unitIdMap[unitId] || unitId;
@@ -1613,6 +1617,7 @@ export class TalentSystem extends Component {
             'Priest': 'Priest',
             'Bear': 'Bear',
             'Eagle': 'Eagle',
+            'EagleArcher': 'EagleArcher',
             // 建筑 / 防御单位
             'WarAncientTree': 'WarAncientTree',
             'HunterHall': 'HunterHall',

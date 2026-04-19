@@ -7,6 +7,7 @@ import { Build } from './Build';
 import { TalentEffectManager } from '../TalentEffectManager';
 import { UnitPool } from '../UnitPool';
 import { UnitType } from '../UnitType';
+import { PlayerDataManager } from '../PlayerDataManager';
 const { ccclass, property } = _decorator;
 
 // 重新导出 UnitType 以保持向后兼容
@@ -37,6 +38,9 @@ export class WarAncientTree extends Build {
     // 生产相关属性
     @property(Prefab)
     towerPrefab: Prefab = null!; // 生产的 Arrower 预制体
+    
+    @property(Prefab)
+    eagleArcherPrefab: Prefab = null!; // 生产的 EagleArcher 预制体（转职单位）
 
     @property
     maxTowerCount: number = 4; // 最多生产4个Arrower
@@ -60,6 +64,7 @@ export class WarAncientTree extends Build {
     private productionProgressGraphics: Graphics = null!; // 生产进度条Graphics组件
     private producedTowers: Node[] = []; // 已生产的Arrower列表
     private totalProducedCount: number = 0; // 累计生产的单位数量（用于计算金币消耗）
+    private producedEagleArcherCount: number = 0; // 测试模式下已生产的角鹰射手数量（用于限制测试模式生产数量）
     private productionTimer: number = 0; // 生产计时器
     private productionProgress: number = 0; // 生产进度（0-1）
     private isProducing: boolean = false; // 是否正在生产
@@ -493,11 +498,42 @@ export class WarAncientTree extends Build {
         }
 
         // 检查人口上限
-        if (!this.gameManager) {
+        if (!this.gameManager) { 
             this.findGameManager();
         }
-        
+
         if (this.gameManager && !this.gameManager.canAddPopulation(1)) {
+            return;
+        }
+
+        // 检查玩家是否有角鹰缰绳，如果有则转职为角鹰射手
+        const playerDataManager = PlayerDataManager.getInstance();
+        let eagleReinsCount = playerDataManager ? playerDataManager.getEagleReinsCount() : 0;
+
+        // 测试模式：默认给 1 个角鹰射手配额（不消耗真实缰绳）
+        const TEST_MODE_EAGLE_ARCHER = false; // 设置为 false 关闭测试模式
+        const testEagleArcherQuota = 1; // 测试模式下固定生产 1 个角鹰射手
+
+        // 检查是否已经生产过测试角鹰射手
+        let allowTestEagleArcher = false;
+        if (TEST_MODE_EAGLE_ARCHER && this.producedEagleArcherCount < testEagleArcherQuota) {
+            allowTestEagleArcher = true;
+            console.log(`[WarAncientTree] 测试模式：第 ${this.producedEagleArcherCount + 1} 个单位将生产角鹰射手`);
+        }
+
+        const shouldTransferToEagleArcher = eagleReinsCount > 0 || allowTestEagleArcher;
+
+        if (shouldTransferToEagleArcher) {
+            console.log('[WarAncientTree.produceTower] 检测到缰绳（或测试模式），准备生产角鹰射手');
+            // 消耗一个缰绳（测试模式下不消耗）
+            if (playerDataManager && eagleReinsCount > 0) {
+                const consumed = playerDataManager.consumeEagleReins(1);
+                console.log(`[WarAncientTree.produceTower] 消耗缰绳结果：${consumed}`);
+            } else if (allowTestEagleArcher) {
+                console.log('[WarAncientTree.produceTower] 测试模式：免费生产角鹰射手');
+            }
+            // 生产角鹰射手而不是普通弓箭手
+            this.produceEagleArcher();
             return;
         }
 
@@ -684,6 +720,133 @@ export class WarAncientTree extends Build {
         }
     }
 
+    /**
+     * 生产角鹰射手（使用角鹰缰绳转职）
+     */
+    private produceEagleArcher() {
+        // 优先使用配置的角鹰射手预制体，如果没有则使用弓箭手预制体动态添加组件
+        let eagleArcherNode: Node | null = null;
+
+        if (this.eagleArcherPrefab) {
+            // 使用配置的角鹰射手预制体
+            eagleArcherNode = instantiate(this.eagleArcherPrefab);
+            console.log('[WarAncientTree] 使用 eagleArcherPrefab 生产角鹰射手');
+        } else {
+            // 降级方案：实例化弓箭手预制体并动态添加 EagleArcher 组件
+            eagleArcherNode = instantiate(this.towerPrefab);
+            console.warn('[WarAncientTree] 未配置 eagleArcherPrefab，使用降级方案（弓箭手 + EagleArcher 组件）');
+        }
+
+        if (!eagleArcherNode) {
+            console.error('[WarAncientTree] 实例化角鹰射手预制体失败');
+            return;
+        }
+
+        // 重要：先禁用节点，避免在 setParent 时触发 onEnable
+        eagleArcherNode.active = false;
+
+        eagleArcherNode.setParent(this.towerContainer);
+
+        // 计算生成位置
+        const treePos = this.node.worldPosition.clone();
+        let spawnPos = new Vec3(treePos.x, treePos.y - this.spawnOffset, treePos.z);
+        spawnPos = this.findAvailableSpawnPosition(spawnPos);
+
+        // 设置位置
+        eagleArcherNode.setWorldPosition(spawnPos);
+
+        // 如果没有使用预制体，需要动态添加 EagleArcher 组件
+        if (!this.eagleArcherPrefab) {
+            // 移除 Arrower 组件（如果有）
+            const arrowerScript = eagleArcherNode.getComponent('Arrower') as any;
+            if (arrowerScript) {
+                try {
+                    arrowerScript.destroy();
+                } catch (e) {
+                    console.warn('[WarAncientTree] 移除 Arrower 组件失败', e);
+                }
+            }
+            // 添加 EagleArcher 组件
+            try {
+                const eagleArcherScript = eagleArcherNode.addComponent('EagleArcher') as any;
+                if (eagleArcherScript) {
+                    this.setupEagleArcherScript(eagleArcherScript);
+                }
+            } catch (e) {
+                console.error('[WarAncientTree] 添加 EagleArcher 组件失败', e);
+                eagleArcherNode.destroy();
+                return;
+            }
+        }
+
+        // 获取 EagleArcher 组件
+        let eagleArcherScript = eagleArcherNode.getComponent('EagleArcher') as any;
+        if (!eagleArcherScript) {
+            // 尝试从预制体获取（可能已经挂载）
+            eagleArcherScript = eagleArcherNode.getComponent('EagleArcher') as any;
+        }
+
+        if (eagleArcherScript) {
+            this.setupEagleArcherScript(eagleArcherScript);
+        }
+
+        // 增加人口
+        if (this.gameManager) {
+            if (!this.gameManager.addPopulation(1)) {
+                eagleArcherNode.destroy();
+                return;
+            }
+        }
+
+        // 激活节点
+        eagleArcherNode.active = true;
+
+        // 添加到已生产列表
+        this.producedTowers.push(eagleArcherNode);
+        this.totalProducedCount++;
+        this.producedEagleArcherCount++;
+
+        // 安排自动上移
+        if (eagleArcherScript && typeof eagleArcherScript.setupAutoMoveToCombatPosition === 'function') {
+            eagleArcherScript.setupAutoMoveToCombatPosition(spawnPos);
+        }
+
+        // 设置初始移动方向（向右）
+        if (eagleArcherScript && typeof eagleArcherScript.setInitialMovementDirection === 'function') {
+            eagleArcherScript.setInitialMovementDirection(1); // 1 表示向右
+        }
+
+        // 检查单位是否首次出现
+        if (this.gameManager) {
+            this.gameManager.checkUnitFirstAppearance('EagleArcher', eagleArcherScript);
+        }
+
+        console.log(`[WarAncientTree] 生产角鹰射手，当前已生产角鹰射手数量：${this.producedEagleArcherCount}`);
+    }
+
+    /**
+     * 设置角鹰射手脚本属性
+     */
+    private setupEagleArcherScript(script: any) {
+        // 设置 prefabName（用于对象池回收）
+        if (script.prefabName === undefined || script.prefabName === '') {
+            script.prefabName = 'EagleArcher';
+        }
+
+        // 默认开启穿透箭技能
+        if (typeof script.isPenetrateArrowEnabled === 'boolean') {
+            script.isPenetrateArrowEnabled = true;
+            if (typeof script.hasSkill === 'boolean') {
+                script.hasSkill = true;
+            }
+        }
+
+        // 设置飞行单位标志
+        if (typeof script.isFlying === 'boolean') {
+            script.isFlying = true;
+        }
+    }
+
     findAvailableSpawnPosition(initialPos: Vec3): Vec3 {
         const checkRadius = 30; // Tower的碰撞半径
         const offsetStep = 50; // 每次平移的距离（增大步长，确保不会重叠）
@@ -748,8 +911,6 @@ export class WarAncientTree extends Build {
     }
 
     hasUnitAtPosition(position: Vec3, radius: number): boolean {
-        const minDistance = radius * 2; // 最小距离（两个半径）
-
         // 检查与水晶的碰撞
         const crystal = find('Crystal');
         if (crystal && crystal.isValid && crystal.active) {
@@ -757,8 +918,8 @@ export class WarAncientTree extends Build {
             const crdx = position.x - crystalPos.x, crdy = position.y - crystalPos.y, crdz = position.z - crystalPos.z;
             const crystalRadius = 50;
             // 使用安全距离，确保不会重叠
-            const minDistance = (radius + crystalRadius) * 1.1;
-            if (crdx * crdx + crdy * crdy + crdz * crdz < minDistance * minDistance) {
+            const minDistanceCrystal = (radius + crystalRadius) * 1.1;
+            if (crdx * crdx + crdy * crdy + crdz * crdz < minDistanceCrystal * minDistanceCrystal) {
                 return true;
             }
         }
@@ -889,10 +1050,16 @@ export class WarAncientTree extends Build {
         // 清理已死亡的Tower
         const beforeCount = this.producedTowers.length;
         let removedCount = 0;
+        let removedEagleArcherCount = 0;
         
         this.producedTowers = this.producedTowers.filter(tower => {
             // 检查节点是否有效
             if (!tower || !tower.isValid || !tower.active) {
+                // 检查是否是角鹰射手
+                const eagleArcherScript = tower.getComponent('EagleArcher') as any;
+                if (eagleArcherScript) {
+                    removedEagleArcherCount++;
+                }
                 removedCount++;
                 return false;
             }
@@ -902,6 +1069,11 @@ export class WarAncientTree extends Build {
             if (towerScript && towerScript.isAlive) {
                 const isAlive = towerScript.isAlive();
                 if (!isAlive) {
+                    // 检查是否是角鹰射手
+                    const eagleArcherScript = tower.getComponent('EagleArcher') as any;
+                    if (eagleArcherScript) {
+                        removedEagleArcherCount++;
+                    }
                     removedCount++;
                 }
                 return isAlive;
@@ -911,6 +1083,12 @@ export class WarAncientTree extends Build {
             return true;
         });
         
+        
+        // 更新角鹰射手计数
+        if (removedEagleArcherCount > 0) {
+            this.producedEagleArcherCount = Math.max(0, this.producedEagleArcherCount - removedEagleArcherCount);
+            console.log(`[WarAncientTree] 清理死亡单位，移除${removedEagleArcherCount}个角鹰射手，剩余角鹰射手计数：${this.producedEagleArcherCount}`);
+        }
         const afterCount = this.producedTowers.length;
         if (beforeCount !== afterCount) {
             // 更新单位信息面板（如果被选中）
