@@ -583,6 +583,32 @@
       "经验奖励": "20 点"
     }
   },
+  "Bear": {
+    "baseStats": {
+      "maxHealth": 1000,
+      "attackRange": 60,
+      "attackDamage": 15,
+      "attackInterval": 1.5,
+      "moveSpeed": 80,
+      "collisionRadius": 15,
+      "tenacity": 0.2,
+      "buildCost": 0,
+      "level": 1
+    },
+    "displayInfo": {
+      "name": "巨熊",
+      "description": "强大的中立单位，被驯化后成为可靠的战友。"
+    },
+    "displayStats": {
+      "生命值": 1000,
+      "攻击力": 15,
+      "攻击范围": "60 像素",
+      "攻击间隔": "1.5 秒",
+      "移动速度": "80 像素/秒",
+      "韧性": "0.2",
+      "人口占用": "0"
+    }
+  },
   "EagleNest": {
     "baseStats": {
       "maxHealth": 80,

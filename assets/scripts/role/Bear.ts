@@ -103,6 +103,8 @@ export class Bear extends Role {
     }
 
     onEnable() {
+        super.onEnable(); // 调用父类 onEnable，应用天赋增幅和 Buff 效果
+
         this.currentHealth = this.maxHealth;
         // 注意：不重置 bearState，因为归顺状态需要保留
         // this.bearState = BearState.Neutral;

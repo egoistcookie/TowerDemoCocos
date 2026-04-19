@@ -1054,8 +1054,9 @@ app.get('/api/analytics/player/:playerId/profile', async (req, res) => {
  * 3. 牧师等级最高的玩家 → 天使 (icon/称号 - 天使.png)
  * 4. 女猎手等级最高的玩家 → 龙卷 (icon/称号 - 龙卷.png)
  * 5. 法师等级最高的玩家 → 法神 (icon/称号 - 陨石.png)
- * 6. 杀敌数排名前五的玩家 → 兽人杀手 (icon/称号 - 杀手.png)
- * 7. 通关数排名前五的玩家 → 精灵之光 (icon/称号 - 希望.png)
+ * 6. 角鹰等级最高的玩家 → 鹰海战术 (icon/称号 - 鹰海战术.png)
+ * 7. 杀敌数排名前五的玩家 → 兽人杀手 (icon/称号 - 杀手.png)
+ * 8. 通关数排名前五的玩家 → 精灵之光 (icon/称号 - 希望.png)
  */
 app.get('/api/analytics/player/:playerId/titles', async (req, res) => {
     try {
@@ -1071,7 +1072,8 @@ app.get('/api/analytics/player/:playerId/titles', async (req, res) => {
             { roleId: 'Arrower', titleName: '神射手', iconPath: '称号 - 弓箭.png' },
             { roleId: 'Priest', titleName: '天使', iconPath: '称号 - 天使.png' },
             { roleId: 'Hunter', titleName: '龙卷', iconPath: '称号 - 龙卷.png' },
-            { roleId: 'Mage', titleName: '法神', iconPath: '称号 - 陨石.png' }
+            { roleId: 'Mage', titleName: '法神', iconPath: '称号 - 陨石.png' },
+            { roleId: 'Eagle', titleName: '鹰海战术', iconPath: '称号 - 鹰海战术.png' }
         ];
 
         for (const role of roleQueries) {
@@ -1093,7 +1095,7 @@ app.get('/api/analytics/player/:playerId/titles', async (req, res) => {
                 titles.push({
                     titleName: role.titleName,
                     iconPath: role.iconPath,
-                    description: `${role.roleId === 'ElfSwordsman' ? '剑士' : role.roleId === 'Arrower' ? '弓箭手' : role.roleId === 'Priest' ? '牧师' : role.roleId === 'Hunter' ? '女猎手' : '法师'}等级最高`
+                    description: `${role.roleId === 'ElfSwordsman' ? '剑士' : role.roleId === 'Arrower' ? '弓箭手' : role.roleId === 'Priest' ? '牧师' : role.roleId === 'Hunter' ? '女猎手' : role.roleId === 'Mage' ? '法师' : '角鹰'}等级最高`
                 });
             }
         }

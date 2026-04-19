@@ -564,9 +564,23 @@ export class TalentSystem extends Component {
         // 更新天赋点和经验值显示
         this.updateTalentPointsDisplay();
     }
-    
+
+    /**
+     * 检查玩家是否已通过第 3 关
+     */
+    private checkHasPassedLevel3(): boolean {
+        if (!this.playerDataManager) {
+            this.playerDataManager = PlayerDataManager.getInstance();
+        }
+        const passedLevels = this.playerDataManager.getPassedLevels();
+        return passedLevels.indexOf(3) !== -1;
+    }
+
     createUnitCardsGrid() {
         this.detachScrollListeners();
+
+        // 检查是否已通过第 3 关（用于显示角鹰）
+        const hasPassedLevel4 = this.checkHasPassedLevel3();
 
         // 友方单位列表
         const unitTypes = [
@@ -583,7 +597,14 @@ export class TalentSystem extends Component {
             { id: 'Mage', name: '法师', description: '远程法术单位，施展魔法攻击敌人', icon: 'Mage', unitType: 'CHARACTER' },
             { id: 'ElfSwordsman', name: '精灵剑士', description: '近战攻击单位，使用剑进行近距离战斗', icon: 'ElfSwordsman', unitType: 'CHARACTER' },
             { id: 'Priest', name: '牧师', description: '辅助单位，治疗附近受伤的友军', icon: 'Priest', unitType: 'CHARACTER' },
+            // 特殊单位（巨熊始终显示，角鹰需要第 3 关通过后显示）
+            { id: 'Bear', name: '巨熊', description: '强大的中立单位，被驯化后成为可靠的战友', icon: 'Bear', unitType: 'CHARACTER' },
         ];
+
+        // 角鹰需要第 3 关通过后才能显示
+        if (hasPassedLevel4) {
+            unitTypes.push({ id: 'Eagle', name: '角鹰', description: '空中飞行单位，拥有强大的攻击能力', icon: 'Eagle', unitType: 'CHARACTER' });
+        }
         
         let cardWidth = 200;
         let cardHeight = 230; 
@@ -1088,14 +1109,21 @@ export class TalentSystem extends Component {
         const enhancements = unitEnhancement?.enhancements || {};
         
         // 获取公共天赋增幅值（不需要实例化，只需要计算值）
-        
+
+        // 角鹰和巨熊只显示生命值和攻击力
+        const isEagleOrBear = (unit.id === 'Eagle' || unit.id === 'Bear');
+
         // 属性映射：显示名称 -> 属性键名（角色单位不显示护甲）
         const statMapping: Record<string, { key: string, format?: (val: number) => string }> = {
             '生命值': { key: 'maxHealth', format: (v) => Math.floor(v).toString() },
             '攻击力': { key: 'attackDamage', format: (v) => Math.floor(v).toString() },
-            '攻击速度': { key: 'attackInterval', format: (v) => v.toFixed(2) + '秒' },
-            '移动速度': { key: 'moveSpeed', format: (v) => Math.floor(v).toString() }
         };
+
+        // 其他单位显示更多属性
+        if (!isEagleOrBear) {
+            statMapping['攻击速度'] = { key: 'attackInterval', format: (v) => v.toFixed(2) + '秒' };
+            statMapping['移动速度'] = { key: 'moveSpeed', format: (v) => Math.floor(v).toString() };
+        }
         
         // 显示属性（只显示基础属性）
         let yOffset = 0;
@@ -1206,13 +1234,22 @@ export class TalentSystem extends Component {
                 ];
             }
         } else {
-            // 角色单位：只显示基础属性（攻击力、攻击速度、生命值、移动速度），不显示护甲
-            enhancementOptions = [
-                { key: 'attackDamage', name: '攻击力', value: 1, unit: '' },
-                { key: 'attackSpeed', name: '攻击速度', value: 5, unit: '%' },
-                { key: 'maxHealth', name: '生命值', value: 2, unit: '' },
-                { key: 'moveSpeed', name: '移动速度', value: 5, unit: '' }
-            ];
+            // 角色单位：根据单位类型确定可强化属性
+            // 角鹰和巨熊：只能强化生命值和攻击力
+            if (unit.id === 'Eagle' || unit.id === 'Bear') {
+                enhancementOptions = [
+                    { key: 'attackDamage', name: '攻击力', value: 1, unit: '' },
+                    { key: 'maxHealth', name: '生命值', value: 2, unit: '' }
+                ];
+            } else {
+                // 其他角色单位：显示全部基础属性
+                enhancementOptions = [
+                    { key: 'attackDamage', name: '攻击力', value: 1, unit: '' },
+                    { key: 'attackSpeed', name: '攻击速度', value: 5, unit: '%' },
+                    { key: 'maxHealth', name: '生命值', value: 2, unit: '' },
+                    { key: 'moveSpeed', name: '移动速度', value: 5, unit: '' }
+                ];
+            }
         }
         
         let buttonYOffset = 0;
@@ -1336,6 +1373,7 @@ export class TalentSystem extends Component {
         // 重新创建详情面板以显示更新后的数据
         detailPanel.destroy();
         // 重新获取unit对象（需要从单位列表中找到）
+        const hasPassedLevel4 = this.checkHasPassedLevel3();
         const unitTypes = [
             { id: 'WarAncientTree', name: '弓箭手小屋', description: '能够训练弓箭手的建筑物，同时拥有远程攻击能力', icon: 'WarAncientTree', unitType: 'BUILDING' },
             { id: 'HunterHall', name: '猎手大厅', description: '能够训练女猎手的建筑物', icon: 'HunterHall', unitType: 'BUILDING' },
@@ -1348,7 +1386,12 @@ export class TalentSystem extends Component {
             { id: 'Mage', name: '法师', description: '远程法术单位，施展魔法攻击敌人', icon: 'Mage', unitType: 'CHARACTER' },
             { id: 'ElfSwordsman', name: '精灵剑士', description: '近战攻击单位，使用剑进行近距离战斗', icon: 'ElfSwordsman', unitType: 'CHARACTER' },
             { id: 'Priest', name: '牧师', description: '辅助单位，治疗附近受伤的友军', icon: 'Priest', unitType: 'CHARACTER' },
+            { id: 'Bear', name: '巨熊', description: '强大的中立单位，被驯化后成为可靠的战友', icon: 'Bear', unitType: 'CHARACTER' },
         ];
+        // 角鹰需要第 4 关通过后才能显示
+        if (hasPassedLevel4) {
+            unitTypes.push({ id: 'Eagle', name: '角鹰', description: '空中飞行单位，拥有强大的攻击能力', icon: 'Eagle', unitType: 'CHARACTER' });
+        }
         const unit = unitTypes.find(u => u.id === unitId);
         if (unit) {
             this.showUnitDetail(unit);
@@ -1395,6 +1438,11 @@ export class TalentSystem extends Component {
                 'Church': 'Church',
                 'stone_wall': 'StoneWall',
                 'StoneWall': 'StoneWall',
+                // 特殊单位
+                'bear': 'Bear',
+                'Bear': 'Bear',
+                'eagle': 'Eagle',
+                'Eagle': 'Eagle',
             };
             
             const normalizedUnitId = unitIdMap[unitId] || unitId;
@@ -1563,6 +1611,8 @@ export class TalentSystem extends Component {
             'Mage': 'Mage',
             'ElfSwordsman': 'ElfSwordsman',
             'Priest': 'Priest',
+            'Bear': 'Bear',
+            'Eagle': 'Eagle',
             // 建筑 / 防御单位
             'WarAncientTree': 'WarAncientTree',
             'HunterHall': 'HunterHall',

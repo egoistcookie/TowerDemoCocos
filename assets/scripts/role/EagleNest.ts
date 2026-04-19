@@ -4,6 +4,8 @@ import { UnitInfo } from '../UnitInfoPanel';
 import { Build } from './Build';
 import { UnitPool } from '../UnitPool';
 import { GamePopup } from '../GamePopup';
+import { AnalyticsManager } from '../AnalyticsManager';
+import { OperationType } from '../AnalyticsManager';
 const { ccclass, property } = _decorator;
 
 /**
@@ -190,6 +192,16 @@ export class EagleNest extends Build {
         if (!this.hasShownJuvenileHint) {
             GamePopup.showMessage('角鹰幼体开始成长！');
             this.hasShownJuvenileHint = true;
+        }
+
+        // 记录训练角鹰操作
+        const analytics = AnalyticsManager.getInstance();
+        if (analytics && this.gameManager) {
+            analytics.recordOperation(
+                OperationType.TRAIN_EAGLE,
+                this.gameManager.getGameTime(),
+                { position: { x: this.node.worldPosition.x, y: this.node.worldPosition.y } }
+            );
         }
 
         // 更新单位信息面板

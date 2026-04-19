@@ -3050,7 +3050,7 @@ export class TowerBuilder extends Component {
         const analytics = AnalyticsManager.getInstance();
         if (analytics && this.gameManager) {
             analytics.recordOperation(
-                OperationType.BUILD_CHURCH,
+                OperationType.BUILD_EAGLE_NEST,
                 this.gameManager.getGameTime(),
                 { position: { x: eagleNestScript?.gridX, y: eagleNestScript?.gridY } }
             );

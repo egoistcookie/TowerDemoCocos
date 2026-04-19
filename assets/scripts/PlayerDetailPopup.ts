@@ -56,6 +56,8 @@ export class PlayerDetailPopup extends Component {
         'build_moon_well': { roleId: 'Wisp', roleName: '小精灵', iconPath: 'textures/role/Wisp' },
         'build_mage_tower': { roleId: 'Mage', roleName: '法师', iconPath: 'textures/role/Mage' },
         'build_war_ancient_tree': { roleId: 'Arrower', roleName: '弓箭手', iconPath: 'textures/role/Arrower' },
+        'build_eagle_nest': { roleId: 'Eagle', roleName: '角鹰', iconPath: 'textures/role/Eagle' },
+        'build_bear_den': { roleId: 'Bear', roleName: '巨熊', iconPath: 'textures/role/Bear' },
         // 防御塔
         'build_watchtower': { roleId: 'WatchTower', roleName: '哨塔', iconPath: 'textures/role/WatchTower', isTower: true },
         'build_thunder_tower': { roleId: 'ThunderTower', roleName: '雷塔', iconPath: 'textures/role/ThunderTower', isTower: true },
@@ -72,6 +74,8 @@ export class PlayerDetailPopup extends Component {
         'Wisp': '小精灵',
         'Arrower': '弓箭手',
         'Mage': '法师',
+        'Eagle': '角鹰',
+        'Bear': '巨熊',
     };
 
     // 防御塔/石墙的 roleId 到信息的映射（用于从 towerCountMap 恢复显示信息）
@@ -80,6 +84,13 @@ export class PlayerDetailPopup extends Component {
         'ThunderTower': { roleName: '雷塔', iconPath: 'textures/role/ThunderTower' },
         'IceTower': { roleName: '冰塔', iconPath: 'textures/role/IceTower' },
         'StoneWall': { roleName: '石墙', iconPath: 'textures/role/StoneWall' },
+    };
+
+    // 特殊单位（巨熊、角鹰）的信息映射
+    private readonly SPECIAL_UNIT_INFO: Record<string, { roleName: string; iconPath: string }> = {
+        'Bear': { roleName: '巨熊', iconPath: 'textures/role/Bear' },
+        'Eagle': { roleName: '角鹰', iconPath: 'textures/role/Eagle' },
+        'BeastDen': { roleName: '兽穴', iconPath: 'textures/role/BeastDen' },
     };
 
     onLoad() {
@@ -717,6 +728,21 @@ export class PlayerDetailPopup extends Component {
                     });
                 }
             }
+
+            // 特殊处理：触发巨熊操作
+            if (opType === 'trigger_bear' && !addedRoleIds.has('Bear')) {
+                addedRoleIds.add('Bear');
+                const level = unitLevels?.['Bear'] ?? 0;
+                const bearInfo = this.SPECIAL_UNIT_INFO['Bear'];
+                if (bearInfo) {
+                    roles.push({
+                        roleId: 'Bear',
+                        roleName: bearInfo.roleName,
+                        roleLevel: level,
+                        iconPath: bearInfo.iconPath,
+                    });
+                }
+            }
         }
 
         // 将防御塔/石墙添加到结果中
@@ -756,6 +782,37 @@ export class PlayerDetailPopup extends Component {
                         towerCount: level,
                     });
                     console.log('[PlayerDetailPopup] 从 unitLevels 添加防御塔:', unitId, '数量:', level);
+                }
+            }
+        }
+
+        // 从 unitLevels 中添加特殊单位（角鹰、巨熊、兽穴）
+        // 注意：EagleNest 会显示为 Eagle（角鹰）
+        if (unitLevels && Object.keys(unitLevels).length > 0) {
+            console.log('[PlayerDetailPopup] 从 unitLevels 添加特殊单位:', unitLevels);
+            // EagleNest -> Eagle 映射
+            const unitIdAliasMap: Record<string, string> = {
+                'EagleNest': 'Eagle',
+            };
+            for (const unitId of Object.keys(unitLevels)) {
+                const level = unitLevels[unitId];
+                // 跳过已添加的单位
+                if (addedRoleIds.has(unitId)) {
+                    continue;
+                }
+                // 处理别名映射
+                const actualUnitId = unitIdAliasMap[unitId] || unitId;
+                // 检查是否是特殊单位
+                const specialInfo = this.SPECIAL_UNIT_INFO[actualUnitId];
+                if (specialInfo && level > 0) {
+                    roles.push({
+                        roleId: actualUnitId,
+                        roleName: specialInfo.roleName,
+                        roleLevel: level,
+                        iconPath: specialInfo.iconPath,
+                    });
+                    addedRoleIds.add(actualUnitId);
+                    console.log('[PlayerDetailPopup] 从 unitLevels 添加特殊单位:', actualUnitId, '等级:', level);
                 }
             }
         }
@@ -963,6 +1020,10 @@ export class PlayerDetailPopup extends Component {
             'IceTower': 'IceTower',
             // 石墙
             'StoneWall': 'StoneWall',
+            // 特殊单位
+            'Bear': 'Bear',
+            'Eagle': 'Eagle',
+            'BeastDen': 'BeastDen',
         };
 
         const normalizedUnitId = unitIdMap[unitId] || unitId;
@@ -1087,6 +1148,10 @@ export class PlayerDetailPopup extends Component {
             'IceTower': new Color(100, 200, 255, 255),     // 冰蓝色
             // 石墙
             'StoneWall': new Color(180, 180, 180, 255),    // 浅灰色
+            // 特殊单位
+            'Bear': new Color(139, 69, 19, 255),           // 棕色（熊）
+            'Eagle': new Color(70, 130, 180, 255),         // 钢蓝色（鹰）
+            'BeastDen': new Color(101, 67, 33, 255),       // 深棕色（兽穴）
         };
         const color = colors[roleId] || new Color(150, 150, 150, 255);
         g.fillColor = color;

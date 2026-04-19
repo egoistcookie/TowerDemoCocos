@@ -397,8 +397,4 @@ export class Eagle extends Role {
             returnToPool();
         }
     }
-
-    onDestroy() {
-        super.onDestroy();
-    }
 }
