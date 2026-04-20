@@ -13,26 +13,6 @@
           "prefabName": "Orc",
           "count": 32,
           "interval": 0.3
-        },
-        {
-          "prefabName": "OrcWarrior",
-          "count": 12,
-          "interval": 0.8
-        },
-        {
-          "prefabName": "OrcShaman",
-          "count": 4,
-          "interval": 1.7
-        },
-        {
-          "prefabName": "TrollSpearman",
-          "count": 18,
-          "interval": 0.5
-        },
-        {
-          "prefabName": "Dragon",
-          "count": 3,
-          "interval": 1.5
         }
       ]
     },

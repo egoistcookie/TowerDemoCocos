@@ -1,5 +1,8 @@
-import { _decorator, Component, Node, UITransform, view, Graphics, Color, Label, Button, EditBox, find, UIOpacity, tween, sys, ScrollView, Mask, LabelOutline } from 'cc';
+import { _decorator, Component, Node, UITransform, view, Graphics, Color, Label, Button, EditBox, find, UIOpacity, tween, sys, ScrollView, Mask, director } from 'cc';
 const { ccclass } = _decorator;
+
+// 引入 GamePopup 用于显示经验获得提示
+import { GamePopup } from './GamePopup';
 
 type VoteType = 'agree' | 'disagree';
 
@@ -25,7 +28,6 @@ export class FeedbackPopup extends Component {
     private static instance: FeedbackPopup | null = null;
 
     private readonly BASE_URL = 'https://www.egoistcookie.top';
-    // 走 /api/analytics 前缀：线上通常只放行该路由段（避免 /api/feedback 被网关拦截 403）
     private readonly API_CREATE = '/api/analytics/feedback/create';
     private readonly API_LIST = '/api/analytics/feedback/list';
     private readonly API_VOTE = '/api/analytics/feedback/vote';
@@ -33,6 +35,10 @@ export class FeedbackPopup extends Component {
     private readonly API_COMMENTS = (id: number) => `/api/analytics/feedback/${id}/comments`;
 
     private playerId: string = '';
+
+    // 经验奖励配置
+    private readonly FEEDBACK_SUBMIT_EXP = 2000; // 提交反馈/评论经验
+    private readonly FEEDBACK_VOTE_EXP = 200; // 投票经验
 
     private root: Node = null!;
     private content: Node = null!;
@@ -158,7 +164,6 @@ export class FeedbackPopup extends Component {
         const ebTr = ebNode.addComponent(UITransform);
         ebTr.setContentSize(w - 180, 90);
         ebNode.setPosition(-(w - 40) / 2 + (w - 180) / 2 + 10, 0, 0);
-        // 输入框背景
         const ebBg = ebNode.addComponent(Graphics);
         ebBg.fillColor = new Color(30, 30, 45, 220);
         ebBg.roundRect(-(w - 180) / 2, -45, w - 180, 90, 8);
@@ -168,7 +173,6 @@ export class FeedbackPopup extends Component {
         eb.maxLength = 2000;
         eb.inputMode = EditBox.InputMode.ANY;
         eb.returnType = EditBox.KeyboardReturnType.DONE;
-        // 绑定文字/占位符Label，避免默认字体过大与溢出
         const textNode = new Node('TextLabel');
         textNode.setParent(ebNode);
         textNode.setPosition(0, 0, 0);
@@ -197,10 +201,8 @@ export class FeedbackPopup extends Component {
         phLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
         phLabel.verticalAlign = Label.VerticalAlign.TOP;
 
-        // 兼容：EditBox 的 textLabel/placeholderLabel 在类型上可能不暴露，用 any 赋值
         (eb as any).textLabel = textLabel;
         (eb as any).placeholderLabel = phLabel;
-        // 清空 EditBox 自带 placeholder，避免原生输入层/默认实现再渲染一份“飘在外面”的占位文字
         eb.placeholder = '';
         this.inputBox = eb;
 
@@ -230,43 +232,51 @@ export class FeedbackPopup extends Component {
         const svNode = new Node('FeedbackScrollView');
         svNode.setParent(this.content);
         const svTr = svNode.addComponent(UITransform);
-        svTr.setContentSize(w - 40, h - 300);
-        svNode.setPosition(0, -60, 0);
+        svTr.setContentSize(w - 40, h - 380);
+        svNode.setPosition(0, -20, 0);
 
-        // view
         const viewNode = new Node('View');
         viewNode.setParent(svNode);
         const viewTr = viewNode.addComponent(UITransform);
-        viewTr.setContentSize(w - 40, h - 300);
-        viewNode.addComponent(Mask); // 裁剪
+        viewTr.setContentSize(w - 40, h - 380);
+        viewNode.addComponent(Mask);
         const viewBg = viewNode.addComponent(Graphics);
         viewBg.fillColor = new Color(0, 0, 0, 0);
-        viewBg.rect(-(w - 40) / 2, -(h - 300) / 2, w - 40, h - 300);
+        viewBg.rect(-(w - 40) / 2, -(h - 380) / 2, w - 40, h - 380);
         viewBg.fill();
 
-        // content
         const contentNode = new Node('Content');
         contentNode.setParent(viewNode);
         const listTr = contentNode.addComponent(UITransform);
-        listTr.setContentSize(w - 40, h - 300);
-        // ScrollView 内部默认采用居中锚点时，content 初始位置应为 0；
-        // 渲染时会根据 viewH 与 contentH 重新精确对齐，避免滚动到边界后“卡住”。
+        listTr.setContentSize(w - 40, h - 380);
         contentNode.setPosition(0, 0, 0);
         this.listContent = contentNode;
 
         const sv = svNode.addComponent(ScrollView);
         sv.content = contentNode;
-        // ScrollView.view 在当前引擎版本是只读属性；通过节点层级（ScrollView/View/Content）自动绑定
         sv.horizontal = false;
         sv.vertical = true;
         this.scrollView = sv;
 
-        // 玩家ID
+        // 玩家 ID
         try {
             this.playerId = sys.localStorage.getItem('player_id') || '';
         } catch (e) {
             this.playerId = '';
         }
+
+        // 底部经验提示文字
+        const tipNode = new Node('ExpTip');
+        tipNode.setParent(this.content);
+        const tipTr = tipNode.addComponent(UITransform);
+        tipTr.setContentSize(w, 50);
+        tipNode.setPosition(0, -h / 2 + 35, 0);
+        const tipLabel = tipNode.addComponent(Label);
+        tipLabel.string = '提交反馈信息或者评论增加 2000 经验；表达意见增加 200 经验；';
+        tipLabel.fontSize = 16;
+        tipLabel.color = new Color(255, 215, 0, 255);
+        tipLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        tipLabel.verticalAlign = Label.VerticalAlign.CENTER;
     }
 
     private fadeIn() {
@@ -281,6 +291,65 @@ export class FeedbackPopup extends Component {
         }
     }
 
+    // 获取今日日期字符串
+    private getTodayStr(): string {
+        const now = new Date();
+        return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+    }
+
+    // 检查是否已领取提交反馈/评论的每日经验奖励
+    private hasClaimedSubmitExpToday(): boolean {
+        const today = this.getTodayStr();
+        const claimed = sys.localStorage.getItem('feedback_submit_exp_date');
+        return claimed === today;
+    }
+
+    // 领取提交反馈/评论的每日经验奖励
+    private claimSubmitExp(): boolean {
+        if (this.hasClaimedSubmitExpToday()) {
+            return false;
+        }
+        const today = this.getTodayStr();
+        sys.localStorage.setItem('feedback_submit_exp_date', today);
+        return true;
+    }
+
+    // 检查是否已领取某条反馈的投票每日经验奖励
+    private hasClaimedVoteExpToday(feedbackId: number): boolean {
+        const today = this.getTodayStr();
+        const claimed = sys.localStorage.getItem(`feedback_vote_exp_${feedbackId}`);
+        return claimed === today;
+    }
+
+    // 领取某条反馈的投票每日经验奖励
+    private claimVoteExp(feedbackId: number): boolean {
+        if (this.hasClaimedVoteExpToday(feedbackId)) {
+            return false;
+        }
+        const today = this.getTodayStr();
+        sys.localStorage.setItem(`feedback_vote_exp_${feedbackId}`, today);
+        return true;
+    }
+
+    // 发放经验
+    private giveExp(amount: number) {
+        const gm = this.findGameManager();
+        if (gm && typeof gm.addExperience === 'function') {
+            gm.addExperience(amount);
+        }
+        // 显示经验获得提示（无论是否找到 GameManager 都显示提示）
+        GamePopup.showMessage(`获得 ${amount} 点经验值`, true, 1.5);
+    }
+
+    // 查找 GameManager
+    private findGameManager(): any {
+        const scene = director.getScene();
+        if (!scene) return null;
+        const gmNode = scene.getChildByName('GameManager');
+        if (!gmNode) return null;
+        return gmNode.getComponent('GameManager');
+    }
+
     private async onSubmitFeedback() {
         if (!this.playerId) return;
         const text = (this.inputBox?.string || '').trim();
@@ -289,11 +358,39 @@ export class FeedbackPopup extends Component {
         try {
             await this.postJson(this.API_CREATE, { playerId: this.playerId, content: text });
             this.inputBox.string = '';
+
+            // 发放提交反馈经验奖励（每天首次 2000 经验）
+            if (this.claimSubmitExp()) {
+                this.giveExp(this.FEEDBACK_SUBMIT_EXP);
+            }
+
             await this.refreshList();
         } catch (e) {
             // ignore
         } finally {
             (this.submitBtn as any).interactable = true;
+        }
+    }
+
+    private async onSubmitComment() {
+        if (!this.playerId || !this.currentFeedbackId) return;
+        const text = (this.commentInput?.string || '').trim();
+        if (!text) return;
+        if (this.commentSubmit) (this.commentSubmit as any).interactable = false;
+        try {
+            await this.postJson(this.API_COMMENT, { playerId: this.playerId, feedbackId: this.currentFeedbackId, content: text });
+            if (this.commentInput) this.commentInput.string = '';
+
+            // 发放提交评论经验奖励（每天首次 2000 经验）
+            if (this.claimSubmitExp()) {
+                this.giveExp(this.FEEDBACK_SUBMIT_EXP);
+            }
+
+            await this.refreshComments();
+        } catch (e) {
+            // ignore
+        } finally {
+            if (this.commentSubmit) (this.commentSubmit as any).interactable = true;
         }
     }
 
@@ -309,7 +406,6 @@ export class FeedbackPopup extends Component {
 
     private renderList(items: FeedbackItem[]) {
         if (!this.listContent || !this.listContent.isValid) return;
-        // 清空
         const children = [...this.listContent.children];
         for (const c of children) {
             if (c && c.isValid) c.destroy();
@@ -321,13 +417,10 @@ export class FeedbackPopup extends Component {
         const itemH = 140;
         const gap = 16;
 
-        // content 居中锚点时，对齐策略：让 content 顶部与 view 顶部重合
-        // contentPosY + contentH/2 = viewH/2  => contentPosY = (viewH - contentH)/2
         const contentH = Math.max((itemH + gap) * items.length + 40, viewH);
         this.listContent.getComponent(UITransform)?.setContentSize(w, contentH);
         this.listContent.setPosition(0, (viewH - contentH) / 2, 0);
 
-        // 从 content 顶部向下铺排 item（坐标系 y 向上为正）
         let y = contentH / 2 - itemH / 2 - 20;
         for (const it of items) {
             const itemNode = new Node(`Feedback_${it.id}`);
@@ -345,7 +438,6 @@ export class FeedbackPopup extends Component {
             bg.roundRect(-itemW / 2, -itemH / 2, itemW, itemH, 10);
             bg.stroke();
 
-            // 内容
             const textNode = new Node('Text');
             textNode.setParent(itemNode);
             textNode.addComponent(UITransform).setContentSize(itemW - 20, 80);
@@ -359,21 +451,17 @@ export class FeedbackPopup extends Component {
             lb.enableWrapText = true;
             lb.overflow = Label.Overflow.RESIZE_HEIGHT;
 
-            // 赞同按钮
             const agreeBtn = this.createSmallBtn(itemNode, '赞同', -itemW / 2 + 70, -itemH / 2 + 28, new Color(80, 180, 80, 255));
             agreeBtn.node.on(Button.EventType.CLICK, () => this.vote(it.id, 'agree'), this);
             const agreeCnt = this.createSmallLabel(itemNode, `${it.agree_count || 0}`, -itemW / 2 + 130, -itemH / 2 + 28);
 
-            // 不赞同按钮
             const disBtn = this.createSmallBtn(itemNode, '不赞同', -itemW / 2 + 240, -itemH / 2 + 28, new Color(180, 80, 80, 255));
             disBtn.node.on(Button.EventType.CLICK, () => this.vote(it.id, 'disagree'), this);
             const disCnt = this.createSmallLabel(itemNode, `${it.disagree_count || 0}`, -itemW / 2 + 320, -itemH / 2 + 28);
 
-            // 点击整条打开评论页
             itemNode.addComponent(Button);
             itemNode.on(Button.EventType.CLICK, () => this.openComments(it.id), this);
 
-            // 避免计数 label 被销毁未用（占位）
             agreeCnt.string = `${it.agree_count || 0}`;
             disCnt.string = `${it.disagree_count || 0}`;
         }
@@ -419,6 +507,12 @@ export class FeedbackPopup extends Component {
         if (!this.playerId) return;
         try {
             await this.postJson(this.API_VOTE, { playerId: this.playerId, feedbackId, vote });
+
+            // 发放投票经验奖励（每条反馈每天首次 200 经验）
+            if (this.claimVoteExp(feedbackId)) {
+                this.giveExp(this.FEEDBACK_VOTE_EXP);
+            }
+
             await this.refreshList();
         } catch (e) {
             // ignore
@@ -437,7 +531,6 @@ export class FeedbackPopup extends Component {
     }
 
     private buildCommentsPage() {
-        const vs = view.getVisibleSize();
         const w = this.content.getComponent(UITransform)?.width || 700;
         const h = this.content.getComponent(UITransform)?.height || 900;
 
@@ -451,7 +544,6 @@ export class FeedbackPopup extends Component {
         bg.roundRect(-w / 2, -h / 2, w, h, 12);
         bg.fill();
 
-        // 标题
         const titleNode = new Node('CTitle');
         titleNode.setParent(page);
         titleNode.addComponent(UITransform).setContentSize(w, 60);
@@ -463,7 +555,6 @@ export class FeedbackPopup extends Component {
         title.horizontalAlign = Label.HorizontalAlign.CENTER;
         title.verticalAlign = Label.VerticalAlign.CENTER;
 
-        // 返回
         const backNode = new Node('Back');
         backNode.setParent(page);
         backNode.addComponent(UITransform).setContentSize(90, 50);
@@ -486,7 +577,6 @@ export class FeedbackPopup extends Component {
             if (page && page.isValid) page.active = false;
         }, this);
 
-        // 输入
         const inputWrap = new Node('CInputWrap');
         inputWrap.setParent(page);
         inputWrap.addComponent(UITransform).setContentSize(w - 40, 110);
@@ -500,17 +590,15 @@ export class FeedbackPopup extends Component {
         ebNode.setParent(inputWrap);
         ebNode.addComponent(UITransform).setContentSize(w - 180, 80);
         ebNode.setPosition(-(w - 40) / 2 + (w - 180) / 2 + 10, 0, 0);
-        // 输入框背景
         const ebBg = ebNode.addComponent(Graphics);
         ebBg.fillColor = new Color(30, 30, 45, 220);
         ebBg.roundRect(-(w - 180) / 2, -40, w - 180, 80, 8);
         ebBg.fill();
         const eb = ebNode.addComponent(EditBox);
-        eb.placeholder = '';
+        eb.placeholder = '写下你的评论...';
         eb.maxLength = 2000;
         eb.inputMode = EditBox.InputMode.ANY;
         eb.returnType = EditBox.KeyboardReturnType.DONE;
-        // 绑定文字/占位符Label
         const textNode = new Node('TextLabel');
         textNode.setParent(ebNode);
         textNode.setPosition(0, 0, 0);
@@ -541,7 +629,6 @@ export class FeedbackPopup extends Component {
 
         (eb as any).textLabel = textLabel;
         (eb as any).placeholderLabel = phLabel;
-        // 清空 EditBox 自带 placeholder，避免默认占位文字重复渲染
         eb.placeholder = '';
         this.commentInput = eb;
 
@@ -566,7 +653,6 @@ export class FeedbackPopup extends Component {
         this.commentSubmit = btn;
         btn.node.on(Button.EventType.CLICK, () => this.onSubmitComment(), this);
 
-        // 评论列表 ScrollView
         const svNode = new Node('CScrollView');
         svNode.setParent(page);
         svNode.addComponent(UITransform).setContentSize(w - 40, h - 300);
@@ -584,12 +670,10 @@ export class FeedbackPopup extends Component {
         const contentNode = new Node('Content');
         contentNode.setParent(viewNode);
         contentNode.addComponent(UITransform).setContentSize(w - 40, h - 300);
-        // 同 renderList：content 初始位置应为 0，渲染时按 viewH 对齐。
         contentNode.setPosition(0, 0, 0);
 
         const sv = svNode.addComponent(ScrollView);
         sv.content = contentNode;
-        // ScrollView.view 在当前引擎版本是只读属性；通过节点层级（ScrollView/View/Content）自动绑定
         sv.horizontal = false;
         sv.vertical = true;
         this.commentsScroll = sv;
@@ -597,22 +681,6 @@ export class FeedbackPopup extends Component {
 
         this.commentsPage = page;
         page.active = false;
-    }
-
-    private async onSubmitComment() {
-        if (!this.playerId || !this.currentFeedbackId) return;
-        const text = (this.commentInput?.string || '').trim();
-        if (!text) return;
-        if (this.commentSubmit) (this.commentSubmit as any).interactable = false;
-        try {
-            await this.postJson(this.API_COMMENT, { playerId: this.playerId, feedbackId: this.currentFeedbackId, content: text });
-            if (this.commentInput) this.commentInput.string = '';
-            await this.refreshComments();
-        } catch (e) {
-            // ignore
-        } finally {
-            if (this.commentSubmit) (this.commentSubmit as any).interactable = true;
-        }
     }
 
     private async refreshComments() {
@@ -670,7 +738,6 @@ export class FeedbackPopup extends Component {
             lb.enableWrapText = true;
             lb.overflow = Label.Overflow.RESIZE_HEIGHT;
         }
-
     }
 
     private async getJson(path: string): Promise<any> {
@@ -723,4 +790,3 @@ export class FeedbackPopup extends Component {
         });
     }
 }
-

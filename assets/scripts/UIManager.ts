@@ -919,7 +919,7 @@ export class UIManager extends Component {
         feedbackNameNode.setParent(feedbackItem);
         feedbackNameNode.setPosition(-feedbackWidth / 4, 0, 0);
         const feedbackLabel = feedbackNameNode.addComponent(Label);
-        feedbackLabel.string = '反馈意见';
+        feedbackLabel.string = '反馈有奖';
         feedbackLabel.fontSize = 28;
         feedbackLabel.color = new Color(255, 255, 255, 255);
         feedbackLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
