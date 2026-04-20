@@ -27,7 +27,149 @@ const manager = find('Canvas/GameManager');
 
 ---
 
-### 2. 触摸事件传播特性
+### 2. bash 命令处理中文文件名失败
+
+**问题**：2026/04/20 使用 `wc` 和 `grep` 命令检查中文文件名的文件时失败：
+```bash
+wc -l Claude 编程指南.md  # 失败
+grep -n "^###" Claude 编程指南.md  # 失败
+```
+
+**错误信息**：
+```
+wc: Claude: No such file or directory
+wc: '"$'\226''"$'\213''"$'\214\207''"$'\215\227''.md': No such file or directory
+```
+
+**原因**：bash  shell 在处理包含中文字符的文件名时，编码转换出现问题，导致文件名被错误解析。
+
+**解决方案**：
+1. **优先使用专用工具**：用 `Read` 工具直接读取文件内容，用 `Grep` 工具搜索文件内容
+2. **使用 Glob 工具定位文件**：`Glob(pattern: "Claude*.md")` 可以正确处理中文文件名
+3. **必须用 bash 时**：给文件名加双引号，或使用 tab 补全让 shell 自动处理编码
+
+**示例**：
+```bash
+# ❌ 错误 - 直接写中文文件名
+wc -l Claude 编程指南.md
+
+# ✅ 正确 - 使用双引号
+wc -l "Claude 编程指南.md"
+
+# ✅ 更好 - 使用 Read/Glob 工具
+Glob(pattern: "Claude*.md")
+Read(file_path: "d:/CocosProject/TowerDemoCocos/Claude 编程指南.md")
+```
+
+**教训**：下次需要检查文件内容时，优先使用 `Read` 工具；需要定位文件时，优先使用 `Glob` 工具。只有在处理纯英文路径的批量操作时才使用 bash 命令。
+
+---
+
+### 3. Edit 工具字符串替换失败
+
+**问题**：使用 Edit 工具修改文件时，经常提示"String to replace not found in file"，即使字符串看起来完全一样。
+
+**原因**：
+1. 中文字符在文件中是 UTF-8 编码的字节序列，Edit 工具匹配时可能不一致
+2. 缩进空格数量不一致（2 空格 vs 4 空格 vs tab）
+3. 文件中有多个相同的字符串，Edit 工具拒绝替换
+
+**解决方案**：使用 `bash sed` 命令替代：
+```bash
+# 在指定行后添加内容
+sed -i '行号 a\            console.info('\''日志内容'\'');' assets/scripts/文件名.ts
+
+# 删除指定行
+sed -i '行号 d' assets/scripts/文件名.ts
+
+# 查看某行的实际内容（包括隐藏字符）
+sed -n '行号 p' assets/scripts/文件名.ts | cat -A
+```
+
+**注意**：sed 命令中添加的内容如果需要单引号，需要使用转义：`'\''`
+
+**示例**：
+```bash
+# 在 5378 行后添加日志
+sed -i '5378a\            console.info('\''[GameManager] 日志'\'');' assets/scripts/GameManager.ts
+```
+
+---
+
+### 4. 加载进度条卡在 30%
+
+**问题**：2026/04/20 修改加载进度条后，发现在 30% 卡住 20 秒，然后突然进入游戏。
+
+**原因分析**：
+1. bundle 加载完成后停止平滑定时器，进度停在 30%
+2. 预制体加载是异步并行加载，但回调可能没有立即触发
+3. 第一关只加载 3 个预制体（石墙、哨塔、战争古树），每个预制体较大
+
+**调试日志**：添加以下日志追踪加载流程：
+```typescript
+// 1. bundle 加载开始/完成
+console.info('[GameManager] === 开始加载分包 prefabs_sub ===');
+console.info('[GameManager] bundle 加载完成回调，err:', err, 'bundle:', bundle ? 'ok' : 'null');
+
+// 2. 预制体加载开始/回调
+console.info('[GameManager] 调用 bundle.load(StoneWall)');
+console.info('[GameManager] StoneWall 回调触发，err:', err, 'prefab:', prefab ? 'ok' : 'null');
+
+// 3. 完成计数
+console.info('[GameManager] checkComplete: loadedCount=', loadedCount, 'totalSteps=', totalSteps);
+
+// 4. 进度更新
+console.info('[GameManager] updateLoadingProgress:', p, '((', progress, '))');
+
+// 5. 平滑定时器
+console.info('[GameManager] smoothLoadingTimerCallback 触发，当前进度：' + this.smoothLoadingProgress);
+```
+
+**解决方案**：
+1. 将平滑定时器间隔从 50ms 改为 16ms（约 60fps），让 0-30% 的动画更顺滑（1.5 秒内完成）
+2. 添加详细日志，定位是哪个预制体加载慢
+3. 检查 `bundle.load` 回调是否正确触发
+
+**修改内容**：
+```typescript
+// 定时器间隔改为 16ms
+this.schedule(this.smoothLoadingTimerCallback, 0.016);
+```
+
+---
+
+### 5. 重复调用 unschedule 导致代码冗余
+
+**问题**：使用 sed 命令批量修改时，容易在错误的位置插入代码，导致同一行被重复添加。
+
+**示例**：
+```typescript
+// ❌ 错误 - 重复调用
+this.stopSmoothLoadingTimer();
+this.unschedule(this.smoothLoadingTimerCallback);  // 重复
+this.hideLoadingOverlay();
+```
+
+**原因**：`stopSmoothLoadingTimer()` 方法内部已经调用了 `this.unschedule(this.smoothLoadingTimerCallback)`，不需要再重复调用。
+
+**解决方案**：
+1. 使用 Grep 检查是否有重复调用：`grep -n "unschedule.*smoothLoadingTimerCallback" assets/scripts/GameManager.ts`
+2. 统一使用封装好的方法，如 `stopSmoothLoadingTimer()`
+3. 修改后用 Read 工具检查是否有重复代码
+
+---
+
+### 6. 平滑定时器达到目标后未停止
+
+**问题**：2026/04/20 发现 `smoothLoadingTimerCallback` 被调用了 524 次，进度卡在 30%。
+
+**原因**：`schedule()` 返回值未保存，导致 `stopSmoothLoadingTimer()` 中的 `unschedule()` 从未执行。
+
+**最终解决方案**：移除平滑定时器，改用 5 秒线性进度条。
+
+---
+
+### 7. 触摸事件传播特性
 
 **问题**：单位重叠时，只能选中上层单位，下层单位无法被选中。
 
@@ -39,7 +181,7 @@ const manager = find('Canvas/GameManager');
 
 ---
 
-### 3. Vec3 距离计算性能优化
+### 8. Vec3 距离计算性能优化
 
 **问题**：频繁调用 `Vec3.distance()` 导致性能下降。
 
@@ -59,7 +201,7 @@ if (sqDist < radius * radius) { }
 
 ---
 
-### 4. 对象池复用时的状态重置
+### 9. 对象池复用时的状态重置
 
 **问题**：单位从对象池取出时，带有上一次生命周期的状态（如增幅效果、手动控制标志）。
 
@@ -76,7 +218,7 @@ onEnable() {
 
 ---
 
-### 5. 字符串替换导致的语法错误
+### 10. 字符串替换导致的语法错误
 
 **问题**：使用 Edit 工具替换代码时，如果字符串不唯一或包含特殊字符，会导致替换失败或语法错误。
 
@@ -98,7 +240,7 @@ new_string: "if (isLastWaveCompleted) {\n    console.log('debug');\n    return;\
 
 ---
 
-### 6. 循环导入问题
+### 11. 循环导入问题
 
 **问题**：A 模块导入 B，B 模块导入 A，导致循环依赖。
 
@@ -114,7 +256,7 @@ new_string: "if (isLastWaveCompleted) {\n    console.log('debug');\n    return;\
 
 ---
 
-### 7. Camera 坐标转换
+### 12. Camera 坐标转换
 
 **问题**：世界坐标与屏幕坐标混淆，导致碰撞检测失败。
 
@@ -133,7 +275,7 @@ camera.screenToWorld(screenPos, worldPos);
 
 ---
 
-### 8. scheduleOnce 延迟清除选择
+### 13. scheduleOnce 延迟清除选择
 
 **问题**：使用 `scheduleOnce` 延迟清除选择状态，但时序可能不稳定。
 
@@ -143,7 +285,7 @@ camera.screenToWorld(screenPos, worldPos);
 
 ---
 
-### 9. 建筑物点击事件冲突
+### 14. 建筑物点击事件冲突
 
 **问题**：TowerBuilder 与建筑物的点击处理存在竞争条件，导致面板闪烁或无法显示。
 
@@ -166,7 +308,7 @@ if (eventNode.getComponent(Build)) {
 
 ---
 
-### 10. 配置文件路径
+### 15. 配置文件路径
 
 **波次配置文件**：`resources/config/waveConfig.json`
 
@@ -185,7 +327,7 @@ resources.load('config/waveConfig', JsonAsset, (err, asset) => {
 
 ---
 
-### 11. 波次节奏控制逻辑
+### 16. 波次节奏控制逻辑
 
 **2026/04/10 更新**：简化波次节奏逻辑，去掉 60 秒倒计时。
 
@@ -208,7 +350,7 @@ resources.load('config/waveConfig', JsonAsset, (err, asset) => {
 
 ---
 
-### 13. 波次节奏控制调试
+### 17. 波次节奏控制调试
 
 **问题**：2026/04/09 修改波次节奏后，用户报告"从第 2 波直接跳到第 4 波"。
 
@@ -230,7 +372,7 @@ resources.load('config/waveConfig', JsonAsset, (err, asset) => {
 
 ---
 
-### 12. 重复方法定义问题
+### 18. 重复方法定义问题
 
 **问题**：2026/04/10 修改波次节奏时，使用字符串替换方法导致 `startNextWave` 和 `endCurrentWave` 方法重复定义。
 
@@ -354,6 +496,7 @@ private methodName(param: type): returnType {
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| 38 | 2026/04/20 | Edit 工具字符串替换失败改用 sed、加载进度条 30% 卡顿问题、平滑定时器空转问题、重复 unschedule 调用、bash 命令中文文件名编码问题 |
 | 37 | 2026/04/09 | 单位重叠选择修复、游戏节奏调整 |
 | 36 | 2026/04/07 | 贴图模式调整、单位选择优化 |
 | 35 | 2026/03/23 | SP 卡片、传送门机制 |
@@ -361,5 +504,5 @@ private methodName(param: type): returnType {
 
 ---
 
-**最后更新**：2026/04/09
+**最后更新**：2026/04/20
 **维护者**：Claude (Anthropic AI)

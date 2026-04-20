@@ -1,8 +1,10 @@
-import { _decorator, Component, Node, UITransform, view, Graphics, Color, Label, Button, EditBox, find, UIOpacity, tween, sys, ScrollView, Mask, director } from 'cc';
+import { _decorator, Component, Node, UITransform, view, Graphics, Color, Label, Button, EditBox, find, UIOpacity, tween, sys, ScrollView, Mask } from 'cc';
 const { ccclass } = _decorator;
 
 // 引入 GamePopup 用于显示经验获得提示
 import { GamePopup } from './GamePopup';
+// 引入 PlayerDataManager 用于发放经验值
+import { PlayerDataManager } from './PlayerDataManager';
 
 type VoteType = 'agree' | 'disagree';
 
@@ -333,21 +335,12 @@ export class FeedbackPopup extends Component {
 
     // 发放经验
     private giveExp(amount: number) {
-        const gm = this.findGameManager();
-        if (gm && typeof gm.addExperience === 'function') {
-            gm.addExperience(amount);
+        const playerDataManager = PlayerDataManager.getInstance();
+        if (playerDataManager && typeof playerDataManager.addExperience === 'function') {
+            playerDataManager.addExperience(amount);
         }
-        // 显示经验获得提示（无论是否找到 GameManager 都显示提示）
+        // 显示经验获得提示（无论是否找到 PlayerDataManager 都显示提示）
         GamePopup.showMessage(`获得 ${amount} 点经验值`, true, 1.5);
-    }
-
-    // 查找 GameManager
-    private findGameManager(): any {
-        const scene = director.getScene();
-        if (!scene) return null;
-        const gmNode = scene.getChildByName('GameManager');
-        if (!gmNode) return null;
-        return gmNode.getComponent('GameManager');
     }
 
     private async onSubmitFeedback() {
@@ -595,7 +588,7 @@ export class FeedbackPopup extends Component {
         ebBg.roundRect(-(w - 180) / 2, -40, w - 180, 80, 8);
         ebBg.fill();
         const eb = ebNode.addComponent(EditBox);
-        eb.placeholder = '写下你的评论...';
+        eb.placeholder = '';
         eb.maxLength = 2000;
         eb.inputMode = EditBox.InputMode.ANY;
         eb.returnType = EditBox.KeyboardReturnType.DONE;

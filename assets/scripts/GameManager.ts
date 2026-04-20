@@ -1281,8 +1281,8 @@ export class GameManager extends Component {
             const leftNode = new Node('ForestGridLeft');
             leftNode.setParent(canvas);
             const leftPanel = leftNode.addComponent(ForestGridPanel);
-            leftPanel.gridWidth = 6;
-            leftPanel.gridHeight = 4;
+            leftPanel.gridWidth = 4;
+            leftPanel.gridHeight = 3;
             leftPanel.cellSize = 50;
             leftPanel.cellSpacing = 0;
             leftPanel.alignRight = false;
@@ -1296,8 +1296,8 @@ export class GameManager extends Component {
             const rightNode = new Node('ForestGridRight');
             rightNode.setParent(canvas);
             const rightPanel = rightNode.addComponent(ForestGridPanel);
-            rightPanel.gridWidth = 6;
-            rightPanel.gridHeight = 4;
+            rightPanel.gridWidth = 4;
+            rightPanel.gridHeight = 3;
             rightPanel.cellSize = 50;
             rightPanel.cellSpacing = 0;
             rightPanel.alignRight = true;
@@ -5261,17 +5261,51 @@ export class GameManager extends Component {
 
     /**
      * 更新加载界面的进度（0~1）
+     * 使用平滑过渡，避免进度条跳跃
      */
     private updateLoadingProgress(progress: number) {
         const p = Math.max(0, Math.min(1, progress));
         if (this.loadingBarNode && this.loadingBarNode.isValid) {
-            this.loadingBarNode.setScale(p, 1, 1);
+            // 使用平滑过渡，避免进度条跳跃
+            const currentScale = this.loadingBarNode.getScale().x;
+            const targetScale = p;
+            // 如果目标进度小于当前进度，直接使用目标进度（避免回退）
+            const finalScale = Math.max(currentScale, targetScale);
+            this.loadingBarNode.setScale(finalScale, 1, 1);
         }
         if (this.loadingLabel && this.loadingLabel.isValid) {
             const percent = Math.round(p * 100);
             this.loadingLabel.string = `正在加载... ${percent}%`;
         }
     }
+
+    // 平滑加载定时器相关
+    private isLoadingLinearProgress: boolean = false;
+
+    /**
+     * 启动线性平滑进度定时器
+     * @param duration 持续时间（秒）
+     * @param targetProgress 目标进度（默认 0.9）
+     */
+    private startLinearLoadingTimer(duration: number, targetProgress: number = 0.9) {
+        this.isLoadingLinearProgress = true;
+        const startTime = Date.now();
+
+        this.schedule(() => {
+            const elapsed = Date.now() - startTime;
+            const ratio = Math.min(elapsed / (duration * 1000), 1);
+            this.updateLoadingProgress(targetProgress * ratio);
+
+            if (ratio >= 1) {
+                this.unschedule(this.smoothLoadingTimerCallback);
+                this.isLoadingLinearProgress = false;
+            }
+        }, 0.016); // 约 60fps
+    }
+
+    private smoothLoadingTimerCallback = () => {
+        // 占位，实际逻辑在 startLinearLoadingTimer 中
+    };
 
     /**
      * 隐藏并销毁加载界面
@@ -5303,13 +5337,13 @@ export class GameManager extends Component {
             }
 
             this.isLoadingPrefabsSub = true;
-            //console.info('[GameManager] 开始加载分包 prefabs_sub');
+            console.info('[GameManager] === 开始加载分包 prefabs_sub ===');
 
             // 首次加载时显示全屏加载读条
             this.showLoadingOverlay();
             // 初始进度 0
             this.updateLoadingProgress(0);
-
+            console.info('[GameManager] 开始调用 assetManager.loadBundle');
                 // 加载步骤: 1) 加载 bundle (20%)  2) 九个预制体 (共 80%，线性分配)
             assetManager.loadBundle('prefabs_sub', (err, bundle) => {
                 if (err) {
@@ -5326,8 +5360,8 @@ export class GameManager extends Component {
                     return;
                 }
 
-                // bundle 成功，进度到 20%
-                this.updateLoadingProgress(0.2);
+                // bundle 成功，启动线性平滑进度：2 秒内从 0% 到 90%
+                this.startLinearLoadingTimer(2, 0.9);
 
                 // 第一关优化：只先加载石墙和哨塔，其他建筑延迟加载
                 const currentLevel = this.getCurrentLevelSafe();
@@ -5336,6 +5370,13 @@ export class GameManager extends Component {
                 if (isLevel1) {
                     // 第一关：只加载石墙和哨塔 2 个必需预制体，快速进入游戏
                     this.loadLevel1MinimalPrefabs(bundle, () => {
+                        // 预制体加载完成，停止平滑进度定时器，立刻进入游戏
+                        if (this.isLoadingLinearProgress) {
+                            this.unschedule(this.smoothLoadingTimerCallback);
+                            this.isLoadingLinearProgress = false;
+                        }
+                        this.hideLoadingOverlay();
+                        console.info('[GameManager] 第一关：调用_startGameInternal()');
                         this._startGameInternal();
                         // 延迟加载其他建筑（进入游戏后 0.5 秒）
                         this.scheduleOnce(() => {
@@ -5348,6 +5389,12 @@ export class GameManager extends Component {
                     const shouldLoadEagleNest = currentLevel >= 4;
                     const totalSteps = (shouldLoadMageTower ? 9 : 8) + (shouldLoadEagleNest ? 1 : 0);
                     this.loadAllBuildingPrefabs(bundle, shouldLoadMageTower, shouldLoadEagleNest, totalSteps, () => {
+                        // 预制体加载完成，停止平滑进度定时器，立刻进入游戏
+                        if (this.isLoadingLinearProgress) {
+                            this.unschedule(this.smoothLoadingTimerCallback);
+                            this.isLoadingLinearProgress = false;
+                        }
+                        this.hideLoadingOverlay();
                         this._startGameInternal();
                     });
                 }
@@ -9437,6 +9484,7 @@ export class GameManager extends Component {
         const checkComplete = () => {
             loadedCount++;
             if (loadedCount >= totalSteps) {
+                console.info('[GameManager] 所有预制体加载完成，调用 onLoaded');
                 // 注入预制体
                 const towerBuilder = this.findComponentInScene('TowerBuilder') as any;
                 if (towerBuilder) {
@@ -9454,8 +9502,6 @@ export class GameManager extends Component {
                     }
                 }
 
-                this.updateLoadingProgress(1);
-                this.hideLoadingOverlay();
                 onLoaded();
             }
         };
@@ -9468,8 +9514,7 @@ export class GameManager extends Component {
                 stoneWallPrefab = prefab as Prefab;
                 //console.info('[GameManager] 从分包 prefabs_sub 成功加载 StoneWall');
             }
-            // 进度：0.2 + 0.8 * (1/3)
-            this.updateLoadingProgress(0.2 + 0.8 * (1 / totalSteps));
+            // 进度：0.3 + 0.7 * (1/3)，从 30% 开始，预制体占 70%
             checkComplete();
         });
 
@@ -9481,8 +9526,7 @@ export class GameManager extends Component {
                 watchTowerPrefab = prefab as Prefab;
                 //console.info('[GameManager] 从分包 prefabs_sub 成功加载 WatchTower');
             }
-            // 进度：0.2 + 0.8 * (2/3)
-            this.updateLoadingProgress(0.2 + 0.8 * (2 / totalSteps));
+            // 进度：0.3 + 0.7 * (2/3)
             checkComplete();
         });
 
@@ -9494,8 +9538,7 @@ export class GameManager extends Component {
                 warAncientTreePrefab = prefab as Prefab;
                 //console.info('[GameManager] 从分包 prefabs_sub 成功加载 WarAncientTree (弓箭手小屋)');
             }
-            // 进度：0.2 + 0.8 * (3/3) = 1.0
-            this.updateLoadingProgress(0.2 + 0.8 * (3 / totalSteps));
+            // 进度：0.3 + 0.7 * (3/3) = 1.0
             checkComplete();
         });
     }
@@ -9589,8 +9632,6 @@ export class GameManager extends Component {
             // 标记分包已加载完成
             this.prefabsSubLoaded = true;
             this.isLoadingPrefabsSub = false;
-            this.updateLoadingProgress(1);
-            this.hideLoadingOverlay();
             onLoaded();
         };
 

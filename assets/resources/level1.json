@@ -157,63 +157,7 @@
     {
       "id": 8,
       "name": "第八波",
-      "description": "飞龙初次登场",
-      "preWaveDelay": 4,
-      "enemies": [
-        {
-          "prefabName": "Orc",
-          "count": 20,
-          "interval": 0.5
-        },
-        {
-          "prefabName": "OrcWarrior",
-          "count": 10,
-          "interval": 1.1
-        },
-        {
-          "prefabName": "OrcWarlord",
-          "count": 1,
-          "interval": 2.8
-        },
-        {
-          "prefabName": "Dragon",
-          "count": 1,
-          "interval": 3.0
-        },
-        {
-          "prefabName": "TrollSpearman",
-          "count": 11,
-          "interval": 0.75
-        }
-      ]
-    },
-    {
-      "id": 9,
-      "name": "第九波",
-      "description": "敌人攻势加强",
-      "preWaveDelay": 3,
-      "enemies": [
-        {
-          "prefabName": "Orc",
-          "count": 25,
-          "interval": 0.45
-        },
-        {
-          "prefabName": "OrcWarrior",
-          "count": 11,
-          "interval": 1.0
-        },
-        {
-          "prefabName": "TrollSpearman",
-          "count": 12,
-          "interval": 0.7
-        }
-      ]
-    },
-    {
-      "id": 10,
-      "name": "第十波",
-      "description": "督军与飞龙",
+      "description": "最终 boss - 督军与飞龙",
       "preWaveDelay": 4,
       "enemies": [
         {
@@ -242,6 +186,6 @@
           "interval": 0.65
         }
       ]
-        }
-      ]
+    }
+  ]
 }

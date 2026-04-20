@@ -628,14 +628,20 @@ export class BuildingSelectionPanel extends Component {
     show() {
         // 先取消所有延迟回调，防止之前的延迟隐藏回调执行
         this.unscheduleAllCallbacks();
-        
+
         // 清除待执行的隐藏回调引用
         (this.node as any)._pendingHideCallback = null;
-        
+
         // 先标记面板刚刚显示，忽略下一次触摸事件（避免建造按钮点击触发隐藏）
         // 必须在设置 active 之前设置，确保触摸事件触发时能检查到
         (this.node as any)._justShown = true;
-        
+
+        // 将面板移到 Canvas 的最前面（显示在所有节点之上）
+        const canvas = find('Canvas');
+        if (canvas) {
+            this.node.setSiblingIndex(canvas.children.length - 1);
+        }
+
         this.node.active = true;
         
         // 恢复透明度（如果之前被隐藏）
@@ -789,15 +795,24 @@ export class BuildingSelectionPanel extends Component {
         }
 
         // 添加遮罩组件来裁剪超出内容
-        const mask = this.node.addComponent(Mask);
-        mask.type = Mask.Type.RECT;
+        this.node.addComponent(Mask);
 
         // 添加触摸滚动支持
-        // 内容容器初始位置是 -panelWidth/2，这样内容左边缘对齐面板左边缘
-        const contentStartX = -panelWidth / 2;
+        // 内容容器锚点 (0, 0.5)，原点在左侧
+        // 当内容宽度小于面板宽度时，内容已经居中对齐，不需要滚动
+        // 当内容宽度大于面板宽度时，内容靠左对齐，允许滚动
+        const contentWidth = this.buildingTypes.length * (itemWidth + spacing);
+        const isCentered = contentWidth < panelWidth;
+
+        // 初始位置：居中时为 -contentWidth/2，否则为 -panelWidth/2（靠左）
+        const initialPosX = isCentered ? -contentWidth / 2 : -panelWidth / 2;
+
+        // 设置内容容器初始位置
+        contentNode.setPosition(initialPosX, 0, 0);
+
         let isDragging = false;
         let startX = 0;
-        let startScrollX = 0;
+        let startScrollX = initialPosX;
 
         this.node.on(Node.EventType.TOUCH_START, (event: EventTouch) => {
             isDragging = false;
@@ -810,16 +825,13 @@ export class BuildingSelectionPanel extends Component {
             const deltaX = touchX - startX;
             const newScrollX = startScrollX + deltaX;
 
-            // 限制滚动范围
-            const contentWidth = this.buildingTypes.length * (itemWidth + spacing);
-            // 内容容器锚点 (0, 0.5)，原点在左侧
-            // 最大滚动位置：content 左边缘对齐面板左边缘（scrollX = -panelWidth/2）
-            // 最小滚动位置：content 右边缘对齐面板右边缘（scrollX = -panelWidth/2 + panelWidth - contentWidth）
-            const maxScrollX = contentStartX;
-            const minScrollX = contentStartX + panelWidth - contentWidth;
-
-            // 只有当内容宽度大于面板宽度时才允许滚动
+            // 限制滚动范围（只有当内容宽度大于面板宽度时才允许滚动）
             if (contentWidth > panelWidth) {
+                // 最大滚动位置：content 左边缘对齐面板左边缘（scrollX = -panelWidth/2）
+                // 最小滚动位置：content 右边缘对齐面板右边缘（scrollX = -panelWidth/2 + panelWidth - contentWidth）
+                const maxScrollX = -panelWidth / 2;
+                const minScrollX = -panelWidth / 2 + panelWidth - contentWidth;
+
                 if (newScrollX > maxScrollX) {
                     contentNode.setPosition(maxScrollX, 0, 0);
                 } else if (newScrollX < minScrollX) {

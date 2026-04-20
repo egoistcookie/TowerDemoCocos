@@ -10,10 +10,10 @@ interface GridCell {
 @ccclass('ForestGridPanel')
 export class ForestGridPanel extends Component {
     @property
-    gridWidth: number = 6; // 网格宽度（默认6格，对应300像素）
+    gridWidth: number = 4; // 网格宽度（默认6格，对应300像素）
 
     @property
-    gridHeight: number = 4; // 网格高度（默认4格，对应200像素）
+    gridHeight: number = 3; // 网格高度（默认4格，对应200像素）
 
     @property
     cellSize: number = 50; // 格子大小（50x50）
