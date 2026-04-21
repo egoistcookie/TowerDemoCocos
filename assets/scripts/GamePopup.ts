@@ -170,6 +170,9 @@ export class GamePopup extends Component {
         if (this.messageLabel) {
             this.messageLabel.string = message;
 
+            // 设置 Label 的 overflow 为 RESIZE_HEIGHT，确保能正确计算文本高度
+            this.messageLabel.overflow = Label.Overflow.RESIZE_HEIGHT;
+
             // 强制更新文本布局，确保文本大小被正确计算
             const textNode = this.messageLabel.node;
             // 先显示节点，确保文本渲染
@@ -179,7 +182,8 @@ export class GamePopup extends Component {
 
             // 等待一帧，让文本渲染完成
             setTimeout(() => {
-            this.adjustBackgroundSizeToText();
+                // 再次确保获取最新的文本尺寸
+                this.adjustBackgroundSizeToText();
             }, 0);
         } else {
             // 尝试重新获取messageLabel
@@ -363,9 +367,18 @@ export class GamePopup extends Component {
         const bgSprite = this.background;
         
         // 计算文本的实际大小
-        const textWidth = textTransform.width;
-        const textHeight = textTransform.height;
-        
+        // 注意：第一次显示时，文本可能还没有完全渲染，需要验证尺寸是否有效
+        let textWidth = textTransform.width;
+        let textHeight = textTransform.height;
+
+        // 如果文本尺寸为 0 或无效值，使用默认最小尺寸
+        if (textWidth <= 0 || !isFinite(textWidth)) {
+            textWidth = 100;
+        }
+        if (textHeight <= 0 || !isFinite(textHeight)) {
+            textHeight = 30;
+        }
+
         // 添加一些边距
         const padding = 20;
         const newWidth = textWidth + padding * 2;

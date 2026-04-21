@@ -177,6 +177,9 @@ export class Role extends Component {
     protected isPlayingDeathAnimation: boolean = false; // 是否正在播放死亡动画
     protected isMoving: boolean = false; // 是否正在移动
     protected moveTarget: Node = null!; // 移动目标（敌人）
+
+    // 【调试日志】弓箭手无法攻击到传送门上方的投矛手 - 日志节流
+    private _debugLogLastTime: number = 0;
     protected isPlayingMoveAnimation: boolean = false; // 是否正在播放移动动画
     protected isPlayingIdleAnimation: boolean = false; // 是否正在播放待机动画
     // 在最近攻击或受击后的这段时间内禁止播放待机动画（秒）
@@ -1453,7 +1456,10 @@ export class Role extends Component {
 
         const enemyScript = this.getEnemyScript(node);
         if (!enemyScript) {
-            // console.log(`[Role.isAliveEnemy] 未找到敌人脚本，节点=${node.name}`);
+            // 【调试日志】弓箭手无法攻击到传送门上方的投矛手（仅第一关最后一波）
+            if (this._isDebugMode()) {
+                console.log(`[DEBUG-Arrower-Lv1Final] isAliveEnemy: node=${node.name}, getEnemyScript returned null`);
+            }
             return false;
         }
 
@@ -1467,14 +1473,58 @@ export class Role extends Component {
 
         // 检查敌人是否存活，支持多种存活检查方式
         if (enemyScript.isAlive && typeof enemyScript.isAlive === 'function') {
-            return enemyScript.isAlive();
+            const isAlive = enemyScript.isAlive();
+            // 【调试日志】弓箭手无法攻击到传送门上方的投矛手（仅第一关最后一波）
+            if (this._isDebugMode() && enemyScript.constructor?.name === 'TrollSpearman') {
+                console.log(`[DEBUG-Arrower-Lv1Final] isAliveEnemy: TrollSpearman ${node.name}, isAlive()=${isAlive}, health=${enemyScript.health}, currentHealth=${enemyScript.currentHealth}`);
+            }
+            return isAlive;
         } else if (enemyScript.health !== undefined) {
-            return enemyScript.health > 0;
+            const result = enemyScript.health > 0;
+            if (this._isDebugMode() && enemyScript.constructor?.name === 'TrollSpearman') {
+                console.log(`[DEBUG-Arrower-Lv1Final] isAliveEnemy: TrollSpearman ${node.name}, health=${enemyScript.health}, result=${result}`);
+            }
+            return result;
         } else if (enemyScript.currentHealth !== undefined) {
-            return enemyScript.currentHealth > 0;
+            const result = enemyScript.currentHealth > 0;
+            if (this._isDebugMode() && enemyScript.constructor?.name === 'TrollSpearman') {
+                console.log(`[DEBUG-Arrower-Lv1Final] isAliveEnemy: TrollSpearman ${node.name}, currentHealth=${enemyScript.currentHealth}, result=${result}`);
+            }
+            return result;
         }
 
         return true;
+    }
+
+    /**
+     * 检查是否是调试模式（第一关最后一波）
+     * @returns 是否是调试模式
+     */
+    private _isDebugMode(): boolean {
+        if (this.prefabName !== 'Arrower' || !this.gameManager) {
+            return false;
+        }
+        const currentLevel = (this.gameManager as any).getCurrentLevelSafe?.() ?? 1;
+        const enemySpawner = (this.gameManager as any).enemySpawner;
+        const currentWave = enemySpawner?.getCurrentWaveNumber?.() ?? 0;
+        const totalWaves = enemySpawner?.getTotalWaves?.() ?? 0;
+        return (currentLevel === 1 && currentWave === totalWaves);
+    }
+
+    /**
+     * 检查是否应该显示调试日志（节流：1 秒一次）
+     * @returns 是否应该显示日志
+     */
+    private _shouldShowDebugLog(): boolean {
+        if (!this._isDebugMode()) {
+            return false;
+        }
+        const now = Date.now();
+        if (!this._debugLogLastTime || (now - this._debugLogLastTime) >= 1000) {
+            this._debugLogLastTime = now;
+            return true;
+        }
+        return false;
     }
     
     /**
@@ -1496,6 +1546,10 @@ export class Role extends Component {
                 return comp;
             }
             if (comp && comp.unitType === UnitType.ENEMY) {
+                // 【调试日志】弓箭手无法攻击到传送门上方的投矛手（仅第一关最后一波）
+                if (this._isDebugMode() && compName === 'TrollSpearman') {
+                    console.log(`[DEBUG-Arrower-Lv1Final] getEnemyScript: Found TrollSpearman on node=${node.name}, unitType=${comp.unitType}`);
+                }
                 return comp;
             }
         }
@@ -1539,6 +1593,21 @@ export class Role extends Component {
             // if (this.prefabName === 'Eagle') { // 角鹰索敌
             //     console.log(`[Role-getEnemies] 角鹰 position=(${this.node.worldPosition.x.toFixed(0)},${this.node.worldPosition.y.toFixed(0)}), maxDistance=${maxDistance}, attackRange=${this.attackRange}, isFlying=${this.isFlying}, 找到${enemies.length}个敌人`);
             // }
+            // 【调试日志】弓箭手无法攻击到传送门上方的投矛手 - 仅第一关最后一波
+            if (this._shouldShowDebugLog()) {
+                const posStr = `(${this.node.worldPosition.x.toFixed(0)},${this.node.worldPosition.y.toFixed(0)})`;
+                console.log(`[DEBUG-Arrower-Lv1Final] getEnemies: pos=${posStr}, maxDistance=${maxDistance.toFixed(0)}, attackRange=${this.attackRange}, found=${enemies.length}`);
+                if (enemies.length > 0) {
+                    enemies.forEach((e, idx) => {
+                        const ePos = e.worldPosition;
+                        const dx = ePos.x - this.node.worldPosition.x;
+                        const dy = ePos.y - this.node.worldPosition.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        const enemyComp = this.getEnemyScript(e);
+                        console.log(`  [DEBUG-Arrower-Lv1Final] enemy[${idx}]: name=${e.name}, type=${enemyComp?.constructor?.name}, pos=(${ePos.x.toFixed(0)},${ePos.y.toFixed(0)}), dist=${dist.toFixed(0)}, alive=${this.isAliveEnemy(e)}`);
+                    });
+                }
+            }
             // 地面近战单位过滤掉飞行单位（无法攻击到空中目标）
             // 攻击范围小于 100 的单位视为近战单位
             if (!this.isFlying && this.attackRange < 100) {
@@ -1675,6 +1744,11 @@ export class Role extends Component {
         const enemies = this.getEnemies(true, detectionRange);
 
         const myPos = this.node.worldPosition;
+
+        // 【调试日志】弓箭手无法攻击到传送门上方的投矛手 - findTarget（仅第一关最后一波）
+        if (this._shouldShowDebugLog()) {
+            console.log(`[DEBUG-Arrower-Lv1Final-findTarget] pos=(${myPos.x.toFixed(0)},${myPos.y.toFixed(0)}), detectionRange=${detectionRange.toFixed(0)}, enemies.length=${enemies.length}, currentTarget=${this.currentTarget ? this.currentTarget.name : 'null'}`);
+        }
 
         // 如果有优先攻击的目标类型，先查找匹配的目标
         let priorityEnemy: Node = null!;

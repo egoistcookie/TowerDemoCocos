@@ -49,6 +49,8 @@ export class UnitManager extends Component {
     private readonly UPDATE_INTERVAL: number = 0.1; // 每0.1秒更新一次单位列表（而不是每帧）
     private mageDebugLogTimer: number = 0;
     
+    // 【调试日志】弓箭手无法攻击到传送门上方的投矛手 - 日志节流
+    private _debugLogLastTime: number = 0;
     static getInstance(): UnitManager | null {
         return UnitManager.instance;
     }
@@ -435,6 +437,32 @@ export class UnitManager extends Component {
     }
     
     /**
+     * 检查是否是调试模式（第一关最后一波）
+     */
+    private _isDebugMode(): boolean {
+        const gameManager = find('GameManager')?.getComponent('GameManager');
+        if (!gameManager) return false;
+        const currentLevel = (gameManager as any).getCurrentLevelSafe?.() ?? 1;
+        const enemySpawner = (gameManager as any).enemySpawner;
+        const currentWave = enemySpawner?.getCurrentWaveNumber?.() ?? 0;
+        const totalWaves = enemySpawner?.getTotalWaves?.() ?? 0;
+        return (currentLevel === 1 && currentWave === totalWaves);
+    }
+
+    /**
+     * 检查是否应该显示调试日志（节流：1 秒一次）
+     */
+    private _shouldShowDebugLog(): boolean {
+        if (!this._isDebugMode()) return false;
+        const now = Date.now();
+        if (!this._debugLogLastTime || (now - this._debugLogLastTime) >= 1000) {
+            this._debugLogLastTime = now;
+            return true;
+        }
+        return false;
+    }
+    
+    /**
      * 在指定范围内查找敌人（优化版本，使用粗略距离筛选）
      * @param center 中心位置
      * @param maxDistance 最大距离
@@ -469,6 +497,13 @@ export class UnitManager extends Component {
             if (includeOnlyAlive) {
                 const enemyScript = this.getEnemyScript(enemy);
                 if (!enemyScript || !this.isAliveEnemy(enemy)) {
+                    // 【调试日志】弓箭手无法攻击到传送门上方的投矛手（仅第一关最后一波，1 秒一次）
+                    const trollSpearmanComp = enemy.getComponent('TrollSpearman');
+                    if (trollSpearmanComp) {
+                        if (this._shouldShowDebugLog()) {
+                            console.log(`[DEBUG-UnitManager-Lv1Final] TrollSpearman ${enemy.name} filtered: enemyScript=${!!enemyScript}, isAlive=${enemyScript ? this.isAliveEnemy(enemy) : 'N/A'}, pos=(${enemy.worldPosition.x.toFixed(0)},${enemy.worldPosition.y.toFixed(0)})`);
+                        }
+                    }
                     continue;
                 }
             }
@@ -476,6 +511,16 @@ export class UnitManager extends Component {
             result.push(enemy);
         }
         
+        // 【调试日志】弓箭手无法攻击到传送门上方的投矛手（仅第一关最后一波）
+        const hasTrollSpearman = result.some(e => e.getComponent('TrollSpearman'));
+        if (hasTrollSpearman && this._shouldShowDebugLog()) {
+            result.forEach(e => {
+                const ts = e.getComponent('TrollSpearman');
+                if (ts) {
+                    console.log(`[DEBUG-UnitManager-Lv1Final] returned TrollSpearman ${e.name} at (${e.worldPosition.x.toFixed(0)},${e.worldPosition.y.toFixed(0)})`);
+                }
+            });
+        }
         ////console.info(`[UnitManager.getEnemiesInRange] 返回 ${result.length} 个符合条件的敌人`);
         return result;
     }

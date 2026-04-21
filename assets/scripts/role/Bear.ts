@@ -71,12 +71,136 @@ export class Bear extends Role {
     private damageInWindow: number = 0; // 1 秒内累积的伤害
     private damageWindowTimer: number = 0; // 伤害窗口计时器
 
+    // 攻击击退效果
+    private readonly KNOCKBACK_POWER: number = 15; // 击退强度（参考哨塔 SP 巨箭的小幅击退）
+
     // 目标选择相关
     protected currentTarget: Node = null!;
     protected targetFindTimer: number = 0;
     protected readonly TARGET_FIND_INTERVAL: number = 0.5;
 
     // 注意：attackTimer 和 currentHealth 等属性从 Role 基类继承，无需重复定义
+
+    /**
+     * 重写 playAttackAnimation：攻击时贴图高度增加 50%
+     */
+    private playBearAttackAnimation(onComplete?: () => void) {
+        // 如果正在播放动画，不重复播放
+        if (this.isPlayingAttackAnimation) {
+            return;
+        }
+
+        // 每次攻击开始时，在 2 秒内禁止播放待机动画
+        this.idleBlockTimer = 2;
+
+        // 停止待机动画
+        if (this.isPlayingIdleAnimation) {
+            this.isPlayingIdleAnimation = false;
+        }
+
+        // 如果没有 Sprite 组件或没有动画帧，直接返回
+        if (!this.sprite) {
+            return;
+        }
+
+        // 如果没有设置动画帧，直接返回
+        if (!this.attackAnimationFrames || this.attackAnimationFrames.length === 0) {
+            return;
+        }
+
+        // 检查帧是否有效
+        const validFrames = this.attackAnimationFrames.filter(frame => frame != null);
+        if (validFrames.length === 0) {
+            return;
+        }
+
+        // 根据敌人位置决定是否翻转
+        let shouldFlip = false;
+        if (this.currentTarget && this.currentTarget.isValid) {
+            const bearPos = this.node.worldPosition;
+            const enemyPos = this.currentTarget.worldPosition;
+            shouldFlip = enemyPos.x < bearPos.x;
+
+            if (shouldFlip) {
+                this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+                this.refreshOverheadNodesScale();
+            } else {
+                this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+                this.refreshOverheadNodesScale();
+            }
+        }
+
+        // 标记正在播放动画
+        this.isPlayingAttackAnimation = true;
+
+        const frames = validFrames;
+        const frameCount = frames.length;
+        const frameDuration = this.attackAnimationDuration / frameCount;
+
+        // 使用 update 方法播放动画
+        let animationTimer = 0;
+        let lastFrameIndex = -1;
+
+        // 立即播放第一帧
+        if (frames[0]) {
+            this.sprite.spriteFrame = frames[0];
+            lastFrameIndex = 0;
+        }
+
+        // 攻击动画开始时，高度增加 40%，Y 轴向上移动 20 像素
+        const originalScaleY = this.node.scale.y;
+        const originalPosY = this.node.worldPosition.y;
+        this.node.setScale(this.node.scale.x, originalScaleY * 1.4, this.node.scale.z);
+        this.node.setWorldPosition(this.node.worldPosition.x, originalPosY + 20, this.node.worldPosition.z);
+
+        // 使用 update 方法逐帧播放
+        const animationUpdate = (deltaTime: number) => {
+            if (!this.sprite || !this.sprite.isValid || this.isDestroyed) {
+                this.isPlayingAttackAnimation = false;
+                // 恢复原始高度和位置
+                this.node.setScale(this.node.scale.x, originalScaleY, this.node.scale.z);
+                this.node.setWorldPosition(this.node.worldPosition.x, originalPosY, this.node.worldPosition.z);
+                this.unschedule(animationUpdate);
+                return;
+            }
+
+            animationTimer += deltaTime;
+
+            // 计算当前应该显示的帧索引
+            const targetFrameIndex = Math.min(Math.floor(animationTimer / frameDuration), frameCount - 1);
+
+            // 检查动画是否完成
+            if (animationTimer >= this.attackAnimationDuration) {
+                // 确保播放最后一帧
+                if (lastFrameIndex < frameCount - 1 && frames[frameCount - 1]) {
+                    this.sprite.spriteFrame = frames[frameCount - 1];
+                }
+                // 动画播放完成，恢复默认 SpriteFrame
+                this.restoreDefaultSprite();
+                this.unschedule(animationUpdate);
+
+                // 恢复原始高度和位置
+                this.node.setScale(this.node.scale.x, originalScaleY, this.node.scale.z);
+                this.node.setWorldPosition(this.node.worldPosition.x, originalPosY, this.node.worldPosition.z);
+
+                // 调用完成回调
+                if (onComplete) {
+                    onComplete();
+                }
+                return;
+            }
+
+            // 更新到当前帧（只在帧变化时更新）
+            if (targetFrameIndex !== lastFrameIndex && targetFrameIndex < frameCount && frames[targetFrameIndex]) {
+                this.sprite.spriteFrame = frames[targetFrameIndex];
+                lastFrameIndex = targetFrameIndex;
+            }
+        };
+
+        // 开始动画更新
+        this.unschedule(animationUpdate);
+        this.schedule(animationUpdate, 0);
+    }
 
     start() {
         super.start(); // 调用父类 start() 创建血条等组件
@@ -187,8 +311,8 @@ export class Bear extends Role {
 
         // console.log(`[Bear] 开始攻击，目标=${this.currentTarget.name}, 位置=(${this.currentTarget.worldPosition.x.toFixed(1)}, ${this.currentTarget.worldPosition.y.toFixed(1)})`);
 
-        // 播放攻击动画
-        this.playAttackAnimation(() => {
+        // 播放攻击动画（高度增加 50%）
+        this.playBearAttackAnimation(() => {
             // 第二次伤害：攻击动画结束时再次造成伤害
             if (this.currentTarget && this.currentTarget.isValid) {
                 this.dealDamageToTarget();
@@ -221,8 +345,23 @@ export class Bear extends Role {
                             this.currentTarget.getComponent('Build') as any;
 
         if (targetScript && targetScript.takeDamage) {
-            targetScript.takeDamage(this.attackDamage);
-            // console.log(`[Bear] 对目标 ${this.currentTarget.name} 造成伤害 ${this.attackDamage}`);
+            // 计算击退方向：从巨熊指向目标
+            const knockbackDir = new Vec3();
+            Vec3.subtract(knockbackDir, this.currentTarget.worldPosition, this.node.worldPosition);
+            if (knockbackDir.length() > 0.001) {
+                knockbackDir.normalize();
+            }
+
+            targetScript.takeDamage(this.attackDamage, knockbackDir);
+
+            // 击退效果：对 Boss 和传送门无效
+            const isBoss = !!(this.currentTarget.getComponent('Boss') as any);
+            const isPortal = !!(this.currentTarget.getComponent('Portal') as any);
+            if (!isBoss && !isPortal && this.KNOCKBACK_POWER > 0) {
+                const knockPos = new Vec3();
+                Vec3.scaleAndAdd(knockPos, this.currentTarget.worldPosition, knockbackDir, this.KNOCKBACK_POWER);
+                this.currentTarget.setWorldPosition(knockPos);
+            }
         } else {
             console.warn(`[Bear] 目标 ${this.currentTarget.name} 没有 takeDamage 方法，未造成伤害`);
         }
