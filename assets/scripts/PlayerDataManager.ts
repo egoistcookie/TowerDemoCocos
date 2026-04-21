@@ -106,6 +106,9 @@ export class PlayerDataManager {
                     if (this.playerData.lastStaminaRecoverTime === undefined) {
                         this.playerData.lastStaminaRecoverTime = Date.now();
                     }
+                    if (this.playerData.eagleReinsCount === undefined) {
+                        this.playerData.eagleReinsCount = 0;
+                    }
                     
                     // 兼容性处理：如果 playerLevel 不存在或为默认值1，则根据已消耗的天赋点计算正确的等级
                     if (!this.playerData.playerLevel || this.playerData.playerLevel === 1) {

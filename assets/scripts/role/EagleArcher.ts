@@ -1,4 +1,4 @@
-import { _decorator } from 'cc';
+import { _decorator, Vec3, find } from 'cc';
 import { Arrower } from './Arrower';
 import { PlayerDataManager } from '../PlayerDataManager';
 import { GamePopup } from '../GamePopup';
@@ -157,6 +157,128 @@ export class EagleArcher extends Arrower {
 
         // 确保飞行单位标志正确设置
         this.isFlying = true;
+
+        // 设置渲染层级：与角鹰保持一致，不被石墙和防御塔遮挡
+        // 值越大越在上层，设置为 45 确保在石墙（索引 30 左右）之后，UI 之前
+        try {
+            this.node.setSiblingIndex(45);
+        } catch (e) {
+            // 忽略错误
+        }
+    }
+
+    /**
+     * 重写碰撞检测逻辑，飞行单位只与角鹰和角鹰射手碰撞
+     */
+    override checkCollisionAtPosition(position: Vec3): boolean {
+        // 检查与水晶的碰撞（飞行单位仍需避免与水晶重叠）
+        const crystal = find('Crystal');
+        if (crystal && crystal.isValid && crystal.active) {
+            const crystalPos = crystal.worldPosition;
+            const dx = position.x - crystalPos.x;
+            const dy = position.y - crystalPos.y;
+            const distanceSq = dx * dx + dy * dy;
+            const crystalRadius = 50;
+            const minDistance = this.collisionRadius + crystalRadius;
+            const minDistanceSq = minDistance * minDistance;
+            if (distanceSq < minDistanceSq) {
+                return true;
+            }
+        }
+
+        // 只检查与其他角鹰的碰撞
+        if (this.unitManager) {
+            const eagles = this.unitManager.getEagles();
+            for (const eagle of eagles) {
+                if (eagle && eagle.isValid && eagle.active && eagle !== this.node) {
+                    const eaglePos = eagle.worldPosition;
+                    const dx = position.x - eaglePos.x;
+                    const dy = position.y - eaglePos.y;
+                    const distanceSq = dx * dx + dy * dy;
+
+                    const otherEagleScript = eagle.getComponent('Eagle') as any;
+                    const otherRadius = otherEagleScript?.collisionRadius ?? this.collisionRadius;
+                    const minDistance = (this.collisionRadius + otherRadius) * 1.2;
+                    const minDistanceSq = minDistance * minDistance;
+
+                    if (distanceSq < minDistanceSq) {
+                        return true;
+                    }
+                }
+            }
+
+            // 检查与其他角鹰射手的碰撞
+            const eagleArchers = this.unitManager.getEagleArchers();
+            for (const eagleArcher of eagleArchers) {
+                if (eagleArcher && eagleArcher.isValid && eagleArcher.active && eagleArcher !== this.node) {
+                    const eagleArcherPos = eagleArcher.worldPosition;
+                    const dx = position.x - eagleArcherPos.x;
+                    const dy = position.y - eagleArcherPos.y;
+                    const distanceSq = dx * dx + dy * dy;
+
+                    const otherEagleArcherScript = eagleArcher.getComponent('EagleArcher') as any;
+                    const otherRadius = otherEagleArcherScript?.collisionRadius ?? this.collisionRadius;
+                    const minDistance = (this.collisionRadius + otherRadius) * 1.2;
+                    const minDistanceSq = minDistance * minDistance;
+
+                    if (distanceSq < minDistanceSq) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * 重写移动方法，飞行单位可以越过障碍物
+     */
+    override moveToPosition(targetPos: Vec3, deltaTime: number) {
+        if (this.isDestroyed) {
+            return;
+        }
+
+        const currentPos = this.node.worldPosition;
+        const dx = targetPos.x - currentPos.x;
+        const dy = targetPos.y - currentPos.y;
+        const distanceSq = dx * dx + dy * dy;
+
+        // 如果已经到达目标位置，停止移动
+        if (distanceSq <= 100) {
+            this.stopMoving();
+            return;
+        }
+
+        // 设置移动状态
+        this.isMoving = true;
+
+        // 飞行单位不需要检查地面障碍，但仍需检查与其他角鹰/角鹰射手的碰撞
+        const direction = new Vec3();
+        Vec3.subtract(direction, targetPos, currentPos);
+        direction.normalize();
+
+        const moveDistance = this.moveSpeed * deltaTime;
+        const newPos = new Vec3(
+            currentPos.x + direction.x * moveDistance,
+            currentPos.y + direction.y * moveDistance,
+            currentPos.z
+        );
+
+        // 检查碰撞并调整位置（只检查与其他角鹰/角鹰射手的碰撞）
+        const adjustedPos = this.checkCollisionAndAdjust(currentPos, newPos);
+
+        this.node.setWorldPosition(adjustedPos);
+
+        // 根据移动方向翻转
+        if (direction.x < 0) {
+            this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+        } else {
+            this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+        }
+
+        // 血条不需要跟随翻转，调用 refreshOverheadNodesScale 更新血条缩放
+        this.refreshOverheadNodesScale();
     }
 
     /**
@@ -210,16 +332,10 @@ export class EagleArcher extends Arrower {
     }
 
     /**
-     * 重写 destroyTower 方法，在死亡时退还角鹰缰绳
+     * 重写 destroyTower 方法，死亡时不退还缰绳
      */
     override destroyTower() {
-        // 退还缰绳
-        const playerDataManager = PlayerDataManager.getInstance();
-        if (playerDataManager) {
-            playerDataManager.addEagleReins(1);
-            console.log('[EagleArcher] 死亡退还 1 个缰绳，当前缰绳数量：' + playerDataManager.getEagleReinsCount());
-        }
-
+        // 死亡不退还缰绳，缰绳只在通关 4/5 关时增加
         // 调用父类的 destroyTower 方法
         super.destroyTower();
     }

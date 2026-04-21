@@ -294,6 +294,7 @@ export class GameManager extends Component {
     // 退出游戏标志
     private isExitingGame: boolean = false; // 是否正在退出游戏中
     private hasClaimedEagleReinsReward: boolean = false; // 是否已领取第四关角鹰缰绳奖励
+    private hasClaimedLevel5EagleReinsReward: boolean = false; // 是否已领取第五关角鹰缰绳奖励
 
     // 木材 UI 标签（左上角），在场景中通过代码创建并缓存
     private woodLabel: Label | null = null;
@@ -3827,6 +3828,12 @@ export class GameManager extends Component {
                         if (currentLevel === 4 && !this.hasClaimedEagleReinsReward) {
                             console.log('[GameManager] 第四关通关，发放角鹰缰绳奖励');
                             this.hasClaimedEagleReinsReward = true;
+                            this.onEagleReinsDropped();
+                        }
+                        // 第五关通关奖励：角鹰缰绳（仅发放一次）
+                        if (currentLevel === 5 && !this.hasClaimedLevel5EagleReinsReward) {
+                            console.log('[GameManager] 第五关通关，发放角鹰缰绳奖励');
+                            this.hasClaimedLevel5EagleReinsReward = true;
                             this.onEagleReinsDropped();
                         }
                     }
@@ -9855,6 +9862,12 @@ export class GameManager extends Component {
      * @param dragonNode 飞龙节点（用于获取喂养结果贴图）
      */
     public onDragonMeatDropped(spriteFrame: SpriteFrame | null, dragonNode: Node | null = null) {
+        // 游戏已结束，不再触发龙肉提示
+        if (this.gameState === GameState.Victory || this.gameState === GameState.Defeat) {
+            console.log('[GameManager] 游戏已结束，跳过龙肉提示');
+            return;
+        }
+
         this.hasDragonMeatAvailable = true;
         this.dragonMeatSpriteFrame = spriteFrame;
 
@@ -10563,43 +10576,190 @@ export class GameManager extends Component {
      * 处理弓箭手转职为角鹰射手
      */
     private onTransferToEagleArcher() {
-        // 查找战争古树并触发生产一个角鹰射手（消耗一个缰绳）
-        const warAncientTrees = find('Canvas/WarAncientTrees');
-        if (warAncientTrees && warAncientTrees.children.length > 0) {
-            for (const tree of warAncientTrees.children) {
-                const treeScript = tree.getComponent('WarAncientTree') as any;
-                if (treeScript && treeScript.produceTower) {
-                    console.log('[GameManager.onTransferToEagleArcher] 触发战争古树生产角鹰射手');
-                    treeScript.produceTower();
-                    break;
-                }
-            }
-        } else {
-            console.warn('[GameManager.onTransferToEagleArcher] 未找到战争古树');
-        }
+        // 显示转职翻转动画
+        this.showTransferAnimation();
+    }
 
-        // 显示弓箭手 happy 提示框
-        this.autoCreateUnitIntroPopup();
-        if (!this.unitIntroPopup) {
+    /**
+     * 获取所有弓箭手（不包括角鹰射手）
+     */
+    private getAllArrowers(): any[] {
+        const arrowers: any[] = [];
+        const towersContainer = find('Canvas/Towers');
+        if (!towersContainer) return arrowers;
+
+        for (const tower of towersContainer.children) {
+            if (!tower || !tower.active || !tower.isValid) continue;
+            // 跳过角鹰射手
+            const eagleArcherScript = tower.getComponent('EagleArcher') as any;
+            if (eagleArcherScript) continue;
+
+            const arrowerScript = tower.getComponent('Arrower') as any;
+            if (arrowerScript) {
+                arrowers.push(arrowerScript);
+            }
+        }
+        return arrowers;
+    }
+
+    /**
+     * 显示转职翻转动画（参考抽卡界面翻转卡片效果）
+     * @param transferCount 转职数量
+     */
+    private showTransferAnimation() {
+        const canvas = find('Canvas');
+        if (!canvas) {
             this.resumeGame();
             return;
         }
 
-        // 加载弓箭手开心贴图
-        resources.load('textures/arrower/arrowerHappy/spriteFrame', SpriteFrame, (err, spriteFrame) => {
-            if (err) {
-                console.warn('[GameManager] 加载弓箭手开心贴图失败', err);
+        // 创建遮罩层
+        const maskLayer = new Node('TransferMask');
+        maskLayer.setParent(canvas);
+        const maskTransform = maskLayer.addComponent(UITransform);
+        const visibleSize = view.getVisibleSize();
+        maskTransform.setContentSize(visibleSize.width * 2, visibleSize.height * 2);
+        maskLayer.setPosition(0, 0, 0);
+        const maskGraphics = maskLayer.addComponent(Graphics);
+        maskGraphics.fillColor = new Color(0, 0, 0, 200);
+        maskGraphics.rect(-visibleSize.width, -visibleSize.height, visibleSize.width * 2, visibleSize.height * 2);
+        maskGraphics.fill();
+        maskLayer.on(Node.EventType.TOUCH_START, (event: EventTouch) => { event.propagationStopped = true; }, this, true);
+        maskLayer.on(Node.EventType.TOUCH_MOVE, (event: EventTouch) => { event.propagationStopped = true; }, this, true);
+        maskLayer.on(Node.EventType.TOUCH_END, (event: EventTouch) => { event.propagationStopped = true; }, this, true);
+        maskLayer.on(Node.EventType.TOUCH_CANCEL, (event: EventTouch) => { event.propagationStopped = true; }, this, true);
+        maskLayer.setSiblingIndex(Number.MAX_SAFE_INTEGER - 1);
+
+        // 创建卡片容器
+        const cardNode = new Node('TransferCard');
+        cardNode.setParent(canvas);
+        const cardTransform = cardNode.addComponent(UITransform);
+        const cardWidth = 400;
+        const cardHeight = 500;
+        cardTransform.setContentSize(cardWidth, cardHeight);
+        cardNode.setPosition(0, 0, 0);
+        cardNode.setSiblingIndex(Number.MAX_SAFE_INTEGER);
+
+        // 添加卡片背景
+        const cardBg = cardNode.addComponent(Graphics);
+        cardBg.fillColor = new Color(50, 50, 50, 255);
+        cardBg.roundRect(-cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, 10);
+        cardBg.fill();
+        cardBg.strokeColor = new Color(255, 215, 0, 255);
+        cardBg.lineWidth = 4;
+        cardBg.roundRect(-cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, 10);
+        cardBg.stroke();
+
+        // 创建 Sprite 节点用于显示贴图
+        const spriteNode = new Node('CardSprite');
+        spriteNode.setParent(cardNode);
+        spriteNode.setPosition(0, 0, 0);
+        const spriteTransform = spriteNode.addComponent(UITransform);
+        const spriteSize = 300;
+        spriteTransform.setContentSize(spriteSize, spriteSize);
+        const cardSprite = spriteNode.addComponent(Sprite);
+        cardSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        cardSprite.type = Sprite.Type.SIMPLE;
+
+        // 查找第一个弓箭手获取其贴图
+        let arrowerSpriteFrame: SpriteFrame | null = null;
+        const arrower = this.getFirstActiveUnitScriptInContainers(['Canvas/Towers'], 'Arrower');
+        if (arrower && arrower.defaultSpriteFrame) {
+            arrowerSpriteFrame = arrower.defaultSpriteFrame;
+        }
+
+        // 加载角鹰射手贴图
+        let eagleArcherSpriteFrame: SpriteFrame | null = null;
+        resources.load('textures/arrower/eagleArcher/spriteFrame', SpriteFrame, (err, sf) => {
+            if (!err && sf) {
+                eagleArcherSpriteFrame = sf;
             }
-            this.unitIntroPopup.show({
-                unitIcon: spriteFrame,
-                unitName: '转职成功！',
-                unitDescription: '一名弓箭手成功转职为角鹰射手！\n在训练弓箭手时，将自动转职为角鹰射手。',
-                unitType: 'Arrower',
-                onCloseCallback: () => {
-                    this.resumeGame();
-                }
-            });
         });
+
+        // 设置初始贴图（弓箭手）
+        if (arrowerSpriteFrame) {
+            cardSprite.spriteFrame = arrowerSpriteFrame;
+        }
+
+        // 显示转职成功提示（点击卡片后触发）
+        const showSuccessPopup = () => {
+            maskLayer.destroy();
+            cardNode.destroy();
+
+            // 加载角鹰射手贴图用于提示框
+            resources.load('textures/arrower/eagleArcher/spriteFrame', SpriteFrame, (err, spriteFrame) => {
+                if (err) {
+                    console.warn('[GameManager] 加载角鹰射手贴图失败', err);
+                }
+                this.autoCreateUnitIntroPopup();
+                if (!this.unitIntroPopup) {
+                    this.resumeGame();
+                    return;
+                }
+                this.unitIntroPopup.show({
+                    unitIcon: spriteFrame,
+                    unitName: '转职成功！',
+                    unitDescription: `一名弓箭手成功转职为角鹰射手！`,
+                    unitType: 'EagleArcher',
+                    onCloseCallback: () => {
+                        this.resumeGame();
+                    }
+                });
+            });
+        };
+
+
+        // 翻转动画：使用 scaleX 实现 X 轴翻转效果
+        const cardOpacity = cardNode.addComponent(UIOpacity);
+        cardOpacity.opacity = 255;
+
+        // 保存原始缩放
+        const originalScale = cardNode.scale.clone();
+
+        // 一次性翻三圈：scaleX 从 1 到 0（淡出）-> 从 0 到 1（淡入），重复 3 次
+        // 每圈 0.4 秒，共 1.2 秒，中间无间隔
+        let flipCount = 0;
+        const totalFlips = 3; // 总共翻转 3 圈
+
+        const doFlip = () => {
+            flipCount++;
+
+            // 淡出（scaleX 从 1 到 0）
+            tween(cardNode)
+                .to(0.2, {
+                    scale: new Vec3(0, originalScale.y, originalScale.z)
+                }, { easing: 'sineInOut' })
+                // 淡入（scaleX 从 0 到 1）
+                .to(0.2, {
+                    scale: originalScale
+                }, { easing: 'sineInOut' })
+                .call(() => {
+                    // 如果是最后一圈（第 3 圈），更换为角鹰射手贴图
+                    if (flipCount === totalFlips && eagleArcherSpriteFrame) {
+                        cardSprite.spriteFrame = eagleArcherSpriteFrame;
+                    }
+
+                    // 如果还没翻完 3 圈，继续翻
+                    if (flipCount < totalFlips) {
+                        doFlip();
+                    } else {
+                        // 翻转完成后，添加点击事件
+                        cardNode.on(Node.EventType.TOUCH_END, () => {
+                            showSuccessPopup();
+                        }, this);
+                    }
+                })
+                .start();
+        };
+
+        // 开始第一圈翻转
+        doFlip();
+
+        // 同时播放淡入淡出动画：先淡出，再淡入
+        tween(cardOpacity)
+            .to(0.6, { opacity: 0 })
+            .to(0.6, { opacity: 255 })
+            .start();
     }
 }
 

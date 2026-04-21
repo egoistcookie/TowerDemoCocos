@@ -64,7 +64,6 @@ export class WarAncientTree extends Build {
     private productionProgressGraphics: Graphics = null!; // 生产进度条Graphics组件
     private producedTowers: Node[] = []; // 已生产的Arrower列表
     private totalProducedCount: number = 0; // 累计生产的单位数量（用于计算金币消耗）
-    private producedEagleArcherCount: number = 0; // 测试模式下已生产的角鹰射手数量（用于限制测试模式生产数量）
     private productionTimer: number = 0; // 生产计时器
     private productionProgress: number = 0; // 生产进度（0-1）
     private isProducing: boolean = false; // 是否正在生产
@@ -498,43 +497,31 @@ export class WarAncientTree extends Build {
         }
 
         // 检查人口上限
-        if (!this.gameManager) { 
+        if (!this.gameManager) {
             this.findGameManager();
         }
+
 
         if (this.gameManager && !this.gameManager.canAddPopulation(1)) {
             return;
         }
 
-        // 检查玩家是否有角鹰缰绳，如果有则转职为角鹰射手
+        // 检查玩家是否有角鹰缰绳，如果有则根据缰绳数量生产对应数量的角鹰射手（缰绳不消耗）
+        // 逻辑：缰绳数量 = 可以同时存在的角鹰射手最大数量
         const playerDataManager = PlayerDataManager.getInstance();
         let eagleReinsCount = playerDataManager ? playerDataManager.getEagleReinsCount() : 0;
 
-        // 测试模式：默认给 1 个角鹰射手配额（不消耗真实缰绳）
-        const TEST_MODE_EAGLE_ARCHER = false; // 设置为 false 关闭测试模式
-        const testEagleArcherQuota = 1; // 测试模式下固定生产 1 个角鹰射手
+        if (eagleReinsCount > 0) {
+            // 检查当前场上存活的角鹰射手数量
+            const currentEagleArcherCount = this.getAliveEagleArcherCount();
+            console.log(`[WarAncientTree.produceTower] 缰绳数量=${eagleReinsCount}，场上角鹰射手=${currentEagleArcherCount}`);
 
-        // 检查是否已经生产过测试角鹰射手
-        let allowTestEagleArcher = false;
-        if (TEST_MODE_EAGLE_ARCHER && this.producedEagleArcherCount < testEagleArcherQuota) {
-            allowTestEagleArcher = true;
-            console.log(`[WarAncientTree] 测试模式：第 ${this.producedEagleArcherCount + 1} 个单位将生产角鹰射手`);
-        }
-
-        const shouldTransferToEagleArcher = eagleReinsCount > 0 || allowTestEagleArcher;
-
-        if (shouldTransferToEagleArcher) {
-            console.log('[WarAncientTree.produceTower] 检测到缰绳（或测试模式），准备生产角鹰射手');
-            // 消耗一个缰绳（测试模式下不消耗）
-            if (playerDataManager && eagleReinsCount > 0) {
-                const consumed = playerDataManager.consumeEagleReins(1);
-                console.log(`[WarAncientTree.produceTower] 消耗缰绳结果：${consumed}`);
-            } else if (allowTestEagleArcher) {
-                console.log('[WarAncientTree.produceTower] 测试模式：免费生产角鹰射手');
+            if (currentEagleArcherCount < eagleReinsCount) {
+                console.log(`[WarAncientTree.produceTower] 补充角鹰射手（${currentEagleArcherCount} < ${eagleReinsCount}）`);
+                // 生产角鹰射手（补充死亡的角鹰射手）
+                this.produceEagleArcher();
+                return;
             }
-            // 生产角鹰射手而不是普通弓箭手
-            this.produceEagleArcher();
-            return;
         }
 
         // 计算Tower出现位置（战争古树下方100像素）
@@ -730,11 +717,9 @@ export class WarAncientTree extends Build {
         if (this.eagleArcherPrefab) {
             // 使用配置的角鹰射手预制体
             eagleArcherNode = instantiate(this.eagleArcherPrefab);
-            console.log('[WarAncientTree] 使用 eagleArcherPrefab 生产角鹰射手');
         } else {
             // 降级方案：实例化弓箭手预制体并动态添加 EagleArcher 组件
             eagleArcherNode = instantiate(this.towerPrefab);
-            console.warn('[WarAncientTree] 未配置 eagleArcherPrefab，使用降级方案（弓箭手 + EagleArcher 组件）');
         }
 
         if (!eagleArcherNode) {
@@ -804,7 +789,6 @@ export class WarAncientTree extends Build {
         // 添加到已生产列表
         this.producedTowers.push(eagleArcherNode);
         this.totalProducedCount++;
-        this.producedEagleArcherCount++;
 
         // 安排自动上移
         if (eagleArcherScript && typeof eagleArcherScript.setupAutoMoveToCombatPosition === 'function') {
@@ -820,8 +804,6 @@ export class WarAncientTree extends Build {
         if (this.gameManager) {
             this.gameManager.checkUnitFirstAppearance('EagleArcher', eagleArcherScript);
         }
-
-        console.log(`[WarAncientTree] 生产角鹰射手，当前已生产角鹰射手数量：${this.producedEagleArcherCount}`);
     }
 
     /**
@@ -1046,6 +1028,22 @@ export class WarAncientTree extends Build {
         return false;
     }
 
+    /**
+     * 获取当前场上存活的角鹰射手数量
+     */
+    private getAliveEagleArcherCount(): number {
+        let count = 0;
+        for (const tower of this.producedTowers) {
+            if (tower && tower.isValid && tower.active) {
+                const eagleArcherScript = tower.getComponent('EagleArcher') as any;
+                if (eagleArcherScript && eagleArcherScript.isAlive && eagleArcherScript.isAlive()) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
     cleanupDeadTowers() {
         // 清理已死亡的Tower
         const beforeCount = this.producedTowers.length;
@@ -1082,13 +1080,7 @@ export class WarAncientTree extends Build {
             // 如果没有Arrower脚本，保留节点（可能是其他类型的单位）
             return true;
         });
-        
-        
-        // 更新角鹰射手计数
-        if (removedEagleArcherCount > 0) {
-            this.producedEagleArcherCount = Math.max(0, this.producedEagleArcherCount - removedEagleArcherCount);
-            console.log(`[WarAncientTree] 清理死亡单位，移除${removedEagleArcherCount}个角鹰射手，剩余角鹰射手计数：${this.producedEagleArcherCount}`);
-        }
+
         const afterCount = this.producedTowers.length;
         if (beforeCount !== afterCount) {
             // 更新单位信息面板（如果被选中）
