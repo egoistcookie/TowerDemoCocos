@@ -31,7 +31,8 @@ export enum OperationType {
     REVIVE = 'revive',                               // 复活（失败结算页看视频复活）
     TRIGGER_BEAR = 'trigger_bear',                   // 触发巨熊（中立巨熊被击败后开始驯化）
     BUILD_EAGLE_NEST = 'build_eagle_nest',           // 建造角鹰兽栏
-    TRAIN_EAGLE = 'train_eagle',                     // 训练角鹰
+    TRAIN_EAGLE = 'train_eagle',                     // 训练角鹰（角鹰兽栏产出）
+    TRAIN_EAGLE_ARCHER = 'train_eagle_archer',       // 训练角鹰射手（弓箭手小屋转职）
 }
 
 /**
@@ -64,7 +65,7 @@ export interface AnalyticsData {
 }
 
 // card_selection_events.selection_mode 允许记录更多状态；前端用该类型约束。
-export type CardSelectionMode = 'single' | 'get_all' | 'reroll';
+export type CardSelectionMode = 'single' | 'get_all' | 'reroll' | 'initial';
 export interface CardSelectionItem {
     unitId: string;
     rarity?: string;
@@ -96,6 +97,7 @@ export class AnalyticsManager extends Component {
     private readonly SESSION_START_URL = 'https://www.egoistcookie.top/api/analytics/session/start';
     private readonly CARD_SELECT_URL = 'https://www.egoistcookie.top/api/analytics/session/card-select';
     private readonly SESSION_END_URL = 'https://www.egoistcookie.top/api/analytics/session/end';
+    private readonly SESSION_UPDATE_OPS_URL = 'https://www.egoistcookie.top/api/analytics/session/update-operations';
     
     /**
      * 获取单例实例
@@ -149,8 +151,10 @@ export class AnalyticsManager extends Component {
     
     /**
      * 开始记录游戏
+     * 1. 立即创建 game_sessions 记录（游戏开始时）
+     * 2. 立即上报 game_time=0 的 card_selection_events（用于统计开始游戏到第一次抽卡之间放弃的人数）
      */
-    public startRecording(level: number) {
+    public async startRecording(level: number) {
         this.currentLevel = level;
         this.operations = [];
         this.gameStartTime = Date.now();
@@ -160,6 +164,49 @@ export class AnalyticsManager extends Component {
         this.isReportingGameData = false;
         this.hasReportedCurrentGame = false;
         console.log(`[AnalyticsManager] 开始记录关卡 ${level}`);
+
+        // 游戏开始时立即创建 session 并上报初始选卡事件（game_time=0）
+        this.startSessionAndInitialEvent(level).catch((e) => {
+            console.warn('[AnalyticsManager] startSessionAndInitialEvent 失败（忽略，不影响游戏）:', e);
+        });
+    }
+
+    /**
+     * 游戏开始时创建 session 并上报初始选卡事件（game_time=0）
+     */
+    private async startSessionAndInitialEvent(level: number): Promise<void> {
+        try {
+            // 1. 创建 session
+            const payload = {
+                playerId: this.playerId,
+                level: level,
+                startTime: Date.now()
+            };
+            const resp = await this.sendJson(this.SESSION_START_URL, payload);
+            const sid = resp && typeof resp.sessionId === 'number' ? resp.sessionId : null;
+            if (sid) {
+                this.sessionId = sid;
+                console.log('[AnalyticsManager] 游戏开始，创建 session:', sid);
+            }
+
+            // 2. 上报初始选卡事件（game_time=0）
+            if (this.sessionId) {
+                const initialEventPayload = {
+                    sessionId: this.sessionId,
+                    playerId: this.playerId,
+                    level: level,
+                    selectionMode: 'initial' as CardSelectionMode,
+                    selectedCount: 0,
+                    cards: [{ unitId: '_game_start', rarity: 'system', buffType: 'game_start', buffValue: 0 }],
+                    eventTime: Date.now(),
+                    gameTime: 0
+                };
+                await this.sendJson(this.CARD_SELECT_URL, initialEventPayload);
+                console.log('[AnalyticsManager] 游戏开始，上报初始选卡事件 (game_time=0)');
+            }
+        } catch (e) {
+            console.warn('[AnalyticsManager] startSessionAndInitialEvent 失败（忽略）:', e);
+        }
     }
     
     /**
@@ -213,20 +260,24 @@ export class AnalyticsManager extends Component {
 
     /**
      * 选卡实时上报：
-     * - 首次选卡会创建 game_sessions 记录（sessionId）
+     * - 游戏开始时已创建 session（sessionId 在 startRecording 时创建）
      * - 每次选卡写入 card_selection_events，并更新 card_selection_summary 聚合表
+     * - 每次抽卡后实时更新 game_sessions 的 operations_json 和游戏状态
+     * @param gameManager 可选的 GameManager 引用，用于获取实时游戏状态（抽卡时传入）
      */
-    public async reportCardSelection(mode: CardSelectionMode, cards: CardSelectionItem[], gameTimeSeconds?: number): Promise<void> {
+    public async reportCardSelection(mode: CardSelectionMode, cards: CardSelectionItem[], gameTimeSeconds?: number, gameManager?: any): Promise<void> {
         try {
             if (!this.isRecording) return;
             if (!cards || cards.length === 0) return;
 
+            // sessionId 应该在 startRecording 时已经创建，这里只是兜底
             if (!this.sessionId) {
-                this.sessionId = await this.startSessionIfNeeded();
+                console.warn('[AnalyticsManager] reportCardSelection: sessionId 不存在，可能 startRecording 未正确调用');
+                return;
             }
 
             const payload = {
-                sessionId: this.sessionId || undefined,
+                sessionId: this.sessionId,
                 playerId: this.playerId,
                 level: this.currentLevel,
                 selectionMode: mode,
@@ -236,32 +287,60 @@ export class AnalyticsManager extends Component {
                 gameTime: typeof gameTimeSeconds === 'number' && !isNaN(gameTimeSeconds) ? Math.floor(gameTimeSeconds) : undefined
             };
 
-            const resp = await this.sendJson(this.CARD_SELECT_URL, payload);
-            // 兜底：若前端本地没有 sessionId，而服务端在 card-select 中自动创建了会话，则回写本地 sessionId
-            if (!this.sessionId && resp && typeof resp.sessionId === 'number') {
-                this.sessionId = resp.sessionId;
-            }
+            await this.sendJson(this.CARD_SELECT_URL, payload);
+
+            // 每次抽卡后实时更新 operations_json 和游戏状态
+            await this.updateSessionOperations(gameManager);
         } catch (e) {
             console.warn('[AnalyticsManager] reportCardSelection 失败（忽略，不影响游戏）:', e);
         }
     }
 
-    private async startSessionIfNeeded(): Promise<number | null> {
+    /**
+     * 实时更新 game_sessions 的 operations_json 和游戏状态
+     * 调用时机：每次抽卡后
+     * @param gameManager 可选的 GameManager 引用，用于获取实时游戏状态
+     */
+    private async updateSessionOperations(gameManager?: any): Promise<void> {
+        if (!this.sessionId) return;
+        if (this.operations.length === 0) return;
+
         try {
+            // 从 GameManager 获取实时游戏状态（如果提供了）
+            let defendTime = 0;
+            let currentWave = 0;
+            let finalGold = 0;
+            let finalPopulation = 0;
+            let killCount = 0;
+
+            if (gameManager) {
+                defendTime = typeof gameManager.getGameTime === 'function' ? Math.floor(gameManager.getGameTime()) : 0;
+                currentWave = typeof gameManager.getCurrentWave === 'function' ? gameManager.getCurrentWave() : 0;
+                finalGold = typeof gameManager.getGold === 'function' ? gameManager.getGold() : 0;
+                finalPopulation = typeof gameManager.getPopulation === 'function' ? gameManager.getPopulation() : 0;
+                killCount = typeof gameManager.getKillCount === 'function' ? gameManager.getKillCount() : 0;
+            }
+
             const payload = {
+                sessionId: this.sessionId,
                 playerId: this.playerId,
                 level: this.currentLevel,
-                startTime: Date.now()
+                operationCount: this.operations.length,
+                operationsJson: JSON.stringify(this.operations),
+                defendTime,
+                currentWave,
+                finalGold,
+                finalPopulation,
+                killCount
             };
-            const resp = await this.sendJson(this.SESSION_START_URL, payload);
-            const sid = resp && typeof resp.sessionId === 'number' ? resp.sessionId : null;
-            return sid;
+            await this.sendJson(this.SESSION_UPDATE_OPS_URL, payload);
         } catch (e) {
-            console.warn('[AnalyticsManager] startSessionIfNeeded 失败（忽略）:', e);
-            return null;
+            console.warn('[AnalyticsManager] updateSessionOperations 失败（忽略）:', e);
         }
     }
-    
+
+
+
     /**
      * 上报游戏数据
      */

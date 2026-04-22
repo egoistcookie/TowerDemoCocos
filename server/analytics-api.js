@@ -297,8 +297,13 @@ app.post('/api/analytics/session/card-select', async (req, res) => {
         const eventTime = typeof body.eventTime === 'number' && !isNaN(body.eventTime) ? body.eventTime : Date.now();
         const gameTime = typeof body.gameTime === 'number' && !isNaN(body.gameTime) ? body.gameTime : null;
 
-        if (!playerId || !level || !selectionMode || !selectedCount || cards.length === 0) {
+        if (!playerId || !level || !selectionMode || cards.length === 0) {
             return res.status(400).json({ success: false, message: '缺少必要参数' });
+        }
+
+        // selectedCount: initial 模式允许为 0，其他模式必须 > 0
+        if (selectionMode !== 'initial' && (!selectedCount || selectedCount <= 0)) {
+            return res.status(400).json({ success: false, message: 'selectedCount 必须大于 0' });
         }
 
         const connection = await pool.getConnection();
@@ -360,7 +365,53 @@ app.post('/api/analytics/session/card-select', async (req, res) => {
 });
 
 /**
- * 选卡实时埋点：会话结束回填（用于“游戏结束时更新操作记录/防御时间/杀敌数等字段”）
+ * 选卡实时埋点：实时更新会话状态（每次抽卡后调用）
+ * POST /api/analytics/session/update-operations
+ * body: { sessionId, playerId, level, operationCount, operationsJson, defendTime?, currentWave?, finalGold?, finalPopulation?, killCount? }
+ */
+app.post('/api/analytics/session/update-operations', async (req, res) => {
+    try {
+        const b = req.body || {};
+        const { sessionId, playerId, level } = b;
+        if (!sessionId || !playerId || !level) {
+            return res.status(400).json({ success: false, message: '缺少 sessionId/playerId/level' });
+        }
+
+        const operationsJson = b.operationsJson || null;
+
+        await pool.execute(
+            `UPDATE game_sessions
+             SET operations_json = ?,
+                 operation_count = ?,
+                 defend_time = ?,
+                 current_wave = ?,
+                 final_gold = ?,
+                 final_population = ?,
+                 kill_count = ?
+             WHERE id = ? AND player_id = ? AND level = ?`,
+            [
+                operationsJson,
+                b.operationCount || 0,
+                b.defendTime || 0,
+                b.currentWave || 0,
+                b.finalGold || 0,
+                b.finalPopulation || 0,
+                b.killCount || 0,
+                sessionId,
+                playerId,
+                level
+            ]
+        );
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('[Analytics] session/update-operations 失败:', error);
+        res.status(500).json({ success: false, message: '服务器内部错误', error: error.message });
+    }
+});
+
+/**
+ * 选卡实时埋点：会话结束回填（用于”游戏结束时更新操作记录/防御时间/杀敌数等字段”）
  * POST /api/analytics/session/end
  * body: { sessionId, playerId, level, endTime, result, defendTime, currentWave, finalGold, finalPopulation, killCount, operationCount, operationsJson? }
  */
@@ -1073,7 +1124,8 @@ app.get('/api/analytics/player/:playerId/titles', async (req, res) => {
             { roleId: 'Priest', titleName: '天使', iconPath: '称号 - 天使.png' },
             { roleId: 'Hunter', titleName: '龙卷', iconPath: '称号 - 龙卷.png' },
             { roleId: 'Mage', titleName: '法神', iconPath: '称号 - 陨石.png' },
-            { roleId: 'Eagle', titleName: '鹰海战术', iconPath: '称号 - 鹰海战术.png' }
+            { roleId: 'Eagle', titleName: '鹰海战术', iconPath: '称号 - 鹰海战术.png' },
+            { roleId: 'EagleArcher', titleName: '王牌', iconPath: '称号 - 王牌.png' }
         ];
 
         for (const role of roleQueries) {
@@ -1092,10 +1144,19 @@ app.get('/api/analytics/player/:playerId/titles', async (req, res) => {
             );
 
             if (rows.length > 0 && rows[0].player_id === playerId) {
+                const roleNames = {
+                    'ElfSwordsman': '剑士',
+                    'Arrower': '弓箭手',
+                    'Priest': '牧师',
+                    'Hunter': '女猎手',
+                    'Mage': '法师',
+                    'Eagle': '角鹰',
+                    'EagleArcher': '角鹰射手'
+                };
                 titles.push({
                     titleName: role.titleName,
                     iconPath: role.iconPath,
-                    description: `${role.roleId === 'ElfSwordsman' ? '剑士' : role.roleId === 'Arrower' ? '弓箭手' : role.roleId === 'Priest' ? '牧师' : role.roleId === 'Hunter' ? '女猎手' : role.roleId === 'Mage' ? '法师' : '角鹰'}等级最高`
+                    description: `${roleNames[role.roleId] || role.roleId}等级最高`
                 });
             }
         }

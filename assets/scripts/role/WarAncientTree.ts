@@ -8,6 +8,8 @@ import { TalentEffectManager } from '../TalentEffectManager';
 import { UnitPool } from '../UnitPool';
 import { UnitType } from '../UnitType';
 import { PlayerDataManager } from '../PlayerDataManager';
+import { AnalyticsManager } from '../AnalyticsManager';
+import { OperationType } from '../AnalyticsManager';
 const { ccclass, property } = _decorator;
 
 // 重新导出 UnitType 以保持向后兼容
@@ -803,6 +805,16 @@ export class WarAncientTree extends Build {
         // 检查单位是否首次出现
         if (this.gameManager) {
             this.gameManager.checkUnitFirstAppearance('EagleArcher', eagleArcherScript);
+        }
+
+        // 记录训练角鹰射手操作
+        const analytics = AnalyticsManager.getInstance();
+        if (analytics && this.gameManager) {
+            analytics.recordOperation(
+                OperationType.TRAIN_EAGLE_ARCHER,
+                this.gameManager.getGameTime(),
+                { position: { x: this.node.worldPosition.x, y: this.node.worldPosition.y } }
+            );
         }
     }
 

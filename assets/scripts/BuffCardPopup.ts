@@ -562,7 +562,7 @@ export class BuffCardPopup extends Component {
                     buffValue: c.buffValue
                 }));
                 // 不影响主流程：异步实时上报失败也忽略
-                analytics.reportCardSelection('reroll', cards, gameTime);
+                analytics.reportCardSelection('reroll', cards, gameTime, this.gameManager);
             } catch (e) {
                 // ignore
             }
@@ -609,7 +609,7 @@ export class BuffCardPopup extends Component {
                 selectedCount: cards.length,
                 cards
             });
-            analytics.reportCardSelection('get_all', cards, gameTime);
+            analytics.reportCardSelection('get_all', cards, gameTime, this.gameManager);
         } catch (e) {
             // 忽略埋点异常
         }
@@ -1106,7 +1106,7 @@ export class BuffCardPopup extends Component {
                 selected: idx === index
             }));
             // 异步实时上报，不阻塞游戏流程
-            analytics.reportCardSelection('single', allCards, gameTime);
+            analytics.reportCardSelection('single', allCards, gameTime, this.gameManager);
         } catch (e) {
             // 忽略埋点异常，不影响游戏流程
         }

@@ -1757,6 +1757,24 @@ export class GameManager extends Component {
         return this.gameTime;
     }
 
+    /**
+     * 获取当前波次，供埋点使用
+     */
+    public getCurrentWave(): number {
+        const enemySpawner = this.findComponentInScene('EnemySpawner') as any;
+        if (enemySpawner && enemySpawner.getCurrentWaveNumber) {
+            return enemySpawner.getCurrentWaveNumber() || 0;
+        }
+        return 0;
+    }
+
+    /**
+     * 获取当前杀敌数，供埋点使用
+     */
+    public getKillCount(): number {
+        return this.totalKillCount || 0;
+    }
+
     updateUI() {
         // 更新血量显示
         if (this.healthLabel && this.crystalScript) {
