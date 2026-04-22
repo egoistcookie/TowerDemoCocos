@@ -792,6 +792,59 @@ export class WarAncientTree extends Build {
         this.producedTowers.push(eagleArcherNode);
         this.totalProducedCount++;
 
+        // 计算角鹰射手的目标位置
+        // 如果有集结点，使用集结点；否则向右侧跑开（角鹰射手默认向右）
+        let targetPos: Vec3;
+        if (this.rallyPoint) {
+            // 有集结点，查找最佳位置（考虑附近的友方单位）
+            targetPos = this.findOptimalRallyPointPosition(this.rallyPoint, spawnPos);
+        } else {
+            // 没有集结点，向右侧跑开
+            const directionX = 1; // 默认向右
+            targetPos = new Vec3(
+                spawnPos.x + directionX * this.moveAwayDistance,
+                spawnPos.y, // y 坐标保持不变
+                spawnPos.z
+            );
+        }
+
+        // 让角鹰射手移动到目标位置
+        if (eagleArcherScript) {
+            // 使用 schedule 在下一帧开始移动，确保角鹰射手已完全初始化
+            this.scheduleOnce(() => {
+                if (eagleArcherNode && eagleArcherNode.isValid && eagleArcherScript) {
+                    // 使用 setManualMoveTargetPosition 方法设置移动目标
+                    if (eagleArcherScript.setManualMoveTargetPosition) {
+                        eagleArcherScript.setManualMoveTargetPosition(targetPos);
+                    } else if (eagleArcherScript.moveToPosition) {
+                        // 如果没有 setManualMoveTargetPosition 方法，使用 moveToPosition
+                        const moveUpdate = (deltaTime: number) => {
+                            if (!eagleArcherNode || !eagleArcherNode.isValid || !eagleArcherScript) {
+                                this.unschedule(moveUpdate);
+                                return;
+                            }
+
+                            const currentPos = eagleArcherNode.worldPosition;
+                            const mvdx = currentPos.x - targetPos.x, mvdy = currentPos.y - targetPos.y, mvdz = currentPos.z - targetPos.z;
+                            const distanceSq = mvdx * mvdx + mvdy * mvdy + mvdz * mvdz;
+
+                            if (distanceSq <= 10 * 10) {
+                                // 到达目标位置，停止移动
+                                if (eagleArcherScript.stopMoving) {
+                                    eagleArcherScript.stopMoving();
+                                }
+                                this.unschedule(moveUpdate);
+                            } else {
+                                // 继续移动
+                                eagleArcherScript.moveToPosition(targetPos, deltaTime);
+                            }
+                        };
+                        this.schedule(moveUpdate, 0);
+                    }
+                }
+            }, 0.1);
+        }
+
         // 安排自动上移
         if (eagleArcherScript && typeof eagleArcherScript.setupAutoMoveToCombatPosition === 'function') {
             eagleArcherScript.setupAutoMoveToCombatPosition(spawnPos);

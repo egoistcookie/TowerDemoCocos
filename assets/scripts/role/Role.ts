@@ -4264,7 +4264,8 @@ export class Role extends Component {
                 name === '女猎手' ||
                 name === '剑士' || name === '精灵剑士' ||
                 name === '牧师' ||
-                name === '法师';
+                name === '法师' ||
+                name === '角鹰射手';
             if (eligible && !this.autoRoamScheduled) {
                 // 若当前已经在较高位置（y >= 500），则不安排自动上移
                 const curPos = this.node?.worldPosition;

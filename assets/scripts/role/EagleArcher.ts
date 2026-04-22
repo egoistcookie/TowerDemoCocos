@@ -100,10 +100,13 @@ export class EagleArcher extends Arrower {
         // 恢复狙击目标设置
         this.priorityTargetType = savedPriorityTargetType;
         console.log(`[EagleArcher] resetRoleState: 恢复狙击目标 ${this.priorityTargetType || '无'}`);
+
+        // 清理狙击准星标记
+        this.removeAllSniperMarks();
     }
 
     /**
-     * 重写 createArrow，在攻击狙击目标时伤害翻倍
+     * 重写 createArrow，在攻击狙击目标时伤害翻倍，箭矢增长增宽为 1.5 倍
      */
     protected createArrow() {
         // 调试日志：打印当前狙击目标设置
@@ -122,6 +125,8 @@ export class EagleArcher extends Arrower {
             try {
                 console.log('[EagleArcher.createArrow] 调用 super.createArrow()');
                 super.createArrow();
+                // 角鹰射手狙击专用：箭矢增长增宽为 1.5 倍
+                this.enhanceArrowScale(1.5);
             } finally {
                 // 恢复原始攻击力
                 this.attackDamage = oldDamage;
@@ -130,9 +135,81 @@ export class EagleArcher extends Arrower {
         } else {
             console.log('[EagleArcher.createArrow] 调用 super.createArrow() (普通攻击)');
             super.createArrow();
+            // 角鹰射手普通攻击：箭矢增长增宽为 1.5 倍
+            this.enhanceArrowScale(1.5);
         }
 
         console.log('[EagleArcher.createArrow] END');
+    }
+
+    /**
+     * 增强最后创建的箭矢的缩放比例
+     * @param scaleMultiplier 缩放倍数
+     */
+    private enhanceArrowScale(scaleMultiplier: number) {
+        // 查找刚创建的箭矢（最后一个子节点）
+        const canvas = find('Canvas');
+        if (!canvas || !canvas.isValid) {
+            return;
+        }
+
+        // 查找所有 Arrow 和 Arrow2 组件
+        const arrows = canvas.getComponentsInChildren('Arrow');
+        const arrows2 = canvas.getComponentsInChildren('Arrow2');
+
+        // 获取最后一个创建的箭矢（最新的子节点在最后）
+        let lastArrow: any = null;
+        let lastArrowTime = -1;
+
+        for (const arrow of arrows) {
+            const arrowNode = arrow.node;
+            if (arrowNode && arrowNode.isValid) {
+                // 使用节点创建时间或索引判断最新的箭矢
+                const siblingIndex = arrowNode.getSiblingIndex();
+                if (siblingIndex > lastArrowTime) {
+                    lastArrowTime = siblingIndex;
+                    lastArrow = arrow;
+                }
+            }
+        }
+
+        for (const arrow2 of arrows2) {
+            const arrowNode = arrow2.node;
+            if (arrowNode && arrowNode.isValid) {
+                const siblingIndex = arrowNode.getSiblingIndex();
+                if (siblingIndex > lastArrowTime) {
+                    lastArrowTime = siblingIndex;
+                    lastArrow = arrow2;
+                }
+            }
+        }
+
+        if (lastArrow && lastArrow.node && lastArrow.node.isValid) {
+            // 检查是否已经被放大过（通过检查节点上是否有标记）
+            const wasEnhanced = (lastArrow.node as any)._wasEnhanced;
+
+            if (wasEnhanced) {
+                // 已经被放大过，先恢复到原始尺寸
+                const originalScale = (lastArrow.node as any)._originalScale;
+                if (originalScale) {
+                    lastArrow.node.setScale(originalScale.x, originalScale.y, originalScale.z);
+                }
+            } else {
+                // 第一次放大，保存原始尺寸
+                const currentScale = lastArrow.node.scale.clone();
+                (lastArrow.node as any)._originalScale = { x: currentScale.x, y: currentScale.y, z: currentScale.z };
+                (lastArrow.node as any)._wasEnhanced = true;
+            }
+
+            // 应用 1.5 倍缩放（基于原始尺寸）
+            const baseScale = (lastArrow.node as any)._originalScale || lastArrow.node.scale;
+            lastArrow.node.setScale(
+                baseScale.x * scaleMultiplier,
+                baseScale.y * scaleMultiplier,
+                baseScale.z
+            );
+            console.log(`[EagleArcher] 箭矢缩放增强：${scaleMultiplier}倍，新缩放：${lastArrow.node.scale}`);
+        }
     }
 
     /**
@@ -147,8 +224,78 @@ export class EagleArcher extends Arrower {
         }
         // 检查当前目标是否具有狙击目标类型的组件
         const enemyScript = this.currentTarget.getComponent<any>(this.priorityTargetType);
+        const isSnipeTarget = !!enemyScript;
         console.log(`[EagleArcher] isCurrentTargetSnipeTarget: enemyScript=${!!enemyScript}`);
-        return !!enemyScript;
+
+        // 在狙击目标头上创建红色准星标记
+        if (isSnipeTarget) {
+            // 尝试获取 Enemy 组件（基类）
+            let enemyComponent: any = null;
+
+            // 先尝试直接获取 Enemy 组件
+            enemyComponent = this.currentTarget.getComponent('Enemy');
+
+            // 如果没有找到，尝试通过继承链查找
+            if (!enemyComponent) {
+                // 尝试获取常见的敌人组件类型
+                const enemyTypes = ['Orc', 'OrcWarrior', 'OrcWarlord', 'TrollSpearman', 'Dragon', 'OrcShaman', 'MinotaurWarrior', 'Boss'];
+                for (const type of enemyTypes) {
+                    enemyComponent = this.currentTarget.getComponent(type);
+                    if (enemyComponent) {
+                        console.log(`[EagleArcher] 找到敌人组件类型：${type}`);
+                        break;
+                    }
+                }
+            }
+
+            if (enemyComponent && enemyComponent.createSniperMark) {
+                enemyComponent.createSniperMark();
+                console.log('[EagleArcher] 为狙击目标创建准星标记');
+            } else {
+                console.log('[EagleArcher] 未找到Enemy组件或createSniperMark方法');
+            }
+        } else {
+            // 移除所有敌人头上的准星标记（不是狙击目标）
+            this.removeAllSniperMarks();
+        }
+
+        return isSnipeTarget;
+    }
+
+    /**
+     * 移除所有敌人头上的狙击准星标记
+     */
+    private removeAllSniperMarks() {
+        const enemiesNode = find('Canvas/Enemies');
+        if (!enemiesNode || !enemiesNode.isValid) {
+            return;
+        }
+
+        // 遍历所有敌人，移除准星标记
+        for (const enemy of enemiesNode.children) {
+            if (enemy && enemy.isValid && enemy.active) {
+                // 尝试获取任意敌人组件（基类或子类）
+                let enemyComponent: any = null;
+
+                // 先尝试获取 Enemy 基类组件
+                enemyComponent = enemy.getComponent('Enemy');
+
+                // 如果没有找到，尝试获取子类组件
+                if (!enemyComponent) {
+                    const enemyTypes = ['Orc', 'OrcWarrior', 'OrcWarlord', 'TrollSpearman', 'Dragon', 'OrcShaman', 'MinotaurWarrior', 'Boss'];
+                    for (const type of enemyTypes) {
+                        enemyComponent = enemy.getComponent(type);
+                        if (enemyComponent) {
+                            break;
+                        }
+                    }
+                }
+
+                if (enemyComponent && enemyComponent.removeSniperMark) {
+                    enemyComponent.removeSniperMark();
+                }
+            }
+        }
     }
 
     start() {
@@ -250,8 +397,11 @@ export class EagleArcher extends Arrower {
             return;
         }
 
-        // 设置移动状态
-        this.isMoving = true;
+        // 设置移动状态并播放移动动画
+        if (!this.isMoving) {
+            this.isMoving = true;
+            this.playMoveAnimation();
+        }
 
         // 飞行单位不需要检查地面障碍，但仍需检查与其他角鹰/角鹰射手的碰撞
         const direction = new Vec3();

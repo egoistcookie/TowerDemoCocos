@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip, view, LabelOutline } from 'cc';
+import { _decorator, Component, Node, Vec3, tween, Sprite, find, Prefab, instantiate, Label, Color, SpriteFrame, UITransform, AudioClip, view, LabelOutline, Graphics } from 'cc';
 import { GameManager, GameState } from '../GameManager';
 import { HealthBar } from '../HealthBar';
 import { DamageNumber } from '../DamageNumber';
@@ -6,6 +6,7 @@ import { AudioManager } from '../AudioManager';
 import { UnitType } from '../role/WarAncientTree';
 import { EnemyPool } from '../EnemyPool';
 import { UnitManager } from '../UnitManager';
+import { SniperMark } from '../SniperMark';
 const { ccclass, property } = _decorator;
 
 /**
@@ -138,6 +139,9 @@ export class Boss extends Component {
     
     // 对象池相关：预制体名称（用于对象池回收，子类可直接改这个字符串）
     public prefabName: string = "Boss";
+
+    // 狙击准星标记
+    protected sniperMarkNode: Node = null!; // 狙击准星标记节点
 
     // ====== 运行时状态 ======
     protected currentHealth: number = 100;
@@ -2549,10 +2553,49 @@ export class Boss extends Component {
         }
         this.healthBarNode = null!;
         this.healthBar = null!;
+
+        // 清理狙击准星标记
+        if (this.sniperMarkNode && this.sniperMarkNode.isValid) {
+            this.sniperMarkNode.destroy();
+        }
+        this.sniperMarkNode = null!;
     }
 
     isAlive(): boolean {
         return !this.isDestroyed && this.currentHealth > 0;
+    }
+
+    /**
+     * 创建狙击准星标记
+     */
+    createSniperMark() {
+        // 如果已经存在准星，先移除
+        if (this.sniperMarkNode && this.sniperMarkNode.isValid) {
+            this.sniperMarkNode.destroy();
+        }
+
+        // 创建准星节点
+        this.sniperMarkNode = new Node('SniperMark');
+        this.sniperMarkNode.setParent(this.node);
+        this.sniperMarkNode.setPosition(0, 0, 0); // 在敌人坐标位置
+
+        // 添加 UITransform 组件
+        const uiTransform = this.sniperMarkNode.addComponent(UITransform);
+        uiTransform.setContentSize(40, 40);
+
+        // 添加 SniperMark 组件（会自动创建 Graphics 并绘制准星）
+        this.sniperMarkNode.addComponent(SniperMark);
+        console.log('[Boss] 创建狙击准星标记');
+    }
+
+    /**
+     * 移除狙击准星标记
+     */
+    removeSniperMark() {
+        if (this.sniperMarkNode && this.sniperMarkNode.isValid) {
+            this.sniperMarkNode.destroy();
+        }
+        this.sniperMarkNode = null!;
     }
 
     public enterBloodRage(tier: number = 1) {

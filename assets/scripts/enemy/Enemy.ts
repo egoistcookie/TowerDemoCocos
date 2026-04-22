@@ -9,6 +9,7 @@ import { StoneWallGridPanel } from '../StoneWallGridPanel';
 import { UnitManager } from '../UnitManager';
 import { EnemyPool } from '../EnemyPool';
 import { UnitConfigManager } from '../UnitConfigManager';
+import { SniperMark } from '../SniperMark';
 // import { PerformanceMonitor } from './PerformanceMonitor';
 const { ccclass, property } = _decorator;
 
@@ -95,6 +96,7 @@ export class Enemy extends Component {
     protected currentHealth: number = 0;
     protected healthBar: HealthBar = null!;
     protected healthBarNode: Node = null!;
+    protected sniperMarkNode: Node = null!; // 狙击准星标记节点
     protected isDestroyed: boolean = false;
     protected attackTimer: number = 0;
     protected currentTarget: Node = null!;
@@ -315,6 +317,41 @@ export class Enemy extends Component {
             this.healthBar.setMaxHealth(this.maxHealth);
             this.healthBar.setHealth(this.currentHealth);
         }
+    }
+
+    /**
+     * 创建狙击准星标记
+     */
+    createSniperMark() {
+        // 如果已存在准星标记，先销毁
+        if (this.sniperMarkNode && this.sniperMarkNode.isValid) {
+            this.sniperMarkNode.destroy();
+        }
+
+        // 创建准星标记节点
+        this.sniperMarkNode = new Node('SniperMark');
+        this.sniperMarkNode.setParent(this.node);
+        this.sniperMarkNode.setPosition(0, 0, 0); // 在敌人坐标位置
+
+        // 添加 UITransform 组件，设置锚点为中心
+        const uiTransform = this.sniperMarkNode.addComponent(UITransform);
+        uiTransform.setContentSize(40, 40);
+        uiTransform.setAnchorPoint(0.5, 0.5); // 锚点居中
+
+        // 添加 SniperMark 组件（会自动创建 Graphics 并绘制准星）
+        const sniperMarkComponent = this.sniperMarkNode.addComponent(SniperMark);
+
+        console.log('[Enemy] createSniperMark: 创建狙击准星标记');
+    }
+
+    /**
+     * 移除狙击准星标记
+     */
+    removeSniperMark() {
+        if (this.sniperMarkNode && this.sniperMarkNode.isValid) {
+            this.sniperMarkNode.destroy();
+        }
+        this.sniperMarkNode = null!;
     }
 
     /**
@@ -2470,13 +2507,19 @@ export class Enemy extends Component {
         }
         this.dialogNode = null;
         this.dialogLabel = null;
-        
+
         // 清理血条
         if (this.healthBarNode && this.healthBarNode.isValid) {
             this.healthBarNode.destroy();
         }
         this.healthBarNode = null!;
         this.healthBar = null!;
+
+        // 清理狙击准星标记
+        if (this.sniperMarkNode && this.sniperMarkNode.isValid) {
+            this.sniperMarkNode.destroy();
+        }
+        this.sniperMarkNode = null!;
     }
 
     /**

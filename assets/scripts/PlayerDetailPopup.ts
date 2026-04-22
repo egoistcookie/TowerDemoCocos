@@ -66,6 +66,11 @@ export class PlayerDetailPopup extends Component {
         'build_stone_wall': { roleId: 'StoneWall', roleName: '石墙', iconPath: 'textures/role/StoneWall', isTower: true },
     };
 
+    // 操作类型到角色的映射（用于处理转职等特殊操作）
+    private readonly OPERATION_TO_ROLE: Record<string, { roleId: string; roleName: string; iconPath: string }> = {
+        'train_eagle_archer': { roleId: 'EagleArcher', roleName: '角鹰射手', iconPath: 'textures/role/EagleArcher' },
+    };
+
     // 角色显示名映射（用于 unitConfig.json 中的 name）
     private readonly ROLE_DISPLAY_NAMES: Record<string, string> = {
         'ElfSwordsman': '剑士',
@@ -76,6 +81,7 @@ export class PlayerDetailPopup extends Component {
         'Mage': '法师',
         'Eagle': '角鹰',
         'Bear': '巨熊',
+        'EagleArcher': '角鹰射手',
     };
 
     // 防御塔/石墙的 roleId 到信息的映射（用于从 towerCountMap 恢复显示信息）
@@ -91,6 +97,7 @@ export class PlayerDetailPopup extends Component {
         'Bear': { roleName: '巨熊', iconPath: 'textures/role/Bear' },
         'Eagle': { roleName: '角鹰', iconPath: 'textures/role/Eagle' },
         'BeastDen': { roleName: '兽穴', iconPath: 'textures/role/BeastDen' },
+        'EagleArcher': { roleName: '角鹰射手', iconPath: 'textures/role/EagleArcher' },
     };
 
     onLoad() {
@@ -729,6 +736,20 @@ export class PlayerDetailPopup extends Component {
                 }
             }
 
+            // 特殊处理：转职操作（如角鹰射手）
+            const opMapping = this.OPERATION_TO_ROLE[opType];
+            if (opMapping && !addedRoleIds.has(opMapping.roleId)) {
+                addedRoleIds.add(opMapping.roleId);
+                const level = unitLevels?.[opMapping.roleId] ?? 0;
+                roles.push({
+                    roleId: opMapping.roleId,
+                    roleName: opMapping.roleName,
+                    roleLevel: level,
+                    iconPath: opMapping.iconPath,
+                });
+                console.log('[PlayerDetailPopup] 添加转职单位:', opMapping.roleId, '等级:', level);
+            }
+
             // 特殊处理：触发巨熊操作
             if (opType === 'trigger_bear' && !addedRoleIds.has('Bear')) {
                 addedRoleIds.add('Bear');
@@ -1014,6 +1035,7 @@ export class PlayerDetailPopup extends Component {
             'Wisp': 'Wisp',
             'Mage': 'Mage',
             'Arrower': 'Arrower',
+            'EagleArcher': 'EagleArcher',
             // 防御塔
             'WatchTower': 'WatchTower',
             'ThunderTower': 'ThunderTower',
