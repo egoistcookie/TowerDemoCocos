@@ -299,9 +299,11 @@ export class GameManager extends Component {
     // 木材 UI 标签（左上角），在场景中通过代码创建并缓存
     private woodLabel: Label | null = null;
 
-    // 树林网格（左右各一块）
+    // 树林网格（左下角）
     private forestLeftNode: Node | null = null;
-    private forestRightNode: Node | null = null;
+
+    // 池塘背景节点（右下角）
+    private pondBackgroundNode: Node | null = null;
 
     /**
      * 微信推荐页相关
@@ -1264,11 +1266,11 @@ export class GameManager extends Component {
     }
 
     /**
-     * 创建两片树林网格（左下角和右下角），用于种植树木
+     * 创建树林网格（左下角），用于种植树木
+     * 注：右侧树林已移除，改用池塘背景
      */
     private createForestGrids() {
-        if (this.forestLeftNode && this.forestLeftNode.isValid &&
-            this.forestRightNode && this.forestRightNode.isValid) {
+        if (this.forestLeftNode && this.forestLeftNode.isValid) {
             return;
         }
 
@@ -1291,23 +1293,71 @@ export class GameManager extends Component {
             leftNode.active = false;
             this.forestLeftNode = leftNode;
         }
-
-        // 右侧树林
-        if (!this.forestRightNode || !this.forestRightNode.isValid) {
-            const rightNode = new Node('ForestGridRight');
-            rightNode.setParent(canvas);
-            const rightPanel = rightNode.addComponent(ForestGridPanel);
-            rightPanel.gridWidth = 4;
-            rightPanel.gridHeight = 3;
-            rightPanel.cellSize = 50;
-            rightPanel.cellSpacing = 0;
-            rightPanel.alignRight = true;
-            // 首页阶段默认隐藏，等开始游戏后再显示
-            rightNode.active = false;
-            this.forestRightNode = rightNode;
-        }
     }
-    
+
+    /**
+     * 在右下角创建池塘背景贴图
+     */
+    private createPondBackground() {
+        // 如果已创建过，直接显示
+        if (this.pondBackgroundNode && this.pondBackgroundNode.isValid) {
+            this.pondBackgroundNode.active = true;
+            return;
+        }
+
+        const canvas = find('Canvas');
+        if (!canvas) {
+            return;
+        }
+
+        // 创建池塘背景节点
+        const pondNode = new Node('PondBackground');
+        pondNode.setParent(canvas);
+
+        // 添加 Sprite 组件
+        const sprite = pondNode.addComponent(Sprite);
+
+        // 加载池塘背景贴图（路径需要 /spriteFrame 后缀）
+        resources.load('textures/背景图 - 池塘/spriteFrame', SpriteFrame, (err, spriteFrame) => {
+            if (err || !spriteFrame) {
+                console.error('[GameManager] 加载池塘背景贴图失败:', err);
+                pondNode.destroy();
+                return;
+            }
+
+            if (!pondNode.isValid) {
+                return;
+            }
+
+            sprite.spriteFrame = spriteFrame;
+
+            // 获取贴图原始尺寸
+            const textureWidth = spriteFrame.rect.width;
+            const textureHeight = spriteFrame.rect.height;
+
+            // 设置节点锚点为右下角，方便定位
+            const uiTransform = pondNode.addComponent(UITransform);
+            uiTransform.setContentSize(textureWidth, textureHeight);
+            uiTransform.setAnchorPoint(1, 0);
+
+            // 设置节点位置在右下角（紧贴边缘）
+            // Canvas 设计尺寸为 750x1334，原点在中心
+            // 右下角坐标：X = 375, Y = -667
+            const canvasWidth = 750;
+            const canvasHeight = 1334;
+            pondNode.setPosition(
+                canvasWidth / 2,
+                -canvasHeight / 2,
+                0
+            );
+
+            // 添加到 BlockInputEvents 防止穿透
+            pondNode.addComponent(BlockInputEvents);
+        });
+
+        this.pondBackgroundNode = pondNode;
+    }
+
     /**
      * 初始化单位管理器（性能优化）
      */
@@ -1421,12 +1471,15 @@ export class GameManager extends Component {
             this.woodLabel.node.active = false;
         }
 
-        // 首页隐藏两片树林网格
+        // 首页隐藏左侧树林网格
         if (this.forestLeftNode && this.forestLeftNode.isValid) {
             this.forestLeftNode.active = false;
         }
-        if (this.forestRightNode && this.forestRightNode.isValid) {
-            this.forestRightNode.active = false;
+        // 右侧树林已移除，改用池塘背景
+
+        // 隐藏池塘背景
+        if (this.pondBackgroundNode && this.pondBackgroundNode.isValid) {
+            this.pondBackgroundNode.active = false;
         }
 
         // 停止动态背景切换，恢复静态背景
@@ -1602,13 +1655,11 @@ export class GameManager extends Component {
             this.woodLabel.node.active = true;
         }
 
-        // 显示两片树林网格（如果已创建）
+        // 显示左侧树林网格（如果已创建）
         if (this.forestLeftNode && this.forestLeftNode.isValid) {
             this.forestLeftNode.active = true;
         }
-        if (this.forestRightNode && this.forestRightNode.isValid) {
-            this.forestRightNode.active = true;
-        }
+        // 右侧树林已移除，改用池塘背景
         
         // 显示建造按钮（尝试多种路径）
         const buildButton = find('UI/BuildButton') || find('Canvas/UI/BuildButton') || find('BuildButton');
@@ -5473,6 +5524,9 @@ export class GameManager extends Component {
             
             // 显示所有游戏元素
             this.showGameElements();
+
+            // 在右下角创建池塘背景（在游戏开始后、初始化石墙前）
+            this.createPondBackground();
 
             // 启动动态背景切换
             //this.startDynamicBackground(level);

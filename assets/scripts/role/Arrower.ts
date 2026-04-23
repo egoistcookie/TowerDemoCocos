@@ -126,7 +126,27 @@ export class Arrower extends Role {
     // 3级专用：强化版箭矢预制体（Arrow2）
     @property({ type: Prefab })
     level3ArrowPrefab: Prefab = null!;
-    
+
+    // 钓鱼动画：开始钓鱼动画帧（播放一次）
+    @property({ type: [SpriteFrame] })
+    fishingStartFrames: SpriteFrame[] = [];
+
+    // 钓鱼动画：循环钓鱼动画帧（持续循环）
+    @property({ type: [SpriteFrame] })
+    fishingLoopFrames: SpriteFrame[] = [];
+
+    // 钓鱼相关：全局静态引用，确保全场景只有一个钓鱼弓箭手
+    private static fishingArcher: Arrower | null = null;
+    // 钓鱼相关：静态锁，防止多个弓箭手同时进入钓鱼状态
+    private static isFishingLock: boolean = false;
+
+    // 钓鱼相关：空闲计时器（5秒内未攻击则触发钓鱼）
+    private fishingIdleTimer: number = 0;
+    // 钓鱼相关：当前是否正在钓鱼
+    private isFishing: boolean = false;
+    // 钓鱼相关：动画播放引用（用于清除定时器）
+    private _fishingAnimUpdate: ((deltaTime: number) => void) | null = null;
+
     // 技能相关属性
     private readonly PENETRATE_ARROW_MANA_COST: number = 10; // 穿透箭消耗蓝量
     private isPenetrateArrowEnabled: boolean = false; // 穿透箭开关（每个弓箭手独立，默认关闭）
@@ -631,6 +651,8 @@ export class Arrower extends Role {
             // 如果取消防御状态，清除手动移动目标，让单位进入正常索敌模式
             this.manualMoveTarget = null!;
             this.isManuallyControlled = false;
+            // 取消防御状态时重置钓鱼空闲计时器
+            this.fishingIdleTimer = 0;
         }
         
         // 更新单位信息面板（刷新按钮显示，保留穿透箭）
@@ -664,7 +686,241 @@ export class Arrower extends Role {
             }
         }
 
+        // 清理钓鱼状态
+        if (this.isFishing && Arrower.fishingArcher === this) {
+            Arrower.fishingArcher = null;
+            Arrower.isFishingLock = false;
+        }
+
         // 调用父类的 destroyTower 方法
         super.destroyTower();
     }
+
+    // ==================== 钓鱼机制 ====================
+
+    /**
+     * 重写 update：检查空闲时间，超过 5 秒未攻击则开始钓鱼
+     */
+    update(deltaTime: number) {
+        // 先执行父类 update
+        super.update(deltaTime);
+
+        // 如果已销毁或在死亡状态，跳过钓鱼逻辑
+        if (this.isDestroyed) {
+            return;
+        }
+
+        // 钓鱼中：检查是否需要恢复战斗
+        if (this.isFishing) {
+            // 到达钓鱼位置后清除手动移动目标，让父类 update 能正常寻敌
+            const pos = this.node.worldPosition;
+            const dx = this.manualMoveTarget.x - pos.x;
+            const dy = this.manualMoveTarget.y - pos.y;
+            if (!this.manualMoveTarget || (dx * dx + dy * dy) < 100) {
+                this.manualMoveTarget = null;
+                this.isManuallyControlled = false;
+
+                // 手动查找目标
+                if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
+                    this.findTarget();
+                }
+            }
+
+            // 如果找到了目标，取消钓鱼恢复战斗
+            if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
+                this.stopFishing();
+            } else {
+                // 继续钓鱼动画
+                this.playFishingLoopAnimation(deltaTime);
+            }
+            return;
+        }
+
+        // 检查空闲时间（5 秒未攻击则开始钓鱼）
+        // 只有当没有攻击目标时才累计空闲时间
+        if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
+            this.fishingIdleTimer += deltaTime;
+            // 使用静态锁防止多个弓箭手同时进入钓鱼状态
+            if (this.fishingIdleTimer >= 5.0 && !Arrower.isFishingLock) {
+                // 第一个空闲超过 5 秒的弓箭手成为钓鱼弓箭手
+                this.startFishing();
+            }
+        } else {
+            // 有目标时重置空闲计时器
+            this.fishingIdleTimer = 0;
+        }
+    }
+
+    /**
+     * 重写 setManualMoveTargetPosition：手动控制时取消钓鱼
+     */
+    setManualMoveTargetPosition(worldPos: Vec3) {
+        // 如果正在钓鱼，取消钓鱼状态
+        if (this.isFishing) {
+            this.stopFishing();
+        }
+        // 调用父类方法执行移动
+        super.setManualMoveTargetPosition(worldPos);
+    }
+
+    /**
+     * 开始钓鱼：移动到右下角池塘边位置
+     */
+    private startFishing() {
+        // 使用静态锁防止多个弓箭手同时进入钓鱼状态
+        if (Arrower.isFishingLock) {
+            return;
+        }
+        Arrower.isFishingLock = true;
+
+        // 确保全局只有一个钓鱼弓箭手
+        if (Arrower.fishingArcher && Arrower.fishingArcher !== this && Arrower.fishingArcher.isFishing) {
+            Arrower.isFishingLock = false;
+            return;
+        }
+
+        this.isFishing = true;
+        this.fishingIdleTimer = 0;
+        Arrower.fishingArcher = this;
+
+        // 停止移动并清除攻击目标
+        this.stopMoving();
+        this.currentTarget = null!;
+
+        // 钓鱼位置：池塘边上（池塘右下角锚点 375,-667）
+        // 池塘贴图石头边缘在左上部，弓箭手站在石头边缘上
+        // 约在池塘左侧 200 像素，上方 400 像素位置
+        const fishingPos = new Vec3(200, -400, 0);
+        if (!this.manualMoveTarget) {
+            this.manualMoveTarget = new Vec3();
+        }
+        this.manualMoveTarget.set(fishingPos);
+        this.isManuallyControlled = true;
+
+        // 播放开始钓鱼动画（一次）
+        this.playFishingStartAnimation();
+    }
+
+    /**
+     * 停止钓鱼：恢复正常运行
+     */
+    private stopFishing() {
+        this.isFishing = false;
+        this.fishingIdleTimer = 0;
+
+        // 如果是当前钓鱼弓箭手，清除全局引用和锁
+        if (Arrower.fishingArcher === this) {
+            Arrower.fishingArcher = null;
+            Arrower.isFishingLock = false;
+        }
+
+        // 清除钓鱼动画定时器
+        if (this._fishingAnimUpdate) {
+            this.unschedule(this._fishingAnimUpdate);
+            this._fishingAnimUpdate = null;
+        }
+
+        // 停止钓鱼动画，恢复默认贴图
+        if (this.sprite && this.sprite.isValid && this.defaultSpriteFrame) {
+            this.sprite.spriteFrame = this.defaultSpriteFrame;
+        }
+    }
+
+    /**
+     * 播放开始钓鱼动画（播放一次）
+     */
+    private playFishingStartAnimation() {
+        if (!this.sprite || !this.sprite.isValid || this.fishingStartFrames.length === 0) {
+            // 如果没配置动画帧，直接播放循环动画
+            this.playFishingLoopAnimation(0);
+            return;
+        }
+
+        const frames = this.fishingStartFrames.filter(f => f != null);
+        if (frames.length === 0) {
+            this.playFishingLoopAnimation(0);
+            return;
+        }
+
+        const frameDuration = 0.05; // 每帧 0.05 秒
+        let timer = 0;
+
+        const animUpdate = (dt: number) => {
+            if (!this.isFishing || !this.sprite || !this.sprite.isValid || this.isDestroyed) {
+                this.unschedule(animUpdate);
+                this._fishingAnimUpdate = null;
+                return;
+            }
+
+            timer += dt;
+            const frameIndex = Math.floor(timer / frameDuration) % frames.length;
+
+            // 播放完一次后，切换到循环动画
+            if (timer >= frames.length * frameDuration) {
+                this.unschedule(animUpdate);
+                this._fishingAnimUpdate = null;
+                this.playFishingLoopAnimation(0);
+                return;
+            }
+
+            if (frames[frameIndex]) {
+                this.sprite.spriteFrame = frames[frameIndex];
+            }
+        };
+
+        // 清除之前的动画
+        if (this._fishingAnimUpdate) {
+            this.unschedule(this._fishingAnimUpdate);
+        }
+
+        this._fishingAnimUpdate = animUpdate;
+        this.schedule(animUpdate, 0);
+    }
+
+    /**
+     * 播放循环钓鱼动画（持续循环）
+     */
+    private playFishingLoopAnimation(_deltaTime: number) {
+        // 使用定时器实现循环播放，不依赖 _deltaTime
+        if (this._fishingAnimUpdate) {
+            return; // 已在播放
+        }
+
+        const frames = this.fishingLoopFrames.filter(f => f != null);
+        if (frames.length === 0) {
+            return;
+        }
+
+        const frameDuration = 0.15; // 每帧 0.15 秒
+        let timer = 0;
+
+        // 立即播放第一帧
+        if (this.sprite && this.sprite.isValid && frames[0]) {
+            this.sprite.spriteFrame = frames[0];
+        }
+
+        const animUpdate = (dt: number) => {
+            if (!this.isFishing || !this.sprite || !this.sprite.isValid || this.isDestroyed) {
+                this.unschedule(animUpdate);
+                this._fishingAnimUpdate = null;
+                // 恢复默认贴图
+                if (this.sprite && this.sprite.isValid && this.defaultSpriteFrame) {
+                    this.sprite.spriteFrame = this.defaultSpriteFrame;
+                }
+                return;
+            }
+
+            timer += dt;
+            const frameIndex = Math.floor(timer / frameDuration) % frames.length;
+
+            if (frames[frameIndex] && this.sprite && this.sprite.isValid) {
+                this.sprite.spriteFrame = frames[frameIndex];
+            }
+        };
+
+        this._fishingAnimUpdate = animUpdate;
+        this.schedule(animUpdate, 0);
+    }
+
+    // ==================== 钓鱼机制结束 ====================
 }
