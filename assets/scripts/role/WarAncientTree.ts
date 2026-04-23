@@ -510,19 +510,22 @@ export class WarAncientTree extends Build {
 
         // 检查玩家是否有角鹰缰绳，如果有则根据缰绳数量生产对应数量的角鹰射手（缰绳不消耗）
         // 逻辑：缰绳数量 = 可以同时存在的角鹰射手最大数量
-        const playerDataManager = PlayerDataManager.getInstance();
-        let eagleReinsCount = playerDataManager ? playerDataManager.getEagleReinsCount() : 0;
+        // 注意：第一个单位永远是弓箭手，从第二个开始才生产角鹰射手
+        if (this.totalProducedCount >= 1) {
+            const playerDataManager = PlayerDataManager.getInstance();
+            let eagleReinsCount = playerDataManager ? playerDataManager.getEagleReinsCount() : 0;
 
-        if (eagleReinsCount > 0) {
-            // 检查当前场上存活的角鹰射手数量
-            const currentEagleArcherCount = this.getAliveEagleArcherCount();
-            console.log(`[WarAncientTree.produceTower] 缰绳数量=${eagleReinsCount}，场上角鹰射手=${currentEagleArcherCount}`);
+            if (eagleReinsCount > 0) {
+                // 检查当前场上存活的角鹰射手数量
+                const currentEagleArcherCount = this.getAliveEagleArcherCount();
+                console.log(`[WarAncientTree.produceTower] 缰绳数量=${eagleReinsCount}，场上角鹰射手=${currentEagleArcherCount}`);
 
-            if (currentEagleArcherCount < eagleReinsCount) {
-                console.log(`[WarAncientTree.produceTower] 补充角鹰射手（${currentEagleArcherCount} < ${eagleReinsCount}）`);
-                // 生产角鹰射手（补充死亡的角鹰射手）
-                this.produceEagleArcher();
-                return;
+                if (currentEagleArcherCount < eagleReinsCount) {
+                    console.log(`[WarAncientTree.produceTower] 补充角鹰射手（${currentEagleArcherCount} < ${eagleReinsCount}）`);
+                    // 生产角鹰射手（补充死亡的角鹰射手）
+                    this.produceEagleArcher();
+                    return;
+                }
             }
         }
 

@@ -16,12 +16,12 @@ select player_id,count(*) from game_sessions where DATE(created_at) = CURDATE()
 ,'player_1772722064044_978','player_1772465771074_4106') group by player_id ;
 --统计昨天有多少玩家、各玩了几局
 select player_id,count(*) from game_sessions where DATE(created_at) = CURDATE()-1
- and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1775652153130_8335',
+ and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1775652153130_8335'
 ,'player_1772722064044_978','player_1772465771074_4106')  group by player_id ;
 --统计每天有多少局游戏
 select DATE(created_at),count(*) from game_sessions 
  where  player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381'
-,'player_1772722064044_978','player_1772465771074_4106') group by DATE(created_at) order by DATE(created_at) desc ;
+,'player_1772722064044_978','player_1772465771074_4106') and defend_time !=0 group by DATE(created_at) order by DATE(created_at) desc ;
 --选卡明细表
 select * from card_selection_events  order by created_at desc ;
 --统计每天有多少次抽卡

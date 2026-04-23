@@ -3154,6 +3154,10 @@ export class Role extends Component {
         if (this.isMoving || this.isPlayingAttackAnimation || this.isPlayingHitAnimation || this.isPlayingDeathAnimation) {
             return;
         }
+        // 如果正在钓鱼（Arrower 特有），不播放待机动画
+        if ((this as any).isFishing) {
+            return;
+        }
 
         // 如果有有效攻击目标（目标存活且有效），不播放待机动画
         if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
@@ -4290,6 +4294,10 @@ export class Role extends Component {
                     }
                     // 防御状态下不自动前移
                     if (this.isDefending) {
+                        return;
+                    }
+                    // 钓鱼状态下不自动前移（Arrower 特有）
+                    if ((this as any).isFishing) {
                         return;
                     }
                     // 若当前已有索敌目标（update 中已处理索敌），则不触发上移

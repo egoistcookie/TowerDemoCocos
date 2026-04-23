@@ -1313,6 +1313,8 @@ export class GameManager extends Component {
         // 创建池塘背景节点
         const pondNode = new Node('PondBackground');
         pondNode.setParent(canvas);
+        // 设置 siblingIndex 在 Background(2) 之后、Towers(10) 之前，确保渲染在弓箭手下方
+        pondNode.setSiblingIndex(3);
 
         // 添加 Sprite 组件
         const sprite = pondNode.addComponent(Sprite);

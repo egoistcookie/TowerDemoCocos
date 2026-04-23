@@ -1,4 +1,4 @@
-import { _decorator, SpriteFrame, Prefab, Texture2D, AudioClip, Vec3, Node, instantiate, find, sys, EventTouch } from 'cc';
+import { _decorator, Color, SpriteFrame, Prefab, Texture2D, AudioClip, Vec3, Node, instantiate, find, sys, EventTouch, view, tween, UIOpacity, Label, LabelOutline } from 'cc';
 import { Role } from './Role';
 import { AudioManager } from '../AudioManager';
 import { Arrow } from '../Arrow';
@@ -146,6 +146,14 @@ export class Arrower extends Role {
     private isFishing: boolean = false;
     // 钓鱼相关：动画播放引用（用于清除定时器）
     private _fishingAnimUpdate: ((deltaTime: number) => void) | null = null;
+    // 钓鱼相关：保存原始缩放，停止钓鱼时恢复
+    private _fishingOriginalScale: Vec3 | null = null;
+    // 钓鱼相关：是否已到达钓鱼位置
+    private _hasArrivedAtFishingSpot: boolean = false;
+    // 钓鱼相关：金币产出计时器（每2秒产出1金币）
+    private _fishingGoldTimer: number = 0;
+    // 临时Vec3缓存，避免频繁创建
+    private _tempVec3: Vec3 = new Vec3();
 
     // 技能相关属性
     private readonly PENETRATE_ARROW_MANA_COST: number = 10; // 穿透箭消耗蓝量
@@ -159,10 +167,12 @@ export class Arrower extends Role {
     public bowstringAttackMultiplier: number = 1.0;
 
     battleSlogans: string[] = ['箭如雨下！', '射击！射击！射击！', '瞄准，射击！', '弓弦紧绷射天狼!', '箭似流星！', 'Biu! Biu! Biu!'];
+    private readonly fishingSlogans: string[] = ['钓鱼！钓鱼！钓鱼！', '我来养活大家！'];
     private readonly SP_MULTI_ARROW_SLOGAN = '我的箭……会分叉？';
 
     public override tryTriggerSloganOnAction() {
-        if (!this.battleSlogans || this.battleSlogans.length === 0) {
+        const slogans = this.isFishing ? this.fishingSlogans : this.battleSlogans;
+        if (!slogans || slogans.length === 0) {
             return;
         }
         const anyThis = this as any;
@@ -181,6 +191,25 @@ export class Arrower extends Role {
         }
         anyThis.dialogIntervalTimer = 0;
         anyThis.dialogTimer = 0;
+    }
+
+    /**
+     * 重写口号获取：钓鱼时使用钓鱼口号
+     */
+    public override getRandomSlogan(): string {
+        if (this.isFishing && this.fishingSlogans.length > 0) {
+            const index = Math.floor(Math.random() * this.fishingSlogans.length);
+            return this.fishingSlogans[index];
+        }
+        return super.getRandomSlogan();
+    }
+
+    public override getRandomIdleSlogan(): string {
+        if (this.isFishing && this.fishingSlogans.length > 0) {
+            const index = Math.floor(Math.random() * this.fishingSlogans.length);
+            return this.fishingSlogans[index];
+        }
+        return super.getRandomIdleSlogan();
     }
 
     /**
@@ -699,55 +728,109 @@ export class Arrower extends Role {
     // ==================== 钓鱼机制 ====================
 
     /**
+     * 重写对话框系统更新：钓鱼期间抑制战斗口号，避免干扰钓鱼口号
+     */
+    updateDialogSystem(deltaTime: number) {
+        if (this.isFishing) {
+            const anyThis = this as any;
+            // 钓鱼期间独立累加间隔计时器，避免父类逻辑被抑制后计时停滞
+            if (!anyThis.dialogNode || !anyThis.dialogNode.isValid) {
+                anyThis.dialogIntervalTimer = (Number(anyThis.dialogIntervalTimer) || 0) + deltaTime;
+            }
+
+            // 仅维护当前对话框显示状态；新口号触发由 update() 钓鱼分支控制
+            if (anyThis.dialogNode && anyThis.dialogNode.isValid) {
+                this.updateDialog(deltaTime);
+            }
+            return;
+        }
+        // 非钓鱼状态：使用父类默认逻辑
+        super.updateDialogSystem(deltaTime);
+    }
+
+    /**
      * 重写 update：检查空闲时间，超过 5 秒未攻击则开始钓鱼
      */
     update(deltaTime: number) {
-        // 先执行父类 update
-        super.update(deltaTime);
-
         // 如果已销毁或在死亡状态，跳过钓鱼逻辑
         if (this.isDestroyed) {
             return;
         }
 
-        // 钓鱼中：检查是否需要恢复战斗
+        // 【关键优化】在 super.update() 之前完成钓鱼状态初始化和检查
+        // 这样 startFishing() 设置的 manualMoveTarget 能在同一帧被父类 update 处理
         if (this.isFishing) {
-            // 到达钓鱼位置后清除手动移动目标，让父类 update 能正常寻敌
-            const pos = this.node.worldPosition;
-            const dx = this.manualMoveTarget.x - pos.x;
-            const dy = this.manualMoveTarget.y - pos.y;
-            if (!this.manualMoveTarget || (dx * dx + dy * dy) < 100) {
-                this.manualMoveTarget = null;
+            // 钓鱼过程中间歇性触发 fishingSlogans
+            const anyThis = this as any;
+            if ((Number(anyThis.dialogIntervalTimer) || 0) >= 2.0 && (!anyThis.dialogNode || !anyThis.dialogNode.isValid)) {
+                this.createDialog();
+                anyThis.dialogIntervalTimer = 0;
+                anyThis.dialogTimer = 0;
+            }
+
+            // 到达钓鱼位置后清除手动移动目标
+            if (!this.manualMoveTarget) {
                 this.isManuallyControlled = false;
 
-                // 手动查找目标
                 if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
                     this.findTarget();
                 }
+            } else {
+                const pos = this.node.worldPosition;
+                const dx = this.manualMoveTarget.x - pos.x;
+                const dy = this.manualMoveTarget.y - pos.y;
+                if ((dx * dx + dy * dy) < 100) {
+                    this.manualMoveTarget = null;
+                    this.isManuallyControlled = false;
+
+                    this._hasArrivedAtFishingSpot = true;
+                    this._fishingOriginalScale = this.node.getScale().clone();
+                    this.node.setScale(1.6, 1.2, this.node.scale.z);
+                    this.playFishingStartAnimation();
+
+                    if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
+                        this.findTarget();
+                    }
+                }
             }
 
-            // 如果找到了目标，取消钓鱼恢复战斗
             if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
                 this.stopFishing();
-            } else {
-                // 继续钓鱼动画
+            } else if (this._hasArrivedAtFishingSpot) {
                 this.playFishingLoopAnimation(deltaTime);
-            }
-            return;
-        }
 
-        // 检查空闲时间（5 秒未攻击则开始钓鱼）
-        // 只有当没有攻击目标时才累计空闲时间
-        if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
-            this.fishingIdleTimer += deltaTime;
-            // 使用静态锁防止多个弓箭手同时进入钓鱼状态
-            if (this.fishingIdleTimer >= 5.0 && !Arrower.isFishingLock) {
-                // 第一个空闲超过 5 秒的弓箭手成为钓鱼弓箭手
-                this.startFishing();
+                // 每2秒产出1金币并显示飘字
+                this._fishingGoldTimer += deltaTime;
+                if (this._fishingGoldTimer >= 2.0) {
+                    this._fishingGoldTimer -= 2.0;
+                    if (!this.gameManager) {
+                        this.findGameManager();
+                    }
+                    const gm: any = this.gameManager;
+                    if (gm && gm.addGold) {
+                        gm.addGold(1);
+                    }
+                    this.showGoldRewardText();
+                }
             }
         } else {
-            // 有目标时重置空闲计时器
-            this.fishingIdleTimer = 0;
+            // 检查空闲时间（5 秒未攻击则开始钓鱼）
+            if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
+                this.fishingIdleTimer += deltaTime;
+                if (this.fishingIdleTimer >= 5.0 && !Arrower.isFishingLock) {
+                    this.startFishing();
+                }
+            } else {
+                this.fishingIdleTimer = 0;
+            }
+        }
+
+        // 调用父类 update（此时 manualMoveTarget 可能已设置，父类会处理移动）
+        super.update(deltaTime);
+
+        // 如果正在钓鱼，跳过父类后续逻辑
+        if (this.isFishing) {
+            return;
         }
     }
 
@@ -771,14 +854,13 @@ export class Arrower extends Role {
         if (Arrower.isFishingLock) {
             return;
         }
-        Arrower.isFishingLock = true;
 
-        // 确保全局只有一个钓鱼弓箭手
-        if (Arrower.fishingArcher && Arrower.fishingArcher !== this && Arrower.fishingArcher.isFishing) {
-            Arrower.isFishingLock = false;
+        // 确保全局只有一个钓鱼弓箭手（任何时刻只能有一个）
+        if (Arrower.fishingArcher && Arrower.fishingArcher.isFishing) {
             return;
         }
 
+        Arrower.isFishingLock = true;
         this.isFishing = true;
         this.fishingIdleTimer = 0;
         Arrower.fishingArcher = this;
@@ -787,18 +869,36 @@ export class Arrower extends Role {
         this.stopMoving();
         this.currentTarget = null!;
 
-        // 钓鱼位置：池塘边上（池塘右下角锚点 375,-667）
+        // 钓鱼位置：池塘边上
         // 池塘贴图石头边缘在左上部，弓箭手站在石头边缘上
-        // 约在池塘左侧 200 像素，上方 400 像素位置
-        const fishingPos = new Vec3(200, -400, 0);
+        // 以画面中心为基准，池塘在右下角区域
+        const designResolution = view.getDesignResolutionSize();
+        const centerX = designResolution.width / 2;
+        const centerY = designResolution.height / 2;
+        // 相对于画面中心的偏移（向右200，向下400）
+        const fishingPos = new Vec3(centerX + 220, centerY - 540, 0);
         if (!this.manualMoveTarget) {
             this.manualMoveTarget = new Vec3();
         }
         this.manualMoveTarget.set(fishingPos);
         this.isManuallyControlled = true;
 
-        // 播放开始钓鱼动画（一次）
-        this.playFishingStartAnimation();
+        // 向钓鱼目的地移动时触发口号（从两句出发口号中随机挑选）
+        const departureSlogans = ['指挥官，我钓鱼去啦', '我来养活大家'];
+        const slogan = departureSlogans[Math.floor(Math.random() * departureSlogans.length)];
+        this.createDialog(slogan, false);
+
+        // 隐藏血条和蓝条
+        if (this.healthBarNode && this.healthBarNode.isValid) {
+            this.healthBarNode.active = false;
+        }
+        if (this.manaBarNode && this.manaBarNode.isValid) {
+            this.manaBarNode.active = false;
+        }
+
+        // 确保不被 isDefending 阻挡手动移动，并在父类 update 之后再次标记
+        this.isDefending = false;
+        this.isManuallyControlled = true;
     }
 
     /**
@@ -807,11 +907,34 @@ export class Arrower extends Role {
     private stopFishing() {
         this.isFishing = false;
         this.fishingIdleTimer = 0;
+        this._hasArrivedAtFishingSpot = false;
+        this._fishingGoldTimer = 0;
+
+        // 恢复血条和蓝条
+        if (this.healthBarNode && this.healthBarNode.isValid) {
+            this.healthBarNode.active = true;
+        }
+        if (this.manaBarNode && this.manaBarNode.isValid && this.isPenetrateArrowEnabled) {
+            this.manaBarNode.active = true;
+        }
 
         // 如果是当前钓鱼弓箭手，清除全局引用和锁
         if (Arrower.fishingArcher === this) {
             Arrower.fishingArcher = null;
             Arrower.isFishingLock = false;
+        }
+
+        // 重置其他弓箭手的空闲计时器，防止另一个弓箭手立即开始钓鱼
+        if (this.unitManager) {
+            const towers = this.unitManager.getTowers();
+            for (const tower of towers) {
+                if (tower && tower.isValid && tower !== this.node) {
+                    const arrowerScript = tower.getComponent('Arrower') as any;
+                    if (arrowerScript) {
+                        arrowerScript.fishingIdleTimer = 0;
+                    }
+                }
+            }
         }
 
         // 清除钓鱼动画定时器
@@ -823,6 +946,12 @@ export class Arrower extends Role {
         // 停止钓鱼动画，恢复默认贴图
         if (this.sprite && this.sprite.isValid && this.defaultSpriteFrame) {
             this.sprite.spriteFrame = this.defaultSpriteFrame;
+        }
+
+        // 恢复原始缩放
+        if (this._fishingOriginalScale) {
+            this.node.setScale(this._fishingOriginalScale);
+            this._fishingOriginalScale = null;
         }
     }
 
@@ -920,6 +1049,56 @@ export class Arrower extends Role {
 
         this._fishingAnimUpdate = animUpdate;
         this.schedule(animUpdate, 0);
+    }
+
+    /**
+     * 显示金币奖励飘字（参考 GoldMine.showGoldRewardText）
+     */
+    private showGoldRewardText() {
+        if (!this.node || !this.node.isValid) return;
+
+        const canvas = find('Canvas');
+        const parentNode = canvas || this.node.scene || this.node.parent;
+        if (!parentNode) return;
+
+        const basePos = this._tempVec3.set(this.node.worldPosition);
+        basePos.y += 50;
+
+        const n = new Node('GoldRewardText');
+        n.setParent(parentNode);
+
+        try {
+            n.setSiblingIndex(48);
+        } catch {}
+
+        n.setWorldPosition(basePos);
+
+        let label: Label | null = n.getComponent(Label);
+        if (!label) label = n.addComponent(Label);
+        label.string = '+1 gold';
+        label.fontSize = 20;
+        label.color = new Color(255, 215, 0, 255);
+
+        let outline = label.node.getComponent(LabelOutline);
+        if (!outline) {
+            outline = label.node.addComponent(LabelOutline);
+        }
+        outline.color = new Color(0, 0, 0, 255);
+        outline.width = 2;
+
+        const opacity = n.getComponent(UIOpacity) || n.addComponent(UIOpacity);
+        opacity.opacity = 255;
+
+        const floatUp = 30;
+
+        tween(n)
+            .delay(0.1)
+            .to(0.8, { worldPosition: new Vec3(basePos.x, basePos.y + floatUp, basePos.z) }, { easing: 'sineOut' })
+            .parallel(tween(opacity).to(0.8, { opacity: 0 }))
+            .call(() => {
+                if (n && n.isValid) n.destroy();
+            })
+            .start();
     }
 
     // ==================== 钓鱼机制结束 ====================
