@@ -1461,6 +1461,18 @@ export class Boss extends Component {
                 }
             }
         }
+        const eagleArchersNode = find('Canvas/EagleArchers');
+        if (eagleArchersNode) {
+            const eagleArchers = eagleArchersNode.children || [];
+            for (const unit of eagleArchers) {
+                if (unit && unit.active && unit.isValid) {
+                    const eagleArcherScript = unit.getComponent('EagleArcher') as any;
+                    if (eagleArcherScript && eagleArcherScript.isAlive && eagleArcherScript.isAlive()) {
+                        allPotentialTargets.push(unit);
+                    }
+                }
+            }
+        }
         
         // 3.2) 女猎手
         let huntersNode = find('Hunters');

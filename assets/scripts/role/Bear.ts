@@ -295,7 +295,7 @@ export class Bear extends Role {
             }
         } else {
             // 没有目标时，停止移动并播放待机动画
-            console.log('[Bear] 没有有效目标，停止移动');
+          //console.log('[Bear] 没有有效目标，停止移动');
             this.stopMovement();
             // 重置 idleBlockTimer，让待机动画可以立即播放
             this.idleBlockTimer = 0;
@@ -401,9 +401,6 @@ export class Bear extends Role {
 
         if (targets.length === 0) {
             // 范围内没有目标，清空当前目标
-            if (this.currentTarget) {
-                console.log(`[Bear] 范围内无目标，清空旧目标：${this.currentTarget.name}`);
-            }
             this.currentTarget = null!;
             return;
         }
@@ -413,7 +410,7 @@ export class Bear extends Role {
 
         for (const target of targets) {
             if (!target || !target.isValid || !target.active) {
-                console.log(`[Bear] 跳过无效目标：${target?.name || 'unknown'}`);
+              //console.log(`[Bear] 跳过无效目标：${target?.name || 'unknown'}`);
                 continue;
             }
 
@@ -427,7 +424,7 @@ export class Bear extends Role {
                                 target.getComponent('Mage');
 
             if (targetScript && (targetScript as any).isAlive && !(targetScript as any).isAlive()) {
-                console.log(`[Bear] 跳过已死亡目标：${target.name}`);
+              //console.log(`[Bear] 跳过已死亡目标：${target.name}`);
                 continue;
             }
 
@@ -444,10 +441,8 @@ export class Bear extends Role {
         }
 
         if (nearestTarget && nearestTarget.isValid) {
-            console.log(`[Bear] ✓ 选择新目标：${nearestTarget.name}, 距离=${Math.sqrt(nearestDistSq).toFixed(1)}`);
+          //console.log(`[Bear] ✓ 选择新目标：${nearestTarget.name}, 距离=${Math.sqrt(nearestDistSq).toFixed(1)}`);
             this.currentTarget = nearestTarget;
-        } else {
-            console.log('[Bear] 未找到有效目标');
         }
     }
 

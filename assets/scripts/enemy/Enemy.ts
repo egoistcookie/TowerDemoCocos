@@ -2223,6 +2223,17 @@ export class Enemy extends Component {
                 }
             }
         }
+        const eagleArchersNode = find('Canvas/EagleArchers');
+        if (eagleArchersNode) {
+            for (const unit of eagleArchersNode.children) {
+                if (unit && unit.active && unit.isValid) {
+                    const eagleArcherScript = unit.getComponent('EagleArcher') as any;
+                    if (eagleArcherScript && eagleArcherScript.isAlive && eagleArcherScript.isAlive()) {
+                        allTargets.push(unit);
+                    }
+                }
+            }
+        }
 
         const huntersNode = find('Canvas/Hunters');
         if (huntersNode) {

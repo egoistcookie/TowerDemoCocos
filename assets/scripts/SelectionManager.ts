@@ -5,6 +5,7 @@ import { ElfSwordsman } from './role/ElfSwordsman';
 import { Priest } from './role/Priest';
 import { Mage } from './role/Mage';
 import { Eagle } from './role/Eagle';
+import { EagleArcher } from './role/EagleArcher';
 const { ccclass, property } = _decorator;
 
 @ccclass('SelectionManager')
@@ -25,7 +26,7 @@ export class SelectionManager extends Component {
     private selectedSwordsmen: ElfSwordsman[] = []; // 选中的精灵剑士数组
     private selectedPriests: Priest[] = []; // 选中的牧师数组
     private selectedMages: Mage[] = []; // 选中的法师数组
-    private selectedEagles: Eagle[] = []; // 选中的角鹰数组
+    private selectedEagles: Array<Eagle | EagleArcher> = []; // 选中的角鹰/角鹰射手数组
     private camera: Camera = null!; // 相机引用
     private globalTouchHandler: ((event: EventTouch) => void) | null = null!; // 全局触摸事件处理器
     private touchStartTime: number = 0; // 本次触摸开始时间
@@ -789,7 +790,7 @@ export class SelectionManager extends Component {
         }
 
         // 查找角鹰（Eagles 容器）
-        const newSelectedEagles: Eagle[] = [];
+        const newSelectedEagles: Array<Eagle | EagleArcher> = [];
         const eaglesNode = find('Canvas/Eagles') || find('Eagles');
         if (eaglesNode) {
             const eagles = eaglesNode.children || [];
@@ -813,6 +814,26 @@ export class SelectionManager extends Component {
                 const inRangeY = eaglePos.y >= minY && eaglePos.y <= maxY;
                 if (inRangeX && inRangeY) {
                     newSelectedEagles.push(eagleScript);
+                }
+            }
+        }
+        // 查找角鹰射手（EagleArchers 独立容器）
+        const eagleArchersNode = find('Canvas/EagleArchers') || find('EagleArchers');
+        if (eagleArchersNode) {
+            const eagleArchers = eagleArchersNode.children || [];
+            for (const eagleArcherNode of eagleArchers) {
+                if (!eagleArcherNode || !eagleArcherNode.isValid || !eagleArcherNode.active) {
+                    continue;
+                }
+                const eagleArcherScript = eagleArcherNode.getComponent(EagleArcher) as EagleArcher;
+                if (!eagleArcherScript || !eagleArcherScript.isAlive || !eagleArcherScript.isAlive()) {
+                    continue;
+                }
+                const eagleArcherPos = eagleArcherNode.worldPosition;
+                const inRangeX = eagleArcherPos.x >= minX && eagleArcherPos.x <= maxX;
+                const inRangeY = eagleArcherPos.y >= minY && eagleArcherPos.y <= maxY;
+                if (inRangeX && inRangeY) {
+                    newSelectedEagles.push(eagleArcherScript);
                 }
             }
         }
@@ -898,7 +919,7 @@ export class SelectionManager extends Component {
     /**
      * 设置选中的角鹰
      */
-    setSelectedEagles(eagles: Eagle[]) {
+    setSelectedEagles(eagles: Array<Eagle | EagleArcher>) {
         // 取消之前选中的高亮
         for (const eagle of this.selectedEagles) {
             if (eagle && eagle.node && eagle.node.isValid) {

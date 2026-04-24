@@ -263,12 +263,13 @@ export class GoldMine extends Build {
         // 只计算可移动单位：弓箭手、牧师、女猎手、精灵剑士、法师
         const friendlyContainers = [
             'Canvas/Towers',      // Arrower, Priest
+            'Canvas/EagleArchers', // EagleArcher
             'Canvas/Hunters',     // Hunter
             'Canvas/ElfSwordsmans', // ElfSwordsman
             'Canvas/Mages'        // Mage
         ];
 
-        const scriptsToCheck = ['Arrower', 'Priest', 'Hunter', 'ElfSwordsman', 'Mage'];
+        const scriptsToCheck = ['Arrower', 'EagleArcher', 'Priest', 'Hunter', 'ElfSwordsman', 'Mage'];
 
         for (const containerName of friendlyContainers) {
             const containerNode = find(containerName);
@@ -302,12 +303,13 @@ export class GoldMine extends Build {
 
         const friendlyContainers = [
             'Canvas/Towers',
+            'Canvas/EagleArchers',
             'Canvas/Hunters',
             'Canvas/ElfSwordsmans',
             'Canvas/Mages'
         ];
 
-        const scriptsToCheck = ['Arrower', 'Priest', 'Hunter', 'ElfSwordsman', 'Mage'];
+        const scriptsToCheck = ['Arrower', 'EagleArcher', 'Priest', 'Hunter', 'ElfSwordsman', 'Mage'];
 
         for (const containerName of friendlyContainers) {
             const containerNode = find(containerName);

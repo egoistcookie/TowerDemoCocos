@@ -1330,11 +1330,13 @@ export class MinotaurWarrior extends Boss {
         // 优先查找附近的防御塔和战争古树（在攻击范围内）
         // 性能优化：从UnitManager获取建筑物列表，不再使用递归查找
         let towers: Node[] = [];
+        let eagleArchers: Node[] = [];
         let trees: Node[] = [];
         let halls: Node[] = [];
         
         if (this.unitManager) {
             towers = this.unitManager.getTowers();
+            eagleArchers = this.unitManager.getEagleArchers();
             trees = this.unitManager.getWarAncientTrees();
             halls = this.unitManager.getBuildings().filter(building => {
                 const hallScript = building.getComponent('HunterHall') as any;
@@ -1397,6 +1399,23 @@ export class MinotaurWarrior extends Boss {
                             (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
                             minDistance = distance;
                             nearestTarget = tower;
+                            targetPriority = PRIORITY.CHARACTER;
+                        }
+                    }
+                }
+            }
+        }
+        // 1.1) 角鹰射手（独立容器）
+        for (const eagleArcher of eagleArchers) {
+            if (eagleArcher && eagleArcher.active && eagleArcher.isValid) {
+                const eagleArcherScript = eagleArcher.getComponent('EagleArcher') as any;
+                if (eagleArcherScript && eagleArcherScript.isAlive && eagleArcherScript.isAlive()) {
+                    const distance = Vec3.distance(this.node.worldPosition, eagleArcher.worldPosition);
+                    if (distance <= detectionRange) {
+                        if (PRIORITY.CHARACTER < targetPriority ||
+                            (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
+                            minDistance = distance;
+                            nearestTarget = eagleArcher;
                             targetPriority = PRIORITY.CHARACTER;
                         }
                     }
@@ -1991,6 +2010,15 @@ export class MinotaurWarrior extends Boss {
                                   tower.getComponent('Priest') as any;
                     if (script && script.isAlive && script.isAlive()) {
                         potentialTargets.push(tower);
+                    }
+                }
+            }
+            const eagleArchers = this.unitManager.getEagleArchers();
+            for (const unit of eagleArchers) {
+                if (unit && unit.isValid && unit.active) {
+                    const eagleArcherScript = unit.getComponent('EagleArcher') as any;
+                    if (eagleArcherScript && eagleArcherScript.isAlive && eagleArcherScript.isAlive()) {
+                        potentialTargets.push(unit);
                     }
                 }
             }
@@ -2664,6 +2692,18 @@ export class MinotaurWarrior extends Boss {
                     const towerScript = tower.getComponent('Arrower') as any;
                     if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
                         allPotentialTargets.push(tower);
+                    }
+                }
+            }
+        }
+        const eagleArchersNode = find('Canvas/EagleArchers');
+        if (eagleArchersNode) {
+            const eagleArchers = eagleArchersNode.children || [];
+            for (const unit of eagleArchers) {
+                if (unit && unit.active && unit.isValid) {
+                    const eagleArcherScript = unit.getComponent('EagleArcher') as any;
+                    if (eagleArcherScript && eagleArcherScript.isAlive && eagleArcherScript.isAlive()) {
+                        allPotentialTargets.push(unit);
                     }
                 }
             }

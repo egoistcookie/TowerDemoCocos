@@ -6260,7 +6260,7 @@ export class GameManager extends Component {
 
         // 优化：第 2 关之后不再显示小精灵的出场提示
         const level = this.getCurrentLevelSafe();
-        console.log(`[GameManager] checkUnitFirstAppearance: unitType=${unitType}, uniqueUnitType=${uniqueUnitType}, level=${level}`);
+      //console.log(`[GameManager] checkUnitFirstAppearance: unitType=${unitType}, uniqueUnitType=${uniqueUnitType}, level=${level}`);
         if (level >= 2 && (uniqueUnitType === '小精灵' || uniqueUnitType === 'Wisp')) {
             console.log(`[GameManager] 跳过小精灵出场提示（level=${level} >= 2）`);
             return false;
@@ -8370,7 +8370,7 @@ export class GameManager extends Component {
         // 单位容器路径映射
         const unitContainers: Record<string, string[]> = {
             'Arrower': ['Canvas/Towers'],
-            'EagleArcher': ['Canvas/Towers'], // 角鹰射手容器
+            'EagleArcher': ['Canvas/EagleArchers', 'Canvas/Towers'], // 角鹰射手容器
             'Hunter': ['Canvas/Hunters'],
             'Mage': ['Canvas/Mages'],
             // 剑士容器命名在不同场景/版本中可能不同，这里做兼容
@@ -8936,7 +8936,7 @@ export class GameManager extends Component {
         // 使用与 getActiveUnitTypes 相同的容器路径映射
         const unitContainers: Record<string, string[]> = {
             'Arrower': ['Canvas/Towers', 'Canvas/Arrows', 'Canvas/Units'],
-            'EagleArcher': ['Canvas/Towers', 'Canvas/Arrows', 'Canvas/Units'], // 角鹰射手容器
+            'EagleArcher': ['Canvas/EagleArchers', 'Canvas/Towers', 'Canvas/Arrows', 'Canvas/Units'], // 角鹰射手容器
             'Hunter': ['Canvas/Hunters'],
             'Mage': ['Canvas/Mages'],
             // 剑士容器兼容（部分场景使用 Canvas/ElfSwordsmans）

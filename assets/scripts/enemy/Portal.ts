@@ -683,7 +683,8 @@ export class Portal extends Component {
             'Canvas/Priests',
             'Canvas/Mages',
             'Canvas/Bears',         // 巨熊（中立状态时也是目标）
-            'Canvas/Eagles'         // 角鹰（飞行单位）
+            'Canvas/Eagles',        // 角鹰（飞行单位）
+            'Canvas/EagleArchers'   // 角鹰射手（独立容器）
         ];
         const center = this.node.worldPosition;
         let best: Node | null = null;

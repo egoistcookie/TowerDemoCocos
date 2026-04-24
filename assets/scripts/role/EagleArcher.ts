@@ -1,4 +1,4 @@
-import { _decorator, Vec3, find } from 'cc';
+import { _decorator, Vec3, find, Node } from 'cc';
 import { Arrower } from './Arrower';
 import { PlayerDataManager } from '../PlayerDataManager';
 import { GamePopup } from '../GamePopup';
@@ -64,13 +64,20 @@ export class EagleArcher extends Arrower {
     }
 
     /**
+     * 角鹰射手为飞行单位，不参与弓箭手钓鱼行为
+     */
+    protected override canUseFishingBehavior(): boolean {
+        return false;
+    }
+
+    /**
      * 设置优先攻击目标类型（由 GameManager 调用）
      */
     public setPriorityTargetType(type: string | null): void {
         this.priorityTargetType = type;
         // 同时更新全局设置，这样新生产的角鹰射手也会使用相同的设置
         EagleArcher._globalPriorityTargetType = type;
-        console.log(`[EagleArcher] setPriorityTargetType: ${type || '无'}`);
+      //console.log(`[EagleArcher] setPriorityTargetType: ${type || '无'}`);
     }
 
     /**
@@ -78,12 +85,13 @@ export class EagleArcher extends Arrower {
      */
     override onEnable() {
         super.onEnable();
+        this.ensureEagleArcherContainerAboveStoneWalls();
         // 优先使用全局设置（如果当前没有设置）
         if (!this.priorityTargetType && EagleArcher._globalPriorityTargetType) {
             this.priorityTargetType = EagleArcher._globalPriorityTargetType;
-            console.log(`[EagleArcher] onEnable: 从全局恢复狙击目标 ${this.priorityTargetType}`);
+          //console.log(`[EagleArcher] onEnable: 从全局恢复狙击目标 ${this.priorityTargetType}`);
         }
-        console.log(`[EagleArcher] onEnable: priorityTargetType=${this.priorityTargetType || '无'}`);
+      //console.log(`[EagleArcher] onEnable: priorityTargetType=${this.priorityTargetType || '无'}`);
     }
 
     /**
@@ -92,14 +100,14 @@ export class EagleArcher extends Arrower {
     protected override resetRoleState(): void {
         // 保存狙击目标设置
         const savedPriorityTargetType = this.priorityTargetType;
-        console.log(`[EagleArcher] resetRoleState: 保存狙击目标 ${savedPriorityTargetType || '无'}`);
+      //console.log(`[EagleArcher] resetRoleState: 保存狙击目标 ${savedPriorityTargetType || '无'}`);
 
         // 调用父类重置方法
         super.resetRoleState();
 
         // 恢复狙击目标设置
         this.priorityTargetType = savedPriorityTargetType;
-        console.log(`[EagleArcher] resetRoleState: 恢复狙击目标 ${this.priorityTargetType || '无'}`);
+      //console.log(`[EagleArcher] resetRoleState: 恢复狙击目标 ${this.priorityTargetType || '无'}`);
 
         // 清理狙击准星标记
         this.removeAllSniperMarks();
@@ -110,36 +118,36 @@ export class EagleArcher extends Arrower {
      */
     protected createArrow() {
         // 调试日志：打印当前狙击目标设置
-        console.log(`[EagleArcher.createArrow] START: priorityTargetType=${this.priorityTargetType}, currentTarget=${this.currentTarget ? this.currentTarget.name : 'null'}`);
+      //console.log(`[EagleArcher.createArrow] START: priorityTargetType=${this.priorityTargetType}, currentTarget=${this.currentTarget ? this.currentTarget.name : 'null'}`);
 
         // 检查当前目标是否是狙击目标
         const isSnipeTarget = this.isCurrentTargetSnipeTarget();
 
-        console.log(`[EagleArcher.createArrow] isSnipeTarget=${isSnipeTarget}`);
+      //console.log(`[EagleArcher.createArrow] isSnipeTarget=${isSnipeTarget}`);
 
         if (isSnipeTarget) {
             // 临时翻倍攻击力
             const oldDamage = this.attackDamage;
             this.attackDamage = oldDamage * 2;
-            console.log(`[EagleArcher.createArrow] 攻击狙击目标，伤害翻倍：${oldDamage} -> ${this.attackDamage}`);
+          //console.log(`[EagleArcher.createArrow] 攻击狙击目标，伤害翻倍：${oldDamage} -> ${this.attackDamage}`);
             try {
-                console.log('[EagleArcher.createArrow] 调用 super.createArrow()');
+              //console.log('[EagleArcher.createArrow] 调用 super.createArrow()');
                 super.createArrow();
                 // 角鹰射手狙击专用：箭矢增长增宽为 1.5 倍
                 this.enhanceArrowScale(1.5);
             } finally {
                 // 恢复原始攻击力
                 this.attackDamage = oldDamage;
-                console.log(`[EagleArcher.createArrow] 恢复攻击力：${this.attackDamage}`);
+              //console.log(`[EagleArcher.createArrow] 恢复攻击力：${this.attackDamage}`);
             }
         } else {
-            console.log('[EagleArcher.createArrow] 调用 super.createArrow() (普通攻击)');
+          //console.log('[EagleArcher.createArrow] 调用 super.createArrow() (普通攻击)');
             super.createArrow();
             // 角鹰射手普通攻击：箭矢增长增宽为 1.5 倍
             this.enhanceArrowScale(1.5);
         }
 
-        console.log('[EagleArcher.createArrow] END');
+      //console.log('[EagleArcher.createArrow] END');
     }
 
     /**
@@ -208,7 +216,7 @@ export class EagleArcher extends Arrower {
                 baseScale.y * scaleMultiplier,
                 baseScale.z
             );
-            console.log(`[EagleArcher] 箭矢缩放增强：${scaleMultiplier}倍，新缩放：${lastArrow.node.scale}`);
+          //console.log(`[EagleArcher] 箭矢缩放增强：${scaleMultiplier}倍，新缩放：${lastArrow.node.scale}`);
         }
     }
 
@@ -216,16 +224,16 @@ export class EagleArcher extends Arrower {
      * 检查当前目标是否是狙击目标类型
      */
     private isCurrentTargetSnipeTarget(): boolean {
-        console.log(`[EagleArcher] isCurrentTargetSnipeTarget: priorityTargetType=${this.priorityTargetType}, currentTarget=${this.currentTarget ? this.currentTarget.name : 'null'}`);
+      //console.log(`[EagleArcher] isCurrentTargetSnipeTarget: priorityTargetType=${this.priorityTargetType}, currentTarget=${this.currentTarget ? this.currentTarget.name : 'null'}`);
 
         if (!this.priorityTargetType || !this.currentTarget || !this.currentTarget.isValid) {
-            console.log(`[EagleArcher] isCurrentTargetSnipeTarget: 条件不满足，返回 false`);
+          //console.log(`[EagleArcher] isCurrentTargetSnipeTarget: 条件不满足，返回 false`);
             return false;
         }
         // 检查当前目标是否具有狙击目标类型的组件
         const enemyScript = this.currentTarget.getComponent<any>(this.priorityTargetType);
         const isSnipeTarget = !!enemyScript;
-        console.log(`[EagleArcher] isCurrentTargetSnipeTarget: enemyScript=${!!enemyScript}`);
+      //console.log(`[EagleArcher] isCurrentTargetSnipeTarget: enemyScript=${!!enemyScript}`);
 
         // 在狙击目标头上创建红色准星标记
         if (isSnipeTarget) {
@@ -242,7 +250,7 @@ export class EagleArcher extends Arrower {
                 for (const type of enemyTypes) {
                     enemyComponent = this.currentTarget.getComponent(type);
                     if (enemyComponent) {
-                        console.log(`[EagleArcher] 找到敌人组件类型：${type}`);
+                      //console.log(`[EagleArcher] 找到敌人组件类型：${type}`);
                         break;
                     }
                 }
@@ -250,9 +258,9 @@ export class EagleArcher extends Arrower {
 
             if (enemyComponent && enemyComponent.createSniperMark) {
                 enemyComponent.createSniperMark();
-                console.log('[EagleArcher] 为狙击目标创建准星标记');
+              //console.log('[EagleArcher] 为狙击目标创建准星标记');
             } else {
-                console.log('[EagleArcher] 未找到Enemy组件或createSniperMark方法');
+              //console.log('[EagleArcher] 未找到Enemy组件或createSniperMark方法');
             }
         } else {
             // 移除所有敌人头上的准星标记（不是狙击目标）
@@ -301,6 +309,7 @@ export class EagleArcher extends Arrower {
     start() {
         // 调用父类初始化
         super.start();
+        this.ensureEagleArcherContainerAboveStoneWalls();
 
         // 确保飞行单位标志正确设置
         this.isFlying = true;
@@ -311,6 +320,43 @@ export class EagleArcher extends Arrower {
             this.node.setSiblingIndex(45);
         } catch (e) {
             // 忽略错误
+        }
+    }
+
+    /**
+     * 将角鹰射手放入独立容器，并确保该容器位于 StoneWalls 之后
+     * 仅影响角鹰射手，不改变普通弓箭手所在的 Towers 容器层级。
+     */
+    private ensureEagleArcherContainerAboveStoneWalls() {
+        if (!this.node || !this.node.isValid) {
+            return;
+        }
+        const canvas = find('Canvas');
+        const stoneWalls = find('Canvas/StoneWalls');
+        if (!canvas || !canvas.isValid || !stoneWalls || !stoneWalls.isValid) {
+            return;
+        }
+
+        let eagleArchers = find('Canvas/EagleArchers');
+        if (!eagleArchers || !eagleArchers.isValid) {
+            eagleArchers = new Node('EagleArchers');
+            eagleArchers.setParent(canvas);
+        }
+
+        // 保证容器在石墙之后
+        if (eagleArchers.parent === canvas && stoneWalls.parent === canvas) {
+            const eagleArchersIndex = eagleArchers.getSiblingIndex();
+            const stoneWallsIndex = stoneWalls.getSiblingIndex();
+            if (eagleArchersIndex <= stoneWallsIndex) {
+                eagleArchers.setSiblingIndex(stoneWallsIndex + 1);
+            }
+        }
+
+        // 将角鹰射手放入专属容器，不影响 Towers 里普通弓箭手
+        if (this.node.parent !== eagleArchers) {
+            const worldPos = this.node.worldPosition.clone();
+            this.node.setParent(eagleArchers);
+            this.node.setWorldPosition(worldPos);
         }
     }
 
@@ -435,9 +481,9 @@ export class EagleArcher extends Arrower {
      * 打开狙击技能目标选择提示框
      */
     private openSnipeTargetSelection() {
-        console.log('[EagleArcher] openSnipeTargetSelection 被调用');
-        console.log(`[EagleArcher] 当前 priorityTargetType: ${this.priorityTargetType || '无'}`);
-        console.log(`[EagleArcher] 全局 _globalPriorityTargetType: ${EagleArcher._globalPriorityTargetType || '无'}`);
+      //console.log('[EagleArcher] openSnipeTargetSelection 被调用');
+      //console.log(`[EagleArcher] 当前 priorityTargetType: ${this.priorityTargetType || '无'}`);
+      //console.log(`[EagleArcher] 全局 _globalPriorityTargetType: ${EagleArcher._globalPriorityTargetType || '无'}`);
 
         // 获取本关卡内可能出现的所有单位类型
         const availableEnemyTypes = this.getAvailableEnemyTypes();
@@ -450,11 +496,21 @@ export class EagleArcher extends Arrower {
             availableEnemyTypes: availableEnemyTypes,
             currentPriorityType: this.priorityTargetType
         }, (selectedType: string | null) => {
-            console.log(`[EagleArcher] 回调被调用，选择的目标：${selectedType || '无'}`);
+          //console.log(`[EagleArcher] 回调被调用，选择的目标：${selectedType || '无'}`);
             this.priorityTargetType = selectedType;
             // 同时更新全局设置
             EagleArcher._globalPriorityTargetType = selectedType;
-            console.log(`[EagleArcher] 设置优先攻击目标：${selectedType || '无'}`);
+          //console.log(`[EagleArcher] 设置优先攻击目标：${selectedType || '无'}`);
+
+            // 立即刷新单位信息面板上的按钮文字（狙击目标显示）
+            const usm: any = this.unitSelectionManager;
+            const isSelected = !!(usm && typeof usm.isUnitSelected === 'function' && usm.isUnitSelected(this.node));
+            if (isSelected) {
+                const panel = usm.unitInfoPanel;
+                if (panel && typeof panel.updateButtons === 'function') {
+                    panel.updateButtons(this.buildArrowerUnitInfo());
+                }
+            }
         });
     }
 

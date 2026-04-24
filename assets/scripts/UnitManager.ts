@@ -412,17 +412,20 @@ export class UnitManager extends Component {
      * 获取所有角鹰射手（已缓存，从对象池容器直接获取）
      */
     getEagleArchers(): Node[] {
-        // 角鹰射手存储在 Towers 容器下，需要从 Canvas/Towers 获取
-        const towersNode = find('Canvas/Towers');
-        if (!towersNode || !towersNode.isValid) {
-            return [];
-        }
         const result: Node[] = [];
-        for (const child of towersNode.children) {
-            if (child && child.isValid && child.active) {
-                const eagleArcherScript = child.getComponent('EagleArcher');
-                if (eagleArcherScript) {
-                    result.push(child);
+        // 优先从专属容器获取，兼容旧存档/旧流程再回查 Towers
+        const containers = ['Canvas/EagleArchers', 'Canvas/Towers'];
+        for (const path of containers) {
+            const containerNode = find(path);
+            if (!containerNode || !containerNode.isValid) {
+                continue;
+            }
+            for (const child of containerNode.children) {
+                if (child && child.isValid && child.active) {
+                    const eagleArcherScript = child.getComponent('EagleArcher');
+                    if (eagleArcherScript) {
+                        result.push(child);
+                    }
                 }
             }
         }

@@ -313,14 +313,15 @@ export class Priest extends Role {
         const visit = (node: Node) => {
             if (!node || !node.isValid || !node.active) return;
 
-            // 关心五类友军：弓箭手、女猎手、精灵剑士、法师、牧师（包含自身）
+            // 关心六类友军：弓箭手、角鹰射手、女猎手、精灵剑士、法师、牧师（包含自身）
             const arrower = node.getComponent('Arrower') as any;
+            const eagleArcher = node.getComponent('EagleArcher') as any;
             const hunter = node.getComponent('Hunter') as any;
             const swordsman = node.getComponent('ElfSwordsman') as any;
             const mage = node.getComponent('Mage') as any;
             const priest = node.getComponent('Priest') as any;
 
-            const script = arrower || hunter || swordsman || mage || priest;
+            const script = eagleArcher || arrower || hunter || swordsman || mage || priest;
             if (script) {
                 const np2 = node.worldPosition, sp2 = this.node.worldPosition;
                 const n2dx = sp2.x - np2.x, n2dy = sp2.y - np2.y, n2dz = sp2.z - np2.z;
@@ -975,6 +976,7 @@ export class Priest extends Role {
             // 单位：Arrower / Hunter / ElfSwordsman / Priest / Role
             // 建筑物：Build 及其子类（SwordsmanHall / HunterHall / WarAncientTree / Church / IceTower / WatchTower / ThunderTower / StoneWall 等）
             const arrower = node.getComponent('Arrower') as any;
+            const eagleArcher = node.getComponent('EagleArcher') as any;
             const hunter = node.getComponent('Hunter') as any;
             const swordsman = node.getComponent('ElfSwordsman') as any;
             const priest = node.getComponent('Priest') as any;
@@ -990,6 +992,7 @@ export class Priest extends Role {
             const stoneWall = node.getComponent('StoneWall') as any;
 
             const script =
+                eagleArcher ||
                 arrower ||
                 hunter ||
                 swordsman ||
@@ -1119,11 +1122,12 @@ export class Priest extends Role {
 
         const targetNode = this.currentTarget;
         const arrower = targetNode.getComponent('Arrower') as any;
+        const eagleArcher = targetNode.getComponent('EagleArcher') as any;
         const hunter = targetNode.getComponent('Hunter') as any;
         const swordsman = targetNode.getComponent('ElfSwordsman') as any;
         const mage = targetNode.getComponent('Mage') as any;
         const priest = targetNode.getComponent('Priest') as any;
-        const script = arrower || hunter || swordsman || mage || priest;
+        const script = eagleArcher || arrower || hunter || swordsman || mage || priest;
 
         if (!script) {
             this.currentTarget = null!;

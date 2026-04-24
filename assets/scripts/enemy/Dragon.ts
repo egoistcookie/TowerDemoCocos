@@ -180,6 +180,9 @@ export class Dragon extends Enemy {
             // 防御塔
             const towers = this.unitManager.getTowers();
             friendlyUnits.push(...towers);
+            // 角鹰射手（独立容器）
+            const eagleArchers = this.unitManager.getEagleArchers();
+            friendlyUnits.push(...eagleArchers);
 
             // 弓箭手（在Towers容器中）
             const towersList = this.unitManager.getTowers();
@@ -223,6 +226,10 @@ export class Dragon extends Enemy {
             const towersNode = find('Canvas/Towers');
             if (towersNode) {
                 friendlyUnits.push(...towersNode.children);
+            }
+            const eagleArchersNode = find('Canvas/EagleArchers');
+            if (eagleArchersNode) {
+                friendlyUnits.push(...eagleArchersNode.children);
             }
 
             const huntersNode = find('Canvas/Hunters');
@@ -300,7 +307,8 @@ export class Dragon extends Enemy {
                               unit.getComponent('HunterHall') as any ||
                               unit.getComponent('SwordsmanHall') as any ||
                               unit.getComponent('Church') as any ||
-                              unit.getComponent('Eagle') as any;
+                              unit.getComponent('Eagle') as any ||
+                              unit.getComponent('EagleArcher') as any;
 
             if (!unitScript || !unitScript.isAlive || !unitScript.isAlive()) {
                 continue;

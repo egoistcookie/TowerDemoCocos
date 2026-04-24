@@ -6,6 +6,7 @@ import { Arrow2 } from '../Arrow2';
 import { UnitInfo } from '../UnitInfoPanel';
 import { PlayerDataManager } from '../PlayerDataManager';
 import { GamePopup } from '../GamePopup';
+import { GameState } from '../GameManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('Arrower')
@@ -139,6 +140,8 @@ export class Arrower extends Role {
     private static fishingArcher: Arrower | null = null;
     // 钓鱼相关：静态锁，防止多个弓箭手同时进入钓鱼状态
     private static isFishingLock: boolean = false;
+    // 钓鱼相关：全局累计钓鱼金币（用于每20金币触发人口上限+1）
+    private static totalFishingGold: number = 0;
 
     // 钓鱼相关：空闲计时器（5秒内未攻击则触发钓鱼）
     private fishingIdleTimer: number = 0;
@@ -150,7 +153,7 @@ export class Arrower extends Role {
     private _fishingOriginalScale: Vec3 | null = null;
     // 钓鱼相关：是否已到达钓鱼位置
     private _hasArrivedAtFishingSpot: boolean = false;
-    // 钓鱼相关：金币产出计时器（每2秒产出1金币）
+    // 钓鱼相关：金币产出计时器（每3秒产出1金币）
     private _fishingGoldTimer: number = 0;
     // 临时Vec3缓存，避免频繁创建
     private _tempVec3: Vec3 = new Vec3();
@@ -782,7 +785,13 @@ export class Arrower extends Role {
 
         // 【关键优化】在 super.update() 之前完成钓鱼状态初始化和检查
         // 这样 startFishing() 设置的 manualMoveTarget 能在同一帧被父类 update 处理
+        const canUseFishing = this.canUseFishingBehavior();
         if (this.isFishing) {
+            if (!canUseFishing) {
+                this.stopFishing();
+                super.update(deltaTime);
+                return;
+            }
             // 钓鱼过程中间歇性触发 fishingSlogans
             const anyThis = this as any;
             if ((Number(anyThis.dialogIntervalTimer) || 0) >= 5.0 && (!anyThis.dialogNode || !anyThis.dialogNode.isValid)) {
@@ -822,23 +831,36 @@ export class Arrower extends Role {
             } else if (this._hasArrivedAtFishingSpot) {
                 this.playFishingLoopAnimation(deltaTime);
 
-                // 每2秒产出1金币并显示飘字
-                this._fishingGoldTimer += deltaTime;
-                if (this._fishingGoldTimer >= 2.0) {
-                    this._fishingGoldTimer -= 2.0;
-                    if (!this.gameManager) {
-                        this.findGameManager();
+                if (!this.gameManager) {
+                    this.findGameManager();
+                }
+                const gm: any = this.gameManager;
+                // 参考金矿逻辑：仅在 Playing 状态下产出，暂停时不累计
+                if (gm && gm.getGameState && gm.getGameState() === GameState.Playing) {
+                    // 每3秒产出1金币并显示飘字
+                    this._fishingGoldTimer += deltaTime;
+                    if (this._fishingGoldTimer >= 3.0) {
+                        this._fishingGoldTimer -= 3.0;
+                        if (gm.addGold) {
+                            gm.addGold(1);
+                            Arrower.totalFishingGold += 1;
+
+                            // 每累计20个钓鱼金币，人口上限+1，并弹出提示
+                            if (Arrower.totalFishingGold > 0 && Arrower.totalFishingGold % 20 === 0) {
+                                if (gm.getMaxPopulation && gm.setMaxPopulation) {
+                                    const currentMaxPopulation = Number(gm.getMaxPopulation()) || 0;
+                                    gm.setMaxPopulation(currentMaxPopulation + 1);
+                                }
+                                GamePopup.showMessage('经过钓鱼者的不懈努力\n防线能够供养的人口增加', true, 3);
+                            }
+                        }
+                        this.showGoldRewardText();
                     }
-                    const gm: any = this.gameManager;
-                    if (gm && gm.addGold) {
-                        gm.addGold(1);
-                    }
-                    this.showGoldRewardText();
                 }
             }
         } else {
             // 检查空闲时间（5 秒未攻击则开始钓鱼）
-            if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
+            if (canUseFishing && (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active)) {
                 this.fishingIdleTimer += deltaTime;
                 if (this.fishingIdleTimer >= 5.0 && !Arrower.isFishingLock) {
                     this.startFishing();
@@ -855,6 +877,13 @@ export class Arrower extends Role {
         if (this.isFishing) {
             return;
         }
+    }
+
+    /**
+     * 是否允许该单位使用钓鱼行为（子类可重写）
+     */
+    protected canUseFishingBehavior(): boolean {
+        return true;
     }
 
     /**
@@ -1098,7 +1127,7 @@ export class Arrower extends Role {
 
         let label: Label | null = n.getComponent(Label);
         if (!label) label = n.addComponent(Label);
-        label.string = '+1 gold';
+        label.string = '+1 fish';
         label.fontSize = 20;
         label.color = new Color(255, 215, 0, 255);
 

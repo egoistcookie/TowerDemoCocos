@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, tween, UIOpacity, UITransform, Sprite, SpriteFrame, Label, Color, Graphics, Prefab, instantiate, find, view, EventTouch, BlockInputEvents, director } from 'cc';
+import { _decorator, Component, Node, Vec3, tween, UIOpacity, UITransform, Sprite, SpriteFrame, Label, Color, Graphics, Prefab, instantiate, find, view, EventTouch, BlockInputEvents, director, LabelOutline } from 'cc';
 import { GameManager } from './GameManager';
 const { ccclass, property } = _decorator;
 
@@ -11,6 +11,7 @@ export class GamePopup extends Component {
     
     private background: Sprite = null!; // 背景Sprite组件
     private messageLabel: Label = null!; // 消息标签
+    private messageLabelOutline: LabelOutline | null = null; // 消息描边
     private backgroundGraphics: Graphics = null!; // 背景Graphics，用于纯色背景
     
     private isShowing: boolean = false;
@@ -107,6 +108,12 @@ export class GamePopup extends Component {
             this.messageLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
             this.messageLabel.verticalAlign = Label.VerticalAlign.CENTER;
         }
+
+        // 文本描边：白字黑边
+        this.messageLabelOutline = labelNode.getComponent(LabelOutline);
+        if (!this.messageLabelOutline) {
+            this.messageLabelOutline = labelNode.addComponent(LabelOutline);
+        }
         
         // 确保文本在背景之上
         this.ensureTextOnTop();
@@ -136,6 +143,15 @@ export class GamePopup extends Component {
             this.messageLabel.fontSize = 24;
             this.messageLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
             this.messageLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        }
+
+        // 设置描边（白字黑边）
+        if (!this.messageLabelOutline && this.messageLabel && this.messageLabel.node) {
+            this.messageLabelOutline = this.messageLabel.node.getComponent(LabelOutline) || this.messageLabel.node.addComponent(LabelOutline);
+        }
+        if (this.messageLabelOutline) {
+            this.messageLabelOutline.color = new Color(0, 0, 0, 255);
+            this.messageLabelOutline.width = 2;
         }
     }
     
