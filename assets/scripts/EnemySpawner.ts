@@ -97,6 +97,13 @@ export class EnemySpawner extends Component {
     // 波次刷新完后抽卡延迟，给玩家更多注意抽卡的时间
     private buffCardDelayTimer: number = 0;
     private readonly BUFF_CARD_DELAY: number = 5; // 波次刷新完后 5 秒才出现抽卡
+
+    // 防止“同一波结算回调”重复触发导致跳波
+    private waveTransitionSeq: number = 0; // 每次 endCurrentWave 递增
+    private lastHandledWaveTransitionSeq: number = 0; // 已处理到的结算序号（幂等保护）
+    // 防止“同一波 endCurrentWave 被重复调用”（根因：最后一只怪刷完 scheduleOnce + updateWave 同时判断完成）
+    private isEndingWave: boolean = false;
+    private endingWaveIndex: number = -999;
     
     // 测试模式相关
     private testEnemySpawned: boolean = false; // 测试模式下是否已刷新敌人
@@ -154,6 +161,8 @@ export class EnemySpawner extends Component {
         this.enemySpawnTimer = 0;
         this.testEnemySpawned = false;
         this.persistentEnemyGrowthMultiplier = 1;
+        this.isEndingWave = false;
+        this.endingWaveIndex = -999;
         
         // 测试模式日志
         if (this.testMode) {
@@ -1164,6 +1173,11 @@ export class EnemySpawner extends Component {
             return;
         }
 
+        // 若已经进入“波次结算中”，不要再触发任何“结束波次”的判断，避免重复 endCurrentWave 导致跳波
+        if (this.isEndingWave && this.endingWaveIndex === this.currentWaveIndex) {
+            return;
+        }
+
         // 进行到第三波后：随机左/右侧出现传送门预告（10秒后生成传送门）
         if (!this.hasTriggeredSidePortalAfterWave3 && this.currentWaveIndex >= 2) {
             let allowSidePortal = false;
@@ -1263,8 +1277,16 @@ export class EnemySpawner extends Component {
      */
     private endCurrentWave() {
         //console.log(`[EnemySpawner] endCurrentWave() 被调用，currentWaveIndex=${this.currentWaveIndex}, isWaveActive=${this.isWaveActive}`);
+        // 根因修复：同一波只允许进入一次结算流程（否则会出现“波次连跳”）
+        if (this.isEndingWave && this.endingWaveIndex === this.currentWaveIndex) {
+            return;
+        }
+        this.isEndingWave = true;
+        this.endingWaveIndex = this.currentWaveIndex;
+
         this.isWaveActive = false;
         this.currentEnemyConfig = null;
+        const transitionSeq = ++this.waveTransitionSeq;
 
         // 检查是否是最后一波
         const totalWaves = this.currentLevelConfig && this.currentLevelConfig.waves ? this.currentLevelConfig.waves.length : 0;
@@ -1281,10 +1303,10 @@ export class EnemySpawner extends Component {
             //console.log(`[EnemySpawner] 第${waveNumber}波完成（最后一波），立即显示增益卡片`);
             if (this.gameManager) {
                 this.gameManager.showBuffCards(() => {
-                    this.continueToNextWaves();
+                    this.continueToNextWaves(transitionSeq);
                 });
             } else {
-                this.continueToNextWaves();
+                this.continueToNextWaves(transitionSeq);
             }
             return;
         }
@@ -1307,10 +1329,10 @@ export class EnemySpawner extends Component {
                         if (this.gameManager) {
                             this.gameManager.showBuffCards(() => {
                                 //console.log('[EnemySpawner] 增益卡片选择完成，准备继续下一波');
-                                this.continueToNextWaves();
+                                this.continueToNextWaves(transitionSeq);
                             });
                         } else {
-                            this.continueToNextWaves();
+                            this.continueToNextWaves(transitionSeq);
                         }
                     },
                     () => {
@@ -1319,10 +1341,10 @@ export class EnemySpawner extends Component {
                         if (this.gameManager) {
                             this.gameManager.showBuffCards(() => {
                                 //console.log('[EnemySpawner] 增益卡片选择完成，准备继续下一波（手动关闭）');
-                                this.continueToNextWaves();
+                                this.continueToNextWaves(transitionSeq);
                             });
                         } else {
-                            this.continueToNextWaves();
+                            this.continueToNextWaves(transitionSeq);
                         }
                     },
                     10, // 10 秒倒计时
@@ -1333,10 +1355,10 @@ export class EnemySpawner extends Component {
                 this.scheduleOnce(() => {
                     if (this.gameManager) {
                         this.gameManager.showBuffCards(() => {
-                            this.continueToNextWaves();
+                            this.continueToNextWaves(transitionSeq);
                         });
                     } else {
-                        this.continueToNextWaves();
+                        this.continueToNextWaves(transitionSeq);
                     }
                 }, 10);
             }
@@ -1347,10 +1369,10 @@ export class EnemySpawner extends Component {
         //console.log(`[EnemySpawner] 第${waveNumber}波完成，立即显示增益卡片`);
         if (this.gameManager) {
             this.gameManager.showBuffCards(() => {
-                this.continueToNextWaves();
+                this.continueToNextWaves(transitionSeq);
             });
         } else {
-            this.continueToNextWaves();
+            this.continueToNextWaves(transitionSeq);
         }
     }
 
@@ -1410,6 +1432,8 @@ export class EnemySpawner extends Component {
         
         // 重置波次状态
         this.isWaveActive = true;
+        this.isEndingWave = false;
+        this.endingWaveIndex = -999;
         this.preWaveDelayTimer = 0;
         this.currentEnemyIndex = 0;
         this.enemiesSpawnedCount = 0;
@@ -1446,7 +1470,14 @@ export class EnemySpawner extends Component {
     /**
      * 继续生成下一波（点击倒计时弹窗后触发，继续下5波）
      */
-    private continueToNextWaves() {
+    private continueToNextWaves(transitionSeq?: number) {
+        // 幂等保护：同一波的结算回调被重复触发时，只允许推进一次
+        if (transitionSeq !== undefined) {
+            if (transitionSeq <= this.lastHandledWaveTransitionSeq) {
+                return;
+            }
+            this.lastHandledWaveTransitionSeq = transitionSeq;
+        }
        //console.log(`[EnemySpawner] continueToNextWaves() START - currentWaveIndex=${this.currentWaveIndex}`);
         
         // 取消倒计时激活标志

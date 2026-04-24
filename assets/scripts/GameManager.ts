@@ -108,6 +108,8 @@ export class GameManager extends Component {
     
     // 单位首次出现相关
     private appearedUnitTypes: Set<string> = new Set();
+    // “首次出现介绍框”延迟到点击再弹（用于石墙/哨塔，避免开局提示过多）
+    private deferredIntroUnitIds: Set<string> = new Set();
     private hasShownLevel2MageTowerUnlockIntro: boolean = false; // 第2关小精灵介绍后，法师塔解锁介绍仅弹一次
     private hasShownLevel2HunterTornadoAwakenIntro: boolean = false; // 第2关通关后，女猎手龙卷觉醒介绍仅弹一次
     private hasShownLevel4EagleNestUnlockIntro: boolean = false; // 第 4 关通关后，角鹰兽栏解锁介绍仅弹一次
@@ -1105,6 +1107,7 @@ export class GameManager extends Component {
         
         // 每次游戏开始时清空已出现单位类型集合
         this.appearedUnitTypes.clear();
+        this.deferredIntroUnitIds.clear();
         this.shownFirstBuffCardLevels.clear();
         this.hasShownLevel2MageTowerUnlockIntro = false;
         this.hasShownLevel2HunterTornadoAwakenIntro = false;
@@ -5186,6 +5189,7 @@ export class GameManager extends Component {
         this.hasShownPopulationLimitWarning = false;
         this.hasShownFirstArrowerDeathPopup = false;
         this.appearedUnitTypes.clear();
+        this.deferredIntroUnitIds.clear();
         this.shownFirstBuffCardLevels.clear();
         this.hasShownLevel2MageTowerUnlockIntro = false;
         this.hasShownLevel2HunterTornadoAwakenIntro = false;
@@ -6251,6 +6255,8 @@ export class GameManager extends Component {
         // 使用单位名称作为唯一标识，确保每种单位只显示一次介绍框
         // 优先使用unitScript.unitName，否则使用unitType
         const uniqueUnitType = unitScript.unitName || unitScript.prefabName || unitType;
+        // prefabName（或 unitType）作为配置/介绍框的稳定 ID
+        const rawUnitId = unitScript?.prefabName || unitScript?.unitType || unitType;
 
         // 优化：第 2 关之后不再显示小精灵的出场提示
         const level = this.getCurrentLevelSafe();
@@ -6278,6 +6284,17 @@ export class GameManager extends Component {
                 uniqueUnitType === '剑士';
             // 角鹰射手首次出现时显示狙击选择框
             const isFirstEagleArcher = unitType === 'EagleArcher' || unitScript?.unitType === 'EagleArcher' || unitScript?.prefabName === 'EagleArcher' || uniqueUnitType === '角鹰射手';
+
+            // 石墙/哨塔：首次出现时不弹，延迟到“第一次点击该单位”再弹
+            const shouldDeferIntroToClick =
+                rawUnitId === 'StoneWall' ||
+                rawUnitId === 'WatchTower' ||
+                uniqueUnitType === '石墙' ||
+                uniqueUnitType === '哨塔';
+            if (shouldDeferIntroToClick) {
+                this.deferredIntroUnitIds.add(String(rawUnitId));
+                return true;
+            }
 
             if (isFirstArrower && shouldShowIntro) {
                 const baseCloseCallback = this.getIntroCloseCallback(uniqueUnitType);
@@ -6327,6 +6344,18 @@ export class GameManager extends Component {
         }
 
         return false;
+    }
+
+    /**
+     * 石墙/哨塔：若其首次介绍被延迟，则在点击时补弹一次
+     */
+    public tryShowDeferredUnitIntroOnClick(unitScript: any) {
+        if (!unitScript) return;
+        const rawUnitId = String(unitScript?.prefabName || unitScript?.unitType || '');
+        if (!rawUnitId) return;
+        if (!this.deferredIntroUnitIds.has(rawUnitId)) return;
+        this.deferredIntroUnitIds.delete(rawUnitId);
+        this.showUnitIntro(unitScript, this.getIntroCloseCallback(unitScript?.unitName || rawUnitId));
     }
 
     /**

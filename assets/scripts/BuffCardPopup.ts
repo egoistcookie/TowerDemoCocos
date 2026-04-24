@@ -162,9 +162,23 @@ export class BuffCardPopup extends Component {
             return;
         }
         
-        // 已在显示中：忽略后续 show，避免内容被覆盖导致“闪一下就变了”
+        // 已在显示中：避免内容被覆盖导致“闪一下就变了”
+        // 但如果外部传入了 onClose（例如刷怪系统等待抽卡结束继续下一波），需要把回调串联起来，避免流程卡死。
         if (this.isShowing || this.container.active) {
-            //console.warn('[BuffCardPopup] show() ignored because popup is already showing');
+            if (onClose) {
+                const prev = this.onCloseCallback;
+                if (!prev) {
+                    this.onCloseCallback = onClose;
+                } else if (prev !== onClose) {
+                    this.onCloseCallback = () => {
+                        try {
+                            prev();
+                        } finally {
+                            onClose();
+                        }
+                    };
+                }
+            }
             return;
         }
         

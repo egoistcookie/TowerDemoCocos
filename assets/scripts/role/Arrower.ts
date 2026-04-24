@@ -167,7 +167,7 @@ export class Arrower extends Role {
     public bowstringAttackMultiplier: number = 1.0;
 
     battleSlogans: string[] = ['箭如雨下！', '射击！射击！射击！', '瞄准，射击！', '弓弦紧绷射天狼!', '箭似流星！', 'Biu! Biu! Biu!'];
-    private readonly fishingSlogans: string[] = ['钓鱼！钓鱼！钓鱼！', '我来养活大家！'];
+    private readonly fishingSlogans: string[] = ['钓鱼！钓鱼！钓鱼！', '我来养活大家！', '怎么还不上钩呀'];
     private readonly SP_MULTI_ARROW_SLOGAN = '我的箭……会分叉？';
 
     public override tryTriggerSloganOnAction() {
@@ -725,6 +725,29 @@ export class Arrower extends Role {
         super.destroyTower();
     }
 
+    onDestroy() {
+        // 重要：弓箭手的钓鱼状态使用静态锁控制“全局唯一”
+        // 若关卡切换/重开时直接清理节点，可能不会走 destroyTower()，从而导致锁残留，后续关卡永远无法再钓鱼。
+        try {
+            if (this.isFishing && Arrower.fishingArcher === this) {
+                Arrower.fishingArcher = null;
+                Arrower.isFishingLock = false;
+            }
+        } catch {}
+
+        // 清理钓鱼动画定时器（避免残留 schedule）
+        try {
+            if (this._fishingAnimUpdate) {
+                this.unschedule(this._fishingAnimUpdate);
+                this._fishingAnimUpdate = null;
+            }
+        } catch {}
+
+        // 父类清理
+        // @ts-ignore - 兼容父类可能未实现 onDestroy
+        super.onDestroy?.();
+    }
+
     // ==================== 钓鱼机制 ====================
 
     /**
@@ -762,7 +785,7 @@ export class Arrower extends Role {
         if (this.isFishing) {
             // 钓鱼过程中间歇性触发 fishingSlogans
             const anyThis = this as any;
-            if ((Number(anyThis.dialogIntervalTimer) || 0) >= 2.0 && (!anyThis.dialogNode || !anyThis.dialogNode.isValid)) {
+            if ((Number(anyThis.dialogIntervalTimer) || 0) >= 5.0 && (!anyThis.dialogNode || !anyThis.dialogNode.isValid)) {
                 this.createDialog();
                 anyThis.dialogIntervalTimer = 0;
                 anyThis.dialogTimer = 0;

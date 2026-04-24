@@ -162,6 +162,14 @@ export class StoneWall extends Build {
         // 阻止事件传播
         event.propagationStopped = true;
 
+        // 石墙：首次出现介绍框延迟到首次点击再弹（避免开局提示过多）
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        if (this.gameManager && typeof (this.gameManager as any).tryShowDeferredUnitIntroOnClick === 'function') {
+            (this.gameManager as any).tryShowDeferredUnitIntroOnClick(this);
+        }
+
         // 点击时显示九宫格信息面板（包含回收按钮）
         if (!this.unitSelectionManager) {
             this.findUnitSelectionManager();
