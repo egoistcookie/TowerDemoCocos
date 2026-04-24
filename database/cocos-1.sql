@@ -1,5 +1,7 @@
 
---游戏缓存表
+--游戏缓存表 
+--260423：152局 27至少1抽 另有10局是玩到结束了 30%成功率
+--260424：259局 35至少1抽 另有10局玩到结束（5局是老玩家） 40%成功率
 select * from game_sessions  order by created_at desc;
 select * from game_sessions where DATE(created_at) = CURDATE() 
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')
@@ -18,10 +20,15 @@ select player_id,count(*) from game_sessions where DATE(created_at) = CURDATE()
 select player_id,count(*) from game_sessions where DATE(created_at) = CURDATE()-1
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1775652153130_8335'
 ,'player_1772722064044_978','player_1772465771074_4106')  group by player_id ;
---统计每天有多少局游戏
+--统计每天有多少局游戏（20260423之后才开始保存进行了0到12秒的游戏记录）
 select DATE(created_at),count(*) from game_sessions 
- where  player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381'
-,'player_1772722064044_978','player_1772465771074_4106') group by DATE(created_at) order by DATE(created_at) desc ;
+ where  player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')
+group by DATE(created_at) order by DATE(created_at) desc ;
+--统计每天有多少局游戏（至少进行了12秒的、抽了一次卡的游戏）
+select DATE(created_at),count(*) from game_sessions 
+ where  player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')
+and id in (select session_id from card_selection_events where game_time !=0 ) 
+group by DATE(created_at) order by DATE(created_at) desc ;
 --选卡明细表
 select * from card_selection_events  order by created_at desc ;
 --统计每天有多少次抽卡
