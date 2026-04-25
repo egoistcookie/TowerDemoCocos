@@ -1716,7 +1716,9 @@ export class Role extends Component {
     protected getPriorityTargetType(): string | null {
         return null;
     }
- findTarget() {
+    
+    /** 获取目标 */
+    findTarget() {
         let nearestEnemy: Node = null!;
         let minDistanceSq = Infinity; // 使用平方距离，避免开方运算
         const detectionRange = this.getDetectionRange(); // 使用可重写的方法获取索敌范围

@@ -513,13 +513,29 @@ export class GridBuildingSelectionPanel extends Component {
         this.updateCostLabels();
         
         // 设置面板位置（点击位置在四宫格中央）
-        // 四宫格大小为200x200，所以中心偏移为0
-        this.panelNode.setWorldPosition(worldPos.x, worldPos.y, 0);
-        
-        // 高亮被选择的网格
+        // 边缘格子：避免左右两侧选项超出屏幕，整体向内平移 60 像素
+        let shiftX = 0;
         if (!this.stoneWallGridPanel) {
             this.findStoneWallGridPanel();
         }
+        const gridW = this.stoneWallGridPanel ? this.stoneWallGridPanel.gridWidth : 0;
+        if (gridW > 0) {
+            // 最边缘列：向内移动 60
+            if (gridX <= 0) {
+                shiftX = 60;
+            } else if (gridX >= gridW - 1) {
+                shiftX = -60;
+            }
+            // 倒数第二列：向内移动 20
+            else if (gridX === 1) {
+                shiftX = 20;
+            } else if (gridX === gridW - 2) {
+                shiftX = -20;
+            }
+        }
+        this.panelNode.setWorldPosition(worldPos.x + shiftX, worldPos.y, 0);
+        
+        // 高亮被选择的网格
         if (this.stoneWallGridPanel) {
             this.stoneWallGridPanel.highlightGrid(worldPos);
         }

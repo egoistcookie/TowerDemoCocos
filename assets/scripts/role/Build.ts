@@ -16,6 +16,7 @@ const { ccclass, property } = _decorator;
 
 @ccclass('Build')
 export class Build extends Component { 
+    private originalMaxHealthForLevelScaling: number = -1;
     // 基础属性（protected）
     @property
     protected maxHealth: number = 100;
@@ -100,15 +101,16 @@ export class Build extends Component {
     onEnable() {
        //console.info(`[Build] onEnable 被调用，单位类型: ${this.constructor.name}`);
         
+        // 先获取关卡信息并应用关卡血量规则，再进行本轮状态初始化
+        this.findGameManager();
+        this.applyLevelBasedDefenseTowerHealthIfNeeded();
+        
         // 从对象池获取时，重新初始化状态
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
         this.gridX = -1;
         this.gridY = -1;
         this.isMoving = false;
-        
-        // 重新查找游戏管理器（可能已变化）
-        this.findGameManager();
         
         // 重新查找单位选择管理器
         this.findUnitSelectionManager();
@@ -137,6 +139,10 @@ export class Build extends Component {
     protected start() {
        //console.info(`[Build] start 被调用，单位类型: ${this.constructor.name}`);
         
+        // 首次创建时同样按关卡应用防御塔血量规则
+        this.findGameManager();
+        this.applyLevelBasedDefenseTowerHealthIfNeeded();
+        
         this.currentHealth = this.maxHealth;
         this.isDestroyed = false;
 
@@ -148,9 +154,6 @@ export class Build extends Component {
         this.defaultScale = this.node.scale.clone();
         // 重置基准底部高度为“未初始化”状态
         this.baseY = Number.NaN;
-
-        // 查找游戏管理器
-        this.findGameManager();
 
         // 查找单位选择管理器
         this.findUnitSelectionManager();
@@ -183,6 +186,30 @@ export class Build extends Component {
         talentEffectManager.applyTalentEffects(this);
     }
 
+    /**
+     * 第四关之后（level > 3）仅提升三种防御塔的基础血量到 3 倍
+     * 设计为可逆：回到第一~三关时恢复为原始基础值
+     */
+    protected applyLevelBasedDefenseTowerHealthIfNeeded() {
+        if (this.originalMaxHealthForLevelScaling < 0) {
+            this.originalMaxHealthForLevelScaling = this.maxHealth;
+        }
+
+        const unitId = this.getUnitIdForEnhancement();
+        const isDefenseTower =
+            unitId === 'WatchTower' ||
+            unitId === 'IceTower' ||
+            unitId === 'ThunderTower';
+
+        if (!isDefenseTower) {
+            return;
+        }
+
+        const currentLevel = (this.gameManager as any)?.getCurrentLevelSafe?.() ?? 1;
+        const multiplier = currentLevel > 3 ? 3 : 1;
+        this.maxHealth = this.originalMaxHealthForLevelScaling * multiplier;
+    }
+
     protected findGameManager() {
         const findNodeRecursive = (node: Node, name: string): Node | null => {
             if (node.name === name) {
@@ -195,7 +222,10 @@ export class Build extends Component {
             return null;
         };
 
-        let gmNode = find('GameManager');
+        let gmNode = find('Canvas/GameManager');
+        if (!gmNode) {
+            gmNode = find('GameManager');
+        }
         if (!gmNode && this.node.scene) {
             gmNode = findNodeRecursive(this.node.scene, 'GameManager');
         }

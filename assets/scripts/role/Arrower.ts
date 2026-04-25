@@ -928,7 +928,7 @@ export class Arrower extends Role {
         const centerX = designResolution.width / 2;
         const centerY = designResolution.height / 2;
         // 相对于画面中心的偏移（向右200，向下400）
-        const fishingPos = new Vec3(centerX + 220, centerY - 540, 0);
+        const fishingPos = new Vec3(centerX + 235, centerY - 545, 0);
         if (!this.manualMoveTarget) {
             this.manualMoveTarget = new Vec3();
         }

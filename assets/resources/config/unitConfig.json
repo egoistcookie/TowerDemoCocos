@@ -107,7 +107,7 @@
   },
   "WarAncientTree": {
     "baseStats": {
-      "maxHealth": 100,
+      "maxHealth": 400,
       "attackRange": 200,
       "attackDamage": 15,
       "attackInterval": 1.5,
@@ -122,7 +122,7 @@
       "description": "训练弓箭手的场地"
     },
     "displayStats": {
-      "生命值": 100,
+      "生命值": 400,
       "攻击力": 15,
       "攻击范围": "200像素",
       "攻击间隔": "1.5秒",
@@ -239,7 +239,7 @@
   },
   "HunterHall": {
     "baseStats": {
-      "maxHealth": 100,
+      "maxHealth": 400,
       "buildCost": 30,
       "level": 1,
       "collisionRadius": 50,
@@ -251,7 +251,7 @@
       "description": "训练女猎手的场地"
     },
     "displayStats": {
-      "生命值": 100,
+      "生命值": 400,
       "建造成本": "30金币",
       "最大生产数量": 4,
       "生产间隔": "2.0秒"
@@ -259,7 +259,7 @@
   },
   "MageTower": {
     "baseStats": {
-      "maxHealth": 100,
+      "maxHealth": 400,
       "buildCost": 30,
       "level": 1,
       "collisionRadius": 50,
@@ -271,7 +271,7 @@
       "description": "训练法师的场地"
     },
     "displayStats": {
-      "生命值": 100,
+      "生命值": 400,
       "建造成本": "30金币",
       "最大生产数量": 4,
       "生产间隔": "2.0秒"
@@ -279,7 +279,7 @@
   },
   "SwordsmanHall": {
     "baseStats": {
-      "maxHealth": 100,
+      "maxHealth": 400,
       "buildCost": 30,
       "level": 1,
       "collisionRadius": 50,
@@ -291,7 +291,7 @@
       "description": "训练精灵剑士的场地"
     },
     "displayStats": {
-      "生命值": 100,
+      "生命值": 400,
       "建造成本": "30金币",
       "最大生产数量": 4,
       "生产间隔": "2.0秒"
@@ -299,7 +299,7 @@
   },
   "Church": {
     "baseStats": {
-      "maxHealth": 120,
+      "maxHealth": 400,
       "buildCost": 1,
       "level": 1,
       "collisionRadius": 50,
@@ -311,7 +311,7 @@
       "description": "训练牧师的场地"
     },
     "displayStats": {
-      "生命值": 120,
+      "生命值": 400,
       "建造成本": "1金币",
       "最大生产数量": 4,
       "生产间隔": "2.0秒"
@@ -642,7 +642,7 @@
     },
     "displayInfo": {
       "name": "角鹰",
-      "description": "空中飞行单位，不占用人口。"
+      "description": "空中飞行单位，不占用人口，免疫邪能伤害。"
     },
     "displayStats": {
       "生命值": 80,

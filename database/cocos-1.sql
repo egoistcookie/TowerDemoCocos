@@ -1,14 +1,18 @@
 
 --游戏缓存表 
---260423：152局 27至少1抽 另有10局是玩到结束了 30%成功率
---260424：259局 35至少1抽 另有10局玩到结束（5局是老玩家） 40%成功率
-select * from game_sessions  order by created_at desc;
-select * from game_sessions where DATE(created_at) = CURDATE() 
+--260425：
+--260424：253局 33至少1抽 其中7局玩到结束（4局是老玩家） 1/3成功率
+--260423：145局 31至少1抽 其中10局玩到结束 30%成功率
+select * from game_sessions where 
+  player_id not in (select player_id from visitor_source_records where channel='unknown')  order by created_at desc;
+select * from game_sessions where DATE(created_at) = CURDATE()
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')
+ and player_id not in (select player_id from visitor_source_records where channel='unknown') 
 order by created_at desc ;
-select * from game_sessions where operations_json like '%trig%'  order by created_at desc
+select * from game_sessions where operations_json like '%trig%'  order by created_at desc;
 select * from game_sessions where DATE(created_at) = CURDATE() -1
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')
+ and player_id not in (select player_id from visitor_source_records where channel='unknown') 
 order by created_at desc ;
 select * from game_sessions where player_id='player_1774265446223_9255';
 select * from game_sessions where revive_count !=0;
@@ -19,25 +23,30 @@ select player_id,count(*) from game_sessions where DATE(created_at) = CURDATE()
 --统计昨天有多少玩家、各玩了几局
 select player_id,count(*) from game_sessions where DATE(created_at) = CURDATE()-1
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1775652153130_8335'
-,'player_1772722064044_978','player_1772465771074_4106')  group by player_id ;
+,'player_1772722064044_978','player_1772465771074_4106')
+ and player_id not in (select player_id from visitor_source_records where channel='unknown') 
+group by player_id ;
+select * from visitor_source_records;
 --统计每天有多少局游戏（20260423之后才开始保存进行了0到12秒的游戏记录）
 select DATE(created_at),count(*) from game_sessions 
  where  player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')
+ and player_id not in (select player_id from visitor_source_records where channel='unknown') 
 group by DATE(created_at) order by DATE(created_at) desc ;
 --统计每天有多少局游戏（至少进行了12秒的、抽了一次卡的游戏）
 select DATE(created_at),count(*) from game_sessions 
  where  player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')
 and id in (select session_id from card_selection_events where game_time !=0 ) 
+ and player_id not in (select player_id from visitor_source_records where channel='unknown') 
 group by DATE(created_at) order by DATE(created_at) desc ;
 --选卡明细表
 select * from card_selection_events  order by created_at desc ;
 --统计每天有多少次抽卡
 select session_id,player_id,level,game_time ,selection_mode,cards_json,created_at  from card_selection_events where DATE(created_at) = CURDATE()
- and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1775652153130_8335',
-'player_1772722064044_978','player_1772465771074_4106') order by created_at desc ;
+ and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1775652153130_8335','player_1772722064044_978','player_1772465771074_4106')
+ and player_id not in (select player_id from visitor_source_records where channel='unknown')  order by created_at desc ;
 select session_id,player_id,level,selection_mode,cards_json,created_at from card_selection_events where DATE(created_at) = CURDATE()
- and player_id  in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1775652153130_8335',
-'player_1772722064044_978','player_1772465771074_4106') order by created_at desc ;
+ and player_id  in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1775652153130_8335','player_1772722064044_978','player_1772465771074_4106')
+  order by created_at desc ;
 --统计每天有多少广告抽卡(reroll和get_all只有看完了视频才会触发)
 select DATE(created_at),player_id,count(*) from card_selection_events where selection_mode  in ('get_all','reroll') 
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106')

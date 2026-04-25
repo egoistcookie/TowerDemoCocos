@@ -3059,6 +3059,13 @@ export class TowerBuilder extends Component {
 
     // 可以通过按钮调用
     onBuildButtonClick() {
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        if (this.gameManager && typeof (this.gameManager as any).tryResumeForLevel1BuildHutTutorial === 'function') {
+            (this.gameManager as any).tryResumeForLevel1BuildHutTutorial();
+        }
+
         // 检查warAncientTreePrefab是否设置
         if (!this.warAncientTreePrefab) {
             return;
@@ -3091,6 +3098,10 @@ export class TowerBuilder extends Component {
         }
         
         this.enableBuildingMode();
+
+        if (this.gameManager && typeof (this.gameManager as any).notifyLevel1BuildHutTutorialAfterBuildPanelOpened === 'function') {
+            (this.gameManager as any).notifyLevel1BuildHutTutorialAfterBuildPanelOpened();
+        }
     }
     
     /**

@@ -92,6 +92,9 @@ export class EnemySpawner extends Component {
     private enemiesSpawnedCount: number = 0;
     private enemySpawnTimer: number = 0;
     private pauseAfterFirstEnemy: boolean = false; // 第一只怪刷新后暂停刷新
+    // 动态难度：每波结束时判断，若我方>敌方，则下一波敌人数量x2
+    private pendingNextWaveCountMultiplier: number = 1; // 下一个波次将要使用的倍率
+    private currentWaveCountMultiplier: number = 1;     // 当前波次生效倍率
 
 
     // 波次刷新完后抽卡延迟，给玩家更多注意抽卡的时间
@@ -160,6 +163,8 @@ export class EnemySpawner extends Component {
         this.enemiesSpawnedCount = 0;
         this.enemySpawnTimer = 0;
         this.testEnemySpawned = false;
+        this.pendingNextWaveCountMultiplier = 1;
+        this.currentWaveCountMultiplier = 1;
         this.persistentEnemyGrowthMultiplier = 1;
         this.isEndingWave = false;
         this.endingWaveIndex = -999;
@@ -1272,6 +1277,47 @@ export class EnemySpawner extends Component {
             this.enemySpawnTimer = 0;
         }
     }
+
+    private getBattlefieldUnitCounts(): { enemyCount: number; friendlyCount: number } {
+        let enemyCount = 0;
+        let friendlyCount = 0;
+        const unitManager = UnitManager.getInstance();
+        if (unitManager) {
+            enemyCount = (unitManager.getEnemies() || []).length;
+            const towers = (unitManager.getTowers() || []).length; // 含弓箭手/牧师等
+            const defenseTowers = (unitManager.getDefenseTowers() || []).length; // 哨塔/冰塔/雷塔
+            const hunters = (unitManager.getHunters() || []).length;
+            const swords = (unitManager.getElfSwordsmans() || []).length;
+            const mages = (unitManager.getMages() || []).length;
+            const eagles = (unitManager.getEagles() || []).length;
+            const eagleArchers = (unitManager.getEagleArchers() || []).length;
+            friendlyCount = towers + defenseTowers + hunters + swords + mages + eagles + eagleArchers;
+        } else {
+            const countActiveChildren = (path: string): number => {
+                const n = find(path);
+                if (!n || !n.isValid) return 0;
+                let c = 0;
+                const children = n.children || [];
+                for (let i = 0; i < children.length; i++) {
+                    const ch = children[i];
+                    if (ch && ch.isValid && ch.active) c++;
+                }
+                return c;
+            };
+            enemyCount = countActiveChildren('Canvas/Enemies');
+            friendlyCount =
+                countActiveChildren('Canvas/Towers') +
+                countActiveChildren('Canvas/WatchTowers') +
+                countActiveChildren('Canvas/IceTowers') +
+                countActiveChildren('Canvas/ThunderTowers') +
+                countActiveChildren('Canvas/Hunters') +
+                countActiveChildren('Canvas/ElfSwordsmans') +
+                countActiveChildren('Canvas/Mages') +
+                countActiveChildren('Canvas/Eagles') +
+                countActiveChildren('Canvas/EagleArchers');
+        }
+        return { enemyCount, friendlyCount };
+    }
     /**
      * 结束当前波次
      */
@@ -1439,6 +1485,27 @@ export class EnemySpawner extends Component {
         this.enemiesSpawnedCount = 0;
         this.enemySpawnTimer = 0;
         this.currentEnemyConfig = null;
+        // 动态难度（增强版）：在每次 startNextWave 时判断当前局面
+        // - 若我方 <= 敌方：倍率重置为 1
+        // - 若我方 > 敌方：
+        //   - 当前倍率 < 2 时，直接设为 2
+        //   - 当前倍率 >= 2 时，继续 +1（逐波递增）
+        const { enemyCount, friendlyCount } = this.getBattlefieldUnitCounts();
+        const prevMultiplier = Math.max(1, this.currentWaveCountMultiplier);
+        if (friendlyCount > enemyCount) {
+            this.currentWaveCountMultiplier = prevMultiplier >= 2 ? (prevMultiplier + 1) : 2;
+        } else {
+            this.currentWaveCountMultiplier = 1;
+        }
+        this.pendingNextWaveCountMultiplier = this.currentWaveCountMultiplier;
+        console.log(
+            `[EnemySpawner][DynamicDifficulty] startNextWave check: enemy=${enemyCount}, friendly=${friendlyCount}, prevMultiplier=${prevMultiplier}, waveMultiplier=${this.currentWaveCountMultiplier}`
+        );
+        if (this.currentWaveCountMultiplier > 1) {
+            console.log(
+                `[EnemySpawner][DynamicDifficulty] startNextWave apply multiplier: wave=${this.currentWaveIndex + 1}, multiplier=${this.currentWaveCountMultiplier}`
+            );
+        }
         
        //console.log(`[EnemySpawner] startNextWave() 重置波次状态，isWaveActive=${this.isWaveActive}`);
         
@@ -1557,7 +1624,24 @@ export class EnemySpawner extends Component {
         
         // 循环查找下一个存在的预制体
         while (attempts < maxAttempts) {
-            this.currentEnemyConfig = this.currentWave.enemies[this.currentEnemyIndex];
+            const baseConfig = this.currentWave.enemies[this.currentEnemyIndex];
+            const multiplier = Math.max(1, this.currentWaveCountMultiplier);
+            // 使用副本，避免污染关卡原始配置
+            const baseInterval = Math.max(0.01, baseConfig.interval);
+            // 动态难度：倍率越高，刷新越快（间隔按倍率等比缩短）
+            // 例如 multiplier=2 时 interval 减半；multiplier=3 时为 1/3
+            // 加一个下限避免过小导致极端刷怪抖动
+            const finalInterval = Math.max(0.15, baseInterval / multiplier);
+            this.currentEnemyConfig = {
+                prefabName: baseConfig.prefabName,
+                count: Math.max(1, Math.floor(baseConfig.count * multiplier)),
+                interval: finalInterval
+            };
+            if (multiplier > 1) {
+                console.log(
+                    `[EnemySpawner][DynamicDifficulty] apply multiplier: wave=${this.currentWaveIndex + 1}, prefab=${baseConfig.prefabName}, baseCount=${baseConfig.count}, finalCount=${this.currentEnemyConfig.count}, baseInterval=${baseInterval}, finalInterval=${finalInterval.toFixed(3)}, multiplier=${multiplier}`
+                );
+            }
             // 获取新配置时重置计数
             // 注意：这里总是重置，因为如果重新获取同一个配置，说明之前的生成已经完成
             this.enemiesSpawnedCount = 0;
@@ -2059,6 +2143,8 @@ export class EnemySpawner extends Component {
         this.enemiesSpawnedCount = 0;
         this.enemySpawnTimer = 0;
         this.pauseAfterFirstEnemy = false;
+        this.pendingNextWaveCountMultiplier = 1;
+        this.currentWaveCountMultiplier = 1;
         this.currentWave = null;
         this.currentEnemyConfig = null;
         this.testEnemySpawned = false; // 重置测试模式标志

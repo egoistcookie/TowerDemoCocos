@@ -102,6 +102,16 @@ export class GameManager extends Component {
     private buildButtonBattleHintOriginalColor: Color | null = null;
     private buildButtonBattleHintNode: Node | null = null;
     private lastPendingChurchHighlightDebugLogMs: number = 0;
+    /** 第一关：45s 仍只有初始弓箭手小屋时，引导建造（一局一次） */
+    private hasShownLevel1BuildHutTutorialAt45s: boolean = false;
+    private level1BuildHutTutorialAwaitingBuildClick: boolean = false;
+    private level1BuildHutTutorialMaskNode: Node | null = null;
+    private level1BuildHutTutorialBtnOriginalParent: Node | null = null;
+    private level1BuildHutTutorialBtnOriginalSiblingIndex: number = 0;
+    private level1BuildHutTutorialBuildButtonRef: Node | null = null;
+    private readonly level1BuildHutTutorialBtnWorldPos: Vec3 = new Vec3();
+    /** 第一关引导：暂停时仍可用真实时间做建造按钮循环闪烁 */
+    private level1BuildHutTutorialBtnBlinkStartMs: number = 0;
     // 埋点相关
     private analyticsManager: AnalyticsManager | null = null;
     private totalKillCount: number = 0;
@@ -1716,6 +1726,8 @@ export class GameManager extends Component {
      * - 在首页（Ready）、暂停、结算等状态全部隐藏
      */
     private setInGameUIVisible(visible: boolean) {
+        // 第一关「仅点建造」引导时游戏为 Paused，但建造按钮必须保持显示（UIManager 仍持有按钮节点引用）
+        const keepBuildButtonVisible = this.level1BuildHutTutorialAwaitingBuildClick;
         // 优先使用序列化引用
         if (this.healthLabel && this.healthLabel.node.isValid) {
             this.healthLabel.node.active = visible;
@@ -1770,7 +1782,11 @@ export class GameManager extends Component {
             for (const name of names) {
                 const child = uiRoot.getChildByName(name);
                 if (child && child.isValid) {
-                    child.active = visible;
+                    if (name === 'BuildButton' && keepBuildButtonVisible) {
+                        child.active = true;
+                    } else {
+                        child.active = visible;
+                    }
                 }
             }
         }
@@ -1782,7 +1798,7 @@ export class GameManager extends Component {
         if (uiManagerNode) {
             const uiManager = this.uiManager || (uiManagerNode.getComponent('UIManager') as any);
             if (uiManager && uiManager.buildButton && uiManager.buildButton.node && uiManager.buildButton.node.isValid) {
-                uiManager.buildButton.node.active = visible;
+                uiManager.buildButton.node.active = keepBuildButtonVisible ? true : visible;
             }
         }
     }
@@ -1795,6 +1811,7 @@ export class GameManager extends Component {
         // 首页体力倒计时：即使不在 Playing 状态，也需要按秒刷新
         if (!isPlaying) {
             this.updateLevelHud();
+            this.updateLevel1BuildHutTutorialBuildButtonRealTimeBlink();
             return;
         }
 
@@ -3644,11 +3661,23 @@ export class GameManager extends Component {
 
     // 记录最近一次游戏结果状态，用于结算界面（MVP/SVP 显示）
     private lastGameResultState: GameState | null = null;
+    // 幂等保护：同一局只允许进入一次 endGame 结算流程
+    private hasEndGameTriggered: boolean = false;
     // 记录MVP/SVP单位信息，用于首次返回主页提示
     public lastMVPUnit: { unitName: string; unitType: string; unitIcon: SpriteFrame | null } | null = null;
 
     endGame(state: GameState) {
         //console.info(`[GameManager.endGame] 游戏结束，状态: ${state === GameState.Victory ? 'Victory' : state === GameState.Defeat ? 'Defeat' : 'Other'}`);
+        // 仅允许从 Playing 状态进入一次结算，避免经验/通关/埋点重复结算
+        if (this.gameState !== GameState.Playing) {
+            console.warn(`[GameManager.endGame] 忽略重复结算：当前状态=${this.gameState}, 入参=${state}`);
+            return;
+        }
+        if (this.hasEndGameTriggered) {
+            console.warn(`[GameManager.endGame] 忽略重复结算（hasEndGameTriggered=true）：state=${state}`);
+            return;
+        }
+        this.hasEndGameTriggered = true;
         this.gameState = state;
         
         // 游戏结束时，清理所有单位（敌人直接消失，塔停止移动）
@@ -5200,10 +5229,15 @@ export class GameManager extends Component {
         this.hasShownArrowerSuggestBuildWhenWood60 = false;
         this.pendingHighlightChurchCandidateAfterBuild = false;
         this.pendingHighlightSwordsmanHallCandidateAfterBuild = false;
+        this.hasShownLevel1BuildHutTutorialAt45s = false;
+        this.level1BuildHutTutorialAwaitingBuildClick = false;
+        this.removeLevel1BuildHutTutorialMask();
+        this.restoreLevel1BuildHutTutorialBuildButton();
         this.buildButtonBattleHintBlinkSeqId++;
         this.lastDefenseStructureHealthSnapshot = -1;
         this.lastFriendlyUnitCountSnapshot = -1;
         this.gameState = GameState.Ready;
+        this.hasEndGameTriggered = false;
 
         // 重置水晶（血量和等级）
         if (this.crystalScript) {
@@ -5526,6 +5560,7 @@ export class GameManager extends Component {
             this.resumeGame();
         } else if (this.gameState === GameState.Ready) {
             // 如果游戏准备就绪，开始游戏
+            this.hasEndGameTriggered = false;
             this.gameState = GameState.Playing;
             
             // 显示所有游戏元素
@@ -7611,6 +7646,8 @@ export class GameManager extends Component {
         // A 提示触发后，可能在对话弹窗期间就已经打开建造面板；因此这里不依赖 intro popup 是否激活
         this.tryHighlightChurchCandidateAfterBuild();
         this.tryHighlightSwordsmanHallCandidateAfterBuild();
+        // 第一关 45s 仍只有初始弓箭手小屋：引导建造（不与其他介绍框叠加）
+        this.tryTriggerLevel1BuildHutTutorialAt45s();
 
         if (this.unitIntroPopup && this.unitIntroPopup.container && this.unitIntroPopup.container.active) {
             // 已有介绍框在显示时不叠加，下一帧再尝试
@@ -7745,10 +7782,62 @@ export class GameManager extends Component {
     }
 
     /**
-     * A 提示触发时：高亮建造按钮（复用第一关教程逻辑）
+     * 第一关建造引导：暂停时 schedule/tween 不推进，用真实时间每帧在 update 中做 0.5s 高亮 / 0.5s 还原 循环。
+     */
+    private startLevel1BuildHutTutorialBuildButtonRealTimeBlink(btnNode: Node) {
+        if (!btnNode || !btnNode.isValid) {
+            return;
+        }
+        this.buildButtonBattleHintBlinkSeqId++;
+        this.buildButtonBattleHintNode = btnNode;
+        this.buildButtonBattleHintOriginalScale = btnNode.scale.clone();
+        const sprite = btnNode.getComponent(Sprite);
+        this.buildButtonBattleHintOriginalColor = sprite ? sprite.color.clone() : null;
+        if (!btnNode.active) {
+            btnNode.active = true;
+        }
+        this.level1BuildHutTutorialBtnBlinkStartMs = Date.now();
+        this.updateLevel1BuildHutTutorialBuildButtonRealTimeBlink();
+    }
+
+    private updateLevel1BuildHutTutorialBuildButtonRealTimeBlink() {
+        if (!this.level1BuildHutTutorialAwaitingBuildClick) {
+            return;
+        }
+        const btn = this.buildButtonBattleHintNode;
+        if (!btn || !btn.isValid) {
+            return;
+        }
+        const os = this.buildButtonBattleHintOriginalScale;
+        if (!os) {
+            return;
+        }
+        const sprite = btn.getComponent(Sprite);
+        const t = (Date.now() - this.level1BuildHutTutorialBtnBlinkStartMs) / 1000;
+        const c = t % 1.0;
+        const inHighlight = c < 0.5;
+        if (inHighlight) {
+            btn.setScale(os.x * 1.2, os.y * 1.2, os.z);
+            if (sprite && sprite.isValid) {
+                sprite.color = new Color(255, 255, 0, 255);
+            }
+        } else {
+            btn.setScale(os.x, os.y, os.z);
+            if (sprite && sprite.isValid && this.buildButtonBattleHintOriginalColor) {
+                sprite.color = this.buildButtonBattleHintOriginalColor;
+            }
+        }
+    }
+
+    /**
+     * A 提示触发时：高亮建造按钮（复用第一关教程逻辑，战斗未暂停时用 schedule 循环）
      */
     private highlightBuildButtonForBattleHint() {
-        const btnNode = find('UI/BuildButton') || find('Canvas/UI/BuildButton') || find('BuildButton');
+        const btnNode =
+            this.findBuildButtonNodeForLevel1Tutorial() ||
+            find('UI/BuildButton') ||
+            find('Canvas/UI/BuildButton') ||
+            find('BuildButton');
         if (!btnNode || !btnNode.isValid) return;
 
         const sprite = btnNode.getComponent(Sprite);
@@ -7807,6 +7896,198 @@ export class GameManager extends Component {
         const sprite = btnNode.getComponent(Sprite);
         if (sprite && sprite.isValid && this.buildButtonBattleHintOriginalColor) {
             sprite.color = this.buildButtonBattleHintOriginalColor;
+        }
+    }
+
+    /**
+     * 第一关：游戏时间 ≥45s 且场上仍只有 1 座初始弓箭手小屋（WarAncientTree）时，
+     * 弹出弓箭手提示；关闭后全屏置灰并仅高亮建造按钮；点击建造后由 TowerBuilder 回调继续引导。
+     */
+    private tryTriggerLevel1BuildHutTutorialAt45s() {
+        if (this.hasShownLevel1BuildHutTutorialAt45s) {
+            return;
+        }
+        if (this.getCurrentLevelSafe() !== 1) {
+            return;
+        }
+        if (this.gameTime < 45) {
+            return;
+        }
+        if (this.countActiveWarAncientTreesOnField() !== 1) {
+            return;
+        }
+        if (this.unitIntroPopup && this.unitIntroPopup.container && this.unitIntroPopup.container.active) {
+            return;
+        }
+        const arrower = this.getFirstActiveUnitScriptInContainers(['Canvas/Towers'], 'Arrower');
+        if (!arrower) {
+            return;
+        }
+        this.hasShownLevel1BuildHutTutorialAt45s = true;
+        this.showQuickUnitIntro(
+            arrower,
+            '弓箭手',
+            '指挥官，我们有充足的资源了，是时候建造新的小屋来招募人手了！',
+            'Arrower',
+            () => {
+                this.beginLevel1BuildHutTutorialAfterIntroClose();
+            }
+        );
+    }
+
+    private countActiveWarAncientTreesOnField(): number {
+        const root = find('Canvas/WarAncientTrees') || find('WarAncientTrees');
+        if (!root || !root.isValid) {
+            return 0;
+        }
+        let n = 0;
+        const children = root.children || [];
+        for (let i = 0; i < children.length; i++) {
+            const ch = children[i];
+            if (!ch || !ch.isValid || !ch.active) {
+                continue;
+            }
+            if (ch.getComponent('WarAncientTree')) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    private findBuildButtonNodeForLevel1Tutorial(): Node | null {
+        const uiMgrNode = find('Canvas/UI/UIManager') || find('UI/UIManager') || find('UIManager');
+        const uiMgr = uiMgrNode ? (uiMgrNode.getComponent('UIManager') as any) : null;
+        const fromProp = uiMgr && uiMgr.buildButton && uiMgr.buildButton.node ? uiMgr.buildButton.node as Node : null;
+        const btn =
+            (fromProp && fromProp.isValid ? fromProp : null) ||
+            find('Canvas/UI/BuildButton') ||
+            find('UI/BuildButton') ||
+            find('BuildButton');
+        return btn && btn.isValid ? btn : null;
+    }
+
+    private beginLevel1BuildHutTutorialAfterIntroClose() {
+        const btn = this.findBuildButtonNodeForLevel1Tutorial();
+        const canvas = find('Canvas');
+        if (btn && canvas && canvas.isValid && btn.parent) {
+            btn.getWorldPosition(this.level1BuildHutTutorialBtnWorldPos);
+            this.level1BuildHutTutorialBuildButtonRef = btn;
+            this.level1BuildHutTutorialBtnOriginalParent = btn.parent;
+            this.level1BuildHutTutorialBtnOriginalSiblingIndex = btn.getSiblingIndex();
+            btn.setParent(canvas);
+            btn.setWorldPosition(this.level1BuildHutTutorialBtnWorldPos);
+            this.createLevel1BuildHutTutorialDimMask(btn);
+            this.startLevel1BuildHutTutorialBuildButtonRealTimeBlink(btn);
+        } else {
+            this.createLevel1BuildHutTutorialDimMask(null);
+            const fallback = this.findBuildButtonNodeForLevel1Tutorial();
+            if (fallback) {
+                this.startLevel1BuildHutTutorialBuildButtonRealTimeBlink(fallback);
+            }
+        }
+        this.level1BuildHutTutorialAwaitingBuildClick = true;
+        this.pauseGame();
+    }
+
+    /**
+     * 第一关建造引导：点击建造前恢复时间缩放，否则建造面板的 tween/延迟不会执行。
+     */
+    public tryResumeForLevel1BuildHutTutorial() {
+        if (!this.level1BuildHutTutorialAwaitingBuildClick) {
+            return;
+        }
+        if (this.gameState === GameState.Paused) {
+            this.resumeGame();
+        }
+    }
+
+    private createLevel1BuildHutTutorialDimMask(anchorBuildButton: Node | null) {
+        this.removeLevel1BuildHutTutorialMask();
+        const canvas = find('Canvas');
+        if (!canvas || !canvas.isValid) {
+            return;
+        }
+        const overlay = new Node('Level1BuildHutTutorialDimMask');
+        overlay.setParent(canvas);
+        const uiTransform = overlay.addComponent(UITransform);
+        const vs = view.getVisibleSize();
+        uiTransform.setContentSize(vs.width, vs.height);
+        overlay.setPosition(0, 0, 0);
+        const bg = overlay.addComponent(Graphics);
+        bg.fillColor = new Color(0, 0, 0, 150);
+        bg.rect(-vs.width / 2, -vs.height / 2, vs.width, vs.height);
+        bg.fill();
+        overlay.addComponent(BlockInputEvents);
+
+        if (anchorBuildButton && anchorBuildButton.isValid && anchorBuildButton.parent === canvas) {
+            const idx = anchorBuildButton.getSiblingIndex();
+            overlay.setSiblingIndex(idx);
+            anchorBuildButton.setSiblingIndex(overlay.getSiblingIndex() + 1);
+        } else {
+            const uiRoot = find('Canvas/UI');
+            if (uiRoot && uiRoot.parent === canvas) {
+                overlay.setSiblingIndex(uiRoot.getSiblingIndex());
+            } else {
+                overlay.setSiblingIndex(Math.max(0, canvas.children.length - 1));
+            }
+        }
+        this.level1BuildHutTutorialMaskNode = overlay;
+    }
+
+    private removeLevel1BuildHutTutorialMask() {
+        if (this.level1BuildHutTutorialMaskNode && this.level1BuildHutTutorialMaskNode.isValid) {
+            this.level1BuildHutTutorialMaskNode.destroy();
+        }
+        this.level1BuildHutTutorialMaskNode = null;
+    }
+
+    private restoreLevel1BuildHutTutorialBuildButton() {
+        const btn = this.level1BuildHutTutorialBuildButtonRef;
+        if (!btn || !btn.isValid) {
+            this.level1BuildHutTutorialBuildButtonRef = null;
+            this.level1BuildHutTutorialBtnOriginalParent = null;
+            return;
+        }
+        const parent = this.level1BuildHutTutorialBtnOriginalParent;
+        if (parent && parent.isValid) {
+            btn.setParent(parent);
+            const maxIdx = Math.max(0, parent.children.length - 1);
+            const idx = Math.min(Math.max(0, this.level1BuildHutTutorialBtnOriginalSiblingIndex), maxIdx);
+            btn.setSiblingIndex(idx);
+            btn.setWorldPosition(this.level1BuildHutTutorialBtnWorldPos);
+        }
+        this.level1BuildHutTutorialBuildButtonRef = null;
+        this.level1BuildHutTutorialBtnOriginalParent = null;
+    }
+
+    /**
+     * TowerBuilder：玩家点击建造并展开候选面板后调用，继续第一关建造引导。
+     */
+    public notifyLevel1BuildHutTutorialAfterBuildPanelOpened() {
+        if (!this.level1BuildHutTutorialAwaitingBuildClick) {
+            return;
+        }
+        this.level1BuildHutTutorialAwaitingBuildClick = false;
+        this.removeLevel1BuildHutTutorialMask();
+        this.restoreLevel1BuildHutTutorialBuildButton();
+        this.stopBuildButtonForBattleHint();
+        this.pendingHighlightChurchCandidateAfterBuild = true;
+        this.tryHighlightChurchCandidateAfterBuild();
+        GamePopup.showMessage('按住候选建筑物，拖动到弓箭手小屋右侧后放开', true, 3);
+        this.scheduleOnce(() => {
+            this.highlightLevel1BuildHutTutorialGridRightOfArcherHut();
+        }, 0.1);
+    }
+
+    private highlightLevel1BuildHutTutorialGridRightOfArcherHut() {
+        const gridNode = find('Canvas/BuildingGridPanel');
+        const grid = gridNode ? (gridNode.getComponent('BuildingGridPanel') as any) : null;
+        if (!grid || typeof grid.gridToWorld !== 'function' || typeof grid.highlightGrid !== 'function') {
+            return;
+        }
+        const wp = grid.gridToWorld(1, 2);
+        if (wp) {
+            grid.highlightGrid(wp);
         }
     }
 
@@ -8042,7 +8323,7 @@ export class GameManager extends Component {
         this.scheduleOnce(() => setRestore(), loops * Math.max(0, highlightSec + restoreSec));
     }
 
-    private showQuickUnitIntro(unitScript: any, unitName: string, unitDescription: string, unitId: string) {
+    private showQuickUnitIntro(unitScript: any, unitName: string, unitDescription: string, unitId: string, onCloseCallback?: () => void) {
         this.autoCreateUnitIntroPopup();
         if (!this.unitIntroPopup) {
             return;
@@ -8053,7 +8334,8 @@ export class GameManager extends Component {
             unitDescription,
             unitIcon,
             unitType: unitId,
-            unitId
+            unitId,
+            onCloseCallback: onCloseCallback
         });
     }
 

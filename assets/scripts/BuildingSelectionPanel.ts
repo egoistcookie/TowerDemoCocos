@@ -923,6 +923,8 @@ export class BuildingSelectionPanel extends Component {
         // 检查金币是否足够
         if (this.gameManager && !this.gameManager.canAfford(building.cost)) {
             GamePopup.showMessage('金币不足');
+            // 提示金币不足后，强制关闭候选框，避免玩家继续点击导致反复提示
+            this.forceClosePanelAfterInsufficientGold();
             return;
         }
 
@@ -950,6 +952,42 @@ export class BuildingSelectionPanel extends Component {
         
         // 阻止事件传播，避免触发其他事件
         event.propagationStopped = true;
+    }
+
+    /**
+     * 金币不足时强制关闭候选面板（绕过 show() 的 _justShown 保护期）。
+     * 目的：防止玩家点击游戏区域时反复触发“金币不足”提示。
+     */
+    private forceClosePanelAfterInsufficientGold() {
+        try {
+            // 取消可能残留的延迟隐藏回调
+            (this.node as any)._pendingHideCallback = null;
+        } catch {}
+
+        // 清理拖拽/选择态，避免后续事件继续沿用旧状态
+        this.selectedBuilding = null;
+        this.isDragging = false;
+        this.touchEndHandled = false;
+        this.clearDragPreview();
+
+        // 清除网格高亮，避免残留
+        try {
+            if (this.gridPanel) {
+                this.gridPanel.clearHighlight();
+            }
+        } catch {}
+        try {
+            if (this.stoneWallGridPanel) {
+                this.stoneWallGridPanel.clearHighlight();
+            }
+        } catch {}
+
+        // 直接隐藏面板（不走 hide()，避免 _justShown 保护期阻止关闭）
+        if (this.node && this.node.isValid) {
+            this.node.active = false;
+            // 恢复一个“隐藏态缩放”，与 hide() 逻辑保持一致
+            this.node.setScale(0, 1, 1);
+        }
     }
 
     /**
