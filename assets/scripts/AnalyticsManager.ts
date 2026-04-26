@@ -65,7 +65,7 @@ export interface AnalyticsData {
 }
 
 // card_selection_events.selection_mode 允许记录更多状态；前端用该类型约束。
-export type CardSelectionMode = 'single' | 'get_all' | 'reroll' | 'initial';
+export type CardSelectionMode = 'single' | 'single_video' | 'get_all' | 'reroll' | 'initial';
 export interface CardSelectionItem {
     unitId: string;
     rarity?: string;

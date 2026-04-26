@@ -17,7 +17,7 @@ export class Boomerang extends Component {
     maxBounces: number = 3; // 最大弹射次数
 
     @property
-    bounceDamageMultiplier: number = 0.5; // 弹射伤害倍率
+    bounceDamageMultiplier: number = 0.8; // 弹射伤害倍率
 
     @property
     bounceRange: number = 100; // 弹射距离阈值（像素）

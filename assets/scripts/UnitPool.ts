@@ -132,7 +132,7 @@ export class UnitPool extends Component {
 
             // 调试日志：记录从对象池获取时的位置
             const unitPos = unit.worldPosition;
-            console.log(`[UnitPool.get] ${prefabName}, source=${source}, poolSize=${poolSizeBefore}, unitPos=(${unitPos.x.toFixed(1)},${unitPos.y.toFixed(1)})`);
+           //console.log(`[UnitPool.get] ${prefabName}, source=${source}, poolSize=${poolSizeBefore}, unitPos=(${unitPos.x.toFixed(1)},${unitPos.y.toFixed(1)})`);
         }
         
         return unit;
@@ -197,7 +197,7 @@ export class UnitPool extends Component {
 
         // 记录回收时的位置
         const unitPos = unit.worldPosition;
-        console.log(`[UnitPool.release] ${prefabName}, unitId=${(unit.getComponent('Role') as any)?.unitId ?? 'N/A'}, pos=(${unitPos.x.toFixed(1)},${unitPos.y.toFixed(1)})`);
+       //console.log(`[UnitPool.release] ${prefabName}, unitId=${(unit.getComponent('Role') as any)?.unitId ?? 'N/A'}, pos=(${unitPos.x.toFixed(1)},${unitPos.y.toFixed(1)})`);
 
         // 重置单位状态
         unit.active = false;

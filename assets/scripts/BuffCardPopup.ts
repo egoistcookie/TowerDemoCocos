@@ -1,6 +1,6 @@
 import { _decorator, Component, Node, Sprite, Label, Button, find, UITransform, Vec3, tween, Color, UIOpacity, Graphics, view, SpriteFrame, resources, LabelOutline } from 'cc';
 import { BuffManager } from './BuffManager';
-import { AnalyticsManager, OperationType, CardSelectionItem } from './AnalyticsManager';
+import { AnalyticsManager, OperationType, CardSelectionItem, CardSelectionMode } from './AnalyticsManager';
 const { ccclass, property } = _decorator;
 
 /**
@@ -76,6 +76,9 @@ export class BuffCardPopup extends Component {
     // “需要看视频”按钮背景图（assets/resources/textures/icon/video.png）
     private videoButtonSpriteFrame: SpriteFrame | null = null;
     private videoButtonSpriteFrameLoading: Promise<SpriteFrame | null> | null = null;
+    // 金币图标（assets/resources/textures/icon/GIcon.png）
+    private goldIconSpriteFrame: SpriteFrame | null = null;
+    private goldIconSpriteFrameLoading: Promise<SpriteFrame | null> | null = null;
     
     start() {
         // 查找GameManager
@@ -420,6 +423,30 @@ export class BuffCardPopup extends Component {
         });
 
         return this.videoButtonSpriteFrameLoading;
+    }
+
+    /**
+     * 懒加载并缓存金币图标 SpriteFrame（assets/resources/textures/icon/GIcon.png）
+     */
+    private loadGoldIconSpriteFrame(): Promise<SpriteFrame | null> {
+        if (this.goldIconSpriteFrame) return Promise.resolve(this.goldIconSpriteFrame);
+        if (this.goldIconSpriteFrameLoading) return this.goldIconSpriteFrameLoading;
+
+        const path = 'textures/icon/GIcon/spriteFrame';
+        this.goldIconSpriteFrameLoading = new Promise((resolve) => {
+            resources.load(path, SpriteFrame, (err, sf) => {
+                this.goldIconSpriteFrameLoading = null;
+                if (err) {
+                    console.error('[BuffCardPopup] resources.load 失败:', path, err);
+                    resolve(null);
+                    return;
+                }
+                this.goldIconSpriteFrame = sf;
+                resolve(sf);
+            });
+        });
+
+        return this.goldIconSpriteFrameLoading;
     }
     
     /**
@@ -853,7 +880,7 @@ export class BuffCardPopup extends Component {
         // 更新第一张卡片
         if (this.cardData.length > 0 && this.card1) {
             //console.info('[BuffCardPopup] 更新第一张卡片');
-            this.updateCard(this.card1, this.card1Icon, this.card1Name, this.card1Description, this.cardData[0]);
+            this.updateCard(this.card1, this.card1Icon, this.card1Name, this.card1Description, this.cardData[0], 0);
             this.card1.active = true;
             //console.info('[BuffCardPopup] card1 active=', this.card1.active, 'position=', this.card1.position);
         } else if (this.card1) {
@@ -866,7 +893,7 @@ export class BuffCardPopup extends Component {
         // 更新第二张卡片
         if (this.cardData.length > 1 && this.card2) {
             //console.info('[BuffCardPopup] 更新第二张卡片');
-            this.updateCard(this.card2, this.card2Icon, this.card2Name, this.card2Description, this.cardData[1]);
+            this.updateCard(this.card2, this.card2Icon, this.card2Name, this.card2Description, this.cardData[1], 1);
             this.card2.active = true;
         } else if (this.card2) {
             console.warn('[BuffCardPopup] 第二张卡片数据不存在，隐藏卡片');
@@ -878,7 +905,7 @@ export class BuffCardPopup extends Component {
         // 更新第三张卡片
         if (this.cardData.length > 2 && this.card3) {
             //console.info('[BuffCardPopup] 更新第三张卡片');
-            this.updateCard(this.card3, this.card3Icon, this.card3Name, this.card3Description, this.cardData[2]);
+            this.updateCard(this.card3, this.card3Icon, this.card3Name, this.card3Description, this.cardData[2], 2);
             this.card3.active = true;
         } else if (this.card3) {
             console.warn('[BuffCardPopup] 第三张卡片数据不存在，隐藏卡片');
@@ -891,7 +918,7 @@ export class BuffCardPopup extends Component {
     /**
      * 更新单张卡片
      */
-    private updateCard(cardNode: Node, icon: Sprite, unitImageSprite: Sprite, descLabel: Label, data: BuffCardData) {
+    private updateCard(cardNode: Node, icon: Sprite, unitImageSprite: Sprite, descLabel: Label, data: BuffCardData, cardIndex: number) {
         // 顶部的图标（可以隐藏或用于其他用途）
         if (icon) {
             icon.spriteFrame = null; // 顶部图标不再使用
@@ -1008,6 +1035,8 @@ export class BuffCardPopup extends Component {
         
         // 根据稀有度更新边框颜色（必须在最后执行，确保边框正确显示）
         this.updateCardBorder(cardNode, data.rarity);
+        // 更新金币消耗/视频观看UI
+        this.updateCardConsumeUI(cardNode, data, cardIndex);
     }
     
     /**
@@ -1087,6 +1116,152 @@ export class BuffCardPopup extends Component {
             console.warn(`[BuffCardPopup] updateCardBorder: 找不到UITransform组件，卡片=${cardNode.name}`);
         }
     }
+
+    private getCardCost(cardData: BuffCardData): number {
+        // 金币类卡片不需要再消耗金币，等同 R 卡
+        if (cardData.buffType === 'goldReward' || cardData.buffType === 'goldIncrease') {
+            return 0;
+        }
+        const rarity = cardData.rarity;
+        switch (rarity) {
+            case 'SR': return 5;
+            case 'SSR': return 20;
+            case 'UR': return 40;
+            case 'SP': return 80;
+            default: return 0;
+        }
+    }
+
+    private getCurrentGold(): number {
+        if (!this.gameManager || typeof this.gameManager.getGold !== 'function') {
+            return 0;
+        }
+        return this.gameManager.getGold();
+    }
+
+    private updateCardConsumeUI(cardNode: Node, data: BuffCardData, cardIndex: number) {
+        const cost = this.getCardCost(data);
+        let consumeRoot = cardNode.getChildByName('ConsumeRoot');
+        if (!consumeRoot) {
+            consumeRoot = new Node('ConsumeRoot');
+            consumeRoot.setParent(cardNode);
+            const tf = consumeRoot.addComponent(UITransform);
+            tf.setContentSize(190, 72);
+            consumeRoot.setPosition(0, -122, 0);
+
+            const costRow = new Node('CostRow');
+            costRow.setParent(consumeRoot);
+            costRow.addComponent(UITransform).setContentSize(160, 28);
+            costRow.setPosition(0, 14, 0);
+
+            const goldIcon = new Node('GoldIcon');
+            goldIcon.setParent(costRow);
+            goldIcon.addComponent(UITransform).setContentSize(24, 24);
+            goldIcon.setPosition(-15, 0, 0);
+            goldIcon.addComponent(Sprite).sizeMode = Sprite.SizeMode.CUSTOM;
+
+            const costLabelNode = new Node('CostLabel');
+            costLabelNode.setParent(costRow);
+            costLabelNode.addComponent(UITransform).setContentSize(100, 28);
+            costLabelNode.setPosition(13, 0, 0);
+            const costLabel = costLabelNode.addComponent(Label);
+            costLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
+            costLabel.verticalAlign = Label.VerticalAlign.CENTER;
+            costLabel.fontSize = 22;
+            const costLabelOutline = costLabelNode.addComponent(LabelOutline);
+            costLabelOutline.color = new Color(0, 0, 0, 255);
+            costLabelOutline.width = 2;
+
+            const videoButtonNode = new Node('CardVideoButton');
+            videoButtonNode.setParent(consumeRoot);
+            videoButtonNode.addComponent(UITransform).setContentSize(60, 18);
+            videoButtonNode.setPosition(0, -12, 0);
+            videoButtonNode.addComponent(Sprite).sizeMode = Sprite.SizeMode.CUSTOM;
+            const videoBtn = videoButtonNode.addComponent(Button);
+            videoBtn.transition = Button.Transition.COLOR;
+            videoBtn.normalColor = new Color(255, 255, 255, 255);
+            videoBtn.hoverColor = new Color(220, 220, 220, 255);
+            videoBtn.pressedColor = new Color(180, 180, 180, 255);
+
+            const freeLabelNode = new Node('FreeLabel');
+            freeLabelNode.setParent(videoButtonNode);
+            freeLabelNode.addComponent(UITransform).setContentSize(120, 26);
+            freeLabelNode.setPosition(0, 10, 0);
+            const freeLabel = freeLabelNode.addComponent(Label);
+            freeLabel.string = '免费';
+            freeLabel.fontSize = 17;
+            freeLabel.color = new Color(255, 255, 255, 255);
+            freeLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            freeLabel.verticalAlign = Label.VerticalAlign.CENTER;
+            const freeOutline = freeLabelNode.addComponent(LabelOutline);
+            freeOutline.color = new Color(0, 0, 0, 255);
+            freeOutline.width = 2;
+        }
+
+        if (!consumeRoot) return;
+        consumeRoot.active = cost > 0;
+        if (!consumeRoot.active) return;
+
+        const currentGold = this.getCurrentGold();
+        const enoughGold = currentGold >= cost;
+        const costLabel = consumeRoot.getChildByName('CostRow')?.getChildByName('CostLabel')?.getComponent(Label);
+        if (costLabel) {
+            costLabel.string = `${cost}`;
+            costLabel.color = enoughGold ? new Color(255, 221, 0, 255) : new Color(255, 64, 64, 255);
+        }
+
+        const videoButtonNode = consumeRoot.getChildByName('CardVideoButton');
+        if (videoButtonNode) {
+            videoButtonNode.active = !enoughGold;
+            const btn = videoButtonNode.getComponent(Button);
+            if (btn) {
+                btn.clickEvents.length = 0;
+            }
+            videoButtonNode.off(Button.EventType.CLICK);
+            videoButtonNode.on(Button.EventType.CLICK, () => this.onCardClick(cardIndex), this);
+            this.applyVideoButtonBg(videoButtonNode);
+        }
+
+        const goldIconSprite = consumeRoot.getChildByName('CostRow')?.getChildByName('GoldIcon')?.getComponent(Sprite);
+        if (goldIconSprite) {
+            this.loadGoldIconSpriteFrame().then((sf) => {
+                if (!sf || !goldIconSprite || !goldIconSprite.isValid) return;
+                goldIconSprite.spriteFrame = sf;
+            });
+        }
+    }
+
+    private reportSingleCardSelection(index: number, mode: CardSelectionMode, watchVideo: boolean, cost: number) {
+        if (index < 0 || index >= this.cardData.length) {
+            return;
+        }
+        const cardData = this.cardData[index];
+        try {
+            const analytics = AnalyticsManager.getInstance();
+            const gameTime = this.gameManager && this.gameManager.getGameTime ? this.gameManager.getGameTime() : 0;
+            analytics.recordOperation(OperationType.SELECT_BUFF_CARD, gameTime, {
+                mode,
+                selectedCount: 1,
+                unitId: cardData.unitId,
+                rarity: cardData.rarity,
+                buffType: cardData.buffType,
+                buffValue: cardData.buffValue,
+                watchVideo,
+                costGold: cost
+            });
+
+            const allCards: CardSelectionItem[] = this.cardData.map((c, idx) => ({
+                unitId: c.unitId,
+                rarity: c.rarity,
+                buffType: c.buffType,
+                buffValue: c.buffValue,
+                selected: idx === index
+            }));
+            analytics.reportCardSelection(mode, allCards, gameTime, this.gameManager);
+        } catch (e) {
+            // 忽略埋点异常，不影响游戏流程
+        }
+    }
     
     /**
      * 卡片点击事件
@@ -1095,41 +1270,43 @@ export class BuffCardPopup extends Component {
         if (index < 0 || index >= this.cardData.length) {
             return;
         }
-        
+
         const cardData = this.cardData[index];
+        const cost = this.getCardCost(cardData);
+        const currentGold = this.getCurrentGold();
+        const enoughGold = currentGold >= cost;
 
-        // 埋点：记录操作 + 实时上报选卡（上报 3 张卡片，选中的那张标记 selected=true）
-        try {
-            const analytics = AnalyticsManager.getInstance();
-            const gameTime = this.gameManager && this.gameManager.getGameTime ? this.gameManager.getGameTime() : 0;
-            analytics.recordOperation(OperationType.SELECT_BUFF_CARD, gameTime, {
-                mode: 'single',
-                selectedCount: 1,
-                unitId: cardData.unitId,
-                rarity: cardData.rarity,
-                buffType: cardData.buffType,
-                buffValue: cardData.buffValue
-            });
+        const completeSelection = (mode: CardSelectionMode, watchVideo: boolean) => {
+            this.reportSingleCardSelection(index, mode, watchVideo, cost);
+            this.applyBuff(cardData);
+            this.hideWithEffects(index);
+        };
 
-            // 上报 3 张卡片，选中的那张标记 selected=true（用于出率统计 + 玩家选择分析）
-            const allCards: CardSelectionItem[] = this.cardData.map((c, idx) => ({
-                unitId: c.unitId,
-                rarity: c.rarity,
-                buffType: c.buffType,
-                buffValue: c.buffValue,
-                selected: idx === index
-            }));
-            // 异步实时上报，不阻塞游戏流程
-            analytics.reportCardSelection('single', allCards, gameTime, this.gameManager);
-        } catch (e) {
-            // 忽略埋点异常，不影响游戏流程
+        if (cost <= 0 || enoughGold) {
+            if (cost > 0) {
+                const spendOk = this.gameManager && typeof this.gameManager.spendGold === 'function'
+                    ? this.gameManager.spendGold(cost)
+                    : false;
+                if (!spendOk) {
+                    console.warn('[BuffCardPopup] 扣除金币失败，改为观看视频');
+                    this.showVideoAd(() => {
+                        completeSelection('single_video', true);
+                    }, () => {
+                        console.warn('[BuffCardPopup] 广告观看失败，无法领取卡片');
+                    });
+                    return;
+                }
+            }
+            completeSelection('single', false);
+            return;
         }
-        
-        // 应用增益效果
-        this.applyBuff(cardData);
-        
-        // 隐藏弹窗，带特效
-        this.hideWithEffects(index);
+
+        // 金币不足：点击卡片需观看视频
+        this.showVideoAd(() => {
+            completeSelection('single_video', true);
+        }, () => {
+            console.warn('[BuffCardPopup] 广告观看失败，无法领取卡片');
+        });
     }
     
     /**

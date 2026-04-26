@@ -4,6 +4,7 @@ import { UnitManager } from '../UnitManager';
 import { UnitType } from '../UnitType';
 import { GameState } from '../GameState';
 import { UnitInfoPanel } from '../UnitInfoPanel';
+import { DamageStatistics } from '../DamageStatistics';
 const { ccclass, property } = _decorator;
 
 // 巨熊状态枚举
@@ -353,6 +354,16 @@ export class Bear extends Role {
             }
 
             targetScript.takeDamage(this.attackDamage, knockbackDir);
+
+            // 记录巨熊伤害贡献（用于结算贡献榜）
+            try {
+                const damageStats = DamageStatistics.getInstance();
+                const unitType = 'Bear';
+                const unitName = this.unitName || '巨熊';
+                damageStats.recordDamage(unitType, unitName, this.attackDamage);
+            } catch (e) {
+                // 不影响主流程
+            }
 
             // 击退效果：对 Boss 和传送门无效
             const isBoss = !!(this.currentTarget.getComponent('Boss') as any);

@@ -5826,11 +5826,9 @@ export class GameManager extends Component {
         try {
             const level = this.getCurrentLevelSafe ? this.getCurrentLevelSafe() : 1;
             if (typeof level === 'number' && level < 3) {
-                //console.info('[SidePortal] skip on level < 3, level=', level);
                 return;
             }
         } catch {}
-        try { console.log('[SidePortal] spawnRandomSidePortalWithIndicator called'); } catch {}
         const createContainer = (): Node | null => {
             const canvas = find('Canvas');
             if (!canvas) return null;
@@ -5866,14 +5864,12 @@ export class GameManager extends Component {
         const baseY = 900;
         const randY = baseY - Math.random() * 200; // 在当前基准往下200像素内的随机位置
         const sidePos = Math.random() < 0.5 ? new Vec3(sideLeftX, randY, 0) : new Vec3(sideRightX, randY, 0);
-        try { console.log('[SidePortal] indicator target pos =', sidePos.x, sidePos.y, 'container=', container?.name); } catch {}
 
         // 先创建“预告”图标：textures/show（参考传送门生成的“空间裂缝”可视化：使用不透明度淡入/淡出循环）
         const placeIndicator = (sf: SpriteFrame | null) => {
             const n = new Node('PortalIndicator');
             n.setParent(container);
             n.setWorldPosition(sidePos);
-            try { console.log('[SidePortal] indicator node created under', n.parent?.name, 'worldPos=', sidePos.x, sidePos.y); } catch {}
             // 图标
             const sp = n.addComponent(Sprite);
             if (sf) sp.spriteFrame = sf;
@@ -5887,7 +5883,6 @@ export class GameManager extends Component {
                 } else {
                     tr.setContentSize(96, 96);
                 }
-                try { const size = (n.getComponent(UITransform) as UITransform)?.contentSize; console.log('[SidePortal] indicator size =', size?.width, size?.height); } catch {}
             } catch {
                 n.setScale(2, 2, 2);
             }
@@ -5901,12 +5896,10 @@ export class GameManager extends Component {
                 .delay(0.18)
                 .to(0.15, { opacity: 60 });
             tween(opacity).repeatForever(oneCycle).start();
-            try { console.log('[SidePortal] indicator blink tween started'); } catch {}
 
             const spawnPortalAt = (pos: Vec3) => {
                 // 停止并移除指示
                 if (n && n.isValid) n.destroy();
-                try { console.log('[SidePortal] indicator ended, spawning portal at', pos.x, pos.y); } catch {}
                 const trySpawn = (prefab: Prefab | null) => {
                     if (!prefab) {
                         console.warn('[GameManager] spawnRandomSidePortalWithIndicator: Portal prefab null');
@@ -5924,29 +5917,24 @@ export class GameManager extends Component {
                         portal.autoSummonMinInterval = 3.0;
                         portal.autoSummonMaxInterval = 6.0;
                     }
-                    try { console.log('[SidePortal] portal spawned node=', p?.name, 'parent=', p?.parent?.name); } catch {}
                 };
                 // 分包优先
                 const sub = assetManager.getBundle('prefabs_sub');
                 if (sub) {
                     sub.load('Portal', Prefab, (err, prefab) => {
                         if (err || !prefab) {
-                            try { console.warn('[SidePortal] subbundle load Portal failed, fallback to resources', err); } catch {}
                             resources.load('Portal', Prefab, (e2, p2) => trySpawn((p2 as Prefab) || null));
                             return;
                         }
-                        try { console.log('[SidePortal] subbundle Portal loaded'); } catch {}
                         trySpawn(prefab as Prefab);
                     });
                 } else {
-                    try { console.log('[SidePortal] no subbundle, loading Portal from resources'); } catch {}
                     resources.load('Portal', Prefab, (e2, p2) => trySpawn((p2 as Prefab) || null));
                 }
             };
 
             // 10秒后生成传送门
             this.scheduleOnce(() => spawnPortalAt(sidePos), 10.0);
-            try { console.log('[SidePortal] scheduled portal spawn in 10s at', sidePos.x, sidePos.y); } catch {}
 
             // 指示出现2秒后：触发单位介绍框提示一次
             this.scheduleOnce(() => {
@@ -5961,7 +5949,6 @@ export class GameManager extends Component {
                             '指挥官，敌人展开了突袭！小心从战场两翼出现的传送门。',
                             'Arrower'
                         );
-                        try { console.log('[SidePortal] quick unit intro shown'); } catch {}
                     }
                 } catch {}
             }, 2.0);
@@ -5972,34 +5959,27 @@ export class GameManager extends Component {
             // 方案A：直接按 SpriteFrame 资源加载（若导入为精灵帧）
             resources.load('textures/show', SpriteFrame, (errA, sfA) => {
                 if (!errA && sfA) {
-                    try { console.log('[SidePortal] textures/show loaded as SpriteFrame'); } catch {}
                     onReady(sfA as SpriteFrame);
                     return;
                 }
-                try { console.warn('[SidePortal] load SpriteFrame textures/show failed, try spriteFrame path', errA); } catch {}
                 // 方案B：部分版本需要显式 '/spriteFrame'
                 resources.load('textures/show/spriteFrame', SpriteFrame, (errB, sfB) => {
                     if (!errB && sfB) {
-                        try { console.log('[SidePortal] textures/show/spriteFrame loaded'); } catch {}
                         onReady(sfB as SpriteFrame);
                         return;
                     }
-                    try { console.warn('[SidePortal] load SpriteFrame textures/show/spriteFrame failed, try Texture2D', errB); } catch {}
                     // 方案C：按纹理加载后临时创建 SpriteFrame
                     resources.load('textures/show', Texture2D, (errC, tex) => {
                         if (!errC && tex) {
                             try {
                                 const sf = new SpriteFrame();
                                 sf.texture = tex as Texture2D;
-                                console.log('[SidePortal] textures/show loaded as Texture2D, created SpriteFrame');
                                 onReady(sf);
                             } catch (e) {
-                                console.warn('[SidePortal] create SpriteFrame from Texture2D failed', e);
                                 onReady(null);
                             }
                             return;
                         }
-                        try { console.warn('[SidePortal] load Texture2D textures/show failed, give up', errC); } catch {}
                         onReady(null);
                     });
                 });
@@ -7936,19 +7916,31 @@ export class GameManager extends Component {
     }
 
     private countActiveWarAncientTreesOnField(): number {
-        const root = find('Canvas/WarAncientTrees') || find('WarAncientTrees');
-        if (!root || !root.isValid) {
-            return 0;
-        }
+        // 教学触发条件改为统计四类“营地建筑”总数：
+        // WarAncientTree + Church + HunterHall + SwordsmanHall
+        const targets = [
+            { rootPath: 'Canvas/WarAncientTrees', fallbackPath: 'WarAncientTrees', comp: 'WarAncientTree' },
+            { rootPath: 'Canvas/Churches', fallbackPath: 'Churches', comp: 'Church' },
+            { rootPath: 'Canvas/HunterHalls', fallbackPath: 'HunterHalls', comp: 'HunterHall' },
+            { rootPath: 'Canvas/SwordsmanHalls', fallbackPath: 'SwordsmanHalls', comp: 'SwordsmanHall' },
+        ];
+
         let n = 0;
-        const children = root.children || [];
-        for (let i = 0; i < children.length; i++) {
-            const ch = children[i];
-            if (!ch || !ch.isValid || !ch.active) {
+        for (let t = 0; t < targets.length; t++) {
+            const target = targets[t];
+            const root = find(target.rootPath) || find(target.fallbackPath);
+            if (!root || !root.isValid) {
                 continue;
             }
-            if (ch.getComponent('WarAncientTree')) {
-                n++;
+            const children = root.children || [];
+            for (let i = 0; i < children.length; i++) {
+                const ch = children[i];
+                if (!ch || !ch.isValid || !ch.active) {
+                    continue;
+                }
+                if (ch.getComponent(target.comp)) {
+                    n++;
+                }
             }
         }
         return n;
@@ -8922,7 +8914,118 @@ export class GameManager extends Component {
         }
         
         //console.info(`[GameManager] generateBuffCards: 总共生成了 ${cards.length} 张卡片`);
+        // 平民保护：普通抽卡按当前金币保证“至少两张可负担卡”，降低强制看视频概率
+        if (!isRerollMode) {
+            this.applyCivilianDrawProtection(cards, activeUnitTypes, configManager, buffCardConfigManager);
+        }
         return cards;
+    }
+
+    private getCardGoldCostByRarity(rarity: 'R' | 'SR' | 'SSR' | 'UR' | 'SP'): number {
+        switch (rarity) {
+            case 'SR': return 5;
+            case 'SSR': return 20;
+            case 'UR': return 40;
+            case 'SP': return 60;
+            default: return 0;
+        }
+    }
+
+    private generateCardByForcedRarity(
+        rarity: 'R' | 'SR' | 'SSR' | 'UR' | 'SP',
+        activeUnitTypes: string[],
+        configManager: UnitConfigManager,
+        buffCardConfigManager: BuffCardConfigManager,
+        cardIndex: number
+    ): BuffCardData | null {
+        // 与主抽卡逻辑保持一致：非 UR/SP 有 20% 全局增益概率
+        const isGlobalBuff = rarity !== 'UR' && rarity !== 'SP' && Math.random() < 0.2;
+
+        if (isGlobalBuff && activeUnitTypes.length > 0) {
+            const globalEffects = buffCardConfigManager.getGlobalBuffEffects(rarity);
+            const globalBuffTypes = Object.keys(globalEffects);
+            if (globalBuffTypes.length > 0) {
+                const randomGlobalBuffType = globalBuffTypes[Math.floor(Math.random() * globalBuffTypes.length)];
+                const globalBuff = globalEffects[randomGlobalBuffType];
+
+                let unitIcon: SpriteFrame | null = null;
+                let unitName: string = '';
+                if (randomGlobalBuffType === 'populationIncrease') {
+                    unitIcon = this.populationIcon;
+                    unitName = '人口上限';
+                } else if (randomGlobalBuffType === 'goldReward') {
+                    unitIcon = this.goldIcon;
+                    unitName = '金币奖励';
+                }
+
+                return {
+                    unitId: randomGlobalBuffType,
+                    unitName,
+                    unitIcon,
+                    buffType: randomGlobalBuffType,
+                    buffValue: globalBuff.value,
+                    buffDescription: globalBuff.desc,
+                    rarity
+                };
+            }
+        }
+
+        if (activeUnitTypes.length > 0) {
+            return this.generateUnitBuffCard(activeUnitTypes, configManager, buffCardConfigManager, rarity, cardIndex);
+        }
+        return null;
+    }
+
+    private applyCivilianDrawProtection(
+        cards: BuffCardData[],
+        activeUnitTypes: string[],
+        configManager: UnitConfigManager,
+        buffCardConfigManager: BuffCardConfigManager
+    ) {
+        const gold = this.getGold();
+        let maxAffordableRarity: 'R' | 'SR' | 'SSR' | null = null;
+        if (gold < 5) {
+            maxAffordableRarity = 'R';
+        } else if (gold < 20) {
+            maxAffordableRarity = 'SR';
+        } else if (gold < 40) {
+            maxAffordableRarity = 'SSR';
+        } else {
+            return;
+        }
+
+        const affordableMaxCost = this.getCardGoldCostByRarity(maxAffordableRarity);
+        const countAffordable = () => {
+            if (maxAffordableRarity === 'R') {
+                return cards.filter(c => c.rarity === 'R').length;
+            }
+            return cards.filter(c => this.getCardGoldCostByRarity(c.rarity) <= affordableMaxCost).length;
+        };
+
+        let affordableCount = countAffordable();
+        if (affordableCount >= 2) {
+            return;
+        }
+
+        // 按需求：优先替换最便宜（最低级）的卡
+        const candidates = cards
+            .map((card, idx) => ({ idx, cost: this.getCardGoldCostByRarity(card.rarity) }))
+            .sort((a, b) => a.cost - b.cost);
+
+        for (const candidate of candidates) {
+            if (affordableCount >= 2) break;
+            const replacement = this.generateCardByForcedRarity(
+                maxAffordableRarity,
+                activeUnitTypes,
+                configManager,
+                buffCardConfigManager,
+                candidate.idx
+            );
+            if (replacement) {
+                cards[candidate.idx] = replacement;
+                affordableCount = countAffordable();
+            }
+        }
     }
     
     /**
@@ -9130,9 +9233,8 @@ export class GameManager extends Component {
             } else if (randomBuffType === 'multiArrow') {
                 // 多重箭升级规则：
                 // - 每次升级只+1个额外目标（最多额外3个 => 最多打4个单位）
-                // - 攻击力会变为原来的 80%^等级
                 const extraTargetsDelta = 1;
-                desc = `${spName}${roman(nextLv)}：攻击目标+${extraTargetsDelta}，攻击力稍微降低`;
+                desc = `${spName}${roman(nextLv)}：攻击目标+${extraTargetsDelta}`;
             } else if (randomBuffType === 'heavyArmor') {
                 desc = `${spName}${roman(nextLv)}：伤害减免+${delta}%，攻速移速稍微降低`;
             } else if (randomBuffType === 'widePrayer') {
@@ -9189,7 +9291,7 @@ export class GameManager extends Component {
         const spByUnit: Record<string, { buffType: string; buffValue: number; buffDescription: string }> = {
             StoneWall: { buffType: 'selfHealingWall', buffValue: 2, buffDescription: '无声自愈：每秒恢复2点生命值，抽到升级，最高三级' },
             WatchTower: { buffType: 'ballista', buffValue: 1, buffDescription: '巨弩：箭矢体积增大，命中可小幅击退，最高三级' },
-            Arrower: { buffType: 'multiArrow', buffValue: 1, buffDescription: '多重箭：攻击目标+1，攻击力稍微降低，最高三级' },
+            Arrower: { buffType: 'multiArrow', buffValue: 1, buffDescription: '多重箭：攻击目标+1，最高三级' },
             Hunter: { buffType: 'bouncyBoomerang', buffValue: 1, buffDescription: '弹弹乐：弹射单位+1，最高三级' },
             ElfSwordsman: { buffType: 'heavyArmor', buffValue: 5, buffDescription: '重甲：伤害减免+5%，攻速移速稍微降低，最高三级' },
             Priest: { buffType: 'widePrayer', buffValue: 10, buffDescription: '广域祈祷：祈祷范围+10，最高三级' },

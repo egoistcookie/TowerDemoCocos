@@ -536,7 +536,7 @@ export class WarAncientTree extends Build {
 
         // 检查生成位置是否有单位，如果有则左右平移
         spawnPos = this.findAvailableSpawnPosition(spawnPos);
-        console.log('[WarAncientTree.produceTower] 生成位置=(' + spawnPos.x.toFixed(1) + ',' + spawnPos.y.toFixed(1) + ')');
+       //console.log('[WarAncientTree.produceTower] 生成位置=(' + spawnPos.x.toFixed(1) + ',' + spawnPos.y.toFixed(1) + ')');
 
         // 增加人口（在创建Tower之前）
         if (this.gameManager) {
@@ -810,6 +810,8 @@ export class WarAncientTree extends Build {
                 spawnPos.z
             );
         }
+        // 目标点也进行避让，防止不同弓箭手小屋产出的角鹰射手重叠到同一目标位置
+        targetPos = this.findAvailableSpawnPosition(targetPos);
 
         // 让角鹰射手移动到目标位置
         if (eagleArcherScript) {
@@ -1075,6 +1077,7 @@ export class WarAncientTree extends Build {
             { nodeName: 'Hunters', scriptName: 'Hunter' },
             { nodeName: 'ElfSwordsmans', scriptName: 'ElfSwordsman' },
             { nodeName: 'Canvas/Towers', scriptName: 'Priest' },
+            { nodeName: 'Canvas/EagleArchers', scriptName: 'EagleArcher' }, // 新增：角鹰射手专属容器
             { nodeName: 'Canvas/Mages', scriptName: 'Mage' }, // 新增：与法师保持最小间距，避免重叠
         ];
         const crossTypeMinDist = 60; // 跨类型单位最小间距

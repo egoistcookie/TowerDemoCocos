@@ -141,6 +141,42 @@ export class BuffManager {
     public getBuffsForUnit(unitId: string): BuffData[] {
         return this.appliedBuffs.get(unitId) || [];
     }
+
+    /**
+     * 按固定优先级精准命中增益来源（不做多来源合并）：
+     * unitId -> prefabName -> unitType -> constructor.name
+     * 这样日志可明确看到“到底是哪条路径命中”，也避免双层遍历带来的额外开销。
+     */
+    private collectBuffsForUnitScript(unitScript: any, unitId: string): BuffData[] {
+        const keyUnitId = typeof unitId === 'string' ? unitId.trim() : '';
+        const keyPrefab = typeof unitScript?.prefabName === 'string' ? unitScript.prefabName.trim() : '';
+        const keyType = typeof unitScript?.unitType === 'string' ? unitScript.unitType.trim() : '';
+        const keyCtor = typeof unitScript?.constructor?.name === 'string' ? unitScript.constructor.name.trim() : '';
+
+        const byUnitId = keyUnitId ? this.getBuffsForUnit(keyUnitId) : [];
+        const byPrefab = keyPrefab ? this.getBuffsForUnit(keyPrefab) : [];
+        const byType = keyType ? this.getBuffsForUnit(keyType) : [];
+        const byCtor = keyCtor ? this.getBuffsForUnit(keyCtor) : [];
+
+        if (byUnitId.length > 0) {
+            return byUnitId;
+        }
+        if (byPrefab.length > 0) {
+            console.warn(`[BuffManager] 增益来源兜底命中: prefabName(${keyPrefab}), unitId=${keyUnitId || '-'}, buffs=${byPrefab.length}`);
+            return byPrefab;
+        }
+        if (byType.length > 0) {
+            console.warn(`[BuffManager] 增益来源兜底命中: unitType(${keyType}), unitId=${keyUnitId || '-'}, buffs=${byType.length}`);
+            return byType;
+        }
+        if (byCtor.length > 0) {
+            console.warn(`[BuffManager] 增益来源兜底命中: constructor(${keyCtor}), unitId=${keyUnitId || '-'}, buffs=${byCtor.length}`);
+            return byCtor;
+        }
+
+       //console.warn(`[BuffManager] 增益来源未命中: unitId=${keyUnitId || '-'}, prefabName=${keyPrefab || '-'}, unitType=${keyType || '-'}, ctor=${keyCtor || '-'}`);
+        return [];
+    }
     
     /**
      * 获取所有全局增益
@@ -153,7 +189,7 @@ export class BuffManager {
      * 应用增益到单位
      */
     public applyBuffsToUnit(unitScript: any, unitId: string) {
-        const buffs = this.getBuffsForUnit(unitId);
+        const buffs = this.collectBuffsForUnitScript(unitScript, unitId);
         
         if (buffs.length === 0) {
            //console.info(`[BuffManager] 单位 ${unitId} 没有已保存的增益`);
@@ -248,14 +284,9 @@ export class BuffManager {
                 case 'multiArrow':
                     // 新规则：
                     // - 每次升级只 +1 个额外目标：Lv1->1, Lv2->2, Lv3->3（最多额外3个，也就是最多打4个单位）
-                    // - 每次升级会让“最终结算伤害”乘以 0.9（每级一次），即 finalDamage *= 0.9^level
-                    //   注意：不要在这里直接改 attackDamage，否则会导致控弦/攻击力卡等加成被提前打折
+                    // - 不再降低攻击力，最终伤害保持原值
                     unitScript._spMultiArrowExtraTargets = Math.max(0, Math.floor(base * level));
-                    try {
-                        unitScript._spMultiArrowDamageMul = Math.pow(0.9, level);
-                    } catch {
-                        unitScript._spMultiArrowDamageMul = 1.0;
-                    }
+                    unitScript._spMultiArrowDamageMul = 1.0;
                     // 抽到多重箭后：自动关闭弓箭手“穿透箭”开关（两者不允许同时开启）
                     // 这里用 any 访问私有字段，避免在 BuffManager 引入 Arrower 类型依赖
                     if (level > 0) {
