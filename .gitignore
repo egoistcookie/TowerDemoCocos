@@ -33,3 +33,4 @@ assets/anim/orc-attck.anim
 assets/prefabs/Arrow.prefab
 assets/prefabs/Enemy.prefab
 build/*
+tools/daily_brief_config.json

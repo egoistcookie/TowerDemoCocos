@@ -1,0 +1,897 @@
+{
+  "meta": {
+    "start": "2026-04-18 00:00:00",
+    "end": "2026-04-26 23:59:59",
+    "tracking_cutoff": "2026-04-22 23:29:27",
+    "recent5_start": "2026-04-22 23:59:59",
+    "prev7_start": "2026-04-18 00:00:00",
+    "prev7_end": "2026-04-19 23:59:59",
+    "last7_start": "2026-04-20 23:59:59"
+  },
+  "overall_comparable": [
+    {
+      "sessions": 198,
+      "success_sessions": 98.0,
+      "win_rate": 49.49,
+      "avg_defend_time": 273.89,
+      "avg_kill": 340.94,
+      "avg_ops": 53.69
+    }
+  ],
+  "week_compare_comparable": [
+    {
+      "period": "last7",
+      "sessions": 135,
+      "success_sessions": 70.0,
+      "win_rate": 51.85,
+      "avg_defend_time": 268.38,
+      "avg_kill": 338.74,
+      "avg_ops": 53.28
+    },
+    {
+      "period": "prev7",
+      "sessions": 51,
+      "success_sessions": 25.0,
+      "win_rate": 49.02,
+      "avg_defend_time": 294.37,
+      "avg_kill": 362.29,
+      "avg_ops": 57.63
+    }
+  ],
+  "previous_report_period_compare": [
+    {
+      "period": "current_report",
+      "sessions": 187,
+      "success_sessions": 91.0,
+      "win_rate": 48.66,
+      "avg_defend_time": 273.1,
+      "avg_kill": 339.81,
+      "avg_ops": 53.14
+    },
+    {
+      "period": "prev_report_0410_0418",
+      "sessions": 187,
+      "success_sessions": 86.0,
+      "win_rate": 45.99,
+      "avg_defend_time": 288.72,
+      "avg_kill": 353.63,
+      "avg_ops": 53.16
+    }
+  ],
+  "recent5_daily": [
+    {
+      "d": "2026-04-23",
+      "draw_events": 121,
+      "ad_draw_events": 26.0,
+      "ad_rate": 21.49,
+      "single_video_events": 0.0
+    },
+    {
+      "d": "2026-04-24",
+      "draw_events": 119,
+      "ad_draw_events": 20.0,
+      "ad_rate": 16.81,
+      "single_video_events": 0.0
+    },
+    {
+      "d": "2026-04-25",
+      "draw_events": 473,
+      "ad_draw_events": 40.0,
+      "ad_rate": 8.46,
+      "single_video_events": 0.0
+    },
+    {
+      "d": "2026-04-26",
+      "draw_events": 543,
+      "ad_draw_events": 43.0,
+      "ad_rate": 7.92,
+      "single_video_events": 17.0
+    }
+  ],
+  "recent5_version_impact": [
+    {
+      "d": "2026-04-23",
+      "sessions": 9,
+      "win_rate": 33.33,
+      "avg_defend_time": 156.44,
+      "avg_kill": 136.0,
+      "avg_ops": 32.11,
+      "version_label": "1.0.72"
+    },
+    {
+      "d": "2026-04-24",
+      "sessions": 5,
+      "win_rate": 60.0,
+      "avg_defend_time": 262.2,
+      "avg_kill": 284.4,
+      "avg_ops": 39.6,
+      "version_label": "1.0.74"
+    },
+    {
+      "d": "2026-04-25",
+      "sessions": 38,
+      "win_rate": 65.79,
+      "avg_defend_time": 344.53,
+      "avg_kill": 463.61,
+      "avg_ops": 72.97,
+      "version_label": "1.0.76"
+    },
+    {
+      "d": "2026-04-26",
+      "sessions": 41,
+      "win_rate": 51.22,
+      "avg_defend_time": 234.85,
+      "avg_kill": 310.88,
+      "avg_ops": 47.63,
+      "version_label": "1.0.77"
+    }
+  ],
+  "post_0422_funnel": [
+    {
+      "all_sessions": 1198,
+      "sessions_with_draw": 313.0,
+      "sessions_finished": 101.0,
+      "draw_and_finished": 93.0
+    }
+  ],
+  "daily_top_operations": {
+    "2026-04-18": [
+      {
+        "operation_type": "build_stone_wall",
+        "count": 307
+      },
+      {
+        "operation_type": "build_watchtower",
+        "count": 97
+      },
+      {
+        "operation_type": "select_buff_card",
+        "count": 88
+      },
+      {
+        "operation_type": "build_thunder_tower",
+        "count": 15
+      },
+      {
+        "operation_type": "build_mage_tower",
+        "count": 12
+      },
+      {
+        "operation_type": "build_war_ancient_tree",
+        "count": 11
+      },
+      {
+        "operation_type": "build_ice_tower",
+        "count": 9
+      },
+      {
+        "operation_type": "trigger_bear",
+        "count": 8
+      },
+      {
+        "operation_type": "build_swordsman_hall",
+        "count": 7
+      },
+      {
+        "operation_type": "build_church",
+        "count": 5
+      }
+    ],
+    "2026-04-19": [
+      {
+        "operation_type": "build_stone_wall",
+        "count": 914
+      },
+      {
+        "operation_type": "select_buff_card",
+        "count": 297
+      },
+      {
+        "operation_type": "build_watchtower",
+        "count": 204
+      },
+      {
+        "operation_type": "build_war_ancient_tree",
+        "count": 69
+      },
+      {
+        "operation_type": "build_swordsman_hall",
+        "count": 57
+      },
+      {
+        "operation_type": "build_thunder_tower",
+        "count": 49
+      },
+      {
+        "operation_type": "build_hunter_hall",
+        "count": 47
+      },
+      {
+        "operation_type": "build_church",
+        "count": 38
+      },
+      {
+        "operation_type": "trigger_bear",
+        "count": 31
+      },
+      {
+        "operation_type": "build_mage_tower",
+        "count": 24
+      }
+    ],
+    "2026-04-20": [
+      {
+        "operation_type": "build_stone_wall",
+        "count": 150
+      },
+      {
+        "operation_type": "select_buff_card",
+        "count": 78
+      },
+      {
+        "operation_type": "build_watchtower",
+        "count": 46
+      },
+      {
+        "operation_type": "build_swordsman_hall",
+        "count": 28
+      },
+      {
+        "operation_type": "build_war_ancient_tree",
+        "count": 13
+      },
+      {
+        "operation_type": "build_thunder_tower",
+        "count": 10
+      },
+      {
+        "operation_type": "build_ice_tower",
+        "count": 9
+      },
+      {
+        "operation_type": "trigger_bear",
+        "count": 8
+      },
+      {
+        "operation_type": "build_church",
+        "count": 7
+      },
+      {
+        "operation_type": "build_mage_tower",
+        "count": 5
+      }
+    ],
+    "2026-04-21": [
+      {
+        "operation_type": "build_stone_wall",
+        "count": 188
+      },
+      {
+        "operation_type": "select_buff_card",
+        "count": 147
+      },
+      {
+        "operation_type": "train_eagle",
+        "count": 138
+      },
+      {
+        "operation_type": "build_watchtower",
+        "count": 88
+      },
+      {
+        "operation_type": "build_swordsman_hall",
+        "count": 50
+      },
+      {
+        "operation_type": "build_war_ancient_tree",
+        "count": 28
+      },
+      {
+        "operation_type": "build_church",
+        "count": 24
+      },
+      {
+        "operation_type": "build_mage_tower",
+        "count": 17
+      },
+      {
+        "operation_type": "build_ice_tower",
+        "count": 12
+      },
+      {
+        "operation_type": "trigger_bear",
+        "count": 11
+      }
+    ],
+    "2026-04-22": [
+      {
+        "operation_type": "build_stone_wall",
+        "count": 365
+      },
+      {
+        "operation_type": "build_watchtower",
+        "count": 139
+      },
+      {
+        "operation_type": "select_buff_card",
+        "count": 125
+      },
+      {
+        "operation_type": "build_war_ancient_tree",
+        "count": 30
+      },
+      {
+        "operation_type": "build_swordsman_hall",
+        "count": 19
+      },
+      {
+        "operation_type": "trigger_bear",
+        "count": 15
+      },
+      {
+        "operation_type": "build_thunder_tower",
+        "count": 15
+      },
+      {
+        "operation_type": "build_church",
+        "count": 14
+      },
+      {
+        "operation_type": "build_mage_tower",
+        "count": 10
+      },
+      {
+        "operation_type": "build_ice_tower",
+        "count": 8
+      }
+    ],
+    "2026-04-23": [
+      {
+        "operation_type": "build_stone_wall",
+        "count": 115
+      },
+      {
+        "operation_type": "build_watchtower",
+        "count": 112
+      },
+      {
+        "operation_type": "select_buff_card",
+        "count": 96
+      },
+      {
+        "operation_type": "build_war_ancient_tree",
+        "count": 34
+      },
+      {
+        "operation_type": "trigger_bear",
+        "count": 13
+      },
+      {
+        "operation_type": "build_thunder_tower",
+        "count": 9
+      },
+      {
+        "operation_type": "build_ice_tower",
+        "count": 6
+      },
+      {
+        "operation_type": "build_hunter_hall",
+        "count": 6
+      },
+      {
+        "operation_type": "build_swordsman_hall",
+        "count": 4
+      },
+      {
+        "operation_type": "build_church",
+        "count": 2
+      }
+    ],
+    "2026-04-24": [
+      {
+        "operation_type": "build_stone_wall",
+        "count": 206
+      },
+      {
+        "operation_type": "build_watchtower",
+        "count": 145
+      },
+      {
+        "operation_type": "select_buff_card",
+        "count": 112
+      },
+      {
+        "operation_type": "build_war_ancient_tree",
+        "count": 44
+      },
+      {
+        "operation_type": "build_thunder_tower",
+        "count": 16
+      },
+      {
+        "operation_type": "build_ice_tower",
+        "count": 11
+      },
+      {
+        "operation_type": "build_hunter_hall",
+        "count": 7
+      },
+      {
+        "operation_type": "build_swordsman_hall",
+        "count": 7
+      },
+      {
+        "operation_type": "build_church",
+        "count": 6
+      },
+      {
+        "operation_type": "trigger_bear",
+        "count": 4
+      }
+    ],
+    "2026-04-25": [
+      {
+        "operation_type": "build_stone_wall",
+        "count": 1020
+      },
+      {
+        "operation_type": "build_watchtower",
+        "count": 459
+      },
+      {
+        "operation_type": "select_buff_card",
+        "count": 441
+      },
+      {
+        "operation_type": "train_eagle",
+        "count": 276
+      },
+      {
+        "operation_type": "train_eagle_archer",
+        "count": 267
+      },
+      {
+        "operation_type": "build_war_ancient_tree",
+        "count": 111
+      },
+      {
+        "operation_type": "build_thunder_tower",
+        "count": 109
+      },
+      {
+        "operation_type": "build_mage_tower",
+        "count": 59
+      },
+      {
+        "operation_type": "build_swordsman_hall",
+        "count": 45
+      },
+      {
+        "operation_type": "build_church",
+        "count": 42
+      }
+    ],
+    "2026-04-26": [
+      {
+        "operation_type": "build_stone_wall",
+        "count": 832
+      },
+      {
+        "operation_type": "build_watchtower",
+        "count": 631
+      },
+      {
+        "operation_type": "select_buff_card",
+        "count": 531
+      },
+      {
+        "operation_type": "build_war_ancient_tree",
+        "count": 176
+      },
+      {
+        "operation_type": "train_eagle",
+        "count": 170
+      },
+      {
+        "operation_type": "train_eagle_archer",
+        "count": 111
+      },
+      {
+        "operation_type": "build_thunder_tower",
+        "count": 56
+      },
+      {
+        "operation_type": "trigger_bear",
+        "count": 54
+      },
+      {
+        "operation_type": "build_ice_tower",
+        "count": 31
+      },
+      {
+        "operation_type": "build_swordsman_hall",
+        "count": 30
+      }
+    ]
+  },
+  "daily_top_card_selections": {
+    "2026-04-18": [
+      {
+        "card_key": "single|populationIncrease|R|populationIncrease",
+        "count": 11
+      },
+      {
+        "card_key": "single|WarAncientTree|R|maxHealth",
+        "count": 6
+      },
+      {
+        "card_key": "single|StoneWall|R|maxHealth",
+        "count": 6
+      },
+      {
+        "card_key": "single|populationIncrease|SR|populationIncrease",
+        "count": 5
+      },
+      {
+        "card_key": "get_all|unknown|unknown|unknown",
+        "count": 5
+      },
+      {
+        "card_key": "single|Mage|R|moveSpeed",
+        "count": 4
+      },
+      {
+        "card_key": "single|goldReward|R|goldReward",
+        "count": 3
+      },
+      {
+        "card_key": "single|Mage|SR|moveSpeed",
+        "count": 3
+      },
+      {
+        "card_key": "single|Mage|SR|attackDamage",
+        "count": 3
+      },
+      {
+        "card_key": "single|WatchTower|R|attackSpeed",
+        "count": 2
+      }
+    ],
+    "2026-04-19": [
+      {
+        "card_key": "single|populationIncrease|R|populationIncrease",
+        "count": 23
+      },
+      {
+        "card_key": "single|populationIncrease|SR|populationIncrease",
+        "count": 17
+      },
+      {
+        "card_key": "single|StoneWall|R|maxHealth",
+        "count": 13
+      },
+      {
+        "card_key": "single|goldReward|R|goldReward",
+        "count": 12
+      },
+      {
+        "card_key": "single|WarAncientTree|R|maxHealth",
+        "count": 10
+      },
+      {
+        "card_key": "single|StoneWall|SR|maxHealth",
+        "count": 9
+      },
+      {
+        "card_key": "single|StoneWall|SP|selfHealingWall",
+        "count": 9
+      },
+      {
+        "card_key": "single|populationIncrease|SSR|populationIncrease",
+        "count": 9
+      },
+      {
+        "card_key": "single|Arrower|R|attackSpeed",
+        "count": 7
+      },
+      {
+        "card_key": "single|goldReward|SR|goldReward",
+        "count": 7
+      }
+    ],
+    "2026-04-20": [
+      {
+        "card_key": "single|StoneWall|R|maxHealth",
+        "count": 6
+      },
+      {
+        "card_key": "single|populationIncrease|R|populationIncrease",
+        "count": 5
+      },
+      {
+        "card_key": "single|WarAncientTree|SR|maxHealth",
+        "count": 5
+      },
+      {
+        "card_key": "single|WarAncientTree|R|maxHealth",
+        "count": 4
+      },
+      {
+        "card_key": "single|goldReward|R|goldReward",
+        "count": 3
+      },
+      {
+        "card_key": "single|Arrower|SR|attackDamage",
+        "count": 3
+      },
+      {
+        "card_key": "single|Arrower|R|attackDamage",
+        "count": 3
+      },
+      {
+        "card_key": "single|goldReward|SSR|goldReward",
+        "count": 3
+      },
+      {
+        "card_key": "get_all|unknown|unknown|unknown",
+        "count": 3
+      },
+      {
+        "card_key": "single|IceTower|R|attackDamage",
+        "count": 2
+      }
+    ],
+    "2026-04-21": [
+      {
+        "card_key": "single|goldReward|R|goldReward",
+        "count": 15
+      },
+      {
+        "card_key": "single|populationIncrease|R|populationIncrease",
+        "count": 7
+      },
+      {
+        "card_key": "get_all|unknown|unknown|unknown",
+        "count": 6
+      },
+      {
+        "card_key": "single|StoneWall|R|maxHealth",
+        "count": 6
+      },
+      {
+        "card_key": "single|Arrower|SR|attackDamage",
+        "count": 6
+      },
+      {
+        "card_key": "single|populationIncrease|SR|populationIncrease",
+        "count": 5
+      },
+      {
+        "card_key": "single|StoneWall|SR|maxHealth",
+        "count": 4
+      },
+      {
+        "card_key": "single|ElfSwordsman|R|attackDamage",
+        "count": 4
+      },
+      {
+        "card_key": "single|Mage|R|attackDamage",
+        "count": 4
+      },
+      {
+        "card_key": "single|goldReward|SR|goldReward",
+        "count": 3
+      }
+    ],
+    "2026-04-22": [
+      {
+        "card_key": "single|StoneWall|R|maxHealth",
+        "count": 14
+      },
+      {
+        "card_key": "single|populationIncrease|R|populationIncrease",
+        "count": 8
+      },
+      {
+        "card_key": "single|WarAncientTree|R|maxHealth",
+        "count": 6
+      },
+      {
+        "card_key": "single|Arrower|R|maxHealth",
+        "count": 5
+      },
+      {
+        "card_key": "single|populationIncrease|SR|populationIncrease",
+        "count": 5
+      },
+      {
+        "card_key": "single|StoneWall|SR|maxHealth",
+        "count": 5
+      },
+      {
+        "card_key": "single|WatchTower|R|attackDamage",
+        "count": 4
+      },
+      {
+        "card_key": "single|ElfSwordsman|SR|attackDamage",
+        "count": 4
+      },
+      {
+        "card_key": "single|WatchTower|SR|attackDamage",
+        "count": 4
+      },
+      {
+        "card_key": "single|SwordsmanHall|SR|maxHealth",
+        "count": 4
+      }
+    ],
+    "2026-04-23": [
+      {
+        "card_key": "single|StoneWall|SR|maxHealth",
+        "count": 8
+      },
+      {
+        "card_key": "single|WarAncientTree|SR|maxHealth",
+        "count": 6
+      },
+      {
+        "card_key": "single|goldReward|R|goldReward",
+        "count": 5
+      },
+      {
+        "card_key": "get_all|unknown|unknown|unknown",
+        "count": 5
+      },
+      {
+        "card_key": "single|StoneWall|R|maxHealth",
+        "count": 5
+      },
+      {
+        "card_key": "single|Arrower|R|attackSpeed",
+        "count": 5
+      },
+      {
+        "card_key": "single|WarAncientTree|R|maxHealth",
+        "count": 5
+      },
+      {
+        "card_key": "single|Arrower|R|moveSpeed",
+        "count": 4
+      },
+      {
+        "card_key": "single|populationIncrease|R|populationIncrease",
+        "count": 4
+      },
+      {
+        "card_key": "single|StoneWall|SSR|maxHealth",
+        "count": 3
+      }
+    ],
+    "2026-04-24": [
+      {
+        "card_key": "single|WarAncientTree|R|maxHealth",
+        "count": 13
+      },
+      {
+        "card_key": "single|StoneWall|R|maxHealth",
+        "count": 6
+      },
+      {
+        "card_key": "single|StoneWall|SR|maxHealth",
+        "count": 5
+      },
+      {
+        "card_key": "single|populationIncrease|R|populationIncrease",
+        "count": 5
+      },
+      {
+        "card_key": "single|goldReward|SR|goldReward",
+        "count": 5
+      },
+      {
+        "card_key": "single|populationIncrease|SSR|populationIncrease",
+        "count": 4
+      },
+      {
+        "card_key": "single|WatchTower|SR|attackDamage",
+        "count": 4
+      },
+      {
+        "card_key": "single|Arrower|SP|multiArrow",
+        "count": 3
+      },
+      {
+        "card_key": "single|Arrower|R|attackDamage",
+        "count": 3
+      },
+      {
+        "card_key": "single|WatchTower|R|attackDamage",
+        "count": 3
+      }
+    ],
+    "2026-04-25": [
+      {
+        "card_key": "single|StoneWall|R|maxHealth",
+        "count": 33
+      },
+      {
+        "card_key": "single|populationIncrease|R|populationIncrease",
+        "count": 27
+      },
+      {
+        "card_key": "single|populationIncrease|SR|populationIncrease",
+        "count": 19
+      },
+      {
+        "card_key": "single|StoneWall|SR|maxHealth",
+        "count": 17
+      },
+      {
+        "card_key": "single|goldReward|SR|goldReward",
+        "count": 14
+      },
+      {
+        "card_key": "single|WarAncientTree|R|maxHealth",
+        "count": 13
+      },
+      {
+        "card_key": "single|Arrower|R|attackDamage",
+        "count": 12
+      },
+      {
+        "card_key": "single|WatchTower|R|attackSpeed",
+        "count": 10
+      },
+      {
+        "card_key": "single|goldReward|R|goldReward",
+        "count": 10
+      },
+      {
+        "card_key": "single|StoneWall|SP|selfHealingWall",
+        "count": 10
+      }
+    ],
+    "2026-04-26": [
+      {
+        "card_key": "single|StoneWall|SSR|maxHealth",
+        "count": 30
+      },
+      {
+        "card_key": "single|StoneWall|SR|maxHealth",
+        "count": 24
+      },
+      {
+        "card_key": "single|populationIncrease|R|populationIncrease",
+        "count": 20
+      },
+      {
+        "card_key": "single|WarAncientTree|R|maxHealth",
+        "count": 20
+      },
+      {
+        "card_key": "single|WarAncientTree|SR|maxHealth",
+        "count": 20
+      },
+      {
+        "card_key": "single|StoneWall|R|maxHealth",
+        "count": 19
+      },
+      {
+        "card_key": "single|Arrower|SP|multiArrow",
+        "count": 17
+      },
+      {
+        "card_key": "single|populationIncrease|SSR|populationIncrease",
+        "count": 17
+      },
+      {
+        "card_key": "single|goldReward|SR|goldReward",
+        "count": 17
+      },
+      {
+        "card_key": "single|goldReward|SSR|goldReward",
+        "count": 15
+      }
+    ]
+  }
+}

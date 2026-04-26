@@ -61,7 +61,7 @@ order by created_at desc ;
 select session_id,player_id,level,game_time ,selection_mode,cards_json,created_at from card_selection_events where DATE(created_at) = CURDATE()-1
  and player_id  in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1775652153130_8335','player_1772722064044_978','player_1772465771074_4106') and player_id not in (select player_id from visitor_source_records where channel='unknown')  
 order by created_at desc ;
---统计每天有多少非测试广告抽卡(reroll和get_all只有看完了视频才会触发)
+--统计每天有多少非测试广告抽卡(reroll、和get_all和single_video只有看完了视频才会触发)
 select DATE(created_at),player_id,count(*) from card_selection_events where selection_mode  in ('get_all','reroll','single_video') 
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106') and player_id not in (select player_id from visitor_source_records where channel='unknown')  
 group by DATE(created_at),player_id order by DATE(created_at) desc ;
