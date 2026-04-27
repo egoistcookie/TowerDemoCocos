@@ -17,6 +17,9 @@ export class StoneWall extends Build {
     private isHighlighted: boolean = false; // 是否高亮显示
     private highlightNode: Node = null!; // 高亮效果节点
     private _regenTickTimer: number = 0; // SP自愈计时器
+    private _isSpikeTrap: boolean = false;
+    private _spikeTrapDamage: number = 0;
+    private _spikeTrapTickTimer: number = 0;
     
     /**
      * 当石墙从对象池激活时调用（用于对象池复用）
@@ -43,6 +46,14 @@ export class StoneWall extends Build {
 
     update(deltaTime: number) {
         if (this.isDestroyed) {
+            return;
+        }
+        if (this._isSpikeTrap) {
+            this._spikeTrapTickTimer += deltaTime;
+            while (this._spikeTrapTickTimer >= 1.0) {
+                this._spikeTrapTickTimer -= 1.0;
+                this.triggerSpikeTrapDamage();
+            }
             return;
         }
         const regenPerSec = Number((this as any)._spStoneWallRegenPerSec) || 0;
@@ -309,13 +320,50 @@ export class StoneWall extends Build {
             this.highlightNode = null!;
         }
         this.isHighlighted = false;
+        this._isSpikeTrap = false;
+        this._spikeTrapDamage = 0;
+        this._spikeTrapTickTimer = 0;
     }
 
     /**
      * 公有的 takeDamage 方法（覆盖父类的 protected 方法，供外部类调用）
      */
     public takeDamage(damage: number, hitDirection?: Vec3) {
+        if (this._isSpikeTrap) {
+            return;
+        }
         super.takeDamage(damage, hitDirection);
+    }
+
+    public isSpikeTrapActive(): boolean {
+        return this._isSpikeTrap;
+    }
+
+    public activateSpikeTrap(damage: number) {
+        this._isSpikeTrap = true;
+        this._spikeTrapDamage = Math.max(1, Math.floor(Number(damage) || 1));
+        this._spikeTrapTickTimer = 0;
+    }
+
+    private triggerSpikeTrapDamage() {
+        if (!this.node || !this.node.isValid) {
+            return;
+        }
+        const trapPos = this.node.worldPosition;
+        const hitRadius = Math.max(this.collisionRadius || 25, 25);
+        const hitRadiusSq = hitRadius * hitRadius;
+        const enemiesNode = find('Canvas/Enemys');
+        const enemies = enemiesNode ? enemiesNode.children : [];
+        for (const enemy of enemies) {
+            if (!enemy || !enemy.isValid || !enemy.active) continue;
+            const enemyScript = enemy.getComponent('Enemy') as any;
+            if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) continue;
+            const enemyPos = enemy.worldPosition;
+            const dx = enemyPos.x - trapPos.x;
+            const dy = enemyPos.y - trapPos.y;
+            if (dx * dx + dy * dy > hitRadiusSq) continue;
+            enemyScript.takeDamage(this._spikeTrapDamage);
+        }
     }
 
     /**

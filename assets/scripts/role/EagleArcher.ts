@@ -70,6 +70,10 @@ export class EagleArcher extends Arrower {
         return false;
     }
 
+    protected override canUseSpikeTrapBehavior(): boolean {
+        return false;
+    }
+
     /**
      * 设置优先攻击目标类型（由 GameManager 调用）
      */

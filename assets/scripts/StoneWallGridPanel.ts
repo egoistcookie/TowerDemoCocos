@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, Graphics, UITransform, Color, view, SpriteFrame, find, EventTouch, Camera } from 'cc';
+import { _decorator, Component, Node, Vec3, Graphics, UITransform, Color, view, SpriteFrame, find, EventTouch, Camera, Sprite } from 'cc';
 import { GameState } from './GameState';
 import { GridBuildingSelectionPanel } from './GridBuildingSelectionPanel';
 import { UnitSelectionManager } from './UnitSelectionManager';
@@ -37,6 +37,17 @@ export class StoneWallGridPanel extends Component {
     private excludeBuildingForHighlight: Node | null = null; // 高亮时排除的建筑物（用于拖拽）
     private showGridBorder: boolean = false; // 是否显示网格边框（默认不显示）
     private selectionPanel: GridBuildingSelectionPanel = null!; // 选择面板组件
+    private trapCells: Map<string, {
+        gridX: number;
+        gridY: number;
+        damage: number;
+        lastTriggerMs: number;
+        visualNode: Node | null;
+        idleFrame: SpriteFrame | null;
+        triggerFrames: SpriteFrame[];
+        lastEnemySeenMs: number;
+        loopRunner: (() => void) | null;
+    }> = new Map();
 
     onLoad() {
         // 确保网格在任何生命周期调用前初始化
@@ -219,7 +230,7 @@ export class StoneWallGridPanel extends Component {
         
         // 检查网格是否被占用（石墙只占用一个网格，哨塔占用两个网格）
         // 对于点击的网格，如果被占用则不显示选择面板
-        if (this.isGridOccupied(grid.x, grid.y)) {
+        if (this.isGridOccupied(grid.x, grid.y) || this.hasTrapAt(grid.x, grid.y)) {
             // 网格已被占用，不显示选择面板
             if (this.selectionPanel) {
                 this.selectionPanel.hide();
@@ -312,6 +323,8 @@ export class StoneWallGridPanel extends Component {
         this.isHighlighted = false;
         this.highlightedCell = null;
         this.excludeBuildingForHighlight = null;
+        this.clearAllTrapVisuals();
+        this.trapCells.clear();
     }
 
     /**
@@ -582,7 +595,7 @@ export class StoneWallGridPanel extends Component {
         const cellY = startY + gridY * (this.cellSize + this.cellSpacing);
         
         // 检查网格是否可用（排除指定的建筑物）
-        const isAvailable = !this.isGridOccupiedByOther(gridX, gridY, this.excludeBuildingForHighlight || null!);
+        const isAvailable = !this.isGridOccupiedByOther(gridX, gridY, this.excludeBuildingForHighlight || null!) && !this.hasTrapAt(gridX, gridY);
 
         // 绘制半透明填充（先绘制填充，再绘制边框，确保边框在最上层）
         const fillColor = isAvailable ? new Color(0, 255, 0, 150) : new Color(255, 0, 0, 150);
@@ -805,5 +818,257 @@ export class StoneWallGridPanel extends Component {
         this.ensureGridInitialized();
         const cell = this.gridCells[gridY][gridX];
         return cell.buildingNode;
+    }
+
+    private trapKey(gridX: number, gridY: number): string {
+        return `${gridX},${gridY}`;
+    }
+
+    public hasTrapAt(gridX: number, gridY: number): boolean {
+        if (gridX < 0 || gridX >= this.gridWidth || gridY < 0 || gridY >= this.gridHeight) {
+            return false;
+        }
+        return this.trapCells.has(this.trapKey(gridX, gridY));
+    }
+
+    public placeTrapAt(gridX: number, gridY: number, damage: number, trapSprite?: SpriteFrame | null, triggerFrames?: SpriteFrame[]): boolean {
+        if (gridX < 0 || gridX >= this.gridWidth || gridY < 0 || gridY >= this.gridHeight) {
+            return false;
+        }
+        if (this.isGridOccupied(gridX, gridY) || this.hasTrapAt(gridX, gridY)) {
+            return false;
+        }
+        const visualNode = this.createTrapVisual(gridX, gridY, trapSprite || null);
+        this.trapCells.set(this.trapKey(gridX, gridY), {
+            gridX,
+            gridY,
+            damage: Math.max(1, Math.floor(Number(damage) || 1)),
+            lastTriggerMs: 0,
+            visualNode,
+            idleFrame: trapSprite || null,
+            triggerFrames: (triggerFrames || []).filter(Boolean),
+            lastEnemySeenMs: 0,
+            loopRunner: null,
+        });
+        return true;
+    }
+
+    public removeTrapAt(gridX: number, gridY: number): boolean {
+        const key = this.trapKey(gridX, gridY);
+        const trap = this.trapCells.get(key);
+        if (trap && trap.visualNode && trap.visualNode.isValid) {
+            if (trap.loopRunner) {
+                this.unschedule(trap.loopRunner);
+                trap.loopRunner = null;
+            }
+            trap.visualNode.destroy();
+        }
+        return this.trapCells.delete(key);
+    }
+
+    public tryTriggerTrapAtWorldPosition(worldPos: Vec3, _enemyNode: Node): boolean {
+        const cell = this.worldToGrid(worldPos);
+        if (!cell) return false;
+        const key = this.trapKey(cell.x, cell.y);
+        const trap = this.trapCells.get(key);
+        if (!trap) return false;
+
+        const now = Date.now();
+        trap.lastEnemySeenMs = now;
+        this.ensureTrapTriggerLoop(trap);
+        this.trapCells.set(key, trap);
+        return true;
+    }
+
+    private applyTrapDamageToAllEnemiesOnCell(gridX: number, gridY: number, damage: number): boolean {
+        const enemyContainers = [
+            'Canvas/Enemies',
+            'Canvas/Enemys',
+            'Canvas/Orcs',
+            'Canvas/TrollSpearmans',
+            'Canvas/OrcWarriors',
+            'Canvas/OrcWarlords',
+            'Canvas/OrcShamans',
+            'Canvas/MinotaurWarriors',
+            'Canvas/Boss',
+            'Canvas/Bosses',
+        ];
+        let hit = false;
+        let scanned = 0;
+        let aliveMatchedCell = 0;
+        let damaged = 0;
+        for (const path of enemyContainers) {
+            const container = find(path);
+            if (!container || !container.isValid) continue;
+            for (const enemyNode of container.children) {
+                if (!enemyNode || !enemyNode.isValid || !enemyNode.activeInHierarchy) continue;
+                scanned++;
+                const enemyScript =
+                    enemyNode.getComponent('Enemy') as any ||
+                    enemyNode.getComponent('OrcWarlord') as any ||
+                    enemyNode.getComponent('OrcWarrior') as any ||
+                    enemyNode.getComponent('TrollSpearman') as any ||
+                    enemyNode.getComponent('OrcShaman') as any ||
+                    enemyNode.getComponent('MinotaurWarrior') as any ||
+                    enemyNode.getComponent('Boss') as any;
+                if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) continue;
+                const enemyCell = this.worldToGrid(enemyNode.worldPosition);
+                if (!enemyCell) continue;
+                if (enemyCell.x !== gridX || enemyCell.y !== gridY) continue;
+                aliveMatchedCell++;
+                if (enemyScript.takeDamage) {
+                    enemyScript.takeDamage(damage);
+                    hit = true;
+                    damaged++;
+                }
+            }
+        }
+        return hit;
+    }
+
+    private hasAliveEnemyOnCell(gridX: number, gridY: number): boolean {
+        const enemyContainers = [
+            'Canvas/Enemies',
+            'Canvas/Enemys',
+            'Canvas/Orcs',
+            'Canvas/TrollSpearmans',
+            'Canvas/OrcWarriors',
+            'Canvas/OrcWarlords',
+            'Canvas/OrcShamans',
+            'Canvas/MinotaurWarriors',
+            'Canvas/Boss',
+            'Canvas/Bosses',
+        ];
+        for (const path of enemyContainers) {
+            const container = find(path);
+            if (!container || !container.isValid) continue;
+            for (const enemyNode of container.children) {
+                if (!enemyNode || !enemyNode.isValid || !enemyNode.activeInHierarchy) continue;
+                const enemyScript =
+                    enemyNode.getComponent('Enemy') as any ||
+                    enemyNode.getComponent('OrcWarlord') as any ||
+                    enemyNode.getComponent('OrcWarrior') as any ||
+                    enemyNode.getComponent('TrollSpearman') as any ||
+                    enemyNode.getComponent('OrcShaman') as any ||
+                    enemyNode.getComponent('MinotaurWarrior') as any ||
+                    enemyNode.getComponent('Boss') as any;
+                if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) continue;
+                const enemyCell = this.worldToGrid(enemyNode.worldPosition);
+                if (!enemyCell) continue;
+                if (enemyCell.x === gridX && enemyCell.y === gridY) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private createTrapVisual(gridX: number, gridY: number, trapSprite: SpriteFrame | null): Node | null {
+        if (!trapSprite) return null;
+        const worldPos = this.gridToWorld(gridX, gridY);
+        if (!worldPos) return null;
+        const visual = new Node(`Trap_${gridX}_${gridY}`);
+        const canvas = find('Canvas');
+        if (!canvas) return null;
+        visual.setParent(canvas);
+        visual.setWorldPosition(worldPos);
+        const ui = visual.addComponent(UITransform);
+        ui.setContentSize(this.cellSize, this.cellSize);
+        const sprite = visual.addComponent(Sprite);
+        sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        sprite.spriteFrame = trapSprite;
+        sprite.color = new Color(255, 255, 255, 128);
+        // 陷阱层级：只高于背景图
+        const bgNode = canvas.getChildByName('Background');
+        if (bgNode) {
+            visual.setSiblingIndex(bgNode.getSiblingIndex() + 1);
+        } else {
+            visual.setSiblingIndex(1);
+        }
+        return visual;
+    }
+
+    private playTrapTriggerAnimation(trap: { visualNode: Node | null; triggerFrames: SpriteFrame[] }) {
+        if (!trap.visualNode || !trap.visualNode.isValid) return;
+        const sprite = trap.visualNode.getComponent(Sprite);
+        if (!sprite) return;
+        const frames = (trap.triggerFrames || []).filter(Boolean);
+        if (frames.length === 0) {
+            sprite.color = new Color(255, 255, 255, 128);
+            return;
+        }
+        sprite.unscheduleAllCallbacks();
+        const frameDuration = 0.08;
+        frames.forEach((frame, idx) => {
+            sprite.scheduleOnce(() => {
+                if (!sprite || !sprite.node || !sprite.node.isValid) return;
+                sprite.spriteFrame = frame;
+                sprite.color = new Color(255, 255, 255, 128);
+            }, idx * frameDuration);
+        });
+    }
+
+    private ensureTrapTriggerLoop(trap: {
+        gridX: number;
+        gridY: number;
+        damage: number;
+        lastTriggerMs: number;
+        visualNode: Node | null;
+        triggerFrames: SpriteFrame[];
+        loopRunner: (() => void) | null;
+    }) {
+        if (!trap.visualNode || !trap.visualNode.isValid) return;
+        if (trap.loopRunner) return;
+        const sprite = trap.visualNode.getComponent(Sprite);
+        if (!sprite) return;
+        const runner = () => {
+            const hitAny = this.applyTrapDamageToAllEnemiesOnCell(trap.gridX, trap.gridY, trap.damage);
+            if (hitAny) {
+                trap.lastTriggerMs = Date.now();
+                this.playTrapTriggerAnimation(trap);
+            }
+        };
+        trap.loopRunner = runner;
+        runner(); // 立即来一轮（进入陷阱格时立即结算一次）
+        this.schedule(runner, 1.0); // 每秒循环一轮（由本组件统一调度）
+    }
+
+    update(_deltaTime: number) {
+        const now = Date.now();
+        this.trapCells.forEach((trap) => {
+            const hasEnemy = this.hasAliveEnemyOnCell(trap.gridX, trap.gridY);
+            if (hasEnemy) {
+                trap.lastEnemySeenMs = now;
+                this.ensureTrapTriggerLoop(trap);
+                return;
+            }
+            // 敌人离开一小段时间后停止循环动画
+            if (!trap.loopRunner || !trap.visualNode || !trap.visualNode.isValid) return;
+            if (now - trap.lastEnemySeenMs <= 200) return;
+            this.unschedule(trap.loopRunner);
+            trap.loopRunner = null;
+            const sprite = trap.visualNode.getComponent(Sprite);
+            if (sprite) {
+                sprite.unscheduleAllCallbacks();
+                if (trap.idleFrame) {
+                    sprite.spriteFrame = trap.idleFrame;
+                } else if (trap.triggerFrames.length > 0) {
+                    sprite.spriteFrame = trap.triggerFrames[0];
+                }
+                sprite.color = new Color(255, 255, 255, 128);
+            }
+        });
+    }
+
+    private clearAllTrapVisuals() {
+        for (const trap of this.trapCells.values()) {
+            if (trap.visualNode && trap.visualNode.isValid) {
+                if (trap.loopRunner) {
+                    this.unschedule(trap.loopRunner);
+                    trap.loopRunner = null;
+                }
+                trap.visualNode.destroy();
+            }
+        }
     }
 }

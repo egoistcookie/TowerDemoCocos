@@ -136,6 +136,18 @@ export class Arrower extends Role {
     @property({ type: [SpriteFrame] })
     fishingLoopFrames: SpriteFrame[] = [];
 
+    // 陷阱动画：设置陷阱时播放（3秒布置阶段）
+    @property({ type: [SpriteFrame] })
+    spikeTrapSetupFrames: SpriteFrame[] = [];
+
+    // 陷阱动画：地刺触发时播放（敌人经过/触发陷阱时）
+    @property({ type: [SpriteFrame] })
+    spikeTrapTriggerFrames: SpriteFrame[] = [];
+
+    // 陷阱网格贴图（显示在石墙网格空地上）
+    @property({ type: SpriteFrame })
+    spikeTrapGridSprite: SpriteFrame = null!;
+
     // 钓鱼相关：全局静态引用，确保全场景只有一个钓鱼弓箭手
     private static fishingArcher: Arrower | null = null;
     // 钓鱼相关：静态锁，防止多个弓箭手同时进入钓鱼状态
@@ -157,6 +169,23 @@ export class Arrower extends Role {
     private _fishingGoldTimer: number = 0;
     // 临时Vec3缓存，避免频繁创建
     private _tempVec3: Vec3 = new Vec3();
+    // 陷阱机制
+    private _trapCheckTimer: number = 0;
+    private _trapIdleTimer: number = 0;
+    private _isSettingSpikeTrap: boolean = false;
+    private _spikeTrapBuildTimer: number = 0;
+    private _pendingTrapCell: { x: number; y: number } | null = null;
+    private _trapDebugLogTimer: number = 0;
+    private _spikeTrapAnimTimer: number = 0;
+    private _spikeTrapOriginalSprite: SpriteFrame | null = null;
+    private _spikeTrapOriginalScale: Vec3 | null = null;
+    private _isAligningToTrapCell: boolean = false;
+    private _trapAlignCellCenter: Vec3 | null = null;
+    private _expectedTrapSetupFrame: SpriteFrame | null = null;
+    private _trapFlickerLogTimer: number = 0;
+    private _trapSetupCooldownTimer: number = 0;
+    private _lastTrapSetupFrameIdx: number = -1;
+    private readonly SPIKE_TRAP_BUILD_DURATION: number = 4.0;
 
     // 技能相关属性
     private readonly PENETRATE_ARROW_MANA_COST: number = 10; // 穿透箭消耗蓝量
@@ -780,6 +809,36 @@ export class Arrower extends Role {
             return;
         }
 
+        if (this._isSettingSpikeTrap) {
+            // 设置陷阱期间：陷阱动画最高优先级；仅允许“受击”中断
+            if ((this as any).isPlayingHitAnimation) {
+                this.cancelSpikeTrapSetup('hit-interrupt');
+                return;
+            }
+            // 锁定行为状态，防止索敌/移动/攻击分支抢动画
+            this.currentTarget = null!;
+            this.manualMoveTarget = null!;
+            this.isManuallyControlled = false;
+            this.isMoving = false;
+            (this as any).isPlayingMoveAnimation = false;
+            (this as any).isPlayingAttackAnimation = false;
+            this._spikeTrapBuildTimer += deltaTime;
+            this.playSpikeTrapSetupAnimation(deltaTime);
+            // 闪烁定位：若当前显示帧与期望帧不一致，说明有其他逻辑在抢帧
+            if (this.sprite && this.sprite.isValid && this._expectedTrapSetupFrame) {
+                if (this.sprite.spriteFrame !== this._expectedTrapSetupFrame) {
+                    // 每帧纠正回期望帧，避免视觉闪烁
+                    this.sprite.spriteFrame = this._expectedTrapSetupFrame;
+                }
+            }
+            if (this._spikeTrapBuildTimer >= this.SPIKE_TRAP_BUILD_DURATION) {
+                this.finishSpikeTrapSetup();
+            }
+            return;
+        }
+
+        this.updateSpikeTrapBehavior(deltaTime);
+
         // 【关键优化】在 super.update() 之前完成钓鱼状态初始化和检查
         // 这样 startFishing() 设置的 manualMoveTarget 能在同一帧被父类 update 处理
         const canUseFishing = this.canUseFishingBehavior();
@@ -876,10 +935,231 @@ export class Arrower extends Role {
         }
     }
 
+    private updateSpikeTrapBehavior(deltaTime: number) {
+        if (this._trapSetupCooldownTimer > 0) {
+            this._trapSetupCooldownTimer -= deltaTime;
+            return;
+        }
+        if (!this.canUseSpikeTrapBehavior()) {
+            this._trapCheckTimer = 0;
+            this._trapIdleTimer = 0;
+            this._trapDebugLogTimer = 0;
+            return;
+        }
+        if (this._isAligningToTrapCell && this._trapAlignCellCenter) {
+            const myPos = this.node.worldPosition;
+            const dx = this._trapAlignCellCenter.x - myPos.x;
+            const dy = this._trapAlignCellCenter.y - myPos.y;
+            // 已经到格子中心附近，重试一次设陷阱（不再重复触发对齐）
+            if (dx * dx + dy * dy <= 12 * 12) {
+                this._isAligningToTrapCell = false;
+                this.manualMoveTarget = null!;
+                this.isManuallyControlled = false;
+                this.tryStartSpikeTrapSetup(false);
+            }
+            return;
+        }
+        if (this.isFishing) {
+            this._trapCheckTimer = 0;
+            this._trapIdleTimer = 0;
+            return;
+        }
+        // 仅弓箭手空闲时累计闲置时长（无有效战斗目标、非手动移动、非防御）
+        const hasTarget = this.hasValidTrapInterruptTarget();
+        if (!hasTarget && this.currentTarget) {
+            // 清理传送门/无效目标，避免卡住“有目标”状态
+            this.currentTarget = null!;
+        }
+        const hasManualMove = !!this.manualMoveTarget;
+        if (!hasTarget && !hasManualMove && !this.isDefending) {
+            this._trapIdleTimer += deltaTime;
+        } else {
+            this._trapIdleTimer = 0;
+        }
+        this._trapCheckTimer += deltaTime;
+        if (this._trapCheckTimer < 1.5) {
+            return;
+        }
+        this._trapCheckTimer = 0;
+        if (this._trapIdleTimer < 3.0) {
+            return;
+        }
+        this.tryStartSpikeTrapSetup(true);
+    }
+
+    private hasValidTrapInterruptTarget(): boolean {
+        const t = this.currentTarget;
+        if (!t || !t.isValid || !t.active) return false;
+        // 传送门不可攻击，不应阻断陷阱设置
+        if (t.getComponent && t.getComponent('Portal')) return false;
+        // 只有可存活敌人目标才算“有目标”
+        return this.isAliveEnemy(t);
+    }
+
+    private tryStartSpikeTrapSetup(allowAlignToCellCenter: boolean) {
+        const gridNode = find('Canvas/StoneWallGridPanel') || find('StoneWallGridPanel');
+        const grid = gridNode?.getComponent('StoneWallGridPanel') as any;
+        if (!grid) {
+            return;
+        }
+        const myPos = this.node.worldPosition;
+        const cell = grid.worldToGrid ? grid.worldToGrid(myPos) : null;
+        if (!cell) {
+            return;
+        }
+
+        // 新需求：陷阱放在“空地格子”，不是石墙本体
+        if (grid.isGridOccupied && grid.isGridOccupied(cell.x, cell.y)) {
+            return;
+        }
+        if (grid.hasTrapAt && grid.hasTrapAt(cell.x, cell.y)) {
+            return;
+        }
+
+        // 先对齐到当前格子中心，再开始3秒设置动画与计时
+        if (allowAlignToCellCenter && grid.gridToWorld) {
+            const center = grid.gridToWorld(cell.x, cell.y) as Vec3 | null;
+            if (center) {
+                const dx = center.x - myPos.x;
+                const dy = center.y - myPos.y;
+                if (dx * dx + dy * dy > 12 * 12) {
+                    this._isAligningToTrapCell = true;
+                    this._trapAlignCellCenter = center.clone();
+                    if (!this.manualMoveTarget) {
+                        this.manualMoveTarget = new Vec3();
+                    }
+                    this.manualMoveTarget.set(center);
+                    this.isManuallyControlled = true;
+                    return;
+                }
+            }
+        }
+
+        this._isSettingSpikeTrap = true;
+        this._spikeTrapBuildTimer = 0;
+        this._spikeTrapAnimTimer = 0;
+        this._spikeTrapOriginalSprite = this.sprite && this.sprite.isValid ? this.sprite.spriteFrame : null;
+        this._spikeTrapOriginalScale = this.node.getScale().clone();
+        this._expectedTrapSetupFrame = null;
+        this._trapFlickerLogTimer = 0;
+        this._lastTrapSetupFrameIdx = -1;
+        this._pendingTrapCell = { x: cell.x, y: cell.y };
+        this._isAligningToTrapCell = false;
+        this._trapAlignCellCenter = null;
+        // 彻底清理当前节点上的已调度动画回调（含父类待机动画），防止与挖坑动画抢帧
+        this.unscheduleAllCallbacks();
+        this.stopAllAnimations();
+        (this as any).isPlayingIdleAnimation = false;
+        (this as any).isPlayingMoveAnimation = false;
+        this.isMoving = false;
+        this.currentTarget = null!;
+        // 关键：停止钓鱼动画定时器，避免与设置陷阱动画同时改 spriteFrame 导致闪烁
+        if (this._fishingAnimUpdate) {
+            this.unschedule(this._fishingAnimUpdate);
+            this._fishingAnimUpdate = null;
+        }
+        if (this.sprite && this.sprite.isValid) {
+            this.sprite.color = new Color(255, 255, 255, 255);
+        }
+        // 设置陷阱动画期间放大为 1.2x
+        this.node.setScale(1.2, 1.2, this.node.scale.z);
+        const trapSetupSlogans = ['指挥官，我教你做陷阱', '嘿嘿嘿'];
+        const trapSlogan = trapSetupSlogans[Math.floor(Math.random() * trapSetupSlogans.length)];
+        this.createDialog(trapSlogan, false);
+    }
+
+    private finishSpikeTrapSetup() {
+        const pendingCell = this._pendingTrapCell;
+        const gridNode = find('Canvas/StoneWallGridPanel') || find('StoneWallGridPanel');
+        const grid = gridNode?.getComponent('StoneWallGridPanel') as any;
+        if (pendingCell && grid && grid.placeTrapAt) {
+            const trapSprite = this.spikeTrapGridSprite
+                || (this.spikeTrapTriggerFrames && this.spikeTrapTriggerFrames.length > 0 ? this.spikeTrapTriggerFrames[0] : null)
+                || (this.spikeTrapSetupFrames && this.spikeTrapSetupFrames.length > 0 ? this.spikeTrapSetupFrames[0] : null);
+            const ok = grid.placeTrapAt(
+                pendingCell.x,
+                pendingCell.y,
+                this.getEffectiveAttackDamage(),
+                trapSprite,
+                this.spikeTrapTriggerFrames || []
+            );
+            if (!ok) {
+                // 放置失败时静默忽略，保持流程可继续
+            }
+        }
+        this._isSettingSpikeTrap = false;
+        this._spikeTrapBuildTimer = 0;
+        this._spikeTrapAnimTimer = 0;
+        this._pendingTrapCell = null;
+        this._expectedTrapSetupFrame = null;
+        this._trapFlickerLogTimer = 0;
+        this._lastTrapSetupFrameIdx = -1;
+        this._trapIdleTimer = 0;
+        this._isAligningToTrapCell = false;
+        this._trapAlignCellCenter = null;
+        // 设陷阱后短冷却，避免视觉上连续触发“设置陷阱”动画
+        this._trapSetupCooldownTimer = 2.0;
+        if (this.sprite && this.sprite.isValid && this._spikeTrapOriginalSprite) {
+            this.sprite.spriteFrame = this._spikeTrapOriginalSprite;
+        }
+        if (this.sprite && this.sprite.isValid) {
+            this.sprite.color = new Color(255, 255, 255, 255);
+        }
+        if (this._spikeTrapOriginalScale) {
+            this.node.setScale(this._spikeTrapOriginalScale);
+        }
+        this._spikeTrapOriginalScale = null;
+        this._spikeTrapOriginalSprite = null;
+    }
+
+    private cancelSpikeTrapSetup(reason: string) {
+        this._isSettingSpikeTrap = false;
+        this._spikeTrapBuildTimer = 0;
+        this._spikeTrapAnimTimer = 0;
+        this._pendingTrapCell = null;
+        this._expectedTrapSetupFrame = null;
+        this._trapFlickerLogTimer = 0;
+        this._lastTrapSetupFrameIdx = -1;
+        this._trapIdleTimer = 0;
+        this._isAligningToTrapCell = false;
+        this._trapAlignCellCenter = null;
+        // 受击打断后给短冷却，避免立刻再次进设置态
+        this._trapSetupCooldownTimer = 1.0;
+        if (this.sprite && this.sprite.isValid && this._spikeTrapOriginalSprite) {
+            this.sprite.spriteFrame = this._spikeTrapOriginalSprite;
+        }
+        if (this.sprite && this.sprite.isValid) {
+            this.sprite.color = new Color(255, 255, 255, 255);
+        }
+        if (this._spikeTrapOriginalScale) {
+            this.node.setScale(this._spikeTrapOriginalScale);
+        }
+        this._spikeTrapOriginalScale = null;
+        this._spikeTrapOriginalSprite = null;
+    }
+
+    private playSpikeTrapSetupAnimation(deltaTime: number) {
+        if (!this.sprite || !this.sprite.isValid) return;
+        if (!this.spikeTrapSetupFrames || this.spikeTrapSetupFrames.length === 0) return;
+        const frames = this.spikeTrapSetupFrames.filter(f => !!f);
+        if (frames.length === 0) return;
+        this._spikeTrapAnimTimer += deltaTime;
+        const progress = Math.max(0, Math.min(1, this._spikeTrapBuildTimer / this.SPIKE_TRAP_BUILD_DURATION));
+        const idx = Math.min(frames.length - 1, Math.floor(progress * frames.length));
+        this._lastTrapSetupFrameIdx = idx;
+        this._expectedTrapSetupFrame = frames[idx];
+        this.sprite.spriteFrame = frames[idx];
+    }
+
+
     /**
      * 是否允许该单位使用钓鱼行为（子类可重写）
      */
     protected canUseFishingBehavior(): boolean {
+        return true;
+    }
+
+    protected canUseSpikeTrapBehavior(): boolean {
         return true;
     }
 
@@ -1008,6 +1288,9 @@ export class Arrower extends Role {
      * 播放开始钓鱼动画（播放一次）
      */
     private playFishingStartAnimation() {
+        if (this._isSettingSpikeTrap) {
+            return;
+        }
         if (!this.sprite || !this.sprite.isValid || this.fishingStartFrames.length === 0) {
             // 如果没配置动画帧，直接播放循环动画
             this.playFishingLoopAnimation(0);
@@ -1059,6 +1342,9 @@ export class Arrower extends Role {
      * 播放循环钓鱼动画（持续循环）
      */
     private playFishingLoopAnimation(_deltaTime: number) {
+        if (this._isSettingSpikeTrap) {
+            return;
+        }
         // 使用定时器实现循环播放，不依赖 _deltaTime
         if (this._fishingAnimUpdate) {
             return; // 已在播放

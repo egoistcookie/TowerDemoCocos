@@ -341,7 +341,6 @@ export class Enemy extends Component {
         // 添加 SniperMark 组件（会自动创建 Graphics 并绘制准星）
         const sniperMarkComponent = this.sniperMarkNode.addComponent(SniperMark);
 
-        console.log('[Enemy] createSniperMark: 创建狙击准星标记');
     }
 
     /**
@@ -524,6 +523,11 @@ export class Enemy extends Component {
     }
 
     update(deltaTime: number) {
+        const stoneWallGridPanel = find('Canvas/StoneWallGridPanel')?.getComponent('StoneWallGridPanel') as any;
+        if (stoneWallGridPanel && stoneWallGridPanel.tryTriggerTrapAtWorldPosition) {
+            stoneWallGridPanel.tryTriggerTrapAtWorldPosition(this.node.worldPosition, this.node);
+        }
+
         // 狂暴掉血逻辑：每秒损失当前最大生命值的10%
         this.updateBloodRage(deltaTime);
 
@@ -941,6 +945,7 @@ export class Enemy extends Component {
             
             const wallScript = wall.getComponent('StoneWall') as any;
             if (!wallScript || !wallScript.isAlive || !wallScript.isAlive()) continue;
+            if (wallScript.isSpikeTrapActive && wallScript.isSpikeTrapActive()) continue;
 
             const wallPos = wall.worldPosition;
             const dx = this.node.worldPosition.x - wallPos.x;
@@ -977,6 +982,7 @@ export class Enemy extends Component {
             
             const wallScript = wall.getComponent('StoneWall') as any;
             if (!wallScript || !wallScript.isAlive || !wallScript.isAlive()) continue;
+            if (wallScript.isSpikeTrapActive && wallScript.isSpikeTrapActive()) continue;
 
             const wallPos = wall.worldPosition;
             const wallRadius = wallScript.collisionRadius ?? 25; // 使用预制体设置的值，如果没有设置则默认为25
@@ -1498,6 +1504,10 @@ export class Enemy extends Component {
         const mageScript = this.currentTarget.getComponent('Mage') as any;
         const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
+        if (stoneWallScript && stoneWallScript.isSpikeTrapActive && stoneWallScript.isSpikeTrapActive()) {
+            this.currentTarget = null!;
+            return;
+        }
         const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
         const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
         const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
@@ -2166,6 +2176,9 @@ export class Enemy extends Component {
                 if (wall && wall.active && wall.isValid) {
                     const wallScript = wall.getComponent('StoneWall') as any;
                     if (wallScript && wallScript.isAlive && wallScript.isAlive()) {
+                        if (wallScript.isSpikeTrapActive && wallScript.isSpikeTrapActive()) {
+                            continue;
+                        }
                         allTargets.push(wall);
                     }
                 }

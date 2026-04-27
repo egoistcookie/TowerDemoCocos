@@ -3165,6 +3165,10 @@ export class Role extends Component {
         if ((this as any).isFishing) {
             return;
         }
+        // 如果正在设置陷阱（Arrower 特有），不播放待机动画
+        if ((this as any)._isSettingSpikeTrap) {
+            return;
+        }
 
         // 如果有有效攻击目标（目标存活且有效），不播放待机动画
         if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
@@ -3212,6 +3216,10 @@ export class Role extends Component {
      */
     private playIdleAnimation(idleAnimations: SpriteFrame[][]) {
         if (!this.sprite || !this.sprite.isValid || this.isDestroyed) {
+            return;
+        }
+        // 弓箭手设置陷阱期间禁止进入待机动画，避免与陷阱动画抢帧
+        if ((this as any)._isSettingSpikeTrap) {
             return;
         }
 
@@ -3285,7 +3293,7 @@ export class Role extends Component {
         // 使用 update 方法逐帧播放（整体结构与移动动画一致）
         const animationUpdate = (deltaTime: number) => {
             // 如果角色开始移动或攻击，停止待机动画
-            if (this.isMoving || this.isPlayingAttackAnimation || !this.sprite || !this.sprite.isValid || this.isDestroyed) {
+            if (this.isMoving || this.isPlayingAttackAnimation || !this.sprite || !this.sprite.isValid || this.isDestroyed || (this as any)._isSettingSpikeTrap) {
                 this.isPlayingIdleAnimation = false;
                 this.unschedule(animationUpdate);
                 // 恢复原始设置（即便当前实现没有改动尺寸/缩放，这里留作安全兜底）
@@ -3316,7 +3324,7 @@ export class Role extends Component {
                 const waitTime = 2 + Math.random() * 3;
                 this.scheduleOnce(() => {
                     // 等待结束后，如果仍然处于待机状态，播放下一段待机动画
-                    if (!this.isMoving && !this.isPlayingAttackAnimation && !this.isPlayingHitAnimation && !this.isPlayingDeathAnimation) {
+                    if (!this.isMoving && !this.isPlayingAttackAnimation && !this.isPlayingHitAnimation && !this.isPlayingDeathAnimation && !(this as any)._isSettingSpikeTrap) {
                         this.checkAndPlayIdleAnimation();
                     } else {
                         this.restoreIdleAnimationSettings();
