@@ -20,6 +20,9 @@ export class GamePopup extends Component {
 
     // 遮罩层节点，使弹窗始终处于最上层并遮挡其他元素
     private maskLayer: Node | null = null;
+    private _deferredAdjustRunner: (() => void) | null = null;
+    private readonly LABEL_BASE_WIDTH: number = 380;
+    private readonly LABEL_BASE_HEIGHT: number = 60;
     
     start() {
         this.node.active = false; // 初始隐藏
@@ -184,6 +187,7 @@ export class GamePopup extends Component {
 
         // 设置消息
         if (this.messageLabel) {
+            this.resetLabelTransformSize();
             this.messageLabel.string = message;
 
             // 设置 Label 的 overflow 为 RESIZE_HEIGHT，确保能正确计算文本高度
@@ -196,17 +200,15 @@ export class GamePopup extends Component {
             this.content.active = true;
             this.node.active = true;
 
-            // 等待一帧，让文本渲染完成
-            setTimeout(() => {
-                // 再次确保获取最新的文本尺寸
-                this.adjustBackgroundSizeToText();
-            }, 0);
+            // 等待一帧，让文本渲染完成（使用组件调度，避免 setTimeout 竞态）
+            this.scheduleAdjustBackgroundSize();
         } else {
             // 尝试重新获取messageLabel
             const labelNode = this.content.getChildByName('MessageLabel');
             if (labelNode) {
                 this.messageLabel = labelNode.getComponent(Label);
                 if (this.messageLabel) {
+                    this.resetLabelTransformSize();
                     this.messageLabel.string = message;
 
                     // 强制更新文本布局，确保文本大小被正确计算
@@ -215,10 +217,8 @@ export class GamePopup extends Component {
                     this.content.active = true;
                     this.node.active = true;
 
-                    // 等待一帧，让文本渲染完成
-                    setTimeout(() => {
-                    this.adjustBackgroundSizeToText();
-                    }, 0);
+                    // 等待一帧，让文本渲染完成（使用组件调度，避免 setTimeout 竞态）
+                    this.scheduleAdjustBackgroundSize();
                 }
             }
         }
@@ -291,6 +291,7 @@ export class GamePopup extends Component {
         this.node.active = false;
         this.content.active = false;
         this.isShowing = false;
+        this.cancelScheduledAdjustBackgroundSize();
 
         // 关闭后停止自动隐藏计时
         this.autoHideTimer = -1;
@@ -420,6 +421,29 @@ export class GamePopup extends Component {
             }
         }
         
+    }
+
+    private resetLabelTransformSize() {
+        if (!this.messageLabel || !this.messageLabel.node || !this.messageLabel.node.isValid) return;
+        const tf = this.messageLabel.node.getComponent(UITransform);
+        if (!tf) return;
+        tf.setContentSize(this.LABEL_BASE_WIDTH, this.LABEL_BASE_HEIGHT);
+    }
+
+    private cancelScheduledAdjustBackgroundSize() {
+        if (this._deferredAdjustRunner) {
+            this.unschedule(this._deferredAdjustRunner);
+            this._deferredAdjustRunner = null;
+        }
+    }
+
+    private scheduleAdjustBackgroundSize() {
+        this.cancelScheduledAdjustBackgroundSize();
+        this._deferredAdjustRunner = () => {
+            this.adjustBackgroundSizeToText();
+            this._deferredAdjustRunner = null;
+        };
+        this.scheduleOnce(this._deferredAdjustRunner, 0);
     }
     
     /**

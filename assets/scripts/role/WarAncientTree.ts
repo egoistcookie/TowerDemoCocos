@@ -796,25 +796,18 @@ export class WarAncientTree extends Build {
         this.totalProducedCount++;
 
         // 计算角鹰射手的目标位置
-        // 如果有集结点，使用集结点；否则向右侧跑开（角鹰射手默认向右）
-        let targetPos: Vec3;
+        // 仅在有集结点时才下发移动指令；无集结点时保持原地待命
+        let targetPos: Vec3 = spawnPos.clone();
+        const shouldMoveToTarget = !!this.rallyPoint;
         if (this.rallyPoint) {
             // 有集结点，查找最佳位置（考虑附近的友方单位）
             targetPos = this.findOptimalRallyPointPosition(this.rallyPoint, spawnPos);
-        } else {
-            // 没有集结点，向右侧跑开
-            const directionX = 1; // 默认向右
-            targetPos = new Vec3(
-                spawnPos.x + directionX * this.moveAwayDistance,
-                spawnPos.y, // y 坐标保持不变
-                spawnPos.z
-            );
+            // 目标点也进行避让，防止不同单位重叠到同一目标位置
+            targetPos = this.findAvailableSpawnPosition(targetPos);
         }
-        // 目标点也进行避让，防止不同弓箭手小屋产出的角鹰射手重叠到同一目标位置
-        targetPos = this.findAvailableSpawnPosition(targetPos);
 
-        // 让角鹰射手移动到目标位置
-        if (eagleArcherScript) {
+        // 让角鹰射手移动到目标位置（仅有集结点时）
+        if (eagleArcherScript && shouldMoveToTarget) {
             // 使用 schedule 在下一帧开始移动，确保角鹰射手已完全初始化
             this.scheduleOnce(() => {
                 if (eagleArcherNode && eagleArcherNode.isValid && eagleArcherScript) {

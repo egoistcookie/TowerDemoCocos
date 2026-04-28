@@ -1243,7 +1243,14 @@ export class Role extends Component {
         this.lastLogPos = { x: currentPosX, y: currentPosY };
 
         const hasCollisionNow = this.checkCollisionAtPosition(this.tempVec3_3.set(currentPosX, currentPosY, 0));
-        if (hasCollisionNow) {
+        // 角鹰射手在“待命且未被下达移动命令”时，不执行被动推开，
+        // 避免出现“先横向漂移，再到 6 秒后自动上移”的现象。
+        const isIdleEagleArcher =
+            !!this.getComponent('EagleArcher') &&
+            !this.manualMoveTarget &&
+            !this.currentTarget &&
+            !this.isDefending;
+        if (hasCollisionNow && !isIdleEagleArcher) {
             // 即使不移动，如果有碰撞也要推开
             const pushDirection = this.calculatePushAwayDirection(this.tempVec3_2.set(currentPosX, currentPosY, 0));
             if (pushDirection.length() > 0.1) {
@@ -4328,8 +4335,11 @@ export class Role extends Component {
                     const dy = 400 + Math.floor(Math.random() * 101); // [400, 500]
                     const cur = this.node.worldPosition;
                     const target = this.tempVec3_1.set(cur.x, cur.y + dy, 0);
-                    // 自动上移：直接设置移动目标，不标记 wasManuallyControlled
-                    const adjustedPos = this.findAvailableMovePosition(target);
+                    // 自动上移：角鹰射手只允许竖直上移（保持 X 不变），
+                    // 其他单位维持原有可用位置修正逻辑
+                    const adjustedPos = name === '角鹰射手'
+                        ? this.tempVec3_2.set(target.x, target.y, target.z)
+                        : this.findAvailableMovePosition(target);
                     // 使用持久化对象，避免引用临时 Vec3
                     if (!this.manualMoveTarget) {
                         this.manualMoveTarget = new Vec3();
