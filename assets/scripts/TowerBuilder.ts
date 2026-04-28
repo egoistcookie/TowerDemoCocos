@@ -190,6 +190,9 @@ export class TowerBuilder extends Component {
     private isDraggingBuilding: boolean = false; // 是否正在拖拽建筑物
     private draggedBuilding: Node = null!; // 当前拖拽的建筑物节点
     private draggedBuildingOriginalGrid: { x: number; y: number } | null = null; // 拖拽建筑物原始网格位置
+    // 第一关新手拖拽流程日志（仅在网格变化时打印，避免刷屏）
+    private level1TutorialDragLastGridKey: string = '';
+    private level1TutorialTargetReachedLogged: boolean = false;
     
     // 长按检测相关
     private longPressBuilding: Node | null = null; // 正在长按的建筑物
@@ -425,6 +428,19 @@ export class TowerBuilder extends Component {
             }
         }
         return 1;
+    }
+
+    private getCurrentLevelForTutorial(): number {
+        const uiManagerNode = find('UIManager') || find('UI/UIManager') || find('Canvas/UI/UIManager');
+        const uiManager = uiManagerNode?.getComponent('UIManager') as any;
+        if (uiManager && typeof uiManager.getCurrentLevel === 'function') {
+            const level = uiManager.getCurrentLevel();
+            if (typeof level === 'number' && !isNaN(level)) {
+                return level;
+            }
+        }
+        const fallbackLevel = (this.gameManager as any)?.getCurrentLevelSafe?.();
+        return typeof fallbackLevel === 'number' && !isNaN(fallbackLevel) ? fallbackLevel : 0;
     }
 
     /**
@@ -928,7 +944,28 @@ export class TowerBuilder extends Component {
                 if (gridCenter) {
                     // 建筑物对齐到网格中心
                     this.draggedBuilding.setWorldPosition(gridCenter);
-                    // 高亮显示目标网格（排除当前拖拽的建筑物）
+                    // 第一关新手引导：记录“拖入目标格(1,2)”流程，并在命中目标格时清除高亮
+                    try {
+                        const level = this.getCurrentLevelForTutorial();
+                        const tutorialActive = !!(this.gameManager as any)?.hasShownLevel1BuildHutTutorialAt48s;
+                        if (level === 1 && tutorialActive && typeof (this.gridPanel as any).worldToGrid === 'function') {
+                            const g = (this.gridPanel as any).worldToGrid(gridCenter);
+                            if (g) {
+                                const key = `${g.x},${g.y}`;
+                                if (key !== this.level1TutorialDragLastGridKey) {
+                                    this.level1TutorialDragLastGridKey = key;
+                                }
+                            }
+                            if (g && g.x === 1 && g.y === 2) {
+                                if (!this.level1TutorialTargetReachedLogged) {
+                                    this.level1TutorialTargetReachedLogged = true;
+                                }
+                                this.gridPanel.clearHighlight();
+                                return;
+                            }
+                        }
+                    } catch {}
+                    // 默认：高亮显示目标网格（排除当前拖拽的建筑物）
                     this.gridPanel.highlightGrid(gridCenter, this.draggedBuilding);
                 } else {
                     // 无法获取网格中心，保持当前位置但清除高亮
@@ -1593,6 +1630,9 @@ export class TowerBuilder extends Component {
         // 立即清除网格高亮（绿色可放置框体）
         if (this.gridPanel) {
             this.gridPanel.clearHighlight();
+        }
+        if (this.gameManager && typeof (this.gameManager as any).clearLevel1BuildHutTutorialGridHighlight === 'function') {
+            (this.gameManager as any).clearLevel1BuildHutTutorialGridHighlight();
         }
         
         // 清除建筑物的选中状态（只清除UnitSelectionManager，不清除SelectionManager的多选）
@@ -3391,6 +3431,8 @@ export class TowerBuilder extends Component {
         this.isDraggingBuilding = true;
         this.draggedBuilding = building;
         this.draggedBuildingOriginalGrid = originalGrid;
+        this.level1TutorialDragLastGridKey = '';
+        this.level1TutorialTargetReachedLogged = false;
 
         // 临时释放网格占用（拖拽时）
         this.gridPanel.releaseGrid(originalGrid.x, originalGrid.y);
@@ -3491,7 +3533,6 @@ export class TowerBuilder extends Component {
             }
             return;
         }
-
         // 获取目标网格（使用对齐后的位置）
         const targetGrid = this.gridPanel.worldToGrid(gridCenter);
         if (!targetGrid) {

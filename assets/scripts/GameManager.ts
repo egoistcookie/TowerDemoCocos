@@ -102,8 +102,8 @@ export class GameManager extends Component {
     private buildButtonBattleHintOriginalColor: Color | null = null;
     private buildButtonBattleHintNode: Node | null = null;
     private lastPendingChurchHighlightDebugLogMs: number = 0;
-    /** 第一关：45s 仍只有初始弓箭手小屋时，引导建造（一局一次） */
-    private hasShownLevel1BuildHutTutorialAt45s: boolean = false;
+    /** 第一关：48s 仍只有初始弓箭手小屋时，引导建造（一局一次） */
+    private hasShownLevel1BuildHutTutorialAt48s: boolean = false;
     private level1BuildHutTutorialAwaitingBuildClick: boolean = false;
     private level1BuildHutTutorialMaskNode: Node | null = null;
     private level1BuildHutTutorialBtnOriginalParent: Node | null = null;
@@ -5229,7 +5229,7 @@ export class GameManager extends Component {
         this.hasShownArrowerSuggestBuildWhenWood60 = false;
         this.pendingHighlightChurchCandidateAfterBuild = false;
         this.pendingHighlightSwordsmanHallCandidateAfterBuild = false;
-        this.hasShownLevel1BuildHutTutorialAt45s = false;
+        this.hasShownLevel1BuildHutTutorialAt48s = false;
         this.level1BuildHutTutorialAwaitingBuildClick = false;
         this.removeLevel1BuildHutTutorialMask();
         this.restoreLevel1BuildHutTutorialBuildButton();
@@ -7626,8 +7626,8 @@ export class GameManager extends Component {
         // A 提示触发后，可能在对话弹窗期间就已经打开建造面板；因此这里不依赖 intro popup 是否激活
         this.tryHighlightChurchCandidateAfterBuild();
         this.tryHighlightSwordsmanHallCandidateAfterBuild();
-        // 第一关 45s 仍只有初始弓箭手小屋：引导建造（不与其他介绍框叠加）
-        this.tryTriggerLevel1BuildHutTutorialAt45s();
+        // 第一关 48s 仍只有初始弓箭手小屋：引导建造（不与其他介绍框叠加）
+        this.tryTriggerLevel1BuildHutTutorialAt48s();
 
         if (this.unitIntroPopup && this.unitIntroPopup.container && this.unitIntroPopup.container.active) {
             // 已有介绍框在显示时不叠加，下一帧再尝试
@@ -7645,8 +7645,8 @@ export class GameManager extends Component {
             //     `[BattleDialog] tick gold=${this.gold} wood=${this.wood} hasPriest=${hasPriest} shown={A:${this.hasShownArrowerNeedPriestDialog},B:${this.hasShownPriestProtectBuildingDialog},C:${this.hasShownGoldReach100ArrowerDialog},D:${this.hasShownPriestSuggestSwordsmanAfterKillDialog},E:${this.hasShownArrowerSuggestBuildWhenWood60}}`
             // );
         }
-        // e. 木材达到 90：弓箭手提示多建造防御塔（仅在 Canvas/Towers 一层扫描）
-        if (!this.hasShownArrowerSuggestBuildWhenWood60 && this.wood >= 90) {
+        // e. 木材达到 100：弓箭手提示多建造防御塔（仅在 Canvas/Towers 一层扫描）
+        if (!this.hasShownArrowerSuggestBuildWhenWood60 && this.wood >= 100) {
             const arrowerForWood = this.getFirstActiveUnitScriptInContainers(['Canvas/Towers'], 'Arrower');
             if (arrowerForWood) {
                 this.showQuickUnitIntro(
@@ -7657,7 +7657,7 @@ export class GameManager extends Component {
                 );
                 this.hasShownArrowerSuggestBuildWhenWood60 = true;
                //console.log('[BattleDialog][E] Arrower container=Canvas/Towers');
-               //console.log('[BattleDialog][E] triggered: wood >= 60, arrower found');
+               //console.log('[BattleDialog][E] triggered: wood >= 100, arrower found');
                 return;
             }
         }
@@ -7880,17 +7880,17 @@ export class GameManager extends Component {
     }
 
     /**
-     * 第一关：游戏时间 ≥45s 且场上仍只有 1 座初始弓箭手小屋（WarAncientTree）时，
+     * 第一关：游戏时间 ≥48s 且场上仍只有 1 座初始弓箭手小屋（WarAncientTree）时，
      * 弹出弓箭手提示；关闭后全屏置灰并仅高亮建造按钮；点击建造后由 TowerBuilder 回调继续引导。
      */
-    private tryTriggerLevel1BuildHutTutorialAt45s() {
-        if (this.hasShownLevel1BuildHutTutorialAt45s) {
+    private tryTriggerLevel1BuildHutTutorialAt48s() {
+        if (this.hasShownLevel1BuildHutTutorialAt48s) {
             return;
         }
         if (this.getCurrentLevelSafe() !== 1) {
             return;
         }
-        if (this.gameTime < 45) {
+        if (this.gameTime < 48) {
             return;
         }
         if (this.countActiveWarAncientTreesOnField() !== 1) {
@@ -7903,7 +7903,7 @@ export class GameManager extends Component {
         if (!arrower) {
             return;
         }
-        this.hasShownLevel1BuildHutTutorialAt45s = true;
+        this.hasShownLevel1BuildHutTutorialAt48s = true;
         this.showQuickUnitIntro(
             arrower,
             '弓箭手',
@@ -8081,6 +8081,23 @@ export class GameManager extends Component {
         if (wp) {
             grid.highlightGrid(wp);
         }
+    }
+
+    /**
+     * 第一关建造引导：强制清除网格高亮（含异步兜底，避免延迟绘制残留）
+     */
+    public clearLevel1BuildHutTutorialGridHighlight() {
+        const clearOnce = () => {
+            const gridNode = find('Canvas/BuildingGridPanel');
+            const grid = gridNode ? (gridNode.getComponent('BuildingGridPanel') as any) : null;
+            if (grid && typeof grid.clearHighlight === 'function') {
+                grid.clearHighlight();
+            }
+        };
+
+        clearOnce();
+        this.scheduleOnce(clearOnce, 0);
+        this.scheduleOnce(clearOnce, 0.05);
     }
 
     /**

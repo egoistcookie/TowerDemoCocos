@@ -140,7 +140,9 @@ export class EnemySpawner extends Component {
     private readonly ORC_RAGE_END_BREAKTHROUGH_Y: number = 1050;
     private readonly ORC_RAGE_END_DELAY_SECONDS: number = 5;
     private readonly ORC_RAGE_TRIGGER_COOLDOWN_SECONDS: number = 30;
-    private readonly ORC_RAGE_PERSISTENT_GROWTH_FACTOR: number = 1.2;
+    // 传送门被摧毁/堵门触发狂暴时：仅第10关提升到 1.2，其它关统一 1.1（降低前期难度）
+    private readonly ORC_RAGE_PERSISTENT_GROWTH_FACTOR_LEVEL10: number = 1.2;
+    private readonly ORC_RAGE_PERSISTENT_GROWTH_FACTOR_DEFAULT: number = 1.1;
     private orcBlockCheckTimer: number = 0;
     private orcMonitorElapsed: number = 0;
     private lastOrcBreakthroughTime: number = 0;
@@ -2002,7 +2004,11 @@ export class EnemySpawner extends Component {
         const activateRage = () => {
             this.waitingOrcRageIntroClose = false;
             this.lastOrcBlockTriggerTime = this.orcMonitorElapsed;
-            this.persistentEnemyGrowthMultiplier *= this.ORC_RAGE_PERSISTENT_GROWTH_FACTOR;
+            const growthFactor =
+                this.currentLevel === 10
+                    ? this.ORC_RAGE_PERSISTENT_GROWTH_FACTOR_LEVEL10
+                    : this.ORC_RAGE_PERSISTENT_GROWTH_FACTOR_DEFAULT;
+            this.persistentEnemyGrowthMultiplier *= growthFactor;
             this.isOrcRageSpawnBuffActive = true;
             this.orcRageSpawnBuffEndAt = -1;
             this.currentOrcRageTier = Math.max(1, rageTier);

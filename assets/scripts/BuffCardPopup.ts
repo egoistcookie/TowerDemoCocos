@@ -152,6 +152,29 @@ export class BuffCardPopup extends Component {
     }
     
     private onCloseCallback: (() => void) | null = null;
+    // 防止连点导致“关闭回调/继续下一波”被触发多次
+    private isClosing: boolean = false;
+    private hasInvokedCloseCallback: boolean = false;
+
+    private setAllButtonsInteractable(interactable: boolean) {
+        try {
+            if (this.card1Button) this.card1Button.interactable = interactable;
+            if (this.card2Button) this.card2Button.interactable = interactable;
+            if (this.card3Button) this.card3Button.interactable = interactable;
+            if (this.rerollButton) this.rerollButton.interactable = interactable;
+            if (this.getAllButton) this.getAllButton.interactable = interactable;
+        } catch {}
+    }
+
+    private invokeCloseOnce() {
+        if (this.hasInvokedCloseCallback) return;
+        this.hasInvokedCloseCallback = true;
+        const cb = this.onCloseCallback;
+        this.onCloseCallback = null;
+        try {
+            cb?.();
+        } catch {}
+    }
     
     /**
      * 显示增益卡片弹窗
@@ -199,6 +222,10 @@ export class BuffCardPopup extends Component {
         
         //console.info('[BuffCardPopup] 卡片数据有效，数量=', this.cardData.length);
         this.onCloseCallback = onClose || null;
+        this.isClosing = false;
+        this.hasInvokedCloseCallback = false;
+        // 进入弹窗时允许点击
+        this.setAllButtonsInteractable(true);
         
         // 重置所有卡片状态（确保第二次显示时状态正确）
         this.resetCardsState();
@@ -669,6 +696,10 @@ export class BuffCardPopup extends Component {
      */
     private hideWithAllCardsFlipped() {
         if (!this.container) return;
+        if (this.isClosing) return;
+        this.isClosing = true;
+        // 关闭流程开始后立即禁用按钮，避免重复触发
+        this.setAllButtonsInteractable(false);
         
         // 获取所有卡片节点
         const cards = [this.card1, this.card2, this.card3];
@@ -696,10 +727,7 @@ export class BuffCardPopup extends Component {
                 }
                 
                 // 调用关闭回调
-                if (this.onCloseCallback) {
-                    this.onCloseCallback();
-                    this.onCloseCallback = null;
-                }
+                this.invokeCloseOnce();
             }
         };
         
@@ -1625,6 +1653,10 @@ export class BuffCardPopup extends Component {
      */
     private hideWithEffects(selectedIndex: number = -1) {
         if (!this.container) return;
+        if (this.isClosing) return;
+        this.isClosing = true;
+        // 关闭流程开始后立即禁用按钮，避免重复触发
+        this.setAllButtonsInteractable(false);
         
         // 获取所有卡片节点
         const cards = [this.card1, this.card2, this.card3];
@@ -1655,10 +1687,7 @@ export class BuffCardPopup extends Component {
                 }
                 
                 // 调用关闭回调
-                if (this.onCloseCallback) {
-                    this.onCloseCallback();
-                    this.onCloseCallback = null;
-                }
+                this.invokeCloseOnce();
             }
         };
         
@@ -1723,6 +1752,10 @@ export class BuffCardPopup extends Component {
      */
     hide() {
         if (!this.container) return;
+        if (this.isClosing) return;
+        this.isClosing = true;
+        // 关闭流程开始后立即禁用按钮，避免重复触发
+        this.setAllButtonsInteractable(false);
         
         // 播放淡出动画
         const uiOpacity = this.container.getComponent(UIOpacity);
@@ -1742,10 +1775,7 @@ export class BuffCardPopup extends Component {
                     }
                     
                     // 调用关闭回调
-                    if (this.onCloseCallback) {
-                        this.onCloseCallback();
-                        this.onCloseCallback = null;
-                    }
+                    this.invokeCloseOnce();
                 })
                 .start();
         } else {
@@ -1759,10 +1789,7 @@ export class BuffCardPopup extends Component {
             }
             
             // 调用关闭回调
-            if (this.onCloseCallback) {
-                this.onCloseCallback();
-                this.onCloseCallback = null;
-            }
+            this.invokeCloseOnce();
         }
     }
 }
