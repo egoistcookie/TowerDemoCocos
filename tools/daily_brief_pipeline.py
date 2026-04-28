@@ -11,9 +11,11 @@ import argparse
 import base64
 import collections
 import json
+import os
 import re
 import urllib.parse
 import urllib.request
+import urllib.error
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -401,14 +403,47 @@ def query_daily_metrics(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def fetch_github_file(cfg: Dict[str, Any]) -> str:
-    gh = cfg["github"]
+    def _resolve_local_prompt_path(local_path: str) -> Optional[Path]:
+        p = Path(local_path)
+        candidates: List[Path] = []
+        if p.is_absolute():
+            candidates.append(p)
+        else:
+            cwd = Path.cwd()
+            script_dir = Path(__file__).resolve().parent
+            project_root = script_dir.parent
+            candidates.extend(
+                [
+                    cwd / p,
+                    script_dir / p,
+                    project_root / p,
+                    project_root / "工程提示词.md",
+                ]
+            )
+
+        for c in candidates:
+            if c.exists():
+                return c
+        return None
+
+    gh = cfg.get("github")
+    if not isinstance(gh, dict):
+        local_path = cfg.get("report", {}).get("local_prompt_path", "工程提示词.md")
+        resolved = _resolve_local_prompt_path(local_path)
+        if not resolved:
+            raise ValueError("github 未配置且本地工程提示词文件不存在")
+        return resolved.read_text(encoding="utf-8")
     owner = gh["owner"]
     repo = gh["repo"]
     ref = gh.get("ref", "master")
     path = gh.get("path", "工程提示词.md")
     token = gh.get("token", "").strip()
     if not token:
-        raise ValueError("github.token 为空，无法拉取仓库文件")
+        local_path = gh.get("local_fallback_path") or cfg.get("report", {}).get("local_prompt_path", "工程提示词.md")
+        resolved = _resolve_local_prompt_path(local_path)
+        if resolved:
+            return resolved.read_text(encoding="utf-8")
+        raise ValueError("github.token 为空，且本地回退文件不存在，无法拉取工程提示词")
 
     url = (
         f"https://api.github.com/repos/{owner}/{repo}/contents/"
@@ -625,6 +660,113 @@ def build_brief_text(metrics: Dict[str, Any], versions: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _json_preview(data: Any, max_len: int = 8000) -> str:
+    text = json.dumps(data, ensure_ascii=False)
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 3] + "..."
+
+
+def analyze_with_claude(cfg: Dict[str, Any], metrics: Dict[str, Any], versions: Dict[str, Any], brief: str) -> str:
+    ai_cfg = cfg.get("anthropic", {})
+    token = (ai_cfg.get("token") or os.getenv("ANTHROPIC_AUTH_TOKEN") or "").strip()
+    if not token:
+        return ""
+
+    base_url = (ai_cfg.get("base_url") or os.getenv("ANTHROPIC_BASE_URL") or "https://api.anthropic.com").strip()
+    model = (ai_cfg.get("model") or os.getenv("ANTHROPIC_MODEL") or "qwen3.5-plus").strip()
+    max_tokens = int(ai_cfg.get("max_tokens", 300))
+    timeout = int(ai_cfg.get("timeout", 120))
+    endpoint_override = (ai_cfg.get("endpoint") or "").strip()
+
+    api_path = "/v1/messages"
+    endpoint = endpoint_override or f"{base_url.rstrip('/')}{api_path}"
+    if (not endpoint_override) and base_url.rstrip("/").endswith("/v1/messages"):
+        endpoint = base_url.rstrip("/")
+
+    system_prompt = (
+        "你是游戏数据分析师。请基于给定近三天数据和版本变更，输出精炼中文分析。"
+        "要求：1) 先给总体判断；2) 给3-5条关键发现（用事实和数值）；3) 给3条可执行建议。"
+        "控制在220字以内，避免空话。"
+    )
+    user_payload = {
+        "time_window": {"start": metrics.get("start"), "end": metrics.get("end"), "days": metrics.get("days")},
+        "daily": metrics.get("daily", []),
+        "daily_player_compare": metrics.get("daily_player_compare", []),
+        "ad_mode_detail": metrics.get("ad_mode_detail", []),
+        "ad_mode_daily_unique_players": metrics.get("ad_mode_daily_unique_players", []),
+        "recent_versions": [
+            {"date": v.get("date"), "title": v.get("title"), "items": (v.get("items") or [])[:3]}
+            for v in (versions.get("versions", [])[:3])
+        ],
+    }
+
+    try:
+        def _call_once(content_text: str, call_timeout: int) -> Dict[str, Any]:
+            req_payload = {
+                "model": model,
+                "max_tokens": max_tokens,
+                "system": system_prompt,
+                "messages": [{"role": "user", "content": content_text}],
+            }
+            data = json.dumps(req_payload, ensure_ascii=False).encode("utf-8")
+            req = urllib.request.Request(endpoint, data=data, method="POST")
+            req.add_header("Content-Type", "application/json")
+            req.add_header("Authorization", f"Bearer {token}")
+            req.add_header("x-api-key", token)
+            req.add_header("anthropic-version", "2023-06-01")
+            with urllib.request.urlopen(req, timeout=call_timeout) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+
+        prompt_text = "请分析以下日报数据并给出小结与建议：\n" + _json_preview(user_payload, max_len=5000)
+        try:
+            raw = _call_once(prompt_text, timeout)
+        except Exception:
+            retry_payload = {
+                "time_window": user_payload["time_window"],
+                "daily": user_payload["daily"],
+                "daily_player_compare": user_payload["daily_player_compare"],
+            }
+            retry_text = (
+                "首次请求超时，请基于精简数据快速给出小结与建议（不超过180字）：\n"
+                + _json_preview(retry_payload, max_len=2200)
+            )
+            raw = _call_once(retry_text, max(45, timeout // 2))
+
+        content = raw.get("content", [])
+        parts: List[str] = []
+        if isinstance(content, list):
+            for it in content:
+                if isinstance(it, dict) and it.get("type") == "text":
+                    txt = str(it.get("text", "")).strip()
+                    if txt:
+                        parts.append(txt)
+        return "\n".join(parts).strip()
+    except urllib.error.HTTPError as e:
+        try:
+            err_body = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            err_body = ""
+        if len(err_body) > 500:
+            err_body = err_body[:500] + "..."
+        return f"Claude分析失败：HTTP {e.code} {e.reason} | endpoint={endpoint} | body={err_body}"
+    except Exception as e:
+        return f"Claude分析失败：{e} | endpoint={endpoint}"
+
+
+def append_claude_summary(brief: str, claude_summary: str) -> str:
+    if not claude_summary:
+        return brief
+    lines = [brief, "", "七、Claude小结与建议", claude_summary.strip()]
+    return "\n".join(lines)
+
+
+def build_claude_summary_text(claude_summary: str) -> str:
+    if not claude_summary:
+        return "七、Claude小结与建议\n（暂无）"
+    return f"七、Claude小结与建议\n{claude_summary.strip()}"
+
+
 def send_wecom(webhook: str, content: str) -> Dict[str, Any]:
     payload = {"msgtype": "text", "text": {"content": content}}
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -640,14 +782,24 @@ def main() -> None:
     days = int(cfg.get("report", {}).get("days", 3))
 
     metrics = query_daily_metrics(cfg)
-    prompt_md = fetch_github_file(cfg)
+    try:
+        prompt_md = fetch_github_file(cfg)
+    except Exception:
+        # 版本记录属于补充信息，读取失败时不影响日报主流程
+        prompt_md = ""
     versions = parse_recent_versions(prompt_md, days=days)
-    brief = build_brief_text(metrics, versions)
+    brief_main = build_brief_text(metrics, versions)
+    claude_summary = analyze_with_claude(cfg, metrics, versions, brief_main)
+    brief_claude = build_claude_summary_text(claude_summary)
+    brief = append_claude_summary(brief_main, claude_summary)
 
     result = {
         "metrics": metrics,
         "versions": versions,
+        "brief_main": brief_main,
+        "brief_claude": brief_claude,
         "brief": brief,
+        "claude_summary": claude_summary,
     }
 
     if args.dry_run:
@@ -655,8 +807,10 @@ def main() -> None:
         return
 
     webhook = cfg["wecom"]["webhook"]
-    wecom_resp = send_wecom(webhook, brief)
-    result["wecom_response"] = wecom_resp
+    wecom_resp_main = send_wecom(webhook, brief_main)
+    wecom_resp_claude = send_wecom(webhook, brief_claude)
+    result["wecom_response_main"] = wecom_resp_main
+    result["wecom_response_claude"] = wecom_resp_claude
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
