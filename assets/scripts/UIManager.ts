@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Button, Label, find, director, UITransform, Color, Graphics, tween, Vec3, UIOpacity, Sprite, SpriteFrame, Prefab, instantiate, resources, assetManager, sys, view, macro, LabelOutline } from 'cc';
+import { _decorator, Component, Node, Button, Label, find, director, UITransform, Color, Graphics, tween, Vec3, UIOpacity, Sprite, SpriteFrame, Prefab, instantiate, resources, assetManager, sys, view, macro, LabelOutline, Widget } from 'cc';
 import { GameManager as GameManagerClass } from './GameManager';
 import { CountdownPopup } from './CountdownPopup';
 // 导入TalentSystem，用于管理天赋系统和单位卡片
@@ -1318,11 +1318,8 @@ export class UIManager extends Component {
             this.startGameButtonNode.active = isGame;
         }
 
-        // 签到按钮只在游戏首页显示
-        if (this.checkInButton && this.checkInButton.node && this.checkInButton.node.isValid) {
-            this.checkInButton.node.active = isGame;
-            console.log('[UIManager] setActivePage() 签到按钮显示状态:', isGame);
-        }
+        // 签到按钮显隐统一控制（首页显示，战斗隐藏）
+        this.refreshCheckInButtonVisibility();
 
         // 首页（game面板）显示时，刷新首页头像/等级/体力 HUD（与上一关/下一关按钮同属 gameMainPanel）
         if (isGame) {
@@ -1405,18 +1402,51 @@ export class UIManager extends Component {
         
         // 创建CountdownPopup节点
         const popupNode = new Node('CountdownPopup');
-        popupNode.setParent(this.node);
+        // 放到 Canvas 下，便于按安全区对齐
+        popupNode.setParent(canvas || this.node);
         
-        // 计算右上角位置：与最右保持50像素，与最上保持100像素（往上移100像素）
+        // 计算右上角位置：与最右保持50像素；与最上保持固定边距 + 安全区偏移
         const popupSize = 37.5; // 弹窗大小，缩小为原来的二分之一（37.5x37.5）
         const rightMargin = 50;
-        const topMargin = 100; // 原来的200像素，往上移100像素
-        
-        // 计算位置：屏幕原点在中心，所以右上角坐标是 (canvasWidth/2 - margin - popupSize/2, canvasHeight/2 - margin - popupSize/2)
-        const posX = (canvasWidth / 2) - rightMargin - (popupSize / 2);
-        const posY = (canvasHeight / 2) - topMargin - (popupSize / 2);
-        
-        popupNode.setPosition(posX, posY, 0); // 右上角位置
+        const topMarginBase = 24;
+
+        // 计算安全区顶部偏移（像素 -> UI坐标）
+        let safeTopPx = 0;
+        let frameHeightPx = 0;
+        try {
+            // 微信小游戏环境优先
+            // @ts-ignore
+            const wxAny = (globalThis as any).wx;
+            if (wxAny && typeof wxAny.getSystemInfoSync === 'function') {
+                const info = wxAny.getSystemInfoSync();
+                const safeArea = info?.safeArea;
+                const screenHeight = Number(info?.screenHeight || info?.windowHeight || 0);
+                if (safeArea && screenHeight > 0) {
+                    safeTopPx = Math.max(0, screenHeight - (safeArea.top + safeArea.height));
+                    frameHeightPx = screenHeight;
+                }
+            }
+        } catch {}
+        if (safeTopPx <= 0) {
+            try {
+                const safeRect = (sys as any).getSafeAreaRect?.();
+                const frame = view.getFrameSize();
+                if (safeRect && frame && frame.height > 0) {
+                    safeTopPx = Math.max(0, frame.height - (safeRect.y + safeRect.height));
+                    frameHeightPx = frame.height;
+                }
+            } catch {}
+        }
+        const safeTopUi = (frameHeightPx > 0 && canvasHeight > 0) ? (safeTopPx / frameHeightPx) * canvasHeight : 0;
+
+        // 用 Widget 贴齐右上角，避免不同机型刘海导致偏移不一致
+        const widget = popupNode.addComponent(Widget);
+        widget.isAlignRight = true;
+        widget.isAlignTop = true;
+        widget.right = rightMargin;
+        widget.top = Math.max(0, topMarginBase + safeTopUi);
+        widget.alignMode = Widget.AlignMode.ALWAYS;
+        widget.updateAlignment();
         
         // 添加CountdownPopup组件
         this.countdownPopup = popupNode.addComponent(CountdownPopup);
@@ -2184,6 +2214,7 @@ export class UIManager extends Component {
                 settingsPanel.active = false;
             }
         }
+        this.refreshCheckInButtonVisibility();
 
         // 5. 退出游戏后切回主菜单背景音乐（backMusic.mp3），前提是玩家开启了BGM
         const soundManager = SoundManager.getInstance();
@@ -2467,7 +2498,10 @@ export class UIManager extends Component {
             }
             
             // 隐藏签到宝箱
-            const checkInButtonNode = find('Canvas/CheckInButton') || find('Canvas/BottomSelection/CheckInButton');
+            const checkInButtonNode =
+                find('Canvas/TopHUD/CheckInButton') ||
+                find('Canvas/CheckInButton') ||
+                find('Canvas/BottomSelection/CheckInButton');
             if (checkInButtonNode) {
                 checkInButtonNode.active = false;
                 console.log('[UIManager.showTalentHintDialogStatic] 已隐藏签到宝箱');
@@ -3381,6 +3415,7 @@ export class UIManager extends Component {
         if (bottomSelection) {
             bottomSelection.active = false;
         }
+        this.refreshCheckInButtonVisibility();
     }
 
     /**
@@ -3421,35 +3456,32 @@ export class UIManager extends Component {
      */
     private bindCheckInButton() {
         console.log('[UIManager] bindCheckInButton() 开始绑定签到按钮');
-        
-        if (!this.checkInButton) {
-            console.error('[UIManager] bindCheckInButton() checkInButton 属性为空，请在编辑器中配置');
+
+        // 兼容 TopHUD：若未在编辑器绑定，优先从 TopHUD 自动查找
+        if (!this.checkInButton || !this.checkInButton.node || !this.checkInButton.node.isValid) {
+            const checkInNode =
+                find('Canvas/TopHUD/CheckInButton') ||
+                find('Canvas/CheckInButton') ||
+                find('Canvas/BottomSelection/CheckInButton');
+            if (checkInNode) {
+                this.checkInButton = checkInNode.getComponent(Button) || checkInNode.addComponent(Button);
+            }
+        }
+
+        if (!this.checkInButton || !this.checkInButton.node || !this.checkInButton.node.isValid) {
+            console.error('[UIManager] bindCheckInButton() 无法找到签到按钮节点（请检查 Canvas/TopHUD/CheckInButton）');
             return;
         }
-        
-        if (!this.checkInButton.node) {
-            console.error('[UIManager] bindCheckInButton() checkInButton.node 为空');
-            return;
-        }
+
+        // 避免 Button 内置颜色过渡导致“看起来置灰”
+        this.checkInButton.transition = Button.Transition.NONE;
 
         console.log('[UIManager] bindCheckInButton() 签到按钮节点:', this.checkInButton.node.name);
         console.log('[UIManager] bindCheckInButton() 签到按钮位置:', this.checkInButton.node.position);
         console.log('[UIManager] bindCheckInButton() 签到按钮激活状态:', this.checkInButton.node.active);
         console.log('[UIManager] bindCheckInButton() 签到按钮父节点:', this.checkInButton.node.parent ? this.checkInButton.node.parent.name : 'null');
 
-        // 确保签到按钮在最上层（不被遮挡）
-        const canvas = find('Canvas');
-        if (canvas) {
-            // 将签到按钮移到Canvas的最上层
-            this.checkInButton.node.setParent(canvas);
-            this.checkInButton.node.setSiblingIndex(canvas.children.length - 1);
-            
-            // Y坐标往下移动100像素
-            const currentPos = this.checkInButton.node.position;
-            this.checkInButton.node.setPosition(currentPos.x - 20 , currentPos.y - 150, currentPos.z);
-            console.log('[UIManager] bindCheckInButton() 签到按钮已移到Canvas最上层，层级索引:', canvas.children.length - 1);
-            console.log('[UIManager] bindCheckInButton() 签到按钮新位置:', this.checkInButton.node.position);
-        }
+        // 注意：签到按钮放在 TopHUD 时，位置/层级由编辑器与 TopHUD 统一管理，这里不再改父节点和坐标
 
         // 检查 Sprite 组件
         const sprite = this.checkInButton.node.getComponent(Sprite);
@@ -3473,7 +3505,8 @@ export class UIManager extends Component {
             console.log('[UIManager] bindCheckInButton() UITransform 尺寸:', uiTransform.width, 'x', uiTransform.height);
         }
 
-        // 绑定点击事件
+        // 绑定点击事件（先清理，避免重复绑定）
+        this.checkInButton.node.off(Button.EventType.CLICK);
         this.checkInButton.node.on(Button.EventType.CLICK, () => {
             console.log('[UIManager] 签到按钮被点击！');
             this.onCheckInButtonClick();
@@ -3481,6 +3514,10 @@ export class UIManager extends Component {
 
         // 更新签到按钮状态
         this.updateCheckInButtonState();
+        this.normalizeCheckInButtonVisual();
+
+        // bind 时可能晚于 setActivePage 执行，这里补一次显隐同步，确保首页首次进入能显示
+        this.refreshCheckInButtonVisibility();
 
         console.log('[UIManager] bindCheckInButton() 签到按钮事件已绑定');
     }
@@ -3547,6 +3584,7 @@ export class UIManager extends Component {
 
         // 按钮始终可交互，即使已签到也能点击（点击时会提示）
         this.checkInButton.interactable = true;
+        this.checkInButton.transition = Button.Transition.NONE;
         console.log('[UIManager] updateCheckInButtonState() 按钮可交互状态设置为: true（始终可点击）');
 
         // 不改变按钮颜色和透明度，即使已签到也保持正常显示
@@ -3560,11 +3598,65 @@ export class UIManager extends Component {
 
         // 确保透明度始终为255（完全不透明）
         let opacity = this.checkInButton.node.getComponent(UIOpacity);
-        if (opacity) {
-            opacity.opacity = 255;
-            console.log('[UIManager] updateCheckInButtonState() UIOpacity 保持为: 255');
+        if (!opacity) {
+            opacity = this.checkInButton.node.addComponent(UIOpacity);
         }
+        opacity.opacity = 255;
+        console.log('[UIManager] updateCheckInButtonState() UIOpacity 保持为: 255');
         
         console.log('[UIManager] updateCheckInButtonState() 签到按钮状态更新完成');
+        this.normalizeCheckInButtonVisual();
+    }
+
+    /**
+     * 签到按钮显隐规则：
+     * - 仅首页 game 页签 + BottomSelection 可见时显示
+     * - 进入战斗（BottomSelection 隐藏）时隐藏
+     */
+    private refreshCheckInButtonVisibility() {
+        if (!this.checkInButton || !this.checkInButton.node || !this.checkInButton.node.isValid) {
+            return;
+        }
+        const bottomSelection = this.bottomSelectionNodeRef || find('Canvas/BottomSelection');
+        const isHomeVisible = !!(bottomSelection && bottomSelection.activeInHierarchy);
+        const shouldShow = this.activePage === 'game' && isHomeVisible;
+        this.checkInButton.node.active = shouldShow;
+        if (shouldShow) {
+            this.updateCheckInButtonState();
+        }
+    }
+
+    /**
+     * 彻底移除签到按钮的“置灰外观”：
+     * - 根节点和所有子节点 Sprite 统一白色
+     * - 根节点和所有子节点 UIOpacity 统一 255
+     * - Button 统一可交互 + 禁用过渡
+     */
+    private normalizeCheckInButtonVisual() {
+        if (!this.checkInButton || !this.checkInButton.node || !this.checkInButton.node.isValid) {
+            return;
+        }
+        this.checkInButton.interactable = true;
+        this.checkInButton.transition = Button.Transition.NONE;
+
+        const stack: Node[] = [this.checkInButton.node];
+        while (stack.length > 0) {
+            const node = stack.pop()!;
+            const sprite = node.getComponent(Sprite);
+            if (sprite) {
+                sprite.color = new Color(255, 255, 255, 255);
+            }
+            let opacity = node.getComponent(UIOpacity);
+            if (!opacity) {
+                opacity = node.addComponent(UIOpacity);
+            }
+            opacity.opacity = 255;
+
+            for (const child of node.children) {
+                if (child && child.isValid) {
+                    stack.push(child);
+                }
+            }
+        }
     }
 }

@@ -130,9 +130,12 @@ export class Portal extends Component {
             if (!this.node || !this.node.isValid) return;
             // 先找 HUD/TopUI 根节点；若项目里资源栏不在这些固定路径，则回退到 Gold/Wood Label 所在根节点
             const uiNode =
+                find('Canvas/TopHUD') ||
                 find('Canvas/UI') ||
                 find('Canvas/HUD') ||
                 find('Canvas/TopUI') ||
+                (find('Canvas/TopHUD/GoldLabel')?.parent as any) ||
+                (find('Canvas/TopHUD/WoodLabel')?.parent as any) ||
                 (find('Canvas/UI/GoldLabel')?.parent as any) ||
                 (find('Canvas/GoldLabel')?.parent as any) ||
                 (find('Canvas/UI/WoodLabel')?.parent as any) ||

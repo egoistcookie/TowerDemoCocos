@@ -24,6 +24,7 @@ export class UnitIntroPopup extends Component {
     private maskLayer: Node = null!; // 遮罩层节点
     private lastShownUnitType: string = ''; // 当前显示的介绍框对应的单位类型（用于小精灵关闭后触发新手教程）
     private currentCloseCallback: (() => void) | null = null; // 弹窗关闭回调（可选）
+    private unitIconOriginalWidth: number = 100; // 保存 unitIcon 的原始宽度，用于恢复默认尺寸
     private unitIconOriginalHeight: number = 100; // 保存 unitIcon 的原始高度，用于恢复默认尺寸
 
     start() {
@@ -59,10 +60,11 @@ export class UnitIntroPopup extends Component {
             this.container.on('touch-end', this.onClose, this);
         }
 
-        // 保存 unitIcon 的原始高度（用于后续恢复默认尺寸）
+        // 保存 unitIcon 的原始宽高（用于后续恢复默认尺寸）
         if (this.unitIcon && this.unitIcon.node) {
             const uiTransform = this.unitIcon.node.getComponent(UITransform);
             if (uiTransform) {
+                this.unitIconOriginalWidth = uiTransform.width;
                 this.unitIconOriginalHeight = uiTransform.height;
             }
         }
@@ -285,14 +287,17 @@ export class UnitIntroPopup extends Component {
         // 设置单位信息
         if (unitInfo.unitIcon && this.unitIcon) {
             this.unitIcon.spriteFrame = unitInfo.unitIcon;
-            // 调整图标高度：如果传入了 iconHeightScale 则缩放，否则恢复原始高度
+            // 调整图标宽高：可分别传入 iconWidthScale / iconHeightScale
             if (this.unitIcon.node) {
                 const uiTransform = this.unitIcon.node.getComponent(UITransform);
                 if (uiTransform) {
+                    const targetWidth = unitInfo.iconWidthScale
+                        ? this.unitIconOriginalWidth * unitInfo.iconWidthScale
+                        : this.unitIconOriginalWidth;
                     const targetHeight = unitInfo.iconHeightScale
                         ? this.unitIconOriginalHeight * unitInfo.iconHeightScale
                         : this.unitIconOriginalHeight;
-                    uiTransform.setContentSize(uiTransform.width, targetHeight);
+                    uiTransform.setContentSize(targetWidth, targetHeight);
                 }
             }
         }

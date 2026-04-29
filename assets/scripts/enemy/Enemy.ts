@@ -1016,17 +1016,19 @@ export class Enemy extends Component {
      * @returns 限制在屏幕范围内的位置
      */
     clampPositionToScreen(position: Vec3): Vec3 {
-        // 使用cc.view获取屏幕尺寸和设计分辨率
-        const designResolution = view.getDesignResolutionSize();
-        
+        // 注意：position 是 worldPosition（以可视区域坐标系为基准），不能用 designResolution(0..width/height) 去 clamp
+        // 否则会导致“出生在顶部 -> 下一帧被 clamp 拉到另一套坐标系”出现闪现/跳跃
+        const visibleOrigin = view.getVisibleOrigin();
+        const visibleSize = view.getVisibleSize();
+
         // 使用默认碰撞半径（敌人单位通常较小）
         const collisionRadius = 20;
         
-        // 计算屏幕边界，确保单位在可见屏幕内移动
-        const minX = collisionRadius;
-        const maxX = designResolution.width - collisionRadius;
-        const minY = collisionRadius;
-        const maxY = designResolution.height - collisionRadius;
+        // 计算可视区域边界，确保单位在可见屏幕内移动
+        const minX = visibleOrigin.x + collisionRadius;
+        const maxX = visibleOrigin.x + visibleSize.width - collisionRadius;
+        const minY = visibleOrigin.y + collisionRadius;
+        const maxY = visibleOrigin.y + visibleSize.height - collisionRadius;
 
         // 限制位置在屏幕范围内 - 使用复用的临时对象
         this.tempVec3_1.set(position);

@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, instantiate, BlockInputEvents, sys, Texture2D, ImageAsset, Mask, UIOpacity, LabelOutline, AudioSource, tween, ScrollView, EventTouch } from 'cc';
+import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, instantiate, BlockInputEvents, sys, Texture2D, ImageAsset, Mask, UIOpacity, LabelOutline, AudioSource, tween, ScrollView, EventTouch, Widget } from 'cc';
 // 微信小游戏全局对象声明（避免 TypeScript 报错）
 declare const wx: any;
 import { Crystal } from './role/Crystal';
@@ -30,6 +30,8 @@ export { GameState };
 
 @ccclass('GameManager')
 export class GameManager extends Component {
+    private static readonly BUILD_CANDIDATE_PANEL_FIXED_HEIGHT = 220;
+
     @property(Node)
     crystal: Node = null!;
 
@@ -316,6 +318,18 @@ export class GameManager extends Component {
 
     // 池塘背景节点（右下角）
     private pondBackgroundNode: Node | null = null;
+    @property
+    topHudBaseTopMargin: number = 24; // TopHUD 的基础上边距（设计分辨率坐标）
+    private cachedTopHudSafeTopUi: number = 0;
+    @property
+    topPortalTopMargin: number = 300; // 顶部三个初始传送门距离上边界的边距（原100，整体下移200）
+    @property
+    bottomActionButtonBaseMargin: number = 20; // 建造/退出按钮基础底边距
+    @property
+    liftBottomActionButtonWhenPanelVisible: boolean = true; // 候选框显示时是否抬升底部按钮
+    @property
+    bottomActionButtonPanelGap: number = 12; // 按钮与候选框的额外间距
+    private lastBottomActionButtonMargin: number = -1;
 
     /**
      * 微信推荐页相关
@@ -326,6 +340,9 @@ export class GameManager extends Component {
      * 场景加载时，尝试预加载微信推荐页（仅微信小游戏环境生效）
      */
     onLoad() {
+        this.updateTopHudSafeAreaOffset();
+        (view as any).on?.('canvas-resize', this.updateTopHudSafeAreaOffset, this);
+
         // 仅在微信小游戏环境尝试加载
         // 注意：引擎环境判断与 API 可用性双保险
         try {
@@ -339,6 +356,127 @@ export class GameManager extends Component {
         } catch {
             // ignore
         }
+    }
+
+    /**
+     * 按设备安全区动态设置 TopHUD 顶部边距。
+     * - 不同刘海机型会自动得到不同 top 值（例如 13 mini / 15 Pro Max）
+     * - 非微信环境或取不到安全区时，退回到基础边距
+     */
+    private updateTopHudSafeAreaOffset() {
+        const topHud = find('Canvas/TopHUD');
+        if (!topHud || !topHud.isValid) return;
+
+        const canvas = find('Canvas');
+        const canvasTransform = canvas?.getComponent(UITransform);
+        const widget = topHud.getComponent(Widget) || topHud.addComponent(Widget);
+
+        let safeTopPx = 0;
+        let frameHeightPx = 0;
+
+        try {
+            // 微信小游戏：优先取微信原生 safeArea（最稳定）
+            if (typeof wx !== 'undefined' && wx && typeof wx.getSystemInfoSync === 'function') {
+                const info = wx.getSystemInfoSync();
+                const safeArea = info?.safeArea;
+                const screenHeight = Number(info?.screenHeight || info?.windowHeight || 0);
+                if (safeArea && screenHeight > 0) {
+                    safeTopPx = Math.max(0, screenHeight - (safeArea.top + safeArea.height));
+                    frameHeightPx = screenHeight;
+                }
+            }
+        } catch {
+            // ignore
+        }
+
+        // 兜底：使用引擎 safeArea
+        if (safeTopPx <= 0) {
+            try {
+                const safeRect = (sys as any).getSafeAreaRect?.();
+                const frame = view.getFrameSize();
+                if (safeRect && frame && frame.height > 0) {
+                    safeTopPx = Math.max(0, frame.height - (safeRect.y + safeRect.height));
+                    frameHeightPx = frame.height;
+                }
+            } catch {
+                // ignore
+            }
+        }
+
+        const canvasHeight = canvasTransform?.contentSize.height || 0;
+        const safeTopUi = (frameHeightPx > 0 && canvasHeight > 0)
+            ? (safeTopPx / frameHeightPx) * canvasHeight
+            : 0;
+        this.cachedTopHudSafeTopUi = safeTopUi;
+
+        widget.isAlignTop = true;
+        widget.top = Math.max(0, this.topHudBaseTopMargin + safeTopUi);
+        widget.alignMode = 2 as any; // ALWAYS
+        widget.updateAlignment();
+    }
+
+    private updateHomeLevelHudSafeAreaOffset() {
+        if (!this.levelHudNode || !this.levelHudNode.isValid) return;
+        const widget = this.levelHudNode.getComponent(Widget) || this.levelHudNode.addComponent(Widget);
+        widget.isAlignTop = true;
+        widget.isAlignLeft = true;
+        // 首页玩家信息区域整体偏移：在现有基础上向左回调 120（即再向右 10），向下 50
+        widget.top = Math.max(0, this.topHudBaseTopMargin + (this.cachedTopHudSafeTopUi || 0) + 50);
+        widget.left = 24 + 60 - 120;
+        widget.alignMode = Widget.AlignMode.ALWAYS;
+        widget.updateAlignment();
+    }
+
+    private positionCrystalWithBottomOffset() {
+        const crystalNode = this.crystal && this.crystal.isValid ? this.crystal : find('Canvas/Crystal');
+        if (!crystalNode || !crystalNode.isValid) return;
+
+        const bottomOffset = 100; // 往上挪 50（原先 50）
+        const vo = view.getVisibleOrigin();
+        const targetY = vo.y + bottomOffset;
+        const wp = crystalNode.worldPosition.clone();
+        crystalNode.setWorldPosition(wp.x, targetY, wp.z);
+    }
+
+    private isBuildCandidatePanelVisible(): boolean {
+        const panelA = find('Canvas/BuildingSelectionPanel');
+        const panelB = find('Canvas/GridBuildingSelectionPanel');
+        return !!(
+            (panelA && panelA.isValid && panelA.activeInHierarchy) ||
+            (panelB && panelB.isValid && panelB.activeInHierarchy)
+        );
+    }
+
+    private applyBottomWidgetMargin(node: Node | null, bottom: number) {
+        if (!node || !node.isValid) return;
+        // 不再依赖 Widget，直接按世界坐标锁定到底部，避免容器锚点/对齐把按钮拉到画面中央
+        const vo = view.getVisibleOrigin();
+        const wp = node.worldPosition.clone();
+        node.setWorldPosition(wp.x, vo.y + bottom, wp.z);
+    }
+
+    private updateBottomActionButtonsLayout() {
+        // 固定：建造按钮/退出按钮始终距离底部 250 像素
+        const targetBottom = 250;
+        if (Math.abs(targetBottom - this.lastBottomActionButtonMargin) < 0.1) {
+            return;
+        }
+        this.lastBottomActionButtonMargin = targetBottom;
+
+        const buildButtonNode =
+            find('Canvas/TopHUD/BuildButton') ||
+            find('Canvas/UI/BuildButton') ||
+            find('UI/BuildButton') ||
+            find('BuildButton');
+        const returnButtonNode =
+            find('Canvas/TopHUD/ReturnButton') ||
+            find('Canvas/UI/ReturnButton') ||
+            find('UI/ReturnButton') ||
+            find('Canvas/ReturnButton') ||
+            (this.exitGameButton?.node || null);
+
+        this.applyBottomWidgetMargin(buildButtonNode, targetBottom);
+        this.applyBottomWidgetMargin(returnButtonNode, targetBottom);
     }
 
     /**
@@ -987,12 +1125,13 @@ export class GameManager extends Component {
         }
 
         // 尝试查找已存在的波次标签节点
-        const existingWaveLabel = find('Canvas/UI/WaveLabel') || find('Canvas/WaveLabel') || find('WaveLabel');
+        const existingWaveLabel = find('Canvas/TopHUD/WaveLabel') || find('Canvas/UI/WaveLabel') || find('Canvas/WaveLabel') || find('WaveLabel');
         if (existingWaveLabel) {
             this.waveLabel = existingWaveLabel.getComponent(Label);
             if (!this.waveLabel) {
                 this.waveLabel = existingWaveLabel.addComponent(Label);
             }
+            this.adjustTimerAndWaveLabelDownOffset();
             return;
         }
 
@@ -1057,8 +1196,21 @@ export class GameManager extends Component {
 
         // 保存引用
         this.waveLabel = waveLabel;
+        this.adjustTimerAndWaveLabelDownOffset();
 
       //console.log('[GameManager] 已自动创建波次标签，并调整了时间标签和波次标签的位置');
+    }
+
+    private adjustTimerAndWaveLabelDownOffset() {
+        const downOffset = 50; // 往上挪 50（原先整体下移100）
+        if (this.timerLabel?.node?.isValid) {
+            const timerPos = this.timerLabel.node.position.clone();
+            this.timerLabel.node.setPosition(timerPos.x, timerPos.y - downOffset, timerPos.z);
+        }
+        if (this.waveLabel?.node?.isValid) {
+            const wavePos = this.waveLabel.node.position.clone();
+            this.waveLabel.node.setPosition(wavePos.x, wavePos.y - downOffset, wavePos.z);
+        }
     }
 
     start() {
@@ -1228,7 +1380,8 @@ export class GameManager extends Component {
         }
 
         // 如果场景中已经手动放置了名为 WoodLabel 的节点，则直接复用
-        const existingNode = find('Canvas/UI/WoodLabel') ||
+        const existingNode = find('Canvas/TopHUD/WoodLabel') ||
+                             find('Canvas/UI/WoodLabel') ||
                              find('Canvas/WoodLabel') ||
                              find('WoodLabel');
         if (existingNode) {
@@ -1355,16 +1508,14 @@ export class GameManager extends Component {
             uiTransform.setContentSize(textureWidth, textureHeight);
             uiTransform.setAnchorPoint(1, 0);
 
-            // 设置节点位置在右下角（紧贴边缘）
-            // Canvas 设计尺寸为 750x1334，原点在中心
-            // 右下角坐标：X = 375, Y = -667
-            const canvasWidth = 750;
-            const canvasHeight = 1334;
-            pondNode.setPosition(
-                canvasWidth / 2,
-                -canvasHeight / 2,
-                0
-            );
+            // 使用 Widget 贴齐屏幕右下角，避免在不同机型上与底部出现大间隙
+            const widget = pondNode.getComponent(Widget) || pondNode.addComponent(Widget);
+            widget.isAlignRight = true;
+            widget.isAlignBottom = true;
+            widget.right = 0;
+            widget.bottom = 0;
+            widget.alignMode = Widget.AlignMode.ALWAYS;
+            widget.updateAlignment();
 
             // 添加到 BlockInputEvents 防止穿透
             pondNode.addComponent(BlockInputEvents);
@@ -1520,7 +1671,7 @@ export class GameManager extends Component {
         }
 
         // 隐藏 Canvas/UI 下的图标：HIcon、GIcon、PIcon
-        const uiRoot = find('Canvas/UI') || find('UI');
+        const uiRoot = find('Canvas/TopHUD') || find('Canvas/UI') || find('UI');
         if (uiRoot) {
             const hIcon = uiRoot.getChildByName('HIcon');
             if (hIcon) hIcon.active = false;
@@ -1531,6 +1682,8 @@ export class GameManager extends Component {
             // 首页隐藏木材图标
             const wIcon = uiRoot.getChildByName('WIcon');
             if (wIcon) wIcon.active = false;
+            const checkInButton = uiRoot.getChildByName('CheckInButton');
+            if (checkInButton) checkInButton.active = false;
         }
 
         // LevelHUD 作为 gameMainPanel 的子节点，会自动随着 gameMainPanel 显示隐藏
@@ -1636,11 +1789,14 @@ export class GameManager extends Component {
             
             // 直接设置水晶节点为激活状态
             this.crystal.active = true;
+            this.positionCrystalWithBottomOffset();
         } else {
             // 最后尝试直接查找并显示，不保存引用
             const directCrystal = find('Canvas/Crystal');
             if (directCrystal) {
                 directCrystal.active = true;
+                this.crystal = directCrystal;
+                this.positionCrystalWithBottomOffset();
             }
         }
         
@@ -1693,7 +1849,7 @@ export class GameManager extends Component {
         }
         
         // 显示所有其他UI元素
-        const uiNode = find('UI') || find('Canvas/UI');
+        const uiNode = find('Canvas/TopHUD') || find('UI') || find('Canvas/UI');
         if (uiNode) {
             for (const child of uiNode.children) {
                 // 显示所有UI元素，除了特定的隐藏元素
@@ -1714,6 +1870,7 @@ export class GameManager extends Component {
     
 
     onDestroy() {
+        (view as any).off?.('canvas-resize', this.updateTopHudSafeAreaOffset, this);
         // 移除事件监听
         if (this.crystalScript) {
             Crystal.getEventTarget().off('crystal-destroyed', this.onCrystalDestroyed, this);
@@ -1761,7 +1918,7 @@ export class GameManager extends Component {
         }
 
         // 通过节点路径兜底，确保即使序列化引用未绑定也能正确隐藏
-        const uiRoot = find('Canvas/UI') || find('UI');
+        const uiRoot = find('Canvas/TopHUD') || find('Canvas/UI') || find('UI');
         if (uiRoot) {
             const names = [
                 'HealthLabel',
@@ -1801,9 +1958,21 @@ export class GameManager extends Component {
                 uiManager.buildButton.node.active = keepBuildButtonVisible ? true : visible;
             }
         }
+
+        // 签到宝箱：进入战斗后强制隐藏（避免不同开局流程绕过 UIManager 导致仍显示）
+        if (visible) {
+            const checkInBtn =
+                find('Canvas/TopHUD/CheckInButton') ||
+                find('Canvas/CheckInButton') ||
+                find('Canvas/BottomSelection/CheckInButton');
+            if (checkInBtn && checkInBtn.isValid) {
+                checkInBtn.active = false;
+            }
+        }
     }
 
     update(deltaTime: number) {
+        this.updateBottomActionButtonsLayout();
         const isPlaying = this.gameState === GameState.Playing;
         // 统一控制 HUD 显隐：只有战斗中才显示，首页/暂停/结算等都隐藏
         this.setInGameUIVisible(isPlaying);
@@ -1931,13 +2100,8 @@ export class GameManager extends Component {
             const uiTransform = this.levelHudNode.addComponent(UITransform);
             // 整个 HUD 区域再放大一些，适配更大的头像和进度条
             uiTransform.setContentSize(320, 70);
-
-            // 放到左上角（相对于 gameMainPanel），整体靠近屏幕顶部
-            const visibleSize = view.getVisibleSize();
-            const offsetX = -visibleSize.width / 2 + 150;
-            // 往下移一点，避免贴边
-            const offsetY = visibleSize.height / 2 - 60; // 整体再下移 20 像素
-            this.levelHudNode.setPosition(offsetX, offsetY, 0);
+            // 由安全区 + Widget 定位到左上角（与 TopHUD 保持相同顶部距离）
+            this.updateHomeLevelHudSafeAreaOffset();
 
             // 头像区域（左侧，可点击）
             const avatarNode = new Node('Avatar');
@@ -2223,6 +2387,9 @@ export class GameManager extends Component {
             this.killRankHintLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
             this.killRankHintLabel.verticalAlign = Label.VerticalAlign.CENTER;
         }
+
+        // 每次刷新都重新对齐一次（避免分辨率/安全区变化后位置不更新）
+        this.updateHomeLevelHudSafeAreaOffset();
 
         // 注意：playerDataManager 可能还没加载完；先展示默认值，等数据可用后再刷新
 
@@ -5774,7 +5941,10 @@ export class GameManager extends Component {
         const leftX = -halfW + margin + offsetX;
         const rightX = halfW - margin + offsetX;
         const midX = 0 + offsetX;
-        const y = 1260; // 上移50
+        const visibleOrigin = view.getVisibleOrigin();
+        const visibleSize = view.getVisibleSize();
+        // 在当前基础上再下移 200 像素
+        const y = visibleOrigin.y + visibleSize.height - Math.max(0, this.topPortalTopMargin) - 200;
         const positions = [new Vec3(leftX, y, 0), new Vec3(midX, y, 0), new Vec3(rightX, y, 0)];
         const tryInstantiate = (prefab: Prefab | null) => {
             if (!prefab) {
@@ -8499,6 +8669,9 @@ export class GameManager extends Component {
                 unitIcon: unitIcon,
                 unitType: unitScript.unitType || 'unknown',
                 unitId: rawUnitId,  // prefabName，用于识别小精灵等以触发新手教程
+                // 首次兽人介绍框：贴图宽高都缩放到 50%
+                iconWidthScale: rawUnitId === 'Orc' ? 0.5 : undefined,
+                iconHeightScale: rawUnitId === 'Orc' ? 0.5 : undefined,
                 onCloseCallback: onCloseCallback || undefined
             });
         } else {

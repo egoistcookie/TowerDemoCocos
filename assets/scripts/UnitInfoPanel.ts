@@ -105,8 +105,8 @@ export class UnitInfoPanel extends Component {
         const screenWidth = canvasTransform?.width || 750;
 
         // 设置面板位置和大小（屏幕下方，占屏幕1/6高度）
-        // 两侧与边框保持50像素的距离，所以面板宽度 = 屏幕宽度 - 50
-        const panelWidth = screenWidth - 50;
+        // 面板整体宽度增加 30 像素（原 screenWidth - 50 -> 现在 screenWidth - 20）
+        const panelWidth = screenWidth - 20;
         const panelHeight = screenHeight / 6; 
         const panelTransform = this.panelNode.getComponent(UITransform) || this.panelNode.addComponent(UITransform);
         panelTransform.setContentSize(panelWidth, panelHeight);
@@ -261,7 +261,6 @@ export class UnitInfoPanel extends Component {
         this.rallyPointLabel.node.active = false;
 
         // 右侧：九宫格按钮区域（33%宽度）
-        // 右侧区域范围：从 width/6 到 width/2，中心在 width/2 - areaWidth/2 = width/3
         this.createButtonGrid(contentNode, width, height, areaWidth);
     }
 

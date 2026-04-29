@@ -69,6 +69,16 @@ export class EnemySpawner extends Component {
     })
     maxEnemiesOnScreen: number = 50;
 
+    @property({
+        tooltip: "顶部刷怪时，距离上边界的边距（越小越靠上）"
+    })
+    topSpawnMargin: number = 20;
+
+    @property({
+        tooltip: "从传送门下方刷怪时，额外下移距离（越小越靠近传送门）"
+    })
+    portalSpawnBelowOffset: number = 20;
+
     private gameManager: GameManager = null!;
     private uiManager: any = null!;
     
@@ -261,7 +271,7 @@ export class EnemySpawner extends Component {
         const visibleOrigin = view.getVisibleOrigin();
         return new Vec3(
             visibleOrigin.x + Math.random() * visibleSize.width,
-            visibleOrigin.y + visibleSize.height - 10,
+            visibleOrigin.y + visibleSize.height - Math.max(0, this.topSpawnMargin),
             0
         );
     }
@@ -274,8 +284,8 @@ export class EnemySpawner extends Component {
         // 依据传送门高度，选择其下方一点作为刷怪点
         const ui = portalNode.getComponent(UITransform);
         const halfH = ui ? ui.contentSize.height * 0.5 : 50;
-        // 往下偏移：半高 + 40px，避免与传送门重叠
-        pos.y -= (halfH + 40);
+        // 往下偏移：半高 + 可调边距，避免与传送门重叠且可控制离顶部远近
+        pos.y -= (halfH + Math.max(0, this.portalSpawnBelowOffset));
         return pos;
     }
 
