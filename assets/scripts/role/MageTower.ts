@@ -150,6 +150,8 @@ export class MageTower extends Build {
         // 修复：在激活前先设置位置，确保 onEnable 时位置已正确（否则复活单位可能因为旧位置 y >= 500 而不安排自动上移）
         mage.setWorldPosition(spawnPos);
         mage.active = true;
+        // 同步建筑星级到训练单位头顶
+        this.applyStarToProducedUnit(mage);
         this.producedMages.push(mage);
         const idx = this.producedMages.length - 1;
         const dir = idx % 2 === 0 ? 1 : -1;

@@ -306,6 +306,8 @@ export class HunterHall extends Build {
         
         // 现在激活节点，只触发一次 onEnable()
         hunter.active = true;
+        // 同步建筑星级到训练单位头顶
+        this.applyStarToProducedUnit(hunter);
 
         if (hunterScript) {
            //console.info(`[HunterHall] 生产猎手，最终攻击力=${hunterScript.attackDamage}, 生命值=${hunterScript.maxHealth}`);

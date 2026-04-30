@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Prefab, instantiate, Vec3, EventTouch, input, Input, Camera, find, view, UITransform, SpriteFrame, Graphics, Color, director, tween, Sprite } from 'cc';
+import { _decorator, Component, Node, Prefab, instantiate, Vec3, EventTouch, input, Input, Camera, find, view, UITransform, SpriteFrame, Graphics, Color, director, tween, Sprite, AudioClip } from 'cc';
 import { GameManager } from './GameManager';
 import { BuildingSelectionPanel, BuildingType } from './BuildingSelectionPanel';
 import { GamePopup } from './GamePopup';
@@ -19,6 +19,8 @@ import { BuildingGridPanel } from './BuildingGridPanel';
 import { StoneWallGridPanel } from './StoneWallGridPanel';
 import { BuildingPool } from './BuildingPool';
 import { AnalyticsManager, OperationType } from './AnalyticsManager';
+import { Build } from './role/Build';
+import { SoundManager } from './SoundManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('TowerBuilder')
@@ -84,6 +86,12 @@ export class TowerBuilder extends Component {
 
     @property(SpriteFrame)
     eagleNestIcon: SpriteFrame = null!; // 角鹰兽栏图标
+
+    @property(SpriteFrame)
+    starIcon: SpriteFrame = null!; // 星标贴图（用于建筑/单位星级显示）
+
+    @property(AudioClip)
+    starUpgradeSfx: AudioClip = null!; // 升星音效（可选）
 
     @property(Node)
     buildingSelectionPanel: Node = null!; // 建筑物选择面板节点
@@ -202,6 +210,15 @@ export class TowerBuilder extends Component {
     private longPressMoveThreshold: number = 10; // 移动阈值（像素），超过此距离取消长按
     private longPressIndicator: Node | null = null; // 长按指示器节点（旋转圆弧）
     private isLongPressActive: boolean = false; // 是否正在长按检测中
+    private readonly candidateDisplayCount: number = 3;
+    private readonly refreshCandidateGoldCost: number = 10;
+    private currentBuildingPool: BuildingType[] = [];
+    private lastCandidateKey: string = '';
+
+    private readonly STAR_CONTAINER_NAME = 'StarLevelContainer';
+    private readonly BUILDING_STAR_Y = 70;
+    private readonly UNIT_STAR_Y = 55;
+    private trackedStarTargets: Node[] = [];
 
     /**
      * 由 GameManager 在分包加载完毕后调用，注入分包中的预制体
@@ -269,6 +286,268 @@ export class TowerBuilder extends Component {
      */
     public refreshBuildingTypes() {
         this.updateBuildingTypes();
+    }
+
+    /**
+     * 每波结束时由外部调用，刷新本波可选建筑候选
+     */
+    public onWaveCompletedRefreshCandidates() {
+        this.updateBuildingTypes();
+    }
+
+    public applyStarToBuildingNode(node: Node, starLevel: number) {
+        // 石墙和防御塔不展示星标
+        if (this.isStarDisplayDisabledForBuilding(node)) {
+            const old = node.getChildByName(this.STAR_CONTAINER_NAME);
+            if (old && old.isValid) old.destroy();
+            return;
+        }
+        this.applyStarToAnyNode(node, starLevel, this.BUILDING_STAR_Y, 26, 2);
+    }
+
+    public applyStarToUnitNode(node: Node, starLevel: number) {
+        this.applyStarToAnyNode(node, starLevel, this.UNIT_STAR_Y, 22, 2);
+    }
+
+    private applyStarToAnyNode(node: Node, starLevel: number, yOffset: number, starSize: number, gap: number) {
+        if (!node || !node.isValid) return;
+        const level = Math.max(1, Math.min(3, Math.floor(Number(starLevel || 1))));
+        if (!this.starIcon) return;
+
+        let container = node.getChildByName(this.STAR_CONTAINER_NAME);
+        if (!container || !container.isValid) {
+            container = new Node(this.STAR_CONTAINER_NAME);
+            container.setParent(node);
+        }
+        container.setPosition(0, yOffset, 0);
+        this.trackStarTarget(node);
+        this.updateStarContainerAntiStretch(node, container);
+
+        // children count to match level
+        const need = level;
+        while (container.children.length > need) {
+            const ch = container.children[container.children.length - 1];
+            if (ch && ch.isValid) ch.destroy();
+            else break;
+        }
+        while (container.children.length < need) {
+            const star = new Node('Star');
+            star.setParent(container);
+            star.addComponent(UITransform).setContentSize(starSize, starSize);
+            const sp = star.addComponent(Sprite);
+            sp.spriteFrame = this.starIcon;
+            sp.sizeMode = Sprite.SizeMode.CUSTOM;
+        }
+        const totalW = need * starSize + (need - 1) * gap;
+        for (let i = 0; i < need; i++) {
+            const star = container.children[i];
+            if (!star || !star.isValid) continue;
+            const x = -totalW / 2 + starSize / 2 + i * (starSize + gap);
+            star.setPosition(x, 0, 0);
+            const sp = star.getComponent(Sprite);
+            if (sp) sp.spriteFrame = this.starIcon;
+        }
+    }
+
+    private trackStarTarget(node: Node) {
+        if (!node || !node.isValid) return;
+        if (this.trackedStarTargets.indexOf(node) >= 0) return;
+        this.trackedStarTargets.push(node);
+    }
+
+    private updateStarContainerAntiStretch(targetNode: Node, container?: Node | null) {
+        if (!targetNode || !targetNode.isValid) return;
+        const c = container && container.isValid ? container : targetNode.getChildByName(this.STAR_CONTAINER_NAME);
+        if (!c || !c.isValid) return;
+        const sx = targetNode.scale.x;
+        const sy = targetNode.scale.y;
+        // 反向补偿父节点在待机/钓鱼动画中的拉伸，保证星星等比显示
+        const invX = Math.abs(sx) > 0.0001 ? 1 / sx : 1;
+        const invY = Math.abs(sy) > 0.0001 ? 1 / sy : 1;
+        c.setScale(invX, invY, 1);
+    }
+
+    update() {
+        if (!this.trackedStarTargets.length) return;
+        const alive: Node[] = [];
+        for (const n of this.trackedStarTargets) {
+            if (!n || !n.isValid) continue;
+            const c = n.getChildByName(this.STAR_CONTAINER_NAME);
+            if (!c || !c.isValid) continue;
+            this.updateStarContainerAntiStretch(n, c);
+            alive.push(n);
+        }
+        this.trackedStarTargets = alive;
+    }
+
+    private isStarDisplayDisabledForBuilding(node: Node): boolean {
+        if (!node || !node.isValid) return false;
+        return !!(
+            node.getComponent(StoneWall) ||
+            node.getComponent(WatchTower) ||
+            node.getComponent(IceTower) ||
+            node.getComponent(ThunderTower)
+        );
+    }
+
+    private getNodeBuildingTypeId(node: Node, buildScript?: any): string {
+        const prefabName = (buildScript?.prefabName || '').toString().trim();
+        if (prefabName) return prefabName;
+        if (node.getComponent(WarAncientTree)) return 'WarAncientTree';
+        if (node.getComponent(HunterHall)) return 'HunterHall';
+        if (node.getComponent(MageTower)) return 'MageTower';
+        if (node.getComponent(SwordsmanHall)) return 'SwordsmanHall';
+        if (node.getComponent(Church)) return 'Church';
+        if (node.getComponent('EagleNest')) return 'EagleNest';
+        if (node.getComponent(StoneWall)) return 'StoneWall';
+        if (node.getComponent(WatchTower)) return 'WatchTower';
+        if (node.getComponent(IceTower)) return 'IceTower';
+        if (node.getComponent(ThunderTower)) return 'ThunderTower';
+        return (node.name || '').replace('(Clone)', '').trim();
+    }
+
+    private getCandidateBuildingTypeId(building: BuildingType): string {
+        const mapByName: Record<string, string> = {
+            '弓箭手小屋': 'WarAncientTree',
+            '猎手大厅': 'HunterHall',
+            '法师塔': 'MageTower',
+            '剑士小屋': 'SwordsmanHall',
+            '教堂': 'Church',
+            '角鹰兽栏': 'EagleNest',
+            '石墙': 'StoneWall',
+            '哨塔': 'WatchTower'
+        };
+        if (building?.name && mapByName[building.name]) return mapByName[building.name];
+        if (building?.prefab) {
+            if (building.prefab === this.warAncientTreePrefab) return 'WarAncientTree';
+            if (building.prefab === this.hunterHallPrefab) return 'HunterHall';
+            if (building.prefab === this.mageTowerPrefab) return 'MageTower';
+            if (building.prefab === this.swordsmanHallPrefab) return 'SwordsmanHall';
+            if (building.prefab === this.churchPrefab) return 'Church';
+            if (building.prefab === this.eagleNestPrefab) return 'EagleNest';
+            if (building.prefab === this.stoneWallPrefab) return 'StoneWall';
+            if (building.prefab === this.watchTowerPrefab) return 'WatchTower';
+        }
+        return building?.name || '';
+    }
+
+    private tryMergeBuildings(source: Node, target: Node): boolean {
+        if (!source || !target || !source.isValid || !target.isValid) return false;
+        const srcBuild = (source.getComponent(Build) || source.getComponent('Build')) as any;
+        const dstBuild = (target.getComponent(Build) || target.getComponent('Build')) as any;
+        if (!srcBuild || !dstBuild) return false;
+
+        const srcKey = this.getNodeBuildingTypeId(source, srcBuild);
+        const dstKey = this.getNodeBuildingTypeId(target, dstBuild);
+        if (!srcKey || !dstKey || srcKey !== dstKey) return false;
+
+        const srcStar = Math.max(1, Math.min(3, Math.floor(Number(srcBuild.starLevel || 1))));
+        const dstStar = Math.max(1, Math.min(3, Math.floor(Number(dstBuild.starLevel || 1))));
+        if (srcStar !== dstStar) return false;
+        if (srcStar >= 3) return false;
+
+        const nextStar = srcStar + 1;
+        if (typeof dstBuild.setStarLevel === 'function') dstBuild.setStarLevel(nextStar);
+        else dstBuild.starLevel = nextStar;
+        this.applyStarToBuildingNode(target, nextStar);
+
+        // 已训练的单位也同步星级（尽力而为）
+        try {
+            const arrays = [
+                'producedTowers',
+                'producedHunters',
+                'producedMages',
+                'producedPriests',
+                'producedSwordsmen',
+                'producedEagles',
+            ];
+            for (const k of arrays) {
+                const arr = (dstBuild as any)[k];
+                if (Array.isArray(arr)) {
+                    for (const u of arr) {
+                        if (u && u.isValid) this.applyStarToUnitNode(u, nextStar);
+                    }
+                }
+            }
+        } catch {}
+
+        // 回收被合并的建筑
+        try {
+            const buildingPool = BuildingPool.getInstance();
+            if (buildingPool) {
+                buildingPool.release(source, srcBuild.prefabName || undefined);
+            } else {
+                source.destroy();
+            }
+        } catch {
+            if (source && source.isValid) source.destroy();
+        }
+
+        // 升星音效（可选）
+        try {
+            if (this.starUpgradeSfx) {
+                SoundManager.getInstance()?.playEffect(this.starUpgradeSfx);
+            }
+        } catch {}
+
+        return true;
+    }
+
+    private tryMergeCandidateBuildingAtGrid(building: BuildingType, gridX: number, gridY: number): boolean {
+        if (!this.gridPanel) return false;
+        const gridCells = (this.gridPanel as any).gridCells;
+        const cell = gridCells?.[gridY]?.[gridX];
+        const target = cell?.buildingNode as Node | null;
+        if (!target || !target.isValid) return false;
+
+        const dstBuild = (target.getComponent(Build) || target.getComponent('Build')) as any;
+        if (!dstBuild) return false;
+
+        const srcTypeId = this.getCandidateBuildingTypeId(building);
+        const dstTypeId = this.getNodeBuildingTypeId(target, dstBuild);
+        if (!srcTypeId || !dstTypeId) return false;
+        if (srcTypeId !== dstTypeId) return false;
+
+        const srcStar = 1; // 候选框拖出的新建筑默认为1星
+        const dstStar = Math.max(1, Math.min(3, Math.floor(Number(dstBuild.starLevel || 1))));
+        if (srcStar !== dstStar) return false;
+        if (dstStar >= 3) return false;
+
+        // 候选建筑参与合并也要支付建造费用
+        if (!this.gameManager) this.findGameManager();
+        const unitId = this.getCandidateBuildingTypeId(building);
+        let buildCost = building.cost;
+        const configCost = this.getBuildCostFromConfig(unitId);
+        if (configCost > 0) buildCost = this.getActualBuildCost(unitId, configCost);
+        if (!this.gameManager || !this.gameManager.canAfford(buildCost)) {
+            GamePopup.showMessage('金币不足');
+            return true; // 已命中可合并目标，只是钱不够，阻断普通建造
+        }
+        this.gameManager.spendGold(buildCost);
+
+        const nextStar = dstStar + 1;
+        if (typeof dstBuild.setStarLevel === 'function') dstBuild.setStarLevel(nextStar);
+        else dstBuild.starLevel = nextStar;
+        this.applyStarToBuildingNode(target, nextStar);
+
+        try {
+            if (this.starUpgradeSfx) {
+                SoundManager.getInstance()?.playEffect(this.starUpgradeSfx);
+            }
+        } catch {}
+        return true;
+    }
+
+    /**
+     * 刷怪进度（0~1），用于刷新按钮金边长度
+     * - 0：整圈
+     * - 1：完全消失
+     */
+    public setWaveSpawnProgress(progress01: number) {
+        if (!this.buildingPanel) return;
+        try {
+            (this.buildingPanel as any).setRefreshProgress?.(progress01);
+        } catch {}
     }
 
     /**
@@ -415,7 +694,10 @@ export class TowerBuilder extends Component {
                 description: '可以生产角鹰单位（空中单位，不占用人口）'
             });
         }
-        this.buildingPanel.setBuildingTypes(buildingTypes);
+        this.currentBuildingPool = buildingTypes;
+        // 候选框只展示 3 个：每次从当前解锁池随机抽取
+        this.refreshCurrentWaveBuildingCandidates(false);
+        this.updateRefreshButtonState();
     }
 
     private getCurrentLevelForUnlock(): number {
@@ -801,6 +1083,75 @@ export class TowerBuilder extends Component {
         this.buildingPanel.setOnBuildCancel(() => {
             this.disableBuildingMode();
         });
+
+        // 设置刷新候选回调（手动刷新扣 10 金币）
+        this.buildingPanel.setOnRefreshRequest(() => {
+            if (!this.gameManager) {
+                this.findGameManager();
+            }
+            if (!this.gameManager || !this.gameManager.canAfford(this.refreshCandidateGoldCost)) {
+                GamePopup.showMessage('金币不足');
+                this.updateRefreshButtonState();
+                return;
+            }
+            this.gameManager.spendGold(this.refreshCandidateGoldCost);
+            this.refreshCurrentWaveBuildingCandidates(false, true);
+            this.updateRefreshButtonState();
+        });
+        this.updateRefreshButtonState();
+    }
+
+    private updateRefreshButtonState() {
+        if (!this.buildingPanel) {
+            return;
+        }
+        const canRefresh = !!this.gameManager && this.gameManager.canAfford(this.refreshCandidateGoldCost);
+        this.buildingPanel.setRefreshButtonState(this.refreshCandidateGoldCost, canRefresh);
+    }
+
+    private refreshCurrentWaveBuildingCandidates(forceIncludeCurrentSelection: boolean, avoidSameAsLast: boolean = false): void {
+        if (!this.buildingPanel) {
+            return;
+        }
+        const pool = [...this.currentBuildingPool];
+        if (pool.length === 0) {
+            this.buildingPanel.setBuildingTypes([]);
+            return;
+        }
+
+        const pickCount = Math.min(this.candidateDisplayCount, pool.length);
+        const makeKey = (arr: BuildingType[]) => arr.map(x => x.name).slice().sort().join('|');
+        const doPickOnce = (): BuildingType[] => {
+            const picked: BuildingType[] = [];
+            const usedIndex = new Set<number>();
+            while (picked.length < pickCount) {
+                const idx = Math.floor(Math.random() * pool.length);
+                if (usedIndex.has(idx)) continue;
+                usedIndex.add(idx);
+                picked.push(pool[idx]);
+            }
+            return picked;
+        };
+
+        let picked = doPickOnce();
+        if (avoidSameAsLast && pool.length > pickCount && this.lastCandidateKey) {
+            const maxAttempts = 8;
+            let attempt = 0;
+            while (attempt < maxAttempts && makeKey(picked) === this.lastCandidateKey) {
+                picked = doPickOnce();
+                attempt++;
+            }
+        }
+
+        if (forceIncludeCurrentSelection && this.currentSelectedBuilding) {
+            const hasCurrent = picked.some(item => item.name === this.currentSelectedBuilding?.name);
+            if (!hasCurrent) {
+                picked[0] = this.currentSelectedBuilding;
+            }
+        }
+
+        this.buildingPanel.setBuildingTypes(picked);
+        this.lastCandidateKey = makeKey(picked);
     }
 
     /**
@@ -1129,6 +1480,7 @@ export class TowerBuilder extends Component {
 
     enableBuildingMode() {
         this.isBuildingMode = true;
+        this.updateRefreshButtonState();
         // 显示建筑物选择面板
         if (this.buildingPanel) {
             this.buildingPanel.show();
@@ -1401,6 +1753,26 @@ export class TowerBuilder extends Component {
             const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
             if (gridCenter) {
                 finalWorldPos = gridCenter;
+                // 候选框拖出建筑：若目标格已有建筑，优先尝试合并升星
+                const g = this.gridPanel.worldToGrid(finalWorldPos);
+                if (g) {
+                    const gridCells = (this.gridPanel as any).gridCells;
+                    const cellBuilding = gridCells?.[g.y]?.[g.x]?.buildingNode as Node | null;
+                }
+                if (g) {
+                    const gridCells = (this.gridPanel as any).gridCells;
+                    const cellBuilding = gridCells?.[g.y]?.[g.x]?.buildingNode as Node | null;
+                    const occupied = !!(cellBuilding && cellBuilding.isValid) || this.gridPanel.isGridOccupied(g.x, g.y);
+                    if (occupied) {
+                    const mergedOrHandled = this.tryMergeCandidateBuildingAtGrid(this.currentSelectedBuilding, g.x, g.y);
+                    if (mergedOrHandled) {
+                        this.disableBuildingMode();
+                        if (this.gridPanel) this.gridPanel.clearHighlight();
+                        if (this.stoneWallGridPanelComponent) this.stoneWallGridPanelComponent.clearHighlight();
+                        return;
+                    }
+                    }
+                }
             } else {
                 // 非石墙必须在普通网格内
                 this.gridPanel.clearHighlight();
@@ -1593,6 +1965,26 @@ export class TowerBuilder extends Component {
                 this.buildingPanel.show();
             }
             return;
+        }
+
+        // 候选框拖拽路径兜底：先尝试“落到已占用格时直接合并升星”
+        // 注意：石墙/防御塔不参与星级显示与合并
+        const unitTypeIdForMerge = this.getCandidateBuildingTypeId(building);
+        const isMergeEligibleType = unitTypeIdForMerge !== 'StoneWall' &&
+            unitTypeIdForMerge !== 'WatchTower' &&
+            unitTypeIdForMerge !== 'IceTower' &&
+            unitTypeIdForMerge !== 'ThunderTower';
+        if (isMergeEligibleType && this.gridPanel) {
+            const g = this.gridPanel.worldToGrid(worldPosition);
+            if (g) {
+                const mergedOrHandled = this.tryMergeCandidateBuildingAtGrid(building, g.x, g.y);
+                if (mergedOrHandled) {
+                    this.disableBuildingMode();
+                    if (this.gridPanel) this.gridPanel.clearHighlight();
+                    if (this.stoneWallGridPanelComponent) this.stoneWallGridPanelComponent.clearHighlight();
+                    return;
+                }
+            }
         }
 
         // 检查是否可以在此位置建造
@@ -3138,6 +3530,7 @@ export class TowerBuilder extends Component {
         }
         
         this.enableBuildingMode();
+        this.updateRefreshButtonState();
 
         if (this.gameManager && typeof (this.gameManager as any).notifyLevel1BuildHutTutorialAfterBuildPanelOpened === 'function') {
             (this.gameManager as any).notifyLevel1BuildHutTutorialAfterBuildPanelOpened();
@@ -3560,6 +3953,7 @@ export class TowerBuilder extends Component {
             this.draggedBuilding
         );
 
+        let merged = false;
         if (isOccupiedByOther) {
             // 目标位置有其他建筑物，交换位置
             // 注意：由于拖拽时已经释放了原始网格，所以需要通过网格单元格直接获取建筑物
@@ -3575,6 +3969,11 @@ export class TowerBuilder extends Component {
             
             // 检查建筑物节点是否有效
             if (otherBuilding && otherBuilding.isValid && otherBuilding !== this.draggedBuilding) {
+                // 叠加：同类型 + 同星级 的建筑可合并升星（最高3星）
+                if (this.tryMergeBuildings(this.draggedBuilding, otherBuilding)) {
+                    // 合并成功：无需交换位置；拖拽源建筑已被回收
+                    merged = true;
+                } else {
                 // 使用保存的原始网格位置进行交换
                 if (this.draggedBuildingOriginalGrid) {
                     this.swapBuildingsWithGrid(
@@ -3590,6 +3989,7 @@ export class TowerBuilder extends Component {
                     this.cancelDraggingBuilding();
                     return;
                 }
+                }
             } else {
                 // 找不到其他建筑物或建筑物已无效，恢复原位置
                 this.cancelDraggingBuilding();
@@ -3601,7 +4001,8 @@ export class TowerBuilder extends Component {
         }
 
         // 保存拖拽的建筑物节点引用（在清除状态前）
-        const buildingToDeselect = this.draggedBuilding;
+        // 合并成功时，拖拽源可能已回收，避免引用失效
+        const buildingToDeselect = merged ? null : this.draggedBuilding;
         
         // 清除拖拽状态
         this.isDraggingBuilding = false;

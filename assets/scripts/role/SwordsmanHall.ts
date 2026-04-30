@@ -281,6 +281,8 @@ export class SwordsmanHall extends Build {
         
         // 现在激活节点，只触发一次 onEnable()
         swordsman.active = true;
+        // 同步建筑星级到训练单位头顶
+        this.applyStarToProducedUnit(swordsman);
 
         if (swordsmanScript) {
            //console.info(`[SwordsmanHall] 生产剑士，最终攻击力=${swordsmanScript.attackDamage}, 生命值=${swordsmanScript.maxHealth}`);

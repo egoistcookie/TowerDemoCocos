@@ -145,6 +145,10 @@ export class BuildingPool extends Component {
                     if (buildScript.totalProducedCount !== undefined) {
                         buildScript.totalProducedCount = 0;
                     }
+                    // 重置星级
+                    if (buildScript.starLevel !== undefined) {
+                        buildScript.starLevel = 1;
+                    }
                 }
             }
         } else {

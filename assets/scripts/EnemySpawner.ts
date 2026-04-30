@@ -106,6 +106,10 @@ export class EnemySpawner extends Component {
     private pendingNextWaveCountMultiplier: number = 1; // 下一个波次将要使用的倍率
     private currentWaveCountMultiplier: number = 1;     // 当前波次生效倍率
 
+    // 刷怪进度（用于“刷新按钮金边”）：按本波应刷总数/已刷数计算
+    private waveTotalToSpawn: number = 0;
+    private waveSpawnedTotal: number = 0;
+
 
     // 波次刷新完后抽卡延迟，给玩家更多注意抽卡的时间
     private buffCardDelayTimer: number = 0;
@@ -180,6 +184,8 @@ export class EnemySpawner extends Component {
         this.persistentEnemyGrowthMultiplier = 1;
         this.isEndingWave = false;
         this.endingWaveIndex = -999;
+        this.waveTotalToSpawn = 0;
+        this.waveSpawnedTotal = 0;
         
         // 测试模式日志
         if (this.testMode) {
@@ -391,6 +397,8 @@ export class EnemySpawner extends Component {
 
         // 增加已生成敌人计数并处理切换/结束逻辑
         this.enemiesSpawnedCount++;
+        this.waveSpawnedTotal++;
+        this.pushWaveSpawnProgressToRefreshButton(false);
         if (this.enemiesSpawnedCount >= (this.currentEnemyConfig?.count || 0)) {
             if (this.currentWave && this.currentEnemyIndex + 1 >= this.currentWave.enemies.length) {
                 this.currentEnemyIndex++;
@@ -405,6 +413,38 @@ export class EnemySpawner extends Component {
             this.currentEnemyConfig = null;
             this.enemiesSpawnedCount = 0;
         }
+    }
+
+    private recomputeWaveTotalToSpawn(): number {
+        if (!this.currentWave || !this.currentWave.enemies) return 0;
+        const multiplier = Math.max(1, this.currentWaveCountMultiplier);
+        let total = 0;
+        for (const cfg of this.currentWave.enemies) {
+            if (!cfg) continue;
+            // 预制体缺失的不计入总数，避免进度永远到不了 100%
+            const prefab = this.enemyPrefabMap.get(cfg.prefabName);
+            if (!prefab) continue;
+            total += Math.max(1, Math.floor(cfg.count * multiplier));
+        }
+        return total;
+    }
+
+    private pushWaveSpawnProgressToRefreshButton(forceComplete: boolean) {
+        const towerBuilderNode = find('Canvas/TowerBuilder') || find('TowerBuilder');
+        const towerBuilder = towerBuilderNode?.getComponent('TowerBuilder') as any;
+        if (!towerBuilder || typeof towerBuilder.setWaveSpawnProgress !== 'function') {
+            return;
+        }
+
+        let p = 0;
+        if (forceComplete) {
+            p = 1;
+        } else {
+            const total = Math.max(0, this.waveTotalToSpawn || 0);
+            const spawned = Math.max(0, this.waveSpawnedTotal || 0);
+            p = total > 0 ? Math.max(0, Math.min(1, spawned / total)) : 0;
+        }
+        towerBuilder.setWaveSpawnProgress(p);
     }
 
     /**
@@ -1153,6 +1193,10 @@ export class EnemySpawner extends Component {
             this.enemiesSpawnedCount = 0;
             this.enemySpawnTimer = 0;
             this.currentEnemyConfig = null;
+            // 本波进度重置：整圈金边
+            this.waveSpawnedTotal = 0;
+            this.waveTotalToSpawn = this.recomputeWaveTotalToSpawn();
+            this.pushWaveSpawnProgressToRefreshButton(false);
             
             // 第一波只刷新一个敌人，刷新后暂停
             // if (this.currentWave && this.currentWave.id === 1) {
@@ -1355,6 +1399,15 @@ export class EnemySpawner extends Component {
         }
 
         const waveNumber = this.currentWaveIndex + 1;
+        // 波次刷新完成：金边完全消失
+        this.pushWaveSpawnProgressToRefreshButton(true);
+
+        // 每波结束时刷新建筑候选池（按当前关卡解锁池随机抽取）
+        const towerBuilderNode = find('Canvas/TowerBuilder') || find('TowerBuilder');
+        const towerBuilder = towerBuilderNode?.getComponent('TowerBuilder') as any;
+        if (towerBuilder && typeof towerBuilder.onWaveCompletedRefreshCandidates === 'function') {
+            towerBuilder.onWaveCompletedRefreshCandidates();
+        }
 
         // 最后一波：立即显示增益卡片（不等待）
         if (isLastWave) {
@@ -1518,6 +1571,11 @@ export class EnemySpawner extends Component {
                 `[EnemySpawner][DynamicDifficulty] startNextWave apply multiplier: wave=${this.currentWaveIndex + 1}, multiplier=${this.currentWaveCountMultiplier}`
             );
         }
+
+        // 本波进度重置：整圈金边（倍率确定后再计算总数）
+        this.waveSpawnedTotal = 0;
+        this.waveTotalToSpawn = this.recomputeWaveTotalToSpawn();
+        this.pushWaveSpawnProgressToRefreshButton(false);
         
        //console.log(`[EnemySpawner] startNextWave() 重置波次状态，isWaveActive=${this.isWaveActive}`);
         

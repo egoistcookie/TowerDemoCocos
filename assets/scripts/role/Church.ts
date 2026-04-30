@@ -266,7 +266,9 @@ export class Church extends Build {
         }
         
         // 现在激活节点，只触发一次 onEnable()
-        priest.active = true;
+        priest.active = true; 
+        // 同步建筑星级到训练单位头顶
+        this.applyStarToProducedUnit(priest);
 
         if (priestScript) {
            //console.info(`[Church] 生产牧师，最终攻击力=${(priestScript as any).attackDamage}, 生命值=${(priestScript as any).maxHealth}`);

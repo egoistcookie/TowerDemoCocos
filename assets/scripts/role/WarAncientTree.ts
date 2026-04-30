@@ -619,6 +619,8 @@ export class WarAncientTree extends Build {
         
         // 现在激活节点，只触发一次 onEnable()
         tower.active = true;
+        // 同步建筑星级到训练单位头顶
+        this.applyStarToProducedUnit(tower);
 
         // 节点激活后，确保穿透箭技能已正确初始化（创建蓝条等）
         if (towerScript && typeof towerScript.isPenetrateArrowEnabled === 'boolean' && towerScript.isPenetrateArrowEnabled) {
@@ -790,6 +792,8 @@ export class WarAncientTree extends Build {
 
         // 激活节点
         eagleArcherNode.active = true;
+        // 同步建筑星级到训练单位头顶
+        this.applyStarToProducedUnit(eagleArcherNode);
 
         // 添加到已生产列表
         this.producedTowers.push(eagleArcherNode);

@@ -94,6 +94,42 @@ export class Build extends Component {
     // 对象池相关：预制体名称（用于对象池回收）
     public prefabName: string = '';
 
+    /** 建筑星级：1~3 */
+    public starLevel: number = 1;
+
+    public getStarLevel(): number {
+        const v = Number(this.starLevel || 1);
+        if (isNaN(v)) return 1;
+        return Math.max(1, Math.min(3, Math.floor(v)));
+    }
+
+    public setStarLevel(level: number) {
+        const v = Number(level);
+        this.starLevel = isNaN(v) ? 1 : Math.max(1, Math.min(3, Math.floor(v)));
+        this.refreshStarVisual();
+    }
+
+    protected refreshStarVisual() {
+        try {
+            const tbNode = find('Canvas/TowerBuilder') || find('TowerBuilder');
+            const tb = tbNode?.getComponent('TowerBuilder') as any;
+            if (tb && typeof tb.applyStarToBuildingNode === 'function') {
+                tb.applyStarToBuildingNode(this.node, this.getStarLevel());
+            }
+        } catch {}
+    }
+
+    protected applyStarToProducedUnit(unit: Node | null) {
+        if (!unit || !unit.isValid) return;
+        try {
+            const tbNode = find('Canvas/TowerBuilder') || find('TowerBuilder');
+            const tb = tbNode?.getComponent('TowerBuilder') as any;
+            if (tb && typeof tb.applyStarToUnitNode === 'function') {
+                tb.applyStarToUnitNode(unit, this.getStarLevel());
+            }
+        } catch {}
+    }
+
     /**
      * 当建筑物从对象池激活时调用（用于对象池复用）
      * 从对象池获取的建筑物会调用此方法，而不是start方法
@@ -134,6 +170,9 @@ export class Build extends Component {
         
         // 应用已保存的增益效果
         this.applyBuffsFromManager();
+
+        // 统一刷新星标（包含对象池复用场景）
+        this.scheduleOnce(() => this.refreshStarVisual(), 0);
     }
 
     protected start() {
@@ -169,6 +208,9 @@ export class Build extends Component {
         
         // 应用已保存的增益效果（首次创建时）
         this.applyBuffsFromManager();
+
+        // 首次创建也刷新星标
+        this.scheduleOnce(() => this.refreshStarVisual(), 0);
     }
     
     /**

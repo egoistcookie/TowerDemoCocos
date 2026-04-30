@@ -257,6 +257,8 @@ export class EagleNest extends Build {
         // 设置位置并激活
         eagle.setWorldPosition(spawnPos);
         eagle.active = true;
+        // 同步建筑星级到训练单位头顶
+        this.applyStarToProducedUnit(eagle);
 
         // 首次出现检查（完全体角鹰）
         if (this.gameManager) {

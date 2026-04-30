@@ -31,11 +31,17 @@ export class BuildingSelectionPanel extends Component {
     private onBuildingSelectedCallback: ((building: BuildingType) => void) | null = null;
     private onBuildCallback: ((building: BuildingType, position: Vec3) => void) | null = null;
     private onBuildCancelCallback: (() => void) | null = null; // 建造取消/失败回调
+    private onRefreshRequestCallback: (() => void) | null = null; // 刷新候选建筑回调
     private canvasNode: Node = null!;
     private touchEndHandled: boolean = false; // 标记触摸结束事件是否已处理
     private gridPanel: BuildingGridPanel = null!; // 网格面板组件
     private stoneWallGridPanel: StoneWallGridPanel = null!; // 石墙网格面板组件
     private lastIsDragging: boolean = false; // 上一帧的拖拽状态，用于检测状态变化
+    private refreshButtonCost: number = 10;
+    private refreshButtonEnabled: boolean = true;
+    private refreshProgress: number = 0; // 0=整圈金边；1=完全消失
+    private refreshButtonNode: Node | null = null;
+    private refreshRingGraphics: Graphics | null = null;
 
     start() {
         this.findGameManager();
@@ -623,6 +629,56 @@ export class BuildingSelectionPanel extends Component {
     }
 
     /**
+     * 设置刷新候选建筑回调
+     */
+    setOnRefreshRequest(callback: () => void) {
+        this.onRefreshRequestCallback = callback;
+    }
+
+    /**
+     * 设置刷新按钮状态
+     */
+    setRefreshButtonState(cost: number, enabled: boolean) {
+        this.refreshButtonCost = cost;
+        this.refreshButtonEnabled = enabled;
+        this.updatePanel();
+    }
+
+    /**
+     * 设置刷新按钮金边进度（0~1）
+     * - 0：整圈
+     * - 1：完全消失
+     */
+    setRefreshProgress(progress01: number) {
+        this.refreshProgress = Math.max(0, Math.min(1, progress01));
+        this.redrawRefreshRing();
+    }
+
+    private redrawRefreshRing() {
+        if (!this.refreshRingGraphics || !this.refreshButtonNode || !this.refreshButtonNode.isValid) {
+            return;
+        }
+        const g = this.refreshRingGraphics;
+        g.clear();
+
+        const remaining = Math.max(0, 1 - (this.refreshProgress || 0));
+        if (remaining <= 0.001) {
+            return;
+        }
+
+        const diameter = this.refreshButtonNode.getComponent(UITransform)?.contentSize.width || 112;
+        // 圆环半径：尽量贴合按钮外沿（避免“悬浮”在外面）
+        const lineWidth = 6;
+        const radius = diameter / 2 + Math.max(0, lineWidth / 2 - 1);
+        const startAngle = -Math.PI / 2;
+        const endAngle = startAngle + remaining * Math.PI * 2;
+        g.lineWidth = lineWidth;
+        g.strokeColor = new Color(255, 215, 0, 255); // 金边
+        g.arc(0, 0, radius, startAngle, endAngle, false);
+        g.stroke();
+    }
+
+    /**
      * 显示面板
      */
     show() {
@@ -726,6 +782,8 @@ export class BuildingSelectionPanel extends Component {
         // 设置面板固定宽度为 750（游戏画面宽度）
         const panelWidth = 750;
         const panelHeight = 220; // 拉高到建造按钮底部位置
+        const refreshButtonAreaWidth = 140;
+        const contentAreaWidth = panelWidth - refreshButtonAreaWidth;
 
         // 获取 Canvas 节点，用于计算屏幕底部位置
         const canvas = find('Canvas');
@@ -802,10 +860,11 @@ export class BuildingSelectionPanel extends Component {
         // 当内容宽度小于面板宽度时，内容已经居中对齐，不需要滚动
         // 当内容宽度大于面板宽度时，内容靠左对齐，允许滚动
         const contentWidth = this.buildingTypes.length * (itemWidth + spacing);
-        const isCentered = contentWidth < panelWidth;
+        const isCentered = contentWidth < contentAreaWidth;
 
-        // 初始位置：居中时为 -contentWidth/2，否则为 -panelWidth/2（靠左）
-        const initialPosX = isCentered ? -contentWidth / 2 : -panelWidth / 2;
+        // 初始位置：居中时以内容区中心居中，否则靠左
+        const contentAreaCenterX = -panelWidth / 2 + contentAreaWidth / 2;
+        const initialPosX = isCentered ? (contentAreaCenterX - contentWidth / 2) : -panelWidth / 2;
 
         // 设置内容容器初始位置
         contentNode.setPosition(initialPosX, 0, 0);
@@ -826,11 +885,11 @@ export class BuildingSelectionPanel extends Component {
             const newScrollX = startScrollX + deltaX;
 
             // 限制滚动范围（只有当内容宽度大于面板宽度时才允许滚动）
-            if (contentWidth > panelWidth) {
-                // 最大滚动位置：content 左边缘对齐面板左边缘（scrollX = -panelWidth/2）
-                // 最小滚动位置：content 右边缘对齐面板右边缘（scrollX = -panelWidth/2 + panelWidth - contentWidth）
+            if (contentWidth > contentAreaWidth) {
+                // 最大滚动位置：content 左边缘对齐内容区左边缘（scrollX = -panelWidth/2）
+                // 最小滚动位置：content 右边缘对齐内容区右边缘
                 const maxScrollX = -panelWidth / 2;
-                const minScrollX = -panelWidth / 2 + panelWidth - contentWidth;
+                const minScrollX = -panelWidth / 2 + contentAreaWidth - contentWidth;
 
                 if (newScrollX > maxScrollX) {
                     contentNode.setPosition(maxScrollX, 0, 0);
@@ -841,6 +900,81 @@ export class BuildingSelectionPanel extends Component {
                 }
             }
         }, this);
+
+        // 候选池右侧刷新按钮（圆形）
+        const refreshNode = new Node('RefreshButton');
+        refreshNode.setParent(this.node);
+        refreshNode.setPosition(panelWidth / 2 - refreshButtonAreaWidth / 2, 0, 0);
+        const refreshTransform = refreshNode.addComponent(UITransform);
+        const refreshDiameter = 112;
+        refreshTransform.setContentSize(refreshDiameter, refreshDiameter);
+
+        const refreshBg = refreshNode.addComponent(Graphics);
+        const buttonColor = this.refreshButtonEnabled ? new Color(40, 120, 220, 220) : new Color(80, 80, 80, 220);
+        refreshBg.fillColor = buttonColor;
+        refreshBg.circle(0, 0, refreshDiameter / 2);
+        refreshBg.fill();
+
+        // 金边圆环（随刷怪进度缩短）
+        const ringNode = new Node('RefreshRing');
+        ringNode.setParent(refreshNode);
+        ringNode.setPosition(0, 0, 0);
+        const ringTransform = ringNode.addComponent(UITransform);
+        ringTransform.setContentSize(refreshDiameter + 8, refreshDiameter + 8);
+        const ringGraphics = ringNode.addComponent(Graphics);
+
+        const refreshLabelNode = new Node('RefreshLabel');
+        refreshLabelNode.setParent(refreshNode);
+        refreshLabelNode.setPosition(0, 14, 0);
+        const refreshLabel = refreshLabelNode.addComponent(Label);
+        refreshLabel.string = '刷新';
+        refreshLabel.fontSize = 24;
+        refreshLabel.color = Color.WHITE;
+
+        const refreshCostNode = new Node('RefreshCostLabel');
+        refreshCostNode.setParent(refreshNode);
+        refreshCostNode.setPosition(0, -18, 0);
+        const refreshCostLabel = refreshCostNode.addComponent(Label);
+        refreshCostLabel.string = `💰${this.refreshButtonCost}`;
+        refreshCostLabel.fontSize = 20;
+        refreshCostLabel.color = this.refreshButtonEnabled ? Color.YELLOW : new Color(180, 180, 180, 255);
+
+        refreshNode.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
+            event.propagationStopped = true;
+            // 圆形命中检测：点击落在圆外则忽略（把触摸热区从方形变为真正的圆形）
+            try {
+                const tr = refreshNode.getComponent(UITransform);
+                if (tr) {
+                    const loc = event.getLocation();
+                    const cameraNode = find('Canvas/Camera');
+                    const camera = cameraNode?.getComponent(Camera);
+                    if (camera) {
+                        const screenPos = new Vec3(loc.x, loc.y, 0);
+                        const worldPos = new Vec3();
+                        camera.screenToWorld(screenPos, worldPos);
+                        const local = tr.convertToNodeSpaceAR(worldPos);
+                        const radius = (tr.contentSize.width || refreshDiameter) / 2;
+                        const dx = local.x;
+                        const dy = local.y;
+                        if (dx * dx + dy * dy > radius * radius) {
+                            return;
+                        }
+                    }
+                }
+            } catch {}
+            if (!this.refreshButtonEnabled) {
+                GamePopup.showMessage('金币不足');
+                return;
+            }
+            if (this.onRefreshRequestCallback) {
+                this.onRefreshRequestCallback();
+            }
+        }, this);
+
+        // 缓存引用并绘制一次圆环
+        this.refreshButtonNode = refreshNode;
+        this.refreshRingGraphics = ringGraphics;
+        this.redrawRefreshRing();
     }
 
     /**
