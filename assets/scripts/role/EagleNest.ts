@@ -267,18 +267,21 @@ export class EagleNest extends Build {
 
         // 完全体角鹰可以离开兽栏，设置移动目标
         if (eagleScript) {
-            // 优先前往集结点
-            if (this.rallyPoint) {
-                const rallyPos = this.findOptimalRallyPointPosition(this.rallyPoint, eagle.worldPosition.clone());
-                this.scheduleOnce(() => eagleScript?.setManualMoveTargetPosition?.(rallyPos), 0.05);
-            } else {
-                const targetPos = new Vec3(
-                    eagle.worldPosition.x + this.moveAwayDistance,
-                    eagle.worldPosition.y,
-                    eagle.worldPosition.z
-                );
-                this.scheduleOnce(() => eagleScript?.setManualMoveTargetPosition?.(targetPos), 0.05);
-            }
+            this.scheduleOnce(() => {
+                if (!eagle || !eagle.isValid || !eagleScript) return;
+                // 目标点计算延后到后置队列，进一步削峰
+                if (this.rallyPoint) {
+                    const rallyPos = this.findOptimalRallyPointPosition(this.rallyPoint, eagle.worldPosition.clone());
+                    eagleScript.setManualMoveTargetPosition?.(rallyPos);
+                } else {
+                    const targetPos = new Vec3(
+                        eagle.worldPosition.x + this.moveAwayDistance,
+                        eagle.worldPosition.y,
+                        eagle.worldPosition.z
+                    );
+                    eagleScript.setManualMoveTargetPosition?.(targetPos);
+                }
+            }, 0.05);
         }
 
         // 更新单位信息面板

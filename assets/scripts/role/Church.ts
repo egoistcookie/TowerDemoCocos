@@ -77,6 +77,26 @@ export class Church extends Build {
         this.node.on(Node.EventType.TOUCH_END, this.onBuildingClick, this);
     }
 
+    onEnable() {
+        super.onEnable();
+        // 对象池复用时清理上一次生产与调度状态，避免残留回调叠加
+        try {
+            this.unscheduleAllCallbacks();
+        } catch {}
+        this.producedPriests = [];
+        this.productionTimer = 0;
+        this.productionProgress = 0;
+        this.isProducing = false;
+        try {
+            if (this.productionProgressBar && this.productionProgressBar.isValid) {
+                this.productionProgressBar.active = false;
+            }
+            if (this.productionProgressGraphics) {
+                this.productionProgressGraphics.clear();
+            }
+        } catch {}
+    }
+
     update(deltaTime: number) {
         if (this.isDestroyed) return;
 
@@ -276,32 +296,34 @@ export class Church extends Build {
 
         this.producedPriests.push(priest);
 
-        // 计算Priest的目标位置
-        // 如果有集结点，先移动到集结点；否则向左右两侧跑开
-        let targetPos: Vec3;
-        if (this.rallyPoint) {
-            // 有集结点，移动到集结点
-            targetPos = this.rallyPoint.clone();
-        } else {
-            // 没有集结点，根据已生产的Priest数量，分散到不同位置
-            const index = this.producedPriests.length - 1;
-            const dirX = index % 2 === 0 ? 1 : -1;
-            targetPos = new Vec3(
-                spawnPos.x + dirX * this.moveAwayDistance,
-                spawnPos.y,
-                spawnPos.z
-            );
-        }
-
         if (priestScript) {
             this.scheduleOnce(() => {
                 if (!priest || !priest.isValid || !priestScript) return;
+                // 目标点计算延后到后置队列，进一步削峰
+                let targetPos: Vec3;
+                if (this.rallyPoint) {
+                    targetPos = this.rallyPoint.clone();
+                } else {
+                    const index = this.producedPriests.length - 1;
+                    const dirX = index % 2 === 0 ? 1 : -1;
+                    const pp = priest.worldPosition;
+                    targetPos = new Vec3(pp.x + dirX * this.moveAwayDistance, pp.y, pp.z);
+                }
 
                 if ((priestScript as any).setManualMoveTargetPosition) {
                     (priestScript as any).setManualMoveTargetPosition(targetPos);
                 } else if ((priestScript as any).moveToPosition) {
+                    let elapsed = 0;
                     const moveUpdate = (dt: number) => {
                         if (!priest || !priest.isValid || !priestScript) {
+                            this.unschedule(moveUpdate);
+                            return;
+                        }
+                        elapsed += dt;
+                        if (elapsed >= 6) {
+                            if ((priestScript as any).stopMoving) {
+                                (priestScript as any).stopMoving();
+                            }
                             this.unschedule(moveUpdate);
                             return;
                         }
@@ -316,7 +338,7 @@ export class Church extends Build {
                             (priestScript as any).moveToPosition(targetPos, dt);
                         }
                     };
-                    this.schedule(moveUpdate, 0);
+                    this.schedule(moveUpdate, 0.05);
                 }
             }, 0.1);
         }

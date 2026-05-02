@@ -12,6 +12,8 @@ import { BuildingPool } from '../BuildingPool';
 import { DamageStatistics } from '../DamageStatistics';
 import { BuffManager } from '../BuffManager';
 import { TalentEffectManager } from '../TalentEffectManager';
+import { BattleFloatTextPool } from '../BattleFloatTextPool';
+import { Role } from './Role';
 const { ccclass, property } = _decorator;
 
 @ccclass('Build')
@@ -109,6 +111,31 @@ export class Build extends Component {
         this.refreshStarVisual();
     }
 
+    /**
+     * 对象池复用重置入口。
+     * 子类可覆盖并调用 super.resetForPoolReuse()，补充清理自己的临时状态。
+     */
+    public resetForPoolReuse() {
+        try { this.unscheduleAllCallbacks(); } catch {}
+        this.isDestroyed = false;
+        this.isMoving = false;
+        this.gridX = -1;
+        this.gridY = -1;
+        this.starLevel = 1;
+        // 清理复用节点上残留的星标容器，避免新建 1 星时短暂显示旧的 2/3 星
+        try {
+            const oldStar = this.node?.getChildByName?.('StarLevelContainer');
+            if (oldStar && oldStar.isValid) {
+                oldStar.destroy();
+            }
+        } catch {}
+        try {
+            (this as any).clearSelectionPanel?.();
+            (this as any).clearMovementArrows?.();
+            (this as any).clearRallyPointMarker?.();
+        } catch {}
+    }
+
     protected refreshStarVisual() {
         try {
             const tbNode = find('Canvas/TowerBuilder') || find('TowerBuilder');
@@ -121,13 +148,17 @@ export class Build extends Component {
 
     protected applyStarToProducedUnit(unit: Node | null) {
         if (!unit || !unit.isValid) return;
+        const star = this.getStarLevel();
         try {
-            const tbNode = find('Canvas/TowerBuilder') || find('TowerBuilder');
-            const tb = tbNode?.getComponent('TowerBuilder') as any;
-            if (tb && typeof tb.applyStarToUnitNode === 'function') {
-                tb.applyStarToUnitNode(unit, this.getStarLevel());
-            }
+            (unit as any).__spawnStarLevel = star;
         } catch {}
+        // 等 Role.start / onEnable 与天赋增幅跑完后，再按星级修正攻血与体型
+        this.scheduleOnce(() => {
+            const role = unit.getComponent(Role);
+            if (role && typeof role.applyStarTierScaling === 'function') {
+                role.applyStarTierScaling(1, star);
+            }
+        }, 0);
     }
 
     /**
@@ -357,63 +388,12 @@ export class Build extends Component {
      * 显示建筑物伤害数字（与单位/敌人一致的表现）
      */
     protected showDamageNumber(damage: number, isCritical: boolean = false, hitDirection?: Vec3) {
-        if (!this.damageNumberPrefab) {
-            return;
-        }
-
-        // 创建伤害数字节点
-        const damageNode = instantiate(this.damageNumberPrefab);
-
-        // 如果预制体上自带 DamageNumber 组件（包含自己的上飘逻辑），先移除，避免与当前自定义飘动冲突
-        const builtinDamageComp = damageNode.getComponent(DamageNumber);
-        if (builtinDamageComp) {
-            damageNode.removeComponent(DamageNumber);
-        }
-
-        const canvas = find('Canvas');
-        if (canvas) {
-            damageNode.setParent(canvas);
-        } else if (this.node.scene) {
-            damageNode.setParent(this.node.scene);
-        } else {
-            damageNode.setParent(this.node.parent);
-        }
-
-        // 起始位置：在建筑物上方一点
         const startPos = this.node.worldPosition.clone();
         startPos.y += 50;
-        damageNode.setWorldPosition(startPos);
-
-        // 查找或创建 Label
-        let label: Label | null = damageNode.getComponent(Label);
-        if (!label) {
-            const labelsInChildren = damageNode.getComponentsInChildren(Label);
-            if (labelsInChildren && labelsInChildren.length > 0) {
-                label = labelsInChildren[0];
-            }
-        }
-        if (!label) {
-            label = damageNode.addComponent(Label);
-            label.fontSize = 20;
-        }
 
         // 文字内容与样式（建筑物受伤：统一黑边红字）
         const baseDamageText = `-${Math.floor(damage)}`;
-        label.string = isCritical ? `${baseDamageText}!` : baseDamageText;
-        label.color = new Color(255, 0, 0, 255);
-
-        // 黑色描边
-        let outline = label.node.getComponent(LabelOutline);
-        if (!outline) {
-            outline = label.node.addComponent(LabelOutline);
-        }
-        (label as any).outlineColor = new Color(0, 0, 0, 255);
-        (label as any).outlineWidth = 2;
-
-        // 暴击放大（略小一点）
-        if (isCritical) {
-            label.fontSize = label.fontSize * 1.2;
-        }
+        const text = isCritical ? `${baseDamageText}!` : baseDamageText;
 
         // 飘动方向：沿攻击方向飘动
         const floatDir = new Vec3();
@@ -432,23 +412,20 @@ export class Build extends Component {
         const floatDistance = isCritical ? 40 : 25;
         const offset = new Vec3();
         Vec3.scaleAndAdd(offset, startPos, floatDir, floatDistance);
-        const endWorldPos = offset;
+        const moveOffset = new Vec3(offset.x - startPos.x, offset.y - startPos.y, offset.z - startPos.z);
 
-        // 渐隐飘动动画
-        const uiOpacity = damageNode.getComponent(UIOpacity) || damageNode.addComponent(UIOpacity);
-        uiOpacity.opacity = 255;
-
-        tween(damageNode)
-            .to(0.6, { worldPosition: endWorldPos }, { easing: 'sineOut' })
-            .parallel(
-                tween(uiOpacity).to(0.6, { opacity: 0 })
-            )
-            .call(() => {
-                if (damageNode && damageNode.isValid) {
-                    damageNode.destroy();
-                }
-            })
-            .start();
+        BattleFloatTextPool.spawnFloatText({
+            owner: this,
+            prefab: this.damageNumberPrefab,
+            worldPos: startPos,
+            text,
+            color: new Color(255, 0, 0, 255),
+            fontSize: isCritical ? 24 : 20,
+            duration: 0.6,
+            moveOffset,
+            outlineColor: new Color(0, 0, 0, 255),
+            outlineWidth: 2,
+        });
     }
 
     /**
@@ -1235,6 +1212,18 @@ export class Build extends Component {
     }
 
     /**
+     * 解析友军单位容器：只用约定路径 find('Canvas/xxx')、find('xxx')。
+     * 场上单位从对象池取出后会挂到这些容器下；池内未激活节点在 UnitPool/PoolContainer，不参与集结点疏散。
+     */
+    protected resolveUnitsContainerNode(baseName: string): Node | null {
+        const underCanvas = find(`Canvas/${baseName}`);
+        if (underCanvas && underCanvas.isValid) return underCanvas;
+        const byName = find(baseName);
+        if (byName && byName.isValid) return byName;
+        return null;
+    }
+
+    /**
      * 查找集结点的最佳位置（考虑附近的友方单位，避免挤在一起）
      * 子类可以重写此方法以使用自己的 hasUnitAtPosition 和 findAvailableSpawnPosition 方法
      * @param rallyPoint 集结点位置
@@ -1258,7 +1247,7 @@ export class Build extends Component {
         ];
         
         for (const container of friendlyContainers) {
-            const containerNode = find(`Canvas/${container.name}`);
+            const containerNode = this.resolveUnitsContainerNode(container.name);
             if (!containerNode) continue;
             
             const units = containerNode.children || [];

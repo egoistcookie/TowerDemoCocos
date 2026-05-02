@@ -1,6 +1,8 @@
-import { _decorator, Component, Node, Sprite, Label, Button, find, UITransform, Vec3, tween, Color, UIOpacity, Graphics, view, SpriteFrame, resources, LabelOutline } from 'cc';
+import { _decorator, Component, Node, Sprite, Label, Button, find, UITransform, Vec3, tween, Color, UIOpacity, Graphics, view, SpriteFrame, resources, LabelOutline, AudioClip } from 'cc';
 import { BuffManager } from './BuffManager';
 import { AnalyticsManager, OperationType, CardSelectionItem, CardSelectionMode } from './AnalyticsManager';
+import { SoundManager } from './SoundManager';
+import { AudioManager } from './AudioManager';
 const { ccclass, property } = _decorator;
 
 /**
@@ -58,7 +60,12 @@ export class BuffCardPopup extends Component {
     card3Description: Label = null!;
     @property(Button)
     card3Button: Button = null!;
-    
+
+    private static readonly CARD_SELECT_SFX_RES = 'sounds/抽卡';
+    private cardSelectSfxCachedClip: AudioClip | null = null;
+    private cardSelectSfxLoading = false;
+    private cardSelectSfxPlayPending = false;
+
     private gameManager: any = null!; // GameManager引用
     private maskLayer: Node = null!; // 遮罩层节点
     private cardData: BuffCardData[] = []; // 卡片数据数组
@@ -155,6 +162,41 @@ export class BuffCardPopup extends Component {
     // 防止连点导致“关闭回调/继续下一波”被触发多次
     private isClosing: boolean = false;
     private hasInvokedCloseCallback: boolean = false;
+
+    private playCardSelectSfxIfAny() {
+        if (this.cardSelectSfxCachedClip) {
+            this.playCardSelectSfxClip(this.cardSelectSfxCachedClip);
+            return;
+        }
+        this.cardSelectSfxPlayPending = true;
+        if (this.cardSelectSfxLoading) return;
+        this.cardSelectSfxLoading = true;
+        resources.load(BuffCardPopup.CARD_SELECT_SFX_RES, AudioClip, (err, clip) => {
+            this.cardSelectSfxLoading = false;
+            if (err || !clip) {
+                this.cardSelectSfxPlayPending = false;
+                console.warn('[BuffCardPopup] 加载抽卡音效失败:', BuffCardPopup.CARD_SELECT_SFX_RES, err);
+                return;
+            }
+            this.cardSelectSfxCachedClip = clip;
+            if (this.cardSelectSfxPlayPending) {
+                this.playCardSelectSfxClip(clip);
+            }
+            this.cardSelectSfxPlayPending = false;
+        });
+    }
+
+    private playCardSelectSfxClip(clip: AudioClip) {
+        try {
+            const sm = SoundManager.getInstance();
+            const smHasEffectSource = sm ? !!(sm as any).effectAudioSource : false;
+            if (sm && smHasEffectSource) {
+                sm.playEffect(clip);
+            } else {
+                AudioManager.Instance?.playSFX(clip);
+            }
+        } catch {}
+    }
 
     private setAllButtonsInteractable(interactable: boolean) {
         try {
@@ -681,6 +723,8 @@ export class BuffCardPopup extends Component {
         } catch (e) {
             // 忽略埋点异常
         }
+
+        this.playCardSelectSfxIfAny();
 
         // 应用所有三张卡片的增益效果
         for (let i = 0; i < this.cardData.length; i++) {
@@ -1305,6 +1349,7 @@ export class BuffCardPopup extends Component {
         const enoughGold = currentGold >= cost;
 
         const completeSelection = (mode: CardSelectionMode, watchVideo: boolean) => {
+            this.playCardSelectSfxIfAny();
             this.reportSingleCardSelection(index, mode, watchVideo, cost);
             this.applyBuff(cardData);
             this.hideWithEffects(index);
@@ -1398,6 +1443,7 @@ export class BuffCardPopup extends Component {
             if (unitScript) {
                 // 统一走 BuffManager 重新计算（尤其 SP 需要按等级覆盖式应用）
                 buffManager.applyBuffsToUnit(unitScript, cardData.unitId);
+                this.notifyBuffPanelIfUnitSelected(unitScript);
                 continue;
             }
 
@@ -1414,9 +1460,27 @@ export class BuffCardPopup extends Component {
                 if (scriptType === cardData.unitId) {
                     // 统一走 BuffManager 重新计算（尤其 SP 需要按等级覆盖式应用）
                     buffManager.applyBuffsToUnit(script, cardData.unitId);
+                    this.notifyBuffPanelIfUnitSelected(script);
                 }
             }
         }
+    }
+
+    /** 抽卡改属性后刷新已打开的单位信息面板（攻击力等） */
+    private notifyBuffPanelIfUnitSelected(unitScript: any) {
+        try {
+            const usm = unitScript.unitSelectionManager;
+            const node = unitScript.node as Node;
+            if (!usm || !node || !usm.isUnitSelected(node)) return;
+            const ai = unitScript.attackInterval > 0 ? 1 / unitScript.attackInterval : 0;
+            usm.updateUnitInfo({
+                attackDamage: unitScript.attackDamage,
+                maxHealth: unitScript.maxHealth,
+                currentHealth: unitScript.currentHealth,
+                attackFrequency: ai,
+                moveSpeed: unitScript.moveSpeed,
+            });
+        } catch {}
     }
     
     /**
@@ -1565,6 +1629,8 @@ export class BuffCardPopup extends Component {
         const unitContainerMap: Record<string, string[]> = {
             'Arrower': ['Canvas/Towers'],
             'Hunter': ['Canvas/Hunters'],
+            'Eagle': ['Canvas/Eagles'],
+            'EagleArcher': ['Canvas/EagleArchers'],
             // 剑士容器命名在不同场景/版本中可能不同，这里做兼容
             'ElfSwordsman': ['Canvas/Swordsmen', 'Canvas/ElfSwordsmans'],
             'Priest': ['Canvas/Towers'],

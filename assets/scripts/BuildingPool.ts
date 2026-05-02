@@ -1,4 +1,5 @@
 import { _decorator, Component, Node, Prefab, instantiate, find } from 'cc';
+import { Build } from './role/Build';
 const { ccclass, property } = _decorator;
 
 /**
@@ -131,8 +132,14 @@ export class BuildingPool extends Component {
                 building.setScale(1, 1, 1);
                 
                 // 清理建筑物脚本的状态
-                const buildScript = building.getComponent('Build') as any;
+                const buildScript = (building.getComponent(Build) || building.getComponent('Build')) as any;
                 if (buildScript) {
+                    // 优先走统一复用重置入口（子类可覆盖）
+                    if (typeof buildScript.resetForPoolReuse === 'function') {
+                        try { buildScript.resetForPoolReuse(); } catch {}
+                    } else {
+                        try { buildScript.unscheduleAllCallbacks?.(); } catch {}
+                    }
                     // 清理 producedTowers 数组（战争古树）
                     if (buildScript.producedTowers !== undefined) {
                         buildScript.producedTowers = [];
@@ -158,9 +165,9 @@ export class BuildingPool extends Component {
         }
         
         if (building) {
-            // 激活对象
-            building.active = true;
-            
+            // 重要：对象池取出时不要立即激活，调用方完成 parent/position 初始化后再激活
+            building.active = false;
+
             // 更新活跃计数
             const count = this.activeCount.get(prefabName) || 0;
             this.activeCount.set(prefabName, count + 1);
@@ -184,7 +191,7 @@ export class BuildingPool extends Component {
         if (!prefabName) {
             const nodeName = building.name;
             // 尝试从组件推断
-            const buildScript = building.getComponent('Build') as any;
+            const buildScript = (building.getComponent(Build) || building.getComponent('Build')) as any;
             if (buildScript && buildScript.prefabName) {
                 prefabName = buildScript.prefabName;
             } else {
@@ -226,6 +233,12 @@ export class BuildingPool extends Component {
         }
         
         // 重置建筑物状态
+        const buildScript = (building.getComponent(Build) || building.getComponent('Build')) as any;
+        if (buildScript && typeof buildScript.resetForPoolReuse === 'function') {
+            try { buildScript.resetForPoolReuse(); } catch {}
+        } else {
+            try { buildScript?.unscheduleAllCallbacks?.(); } catch {}
+        }
         building.active = false;
         building.setParent(this.poolContainer); // 移回对象池容器节点
         

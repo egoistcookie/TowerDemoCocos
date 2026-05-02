@@ -15,6 +15,7 @@ import { DamageStatistics } from '../DamageStatistics';
 import { BuffManager } from '../BuffManager';
 import { TalentEffectManager } from '../TalentEffectManager';
 import { UnitConfigManager } from '../UnitConfigManager';
+import { UnitStarScaling } from '../UnitStarScaling';
 // import { PerformanceMonitor } from './PerformanceMonitor';
 const { ccclass, property } = _decorator;
 
@@ -172,6 +173,8 @@ export class Role extends Component {
     protected sprite: Sprite = null!; // Sprite组件引用
     protected defaultSpriteFrame: SpriteFrame = null!; // 默认SpriteFrame（动画结束后恢复）
     protected defaultScale: Vec3 = new Vec3(1, 1, 1); // 默认缩放（用于恢复翻转）
+    /** 建筑产出星级对应的体型倍率（×defaultScale），朝向翻转时一并乘算 */
+    protected _starVisualMultiplier: number = 1;
     protected isPlayingAttackAnimation: boolean = false; // 是否正在播放攻击动画
     protected isPlayingHitAnimation: boolean = false; // 是否正在播放被攻击动画
     protected isPlayingDeathAnimation: boolean = false; // 是否正在播放死亡动画
@@ -406,6 +409,96 @@ export class Role extends Component {
 
         // 注意：不在 start() 中应用增幅，统一在 onEnable() 中处理
         // 这样可以确保首次创建和对象池复用时的行为一致
+    }
+
+    /**
+     * 按建筑星级调整攻血与体型（相对 1 星：2 星攻血×1.2、模型×1.1；3 星攻血×1.5、模型×1.2）。
+     * oldTier→newTier 为比例换算，与天赋增幅叠乘。
+     */
+    public applyStarTierScaling(oldTier: number, newTier: number) {
+        const o = Math.max(1, Math.min(3, Math.floor(oldTier)));
+        const n = Math.max(1, Math.min(3, Math.floor(newTier)));
+        if (o === n) return;
+        const atkOld = UnitStarScaling.getAttackMultiplier(o);
+        const atkNew = UnitStarScaling.getAttackMultiplier(n);
+        const hpOld = UnitStarScaling.getHealthMultiplier(o);
+        const hpNew = UnitStarScaling.getHealthMultiplier(n);
+        this.attackDamage = Math.max(1, Math.floor(this.attackDamage * atkNew / atkOld));
+        const prevMax = this.maxHealth;
+        this.maxHealth = Math.max(1, Math.floor(this.maxHealth * hpNew / hpOld));
+        this.currentHealth = Math.min(this.maxHealth, Math.max(1, Math.floor(this.currentHealth * this.maxHealth / Math.max(1, prevMax))));
+        this._starVisualMultiplier = UnitStarScaling.getVisualScaleMultiplier(n);
+        const m = this._starVisualMultiplier > 0 ? this._starVisualMultiplier : 1;
+        const ax = Math.abs(this.defaultScale.x) * m;
+        const sy = this.defaultScale.y * m;
+        const sz = this.defaultScale.z * m;
+        const faceLeft = this.node.scale.x < 0;
+        this.node.setScale(faceLeft ? -ax : ax, sy, sz);
+        try {
+            this.refreshOverheadNodesScale();
+        } catch {}
+        try {
+            if (this.healthBar) {
+                this.healthBar.setMaxHealth(this.maxHealth);
+                this.healthBar.setHealth(this.currentHealth);
+            }
+        } catch {}
+        this.syncBuffOriginalStatsFromCurrent();
+    }
+
+    /**
+     * BuffManager 用 _original* 作为抽卡百分比基准；升星会改变当前数值但不更新该缓存，
+     * 会导致后续 applyBuffsToUnit 仍按旧基准乘百分比。此处按当前属性与已有百分比反推基准。
+     */
+    private syncBuffOriginalStatsFromCurrent() {
+        const any = this as any;
+        const ap = Number(any._buffAttackDamagePercent) || 0;
+        const am = 1 + ap / 100;
+        if (am > 0) {
+            any._originalAttackDamage = Math.max(1, Math.round(this.attackDamage / am));
+        } else {
+            any._originalAttackDamage = this.attackDamage;
+        }
+        const hpPct = Number(any._buffMaxHealthPercent) || 0;
+        const hm = 1 + hpPct / 100;
+        if (hm > 0) {
+            any._originalMaxHealth = Math.max(1, Math.round(this.maxHealth / hm));
+        } else {
+            any._originalMaxHealth = this.maxHealth;
+        }
+        const sp = Number(any._buffAttackSpeedPercent) || 0;
+        const sm = 1 + sp / 100;
+        if (sm > 0 && this.attackInterval != null) {
+            any._originalAttackInterval = Math.max(0.05, this.attackInterval * sm);
+        }
+        const mp = Number(any._buffMoveSpeedPercent) || 0;
+        const mm = 1 + mp / 100;
+        if (mm > 0) {
+            any._originalMoveSpeed = Math.round((this.moveSpeed / mm) * 100) / 100;
+        }
+    }
+
+    /** 移动/攻击朝向用的体型缩放（含星级 ×defaultScale） */
+    protected setBodyScaleFacing(moveLeft: boolean) {
+        const m = this._starVisualMultiplier > 0 ? this._starVisualMultiplier : 1;
+        const ax = Math.abs(this.defaultScale.x) * m;
+        const sy = this.defaultScale.y * m;
+        const sz = this.defaultScale.z * m;
+        if (moveLeft) {
+            this.node.setScale(-ax, sy, sz);
+        } else {
+            this.node.setScale(ax, sy, sz);
+        }
+        this.refreshOverheadNodesScale();
+    }
+
+    /** 无朝向翻转时的体型缩放（含星级） */
+    protected setBodyScaleNeutral() {
+        const m = this._starVisualMultiplier > 0 ? this._starVisualMultiplier : 1;
+        this.node.setScale(this.defaultScale.x * m, this.defaultScale.y * m, this.defaultScale.z * m);
+        try {
+            this.refreshOverheadNodesScale();
+        } catch {}
     }
     
     /**
@@ -1431,15 +1524,9 @@ export class Role extends Component {
 
         // 根据移动方向翻转弓箭手
         if (this.tempVec3_1.x < 0) {
-            // 向左移动，翻转
-            this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-            // 血条/对话框保持正常朝向（并在第三段待机拉宽时做反向补偿）
-            this.refreshOverheadNodesScale();
+            this.setBodyScaleFacing(true);
         } else {
-            // 向右移动，正常朝向
-            this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-            // 血条/对话框保持正常朝向（并在第三段待机拉宽时做反向补偿）
-            this.refreshOverheadNodesScale();
+            this.setBodyScaleFacing(false);
         }
 
         // 播放移动动画
@@ -1994,15 +2081,9 @@ export class Role extends Component {
 
         // 根据移动方向翻转弓箭手（使用缓存的方向向量）
         if (finalDirection.x < 0) {
-            // 向左移动，翻转
-            this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-            // 血条 / 蓝量条 / 对话框保持正常朝向（并在第三段待机拉宽时做反向补偿）
-            this.refreshOverheadNodesScale();
+            this.setBodyScaleFacing(true);
         } else {
-            // 向右移动，正常朝向
-            this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-            // 血条 / 蓝量条 / 对话框保持正常朝向（并在第三段待机拉宽时做反向补偿）
-            this.refreshOverheadNodesScale();
+            this.setBodyScaleFacing(false);
         }
 
         // 播放移动动画
@@ -3020,15 +3101,9 @@ export class Role extends Component {
             shouldFlip = enemyPos.x < towerPos.x;
             
             if (shouldFlip) {
-                // 水平翻转：scale.x = -1
-                this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-                // 血条 / 蓝量条保持正常朝向
-                this.refreshOverheadNodesScale();
+                this.setBodyScaleFacing(true);
             } else {
-                // 保持原样：scale.x = 1
-                this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-                // 血条 / 蓝量条保持正常朝向
-                this.refreshOverheadNodesScale();
+                this.setBodyScaleFacing(false);
             }
         }
 
@@ -3113,18 +3188,14 @@ export class Role extends Component {
             const shouldFlip = enemyPos.x < towerPos.x;
             
             if (shouldFlip) {
-                // 水平翻转：scale.x = -1
-                this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+                this.setBodyScaleFacing(true);
             } else {
-                // 保持原样：scale.x = 1
-                this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
+                this.setBodyScaleFacing(false);
             }
-            // 血条 / 蓝量条保持正常朝向（使用统一的缩放刷新逻辑）
-            this.refreshOverheadNodesScale();
         } else {
             // 没有目标，恢复默认缩放（取消翻转）
             if (this.node && this.node.isValid) {
-                this.node.setScale(this.defaultScale.x, this.defaultScale.y, this.defaultScale.z);
+                this.setBodyScaleNeutral();
             }
             // 恢复血条的正常朝向
             if (this.healthBarNode && this.healthBarNode.isValid) {
@@ -4114,6 +4185,7 @@ export class Role extends Component {
         
         // 重置节点状态
         if (this.node) {
+            this._starVisualMultiplier = 1;
             this.node.setScale(this.defaultScale);
             this.node.angle = 0;
             if (this.sprite) {
@@ -4193,6 +4265,7 @@ export class Role extends Component {
         
         // 重置节点状态
         if (this.node) {
+            this._starVisualMultiplier = 1;
             this.node.setScale(this.defaultScale);
             this.node.angle = 0;
             if (this.sprite) {

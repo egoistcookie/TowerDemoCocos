@@ -769,7 +769,7 @@ export class Crystal extends Component {
             // 训练完成后：自动前往当前位置左侧 200 像素进行采集
             // 使用已有手动移动接口，不新增递归/寻路逻辑
             if (typeof wispScript.setManualMoveTargetPosition === 'function') {
-                const autoTargetPos = new Vec3(spawnPos.x - 200, spawnPos.y, spawnPos.z);
+                const autoTargetPos = new Vec3(spawnPos.x - 210, spawnPos.y + 50, spawnPos.z);
                 this.scheduleOnce(() => {
                     if (!wispScript || !wispScript.node || !wispScript.node.isValid || !wispScript.node.active) {
                         return;

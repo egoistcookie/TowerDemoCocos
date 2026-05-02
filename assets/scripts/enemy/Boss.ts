@@ -7,6 +7,7 @@ import { UnitType } from '../role/WarAncientTree';
 import { EnemyPool } from '../EnemyPool';
 import { UnitManager } from '../UnitManager';
 import { SniperMark } from '../SniperMark';
+import { BattleFloatTextPool } from '../BattleFloatTextPool';
 const { ccclass, property } = _decorator;
 
 /**
@@ -1194,23 +1195,19 @@ export class Boss extends Component {
      * 限制位置在屏幕范围内
      */
     clampPositionToScreen(position: Vec3): Vec3 {
-        // 使用cc.view获取屏幕尺寸和设计分辨率
-        const designResolution = view.getDesignResolutionSize();
-        
-        // 使用默认碰撞半径（敌人单位通常较小）
+        // 与普通敌人保持一致：使用可视区域坐标系进行 clamp，避免出生后首帧坐标系跳变
+        const visibleOrigin = view.getVisibleOrigin();
+        const visibleSize = view.getVisibleSize();
         const collisionRadius = 20;
-        
-        // 计算屏幕边界，确保单位在可见屏幕内移动
-        const minX = collisionRadius;
-        const maxX = designResolution.width - collisionRadius;
-        const minY = collisionRadius;
-        const maxY = designResolution.height - collisionRadius;
-        
-        // 限制位置在屏幕范围内
+
+        const minX = visibleOrigin.x + collisionRadius;
+        const maxX = visibleOrigin.x + visibleSize.width - collisionRadius;
+        const minY = visibleOrigin.y + collisionRadius;
+        const maxY = visibleOrigin.y + visibleSize.height - collisionRadius;
+
         const clampedPos = new Vec3(position);
         clampedPos.x = Math.max(minX, Math.min(maxX, clampedPos.x));
         clampedPos.y = Math.max(minY, Math.min(maxY, clampedPos.y));
-        
         return clampedPos;
     }
 
@@ -2169,73 +2166,19 @@ export class Boss extends Component {
     }
 
     showDamageNumber(damage: number) {
-        // 创建伤害数字节点
-        let damageNode: Node;
-        if (this.damageNumberPrefab) {
-            damageNode = instantiate(this.damageNumberPrefab);
-        } else {
-            damageNode = new Node('DamageNumber');
-        }
-
-        // 与通用敌人一致：移除预制体自带 DamageNumber 组件，避免走红字/特殊样式
-        const builtinDamageComp = damageNode.getComponent(DamageNumber);
-        if (builtinDamageComp) {
-            damageNode.removeComponent(DamageNumber);
-        }
-        
-        // 添加到Canvas或场景
-        const canvas = find('Canvas');
-        if (canvas) {
-            damageNode.setParent(canvas);
-        } else {
-            damageNode.setParent(this.node.scene);
-        }
-        
-        // 设置位置（在敌人上方）
-        damageNode.setWorldPosition(this.node.worldPosition.clone().add3f(0, 40, 0));
-        
-        // 查找或创建 Label，并统一为白字黑边样式
-        let label: Label | null = damageNode.getComponent(Label);
-        if (!label) {
-            const labelsInChildren = damageNode.getComponentsInChildren(Label);
-            if (labelsInChildren && labelsInChildren.length > 0) {
-                label = labelsInChildren[0];
-            }
-        }
-        if (!label) {
-            label = damageNode.addComponent(Label);
-            label.fontSize = 20;
-        }
-        label.string = `-${Math.floor(damage)}`;
-        label.color = new Color(255, 255, 255, 255);
-
-        let outline = label.node.getComponent(LabelOutline);
-        if (!outline) {
-            outline = label.node.addComponent(LabelOutline);
-        }
-        (label as any).outlineColor = new Color(0, 0, 0, 255);
-        (label as any).outlineWidth = 2;
-
-        const startPos = damageNode.position.clone();
-        const endPos = startPos.clone();
-        endPos.y += 50;
-        tween(damageNode)
-            .to(1.0, { position: endPos })
-            .parallel(
-                tween().to(1.0, {}, {
-                    onUpdate: (_target, ratio) => {
-                        const c = label!.color.clone();
-                        c.a = 255 * (1 - ratio);
-                        label!.color = c;
-                    }
-                })
-            )
-            .call(() => {
-                if (damageNode && damageNode.isValid) {
-                    damageNode.destroy();
-                }
-            })
-            .start();
+        const startPos = this.node.worldPosition.clone().add3f(0, 40, 0);
+        BattleFloatTextPool.spawnFloatText({
+            owner: this,
+            prefab: this.damageNumberPrefab,
+            worldPos: startPos,
+            text: `-${Math.floor(damage)}`,
+            color: new Color(255, 255, 255, 255),
+            fontSize: 20,
+            duration: 1.0,
+            moveOffset: new Vec3(0, 50, 0),
+            outlineColor: new Color(0, 0, 0, 255),
+            outlineWidth: 2,
+        });
     }
 
     // ====== 战争咆哮 Buff 管理 ======

@@ -10,6 +10,7 @@ import { UnitManager } from '../UnitManager';
 import { EnemyPool } from '../EnemyPool';
 import { UnitConfigManager } from '../UnitConfigManager';
 import { SniperMark } from '../SniperMark';
+import { BattleFloatTextPool } from '../BattleFloatTextPool';
 // import { PerformanceMonitor } from './PerformanceMonitor';
 const { ccclass, property } = _decorator;
 
@@ -1729,63 +1730,8 @@ export class Enemy extends Component {
     }
 
     showDamageNumber(damage: number, isCritical: boolean = false, hitDirection?: Vec3) {
-        // 创建伤害数字节点
-        let damageNode: Node;
-        if (this.damageNumberPrefab) {
-            damageNode = instantiate(this.damageNumberPrefab);
-        } else {
-            damageNode = new Node('DamageNumber');
-        }
-
-        // 如果预制体上自带 DamageNumber 组件（包含自己的上飘逻辑），先移除，避免与当前自定义飘动冲突
-        const builtinDamageComp = damageNode.getComponent(DamageNumber);
-        if (builtinDamageComp) {
-            damageNode.removeComponent(DamageNumber);
-        }
-
-        // 添加到Canvas或场景
-        const canvas = find('Canvas');
-        if (canvas) {
-            damageNode.setParent(canvas);
-        } else {
-            damageNode.setParent(this.node.scene);
-        }
-
-        // 起始位置：在敌人上方一点
-        const startPos = this.node.worldPosition.clone();
-        startPos.y += 30;
-        damageNode.setWorldPosition(startPos);
-
-        // 查找或创建 Label
-        let label: Label | null = damageNode.getComponent(Label);
-        if (!label) {
-            const labelsInChildren = damageNode.getComponentsInChildren(Label);
-            if (labelsInChildren && labelsInChildren.length > 0) {
-                label = labelsInChildren[0];
-            }
-        }
-        if (!label) {
-            label = damageNode.addComponent(Label);
-            label.fontSize = 20;
-        }
-
-        // 文字内容与样式
         const baseDamageText = `-${Math.floor(damage)}`;
-        label.string = isCritical ? `${baseDamageText}!` : baseDamageText;
-        label.color = isCritical ? new Color(255, 0, 0, 255) : new Color(255, 255, 255, 255);
-
-        // 黑色描边（使用非弃用 API）
-        let outline = label.node.getComponent(LabelOutline);
-        if (!outline) {
-            outline = label.node.addComponent(LabelOutline);
-        }
-        (label as any).outlineColor = new Color(0, 0, 0, 255);
-        (label as any).outlineWidth = 2;
-
-        // 暴击放大（略小一点，避免过于夸张）
-        if (isCritical) {
-            label.fontSize = label.fontSize * 1.2;
-        }
+        const text = isCritical ? `${baseDamageText}!` : baseDamageText;
 
         // 飘动方向：沿箭矢/攻击方向飘动（与受击方向一致） - 使用复用的临时对象
         const sourceDir = hitDirection && hitDirection.length() > 0.001
@@ -1802,8 +1748,10 @@ export class Enemy extends Component {
 
         // 飘动距离缩短一半
         const floatDistance = isCritical ? 40 : 25;
+        const startPos = this.node.worldPosition.clone();
+        startPos.y += 30;
         Vec3.scaleAndAdd(this.tempVec3_2, startPos, this.tempVec3_1, floatDistance);
-        const endWorldPos = this.tempVec3_2;
+        const moveOffset = new Vec3(this.tempVec3_2.x - startPos.x, this.tempVec3_2.y - startPos.y, this.tempVec3_2.z - startPos.z);
 
         // 调试日志：伤害数字飘动方向与位置
         // console.info('[Enemy.showDamageNumber]', this.unitName || this.node.name,
@@ -1815,21 +1763,18 @@ export class Enemy extends Component {
         //     'startPos:', `${startPos.x.toFixed(1)},${startPos.y.toFixed(1)}`,
         //     'endPos:', `${endWorldPos.x.toFixed(1)},${endWorldPos.y.toFixed(1)}`);
 
-        // 渐隐飘动动画
-        const uiOpacity = damageNode.getComponent(UIOpacity) || damageNode.addComponent(UIOpacity);
-        uiOpacity.opacity = 255;
-
-        tween(damageNode)
-            .to(0.6, { worldPosition: endWorldPos }, { easing: 'sineOut' })
-            .parallel(
-                tween(uiOpacity).to(0.6, { opacity: 0 })
-            )
-            .call(() => {
-                if (damageNode && damageNode.isValid) {
-                    damageNode.destroy();
-                }
-            })
-            .start();
+        BattleFloatTextPool.spawnFloatText({
+            owner: this,
+            prefab: this.damageNumberPrefab,
+            worldPos: startPos,
+            text,
+            color: isCritical ? new Color(255, 0, 0, 255) : new Color(255, 255, 255, 255),
+            fontSize: isCritical ? 24 : 20,
+            duration: 0.6,
+            moveOffset,
+            outlineColor: new Color(0, 0, 0, 255),
+            outlineWidth: 2,
+        });
     }
 
     die() {

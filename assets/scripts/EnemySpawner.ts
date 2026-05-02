@@ -105,6 +105,8 @@ export class EnemySpawner extends Component {
     // 动态难度：每波结束时判断，若我方>敌方，则下一波敌人数量x2
     private pendingNextWaveCountMultiplier: number = 1; // 下一个波次将要使用的倍率
     private currentWaveCountMultiplier: number = 1;     // 当前波次生效倍率
+    // 动态难度倍率上限，防止后期倍率逐波无限增长导致生成/寻路压力失控
+    private readonly MAX_WAVE_COUNT_MULTIPLIER: number = 2;
 
     // 刷怪进度（用于“刷新按钮金边”）：按本波应刷总数/已刷数计算
     private waveTotalToSpawn: number = 0;
@@ -118,6 +120,11 @@ export class EnemySpawner extends Component {
     // 防止“同一波结算回调”重复触发导致跳波
     private waveTransitionSeq: number = 0; // 每次 endCurrentWave 递增
     private lastHandledWaveTransitionSeq: number = 0; // 已处理到的结算序号（幂等保护）
+
+    /** 缓存 TowerBuilder（波末刷新候选池回调等） */
+    private towerBuilderCached: any = null;
+    /** 仅当整数百分比变化时才推 UI，降低更新频率。 */
+    private lastWaveSpawnProgressUIPercentSent: number = -1;
     // 防止“同一波 endCurrentWave 被重复调用”（根因：最后一只怪刷完 scheduleOnce + updateWave 同时判断完成）
     private isEndingWave: boolean = false;
     private endingWaveIndex: number = -999;
@@ -429,21 +436,42 @@ export class EnemySpawner extends Component {
         return total;
     }
 
-    private pushWaveSpawnProgressToRefreshButton(forceComplete: boolean) {
+    /** 缓存有效则复用；节点失效时下一次再 find（避免每只怪遍历场景）。 */
+    private tryResolveTowerBuilderCached(): void {
+        const tb = this.towerBuilderCached;
+        if (tb && tb.node && tb.node.isValid) {
+            return;
+        }
+        this.towerBuilderCached = null;
         const towerBuilderNode = find('Canvas/TowerBuilder') || find('TowerBuilder');
         const towerBuilder = towerBuilderNode?.getComponent('TowerBuilder') as any;
+        if (towerBuilder && towerBuilder.node?.isValid) {
+            this.towerBuilderCached = towerBuilder;
+        }
+    }
+
+    /** 低开销推送：仅在整数百分比变化时更新刷新按钮进度。 */
+    private pushWaveSpawnProgressToRefreshButton(forceComplete: boolean) {
+        this.tryResolveTowerBuilderCached();
+        const towerBuilder = this.towerBuilderCached;
         if (!towerBuilder || typeof towerBuilder.setWaveSpawnProgress !== 'function') {
             return;
         }
 
-        let p = 0;
         if (forceComplete) {
-            p = 1;
-        } else {
-            const total = Math.max(0, this.waveTotalToSpawn || 0);
-            const spawned = Math.max(0, this.waveSpawnedTotal || 0);
-            p = total > 0 ? Math.max(0, Math.min(1, spawned / total)) : 0;
+            this.lastWaveSpawnProgressUIPercentSent = 100;
+            towerBuilder.setWaveSpawnProgress(1);
+            return;
         }
+
+        const total = Math.max(0, this.waveTotalToSpawn || 0);
+        const spawned = Math.max(0, this.waveSpawnedTotal || 0);
+        const p = total > 0 ? Math.max(0, Math.min(1, spawned / total)) : 0;
+        const pctFloor = Math.min(100, Math.max(0, Math.floor(p * 100 + 1e-9)));
+        if (pctFloor === this.lastWaveSpawnProgressUIPercentSent) {
+            return;
+        }
+        this.lastWaveSpawnProgressUIPercentSent = pctFloor;
         towerBuilder.setWaveSpawnProgress(p);
     }
 
@@ -1403,8 +1431,8 @@ export class EnemySpawner extends Component {
         this.pushWaveSpawnProgressToRefreshButton(true);
 
         // 每波结束时刷新建筑候选池（按当前关卡解锁池随机抽取）
-        const towerBuilderNode = find('Canvas/TowerBuilder') || find('TowerBuilder');
-        const towerBuilder = towerBuilderNode?.getComponent('TowerBuilder') as any;
+        this.tryResolveTowerBuilderCached();
+        const towerBuilder = this.towerBuilderCached;
         if (towerBuilder && typeof towerBuilder.onWaveCompletedRefreshCandidates === 'function') {
             towerBuilder.onWaveCompletedRefreshCandidates();
         }
@@ -1562,6 +1590,7 @@ export class EnemySpawner extends Component {
         } else {
             this.currentWaveCountMultiplier = 1;
         }
+        this.currentWaveCountMultiplier = Math.max(1, Math.min(this.MAX_WAVE_COUNT_MULTIPLIER, this.currentWaveCountMultiplier));
         this.pendingNextWaveCountMultiplier = this.currentWaveCountMultiplier;
         console.log(
             `[EnemySpawner][DynamicDifficulty] startNextWave check: enemy=${enemyCount}, friendly=${friendlyCount}, prevMultiplier=${prevMultiplier}, waveMultiplier=${this.currentWaveCountMultiplier}`

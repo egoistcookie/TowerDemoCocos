@@ -4,6 +4,7 @@
 --260424：253局 33至少1抽 9局到结束（5局老玩家） 	1/4成功率
 --260423：145局 31至少1抽 10局到结束（0老玩家） 	3/10成功率
 --查询非测试游戏记录
+select * from game_sessions order by created_at desc;
 select * from game_sessions where 
  player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106') and player_id not in (select player_id from visitor_source_records where channel='unknown') 
 order by created_at desc;
@@ -80,7 +81,7 @@ select * from game_records where DATE(created_at) = CURDATE()
 order by created_at desc;
 select * from game_records where defend_time !=0 order by created_at desc;
 --玩家信息表
-select * from player_statistics where created_at>'20260422' order by created_at desc;
+select * from player_statistics where created_at>'20260429' order by created_at desc;
 select * from player_statistics where player_id like '%player_1777095847465_6130';
 --统计：一个敌人都没击败的玩家： 0个
 select * from player_statistics where total_kills =0;

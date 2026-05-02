@@ -318,38 +318,36 @@ export class HunterHall extends Build {
         // 增加累计生产数量
         this.totalProducedCount++;
 
-        // 计算Hunter的目标位置
-        // 如果有集结点，优化集结点的位置（避免挤在一起）；否则向左右两侧跑开
-        let targetPos: Vec3;
-        if (this.rallyPoint) {
-            // 有集结点，查找最佳位置（考虑附近的友方单位）
-            targetPos = this.findOptimalRallyPointPosition(this.rallyPoint, spawnPos);
-        } else {
-            // 没有集结点，根据已生产的Hunter数量，分散到不同位置
-            const hunterIndex = this.producedHunters.length - 1;
-            // 左右分散：偶数索引向右，奇数索引向左
-            const directionX = (hunterIndex % 2 === 0 ? 1 : -1);
-            
-            // 计算目标位置（只改变x坐标，y坐标不变）
-            targetPos = new Vec3(
-                spawnPos.x + directionX * this.moveAwayDistance,
-                spawnPos.y, // y坐标保持不变
-                spawnPos.z
-            );
-        }
-
         // 让Hunter移动到目标位置
         if (hunterScript) {
-            // 使用schedule在下一帧开始移动，确保Hunter已完全初始化
             this.scheduleOnce(() => {
                 if (hunter && hunter.isValid && hunterScript) {
+                    // 目标点计算延后到后置队列，进一步削峰
+                    let targetPos: Vec3;
+                    if (this.rallyPoint) {
+                        targetPos = this.findOptimalRallyPointPosition(this.rallyPoint, hunter.worldPosition.clone());
+                    } else {
+                        const hunterIndex = this.producedHunters.length - 1;
+                        const directionX = (hunterIndex % 2 === 0 ? 1 : -1);
+                        const hp = hunter.worldPosition;
+                        targetPos = new Vec3(hp.x + directionX * this.moveAwayDistance, hp.y, hp.z);
+                    }
+                    // 集结/跑开目标再按场景占用收束一格，减少多单位落同点重叠
+                    targetPos = this.findAvailableSpawnPosition(targetPos);
                     // 使用setManualMoveTargetPosition方法设置移动目标
                     if (hunterScript.setManualMoveTargetPosition) {
                         hunterScript.setManualMoveTargetPosition(targetPos);
                     } else if (hunterScript.moveToPosition) {
                         // 如果没有setManualMoveTargetPosition方法，使用moveToPosition
+                        let elapsed = 0;
                         const moveUpdate = (deltaTime: number) => {
                             if (!hunter || !hunter.isValid || !hunterScript) {
+                                this.unschedule(moveUpdate);
+                                return;
+                            }
+                            elapsed += deltaTime;
+                            if (elapsed >= 6) {
+                                if (hunterScript.stopMoving) hunterScript.stopMoving();
                                 this.unschedule(moveUpdate);
                                 return;
                             }
@@ -373,7 +371,7 @@ export class HunterHall extends Build {
                                 hunterScript.moveToPosition(targetPos, deltaTime);
                             }
                         };
-                        this.schedule(moveUpdate, 0);
+                        this.schedule(moveUpdate, 0.05);
                     }
                 }
             }, 0.05);
@@ -389,8 +387,8 @@ export class HunterHall extends Build {
     }
 
     findAvailableSpawnPosition(initialPos: Vec3): Vec3 {
-        const checkRadius = 30; // Hunter的碰撞半径
-        const offsetStep = 50; // 每次平移的距离（增大步长，确保不会重叠）
+        const checkRadius = 38; // 生成站位半径（略大于逻辑碰撞，减少视觉重叠）
+        const offsetStep = 54; // 每次平移的距离（增大步长，确保不会重叠）
         const maxAttempts = 20; // 最多尝试20次（左右各10次）
 
         // 检查初始位置是否可用
@@ -490,7 +488,8 @@ export class HunterHall extends Build {
             const hunters = huntersNode.children || [];
             
             for (const hunter of hunters) {
-                if (hunter && hunter.isValid && hunter.active) {
+                // 勿要求 active：新单位先 setPosition 再 active=true，否则同帧第二只会误判空位而重叠
+                if (hunter && hunter.isValid) {
                     const hunterScript = hunter.getComponent('Hunter') as any;
                     if (hunterScript && hunterScript.isAlive && hunterScript.isAlive()) {
                         // 获取Hunter的实时位置（包括正在移动的Hunter）
@@ -503,18 +502,6 @@ export class HunterHall extends Build {
                         const minDistance1 = (radius + otherRadius) * 1.2;
                         
                         if (distanceSq1 < minDistance1 * minDistance1) {
-                            // 检查是否是自己生产的Hunter
-                            let isProducedHunter = false;
-                            for (const producedHunter of this.producedHunters) {
-                                if (producedHunter === hunter) {
-                                    isProducedHunter = true;
-                                    break;
-                                }
-                            }
-                            
-                            if (isProducedHunter) {
-                            } else {
-                            }
                             return true;
                         }
                     }
@@ -583,19 +570,20 @@ export class HunterHall extends Build {
         }
 
         // 检查与其他类型友军单位的碰撞（跨类型防重叠）
-        const friendlyContainers: Array<{ nodeName: string; scriptName: string }> = [
-            { nodeName: 'Canvas/Towers', scriptName: 'Arrower' },
-            { nodeName: 'ElfSwordsmans', scriptName: 'ElfSwordsman' },
-            { nodeName: 'Canvas/Towers', scriptName: 'Priest' },
-            { nodeName: 'Canvas/Mages', scriptName: 'Mage' }, // 新增：与法师保持间距，避免重叠
+        const friendlyContainers: Array<{ base: string; scriptName: string }> = [
+            { base: 'Towers', scriptName: 'Arrower' },
+            { base: 'Towers', scriptName: 'Priest' },
+            { base: 'ElfSwordsmans', scriptName: 'ElfSwordsman' },
+            { base: 'Mages', scriptName: 'Mage' },
         ];
         const crossTypeMinDist = 60; // 跨类型单位最小间距
         const crossTypeMinDistSq = crossTypeMinDist * crossTypeMinDist;
-        for (const { nodeName, scriptName } of friendlyContainers) {
-            const containerNode = find(nodeName);
+        for (const { base, scriptName } of friendlyContainers) {
+            const containerNode = this.resolveUnitsContainerNode(base);
             if (!containerNode) continue;
             for (const unit of containerNode.children) {
-                if (!unit || !unit.isValid || !unit.active) continue;
+                // 勿依赖 active：与生成流程一致，避免同帧未激活单位漏检
+                if (!unit || !unit.isValid) continue;
                 const unitScript = unit.getComponent(scriptName) as any;
                 if (unitScript && unitScript.isAlive && unitScript.isAlive()) {
                     const up = unit.worldPosition;

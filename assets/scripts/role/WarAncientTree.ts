@@ -648,38 +648,34 @@ export class WarAncientTree extends Build {
         // 增加累计生产数量
         this.totalProducedCount++;
 
-        // 计算Tower的目标位置
-        // 如果有集结点，优化集结点的位置（避免挤在一起）；否则向左右两侧跑开
-        let targetPos: Vec3;
-        if (this.rallyPoint) {
-            // 有集结点，查找最佳位置（考虑附近的友方单位）
-            targetPos = this.findOptimalRallyPointPosition(this.rallyPoint, spawnPos);
-        } else {
-            // 没有集结点，根据已生产的Tower数量，分散到不同位置
-            const towerIndex = this.producedTowers.length - 1;
-            // 左右分散：偶数索引向右，奇数索引向左
-            const directionX = (towerIndex % 2 === 0 ? 1 : -1);
-            
-            // 计算目标位置（只改变x坐标，y坐标不变）
-            targetPos = new Vec3(
-                spawnPos.x + directionX * this.moveAwayDistance,
-                spawnPos.y, // y坐标保持不变
-                spawnPos.z
-            );
-        }
-
         // 让Tower移动到目标位置
         if (towerScript) {
-            // 使用schedule在下一帧开始移动，确保Tower已完全初始化
             this.scheduleOnce(() => {
                 if (tower && tower.isValid && towerScript) {
+                    // 目标点计算延后到后置队列，进一步削峰
+                    let targetPos: Vec3;
+                    if (this.rallyPoint) {
+                        targetPos = this.findOptimalRallyPointPosition(this.rallyPoint, tower.worldPosition.clone());
+                    } else {
+                        const towerIndex = this.producedTowers.length - 1;
+                        const directionX = (towerIndex % 2 === 0 ? 1 : -1);
+                        const tp = tower.worldPosition;
+                        targetPos = new Vec3(tp.x + directionX * this.moveAwayDistance, tp.y, tp.z);
+                    }
                     // 使用setManualMoveTargetPosition方法设置移动目标
                     if (towerScript.setManualMoveTargetPosition) {
                         towerScript.setManualMoveTargetPosition(targetPos);
                     } else if (towerScript.moveToPosition) {
                         // 如果没有setManualMoveTargetPosition方法，使用moveToPosition
+                        let elapsed = 0;
                         const moveUpdate = (deltaTime: number) => {
                             if (!tower || !tower.isValid || !towerScript) {
+                                this.unschedule(moveUpdate);
+                                return;
+                            }
+                            elapsed += deltaTime;
+                            if (elapsed >= 6) {
+                                if (towerScript.stopMoving) towerScript.stopMoving();
                                 this.unschedule(moveUpdate);
                                 return;
                             }
@@ -699,7 +695,7 @@ export class WarAncientTree extends Build {
                                 towerScript.moveToPosition(targetPos, deltaTime);
                             }
                         };
-                        this.schedule(moveUpdate, 0);
+                        this.schedule(moveUpdate, 0.05);
                     }
                 }
             }, 0.1);
@@ -799,29 +795,27 @@ export class WarAncientTree extends Build {
         this.producedTowers.push(eagleArcherNode);
         this.totalProducedCount++;
 
-        // 计算角鹰射手的目标位置
-        // 仅在有集结点时才下发移动指令；无集结点时保持原地待命
-        let targetPos: Vec3 = spawnPos.clone();
-        const shouldMoveToTarget = !!this.rallyPoint;
-        if (this.rallyPoint) {
-            // 有集结点，查找最佳位置（考虑附近的友方单位）
-            targetPos = this.findOptimalRallyPointPosition(this.rallyPoint, spawnPos);
-            // 目标点也进行避让，防止不同单位重叠到同一目标位置
-            targetPos = this.findAvailableSpawnPosition(targetPos);
-        }
-
         // 让角鹰射手移动到目标位置（仅有集结点时）
-        if (eagleArcherScript && shouldMoveToTarget) {
-            // 使用 schedule 在下一帧开始移动，确保角鹰射手已完全初始化
+        if (eagleArcherScript && this.rallyPoint) {
             this.scheduleOnce(() => {
                 if (eagleArcherNode && eagleArcherNode.isValid && eagleArcherScript) {
+                    // 目标点计算延后到后置队列，进一步削峰
+                    let targetPos = this.findOptimalRallyPointPosition(this.rallyPoint!, eagleArcherNode.worldPosition.clone());
+                    targetPos = this.findAvailableSpawnPosition(targetPos);
                     // 使用 setManualMoveTargetPosition 方法设置移动目标
                     if (eagleArcherScript.setManualMoveTargetPosition) {
                         eagleArcherScript.setManualMoveTargetPosition(targetPos);
                     } else if (eagleArcherScript.moveToPosition) {
                         // 如果没有 setManualMoveTargetPosition 方法，使用 moveToPosition
+                        let elapsed = 0;
                         const moveUpdate = (deltaTime: number) => {
                             if (!eagleArcherNode || !eagleArcherNode.isValid || !eagleArcherScript) {
+                                this.unschedule(moveUpdate);
+                                return;
+                            }
+                            elapsed += deltaTime;
+                            if (elapsed >= 6) {
+                                if (eagleArcherScript.stopMoving) eagleArcherScript.stopMoving();
                                 this.unschedule(moveUpdate);
                                 return;
                             }
@@ -841,7 +835,7 @@ export class WarAncientTree extends Build {
                                 eagleArcherScript.moveToPosition(targetPos, deltaTime);
                             }
                         };
-                        this.schedule(moveUpdate, 0);
+                        this.schedule(moveUpdate, 0.05);
                     }
                 }
             }, 0.1);

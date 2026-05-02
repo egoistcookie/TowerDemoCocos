@@ -293,38 +293,36 @@ export class SwordsmanHall extends Build {
         // 增加累计生产数量
         this.totalProducedCount++;
 
-        // 计算ElfSwordsman的目标位置
-        // 如果有集结点，优化集结点的位置（避免挤在一起）；否则向左右两侧跑开
-        let targetPos: Vec3;
-        if (this.rallyPoint) {
-            // 有集结点，查找最佳位置（考虑附近的友方单位）
-            targetPos = this.findOptimalRallyPointPosition(this.rallyPoint, spawnPos);
-        } else {
-            // 没有集结点，根据已生产的ElfSwordsman数量，分散到不同位置
-            const swordsmanIndex = this.producedSwordsmen.length - 1;
-            // 左右分散：偶数索引向右，奇数索引向左
-            const directionX = (swordsmanIndex % 2 === 0 ? 1 : -1);
-            
-            // 计算目标位置（只改变x坐标，y坐标不变）
-            targetPos = new Vec3(
-                spawnPos.x + directionX * this.moveAwayDistance, 
-                spawnPos.y, // y坐标保持不变
-                spawnPos.z
-            );
-        }
-
         // 让ElfSwordsman移动到目标位置
         if (swordsmanScript) {
-            // 使用schedule在下一帧开始移动，确保ElfSwordsman已完全初始化
             this.scheduleOnce(() => {
                 if (swordsman && swordsman.isValid && swordsmanScript) {
+                    // 目标点计算延后到后置队列，进一步削峰
+                    let targetPos: Vec3;
+                    if (this.rallyPoint) {
+                        targetPos = this.findOptimalRallyPointPosition(this.rallyPoint, swordsman.worldPosition.clone());
+                    } else {
+                        const swordsmanIndex = this.producedSwordsmen.length - 1;
+                        const directionX = (swordsmanIndex % 2 === 0 ? 1 : -1);
+                        const sp = swordsman.worldPosition;
+                        targetPos = new Vec3(sp.x + directionX * this.moveAwayDistance, sp.y, sp.z);
+                    }
+                    // 集结/跑开目标再按场景占用收束一格，减少多单位落同点重叠
+                    targetPos = this.findAvailableSpawnPosition(targetPos);
                     // 使用setManualMoveTargetPosition方法设置移动目标
                     if (swordsmanScript.setManualMoveTargetPosition) {
                         swordsmanScript.setManualMoveTargetPosition(targetPos);
                     } else if (swordsmanScript.moveToPosition) {
                         // 如果没有setManualMoveTargetPosition方法，使用moveToPosition
+                        let elapsed = 0;
                         const moveUpdate = (deltaTime: number) => {
                             if (!swordsman || !swordsman.isValid || !swordsmanScript) {
+                                this.unschedule(moveUpdate);
+                                return;
+                            }
+                            elapsed += deltaTime;
+                            if (elapsed >= 6) {
+                                if (swordsmanScript.stopMoving) swordsmanScript.stopMoving();
                                 this.unschedule(moveUpdate);
                                 return;
                             }
@@ -348,7 +346,7 @@ export class SwordsmanHall extends Build {
                                 swordsmanScript.moveToPosition(targetPos, deltaTime);
                             }
                         };
-                        this.schedule(moveUpdate, 0);
+                        this.schedule(moveUpdate, 0.05);
                     }
                 }
             }, 0.05);
@@ -364,8 +362,8 @@ export class SwordsmanHall extends Build {
     }
 
     findAvailableSpawnPosition(initialPos: Vec3): Vec3 {
-        const checkRadius = 30; // ElfSwordsman的碰撞半径
-        const offsetStep = 50; // 每次平移的距离（增大步长，确保不会重叠）
+        const checkRadius = 38; // 生成站位半径（略大于逻辑碰撞，减少视觉重叠）
+        const offsetStep = 54; // 每次平移的距离（增大步长，确保不会重叠）
         const maxAttempts = 20; // 最多尝试20次（左右各10次）
 
         // 检查初始位置是否可用
@@ -465,7 +463,8 @@ export class SwordsmanHall extends Build {
             const swordsmen = swordsmenNode.children || [];
             
             for (const swordsman of swordsmen) {
-                if (swordsman && swordsman.isValid && swordsman.active) {
+                // 勿要求 active：新单位先 setPosition 再 active=true，否则同帧第二只会误判空位而重叠
+                if (swordsman && swordsman.isValid) {
                     const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
                     if (swordsmanScript && swordsmanScript.isAlive && swordsmanScript.isAlive()) {
                         // 获取ElfSwordsman的实时位置（包括正在移动的ElfSwordsman）
@@ -478,18 +477,6 @@ export class SwordsmanHall extends Build {
                         const minDistance1 = (radius + otherRadius) * 1.2;
                         
                         if (distanceSq1 < minDistance1 * minDistance1) {
-                            // 检查是否是自己生产的ElfSwordsman
-                            let isProducedSwordsman = false;
-                            for (const producedSwordsman of this.producedSwordsmen) {
-                                if (producedSwordsman === swordsman) {
-                                    isProducedSwordsman = true;
-                                    break;
-                                }
-                            }
-                            
-                            if (isProducedSwordsman) {
-                            } else {
-                            }
                             return true;
                         }
                     }
@@ -558,19 +545,19 @@ export class SwordsmanHall extends Build {
         }
 
         // 检查与其他类型友军单位的碰撞（跨类型防重叠）
-        const friendlyContainers: Array<{ nodeName: string; scriptName: string }> = [
-            { nodeName: 'Canvas/Towers', scriptName: 'Arrower' },
-            { nodeName: 'Canvas/Towers', scriptName: 'Priest' },
-            { nodeName: 'Hunters', scriptName: 'Hunter' },
-            { nodeName: 'Canvas/Mages', scriptName: 'Mage' }, // 新增：与法师保持间距，避免重叠
+        const friendlyContainers: Array<{ base: string; scriptName: string }> = [
+            { base: 'Towers', scriptName: 'Arrower' },
+            { base: 'Towers', scriptName: 'Priest' },
+            { base: 'Hunters', scriptName: 'Hunter' },
+            { base: 'Mages', scriptName: 'Mage' },
         ];
         const crossTypeMinDist = 60; // 跨类型单位最小间距
         const crossTypeMinDistSq = crossTypeMinDist * crossTypeMinDist;
-        for (const { nodeName, scriptName } of friendlyContainers) {
-            const containerNode = find(nodeName);
+        for (const { base, scriptName } of friendlyContainers) {
+            const containerNode = this.resolveUnitsContainerNode(base);
             if (!containerNode) continue;
             for (const unit of containerNode.children) {
-                if (!unit || !unit.isValid || !unit.active) continue;
+                if (!unit || !unit.isValid) continue;
                 const unitScript = unit.getComponent(scriptName) as any;
                 if (unitScript && unitScript.isAlive && unitScript.isAlive()) {
                     const up = unit.worldPosition;

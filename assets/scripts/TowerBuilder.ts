@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Prefab, instantiate, Vec3, EventTouch, input, Input, Camera, find, view, UITransform, SpriteFrame, Graphics, Color, director, tween, Sprite, AudioClip } from 'cc';
+import { _decorator, Component, Node, Prefab, instantiate, Vec3, EventTouch, input, Input, Camera, find, view, UITransform, SpriteFrame, Graphics, Color, director, tween, Tween, Sprite, AudioClip, UIOpacity, AudioSource, sys } from 'cc';
 import { GameManager } from './GameManager';
 import { BuildingSelectionPanel, BuildingType } from './BuildingSelectionPanel';
 import { GamePopup } from './GamePopup';
@@ -13,6 +13,7 @@ import { ThunderTower } from './role/ThunderTower';
 import { SwordsmanHall } from './role/SwordsmanHall';
 import { TalentEffectManager } from './TalentEffectManager';
 import { Church } from './role/Church';
+import { EagleNest } from './role/EagleNest';
 import { UnitConfigManager } from './UnitConfigManager';
 import { PlayerDataManager } from './PlayerDataManager';
 import { BuildingGridPanel } from './BuildingGridPanel';
@@ -20,7 +21,9 @@ import { StoneWallGridPanel } from './StoneWallGridPanel';
 import { BuildingPool } from './BuildingPool';
 import { AnalyticsManager, OperationType } from './AnalyticsManager';
 import { Build } from './role/Build';
+import { Role } from './role/Role';
 import { SoundManager } from './SoundManager';
+import { AudioManager } from './AudioManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('TowerBuilder')
@@ -92,6 +95,13 @@ export class TowerBuilder extends Component {
 
     @property(AudioClip)
     starUpgradeSfx: AudioClip = null!; // 升星音效（可选）
+
+    @property(AudioClip)
+    buildPlaceSfx: AudioClip = null!; // 网格上成功安放建筑音效（可选）
+
+    /** 勾选后在控制台输出升星音效诊断（clip、SoundManager/AudioManager 通路）；上线可关 */
+    @property
+    debugStarUpgradeSfxLog: boolean = true;
 
     @property(Node)
     buildingSelectionPanel: Node = null!; // 建筑物选择面板节点
@@ -193,7 +203,10 @@ export class TowerBuilder extends Component {
     private initialWarAncientTreePlaced: boolean = false; // 第一关是否已生成初始弓箭手小屋
     private initialMageTowerPlaced: boolean = false; // 第二关是否已生成初始法师塔
     private hasShownDragTutorialInLevel1: boolean = false; // 第一关是否已显示过拖动建造提示
-    
+    /** 与 D:\\CocosProject\\TowerDemoCocos-wip-backup-2026-05-01 一致：第一关点击建筑打开面板时提示长按拖动，最多 3 次（localStorage 计数） */
+    private static readonly LEVEL1_BUILDING_LONG_PRESS_HINT_KEY = 'TowerDemo_Level1BuildingLongPressHintCount';
+    private static readonly LEVEL1_BUILDING_LONG_PRESS_HINT_MAX = 3;
+
     // 建筑物拖拽相关
     private isDraggingBuilding: boolean = false; // 是否正在拖拽建筑物
     private draggedBuilding: Node = null!; // 当前拖拽的建筑物节点
@@ -211,14 +224,33 @@ export class TowerBuilder extends Component {
     private longPressIndicator: Node | null = null; // 长按指示器节点（旋转圆弧）
     private isLongPressActive: boolean = false; // 是否正在长按检测中
     private readonly candidateDisplayCount: number = 3;
-    private readonly refreshCandidateGoldCost: number = 10;
+    /** 每波手动刷新候选的初始金币；每点一次刷新，下次价格 +5，每波结束时重置为该值 */
+    private readonly refreshCandidateGoldCostBase: number = 10;
+    private refreshCandidateManualGoldCost: number = 10;
     private currentBuildingPool: BuildingType[] = [];
+    private currentWaveBuildingCandidates: BuildingType[] = [];
     private lastCandidateKey: string = '';
+    private isBuildCommitInProgress: boolean = false;
+    private lastBuildCommitAtMs: number = 0;
 
     private readonly STAR_CONTAINER_NAME = 'StarLevelContainer';
     private readonly BUILDING_STAR_Y = 70;
     private readonly UNIT_STAR_Y = 55;
-    private trackedStarTargets: Node[] = [];
+    private readonly STAR_EFFECT_DURATION = 3.0; // 升星旋转特效时长（秒）
+    private readonly STAR_SHOW_DURATION = 5.0; // 星标显示时长（秒）
+    private starPoolRoot: Node | null = null;
+    private readonly starContainerPool: Node[] = [];
+    private readonly starHideTokenByNode = new WeakMap<Node, number>();
+    private readonly starHideCbByNode = new WeakMap<Node, () => void>();
+    private starHideTokenSeq = 1;
+    private readonly STAR_FX_POOL_ROOT_NAME = 'StarUpgradeFxPool';
+    private static readonly STAR_PARTICLE_GFX_READY_KEY = '__starParticleGfxReady';
+    private static readonly STAR_BURST_GFX_READY_KEY = '__starBurstGfxReady';
+    private readonly MIN_STAR_FX_POOL_SIZE = 4;
+    private readonly MAX_STAR_FX_POOL_SIZE = 24;
+    private readonly MAX_STAR_FX_PER_UPGRADE = 8;
+    private starFxPoolRoot: Node | null = null;
+    private readonly starFxPool: Node[] = [];
 
     /**
      * 由 GameManager 在分包加载完毕后调用，注入分包中的预制体
@@ -292,21 +324,86 @@ export class TowerBuilder extends Component {
      * 每波结束时由外部调用，刷新本波可选建筑候选
      */
     public onWaveCompletedRefreshCandidates() {
+        this.refreshCandidateManualGoldCost = this.refreshCandidateGoldCostBase;
         this.updateBuildingTypes();
+        this.updateRefreshButtonState();
     }
 
     public applyStarToBuildingNode(node: Node, starLevel: number) {
-        // 石墙和防御塔不展示星标
+        // 防御塔/石墙不展示星标（若此前有残留则回收进星池）
         if (this.isStarDisplayDisabledForBuilding(node)) {
             const old = node.getChildByName(this.STAR_CONTAINER_NAME);
-            if (old && old.isValid) old.destroy();
+            if (old && old.isValid) this.releaseStarContainer(node, old);
             return;
         }
         this.applyStarToAnyNode(node, starLevel, this.BUILDING_STAR_Y, 26, 2);
     }
 
     public applyStarToUnitNode(node: Node, starLevel: number) {
-        this.applyStarToAnyNode(node, starLevel, this.UNIT_STAR_Y, 22, 2);
+        // 单位头顶星：轻量独立路径（仅选中或升星特效期间展示，见 enqueueUnitStarApply / UnitSelectionManager）
+        if (!node || !node.isValid) return;
+        if (!this.starIcon) return;
+        const level = Math.max(1, Math.min(3, Math.floor(Number(starLevel || 1))));
+
+        let container = node.getChildByName(this.STAR_CONTAINER_NAME);
+        if (!container || !container.isValid) {
+            container = new Node(this.STAR_CONTAINER_NAME);
+            container.setParent(node);
+        }
+        container.active = true;
+        container.setPosition(0, this.UNIT_STAR_Y, 0);
+        container.angle = 0;
+
+        // 仅在刷新时做一次反拉伸补偿，不做每帧维护
+        this.updateStarContainerAntiStretch(node, container);
+
+        const starSize = 16; // 单位星标缩放为原来的 0.8 倍
+        const gap = 2;
+        while (container.children.length > level) {
+            const ch = container.children[container.children.length - 1];
+            if (ch && ch.isValid) ch.destroy();
+            else break;
+        }
+        while (container.children.length < level) {
+            const star = new Node('Star');
+            star.setParent(container);
+            star.addComponent(UITransform).setContentSize(starSize, starSize);
+            const sp = star.addComponent(Sprite);
+            sp.spriteFrame = this.starIcon;
+            sp.sizeMode = Sprite.SizeMode.CUSTOM;
+        }
+        const totalW = level * starSize + (level - 1) * gap;
+        for (let i = 0; i < level; i++) {
+            const star = container.children[i];
+            if (!star || !star.isValid) continue;
+            const tr = star.getComponent(UITransform);
+            if (tr) tr.setContentSize(starSize, starSize);
+            star.setPosition(-totalW / 2 + starSize / 2 + i * (starSize + gap), 0, 0);
+            const sp = star.getComponent(Sprite);
+            if (sp) sp.spriteFrame = this.starIcon;
+        }
+    }
+
+    public hideUnitStarNode(node: Node | null) {
+        if (!node || !node.isValid) return;
+        const old = node.getChildByName(this.STAR_CONTAINER_NAME);
+        if (old && old.isValid) old.destroy();
+    }
+
+    public enqueueUnitStarApply(node: Node | null, starLevel: number, withFx: boolean = false, applyStar: boolean = true) {
+        if (!node || !node.isValid) return;
+        const level = Math.max(1, Math.min(3, Math.floor(Number(starLevel || 1))));
+        if (withFx) {
+            // 带特效的升星：头顶星与特效同步出现，特效结束未选中则收回（避免特效前长时间常驻）
+            this.playStarUpgradeEffect(
+                node,
+                applyStar
+                    ? { hideUnitHeadStarsAfterIfNotSelected: true, unitStarLevelForFx: level }
+                    : undefined
+            );
+        } else if (applyStar) {
+            this.applyStarToUnitNode(node, level);
+        }
     }
 
     private applyStarToAnyNode(node: Node, starLevel: number, yOffset: number, starSize: number, gap: number) {
@@ -314,13 +411,11 @@ export class TowerBuilder extends Component {
         const level = Math.max(1, Math.min(3, Math.floor(Number(starLevel || 1))));
         if (!this.starIcon) return;
 
-        let container = node.getChildByName(this.STAR_CONTAINER_NAME);
-        if (!container || !container.isValid) {
-            container = new Node(this.STAR_CONTAINER_NAME);
-            container.setParent(node);
-        }
+        const container = this.acquireStarContainer(node);
         container.setPosition(0, yOffset, 0);
-        this.trackStarTarget(node);
+        container.angle = 0;
+
+        // 仅在创建/刷新时做一次反拉伸补偿，避免每帧维护开销
         this.updateStarContainerAntiStretch(node, container);
 
         // children count to match level
@@ -347,12 +442,557 @@ export class TowerBuilder extends Component {
             const sp = star.getComponent(Sprite);
             if (sp) sp.spriteFrame = this.starIcon;
         }
+
+        // 注意：这里仅做静态星标刷新。特效与5秒回收只在“真实升星”时触发。
     }
 
-    private trackStarTarget(node: Node) {
+    private _logStarUpgradeSfx(tag: string, extra?: any) {
+        if (!this.debugStarUpgradeSfxLog) return;
+        const clipName = (this.starUpgradeSfx as any)?.name || '(null)';
+        const resolved = this.getStarUpgradeSfxClip();
+        const resolvedName = (resolved as any)?.name || '(null)';
+        const sm = SoundManager.getInstance();
+        const effectOn = sm ? (sm as any).isEffectOn?.() : 'no-sound-manager';
+        const smHasEffectSource = sm ? !!(sm as any).effectAudioSource : false;
+        const smEffectVol = sm ? (sm as any).effectAudioSource?.volume : undefined;
+        let audioMgrSfxVol: number | string | undefined = undefined;
+        try {
+            const am = AudioManager.Instance;
+            audioMgrSfxVol = am ? (am as any).sfxVolume : 'no-audio-manager';
+        } catch {
+            audioMgrSfxVol = 'audio-manager-error';
+        }
+        console.log(`[TowerBuilder][StarSfx] ${tag}`, {
+            towerBuilderNode: this.node?.name,
+            starUpgradeSfxProperty: clipName,
+            resolvedClip: resolvedName,
+            effectOn,
+            smHasEffectSource,
+            smEffectVol,
+            audioMgrSfxVol,
+            extra,
+        });
+    }
+
+    private playStarUpgradeFxAndAutoHide(node: Node) {
         if (!node || !node.isValid) return;
-        if (this.trackedStarTargets.indexOf(node) >= 0) return;
-        this.trackedStarTargets.push(node);
+        const container = node.getChildByName(this.STAR_CONTAINER_NAME);
+        if (!container || !container.isValid) {
+            this._logStarUpgradeSfx('playStarUpgradeFxAndAutoHide: no StarLevelContainer, sfx only', {
+                building: node?.name,
+            });
+            this.playStarUpgradeSfxIfAny();
+            return;
+        }
+
+        // 升星特效：使用备份版 playStarUpgradeEffect 同款视觉（内含音效）
+        this.playStarUpgradeEffect(node);
+
+        // 临时策略：不再定时回收星标，避免“升星后再放置新建筑”时的回收链路卡死
+        // 仅清理旧回调，防止历史版本遗留的 scheduleOnce 在本轮触发。
+        const prevCb = this.starHideCbByNode.get(node);
+        if (prevCb) {
+            try { this.unschedule(prevCb); } catch {}
+            this.starHideCbByNode.delete(node);
+        }
+        this.starHideTokenByNode.set(node, this.starHideTokenSeq++);
+    }
+
+    /**
+     * 升星音效：Inspector 的 starUpgradeSfx；未配置时从本节点及子节点上的 AudioSource.clip 取（预制体上挂子节点即可）
+     */
+    private getStarUpgradeSfxClip(): AudioClip | null {
+        if (this.starUpgradeSfx) {
+            return this.starUpgradeSfx;
+        }
+        const sources = this.node.getComponentsInChildren(AudioSource);
+        let fallback: AudioClip | null = null;
+        for (const as of sources) {
+            const clip = as?.clip;
+            if (!clip) continue;
+            const nm = (as.node?.name || '').toLowerCase();
+            if (nm.includes('star') && (nm.includes('upgrade') || nm.includes('sfx'))) {
+                return clip;
+            }
+            if (!fallback) {
+                fallback = clip;
+            }
+        }
+        return fallback;
+    }
+
+    private playStarUpgradeSfxIfAny() {
+        const clip = this.getStarUpgradeSfxClip();
+        if (!clip) {
+            this._logStarUpgradeSfx('playStarUpgradeSfxIfAny: no clip (property empty & no AudioSource.clip)', {});
+            return;
+        }
+        try {
+            const sm = SoundManager.getInstance();
+            const smHasEffectSource = sm ? !!(sm as any).effectAudioSource : false;
+            if (sm && smHasEffectSource) {
+                this._logStarUpgradeSfx('play via SoundManager.playEffect', { clip: (clip as any)?.name });
+                sm.playEffect(clip);
+            } else {
+                this._logStarUpgradeSfx('play via AudioManager.playSFX fallback', {
+                    clip: (clip as any)?.name,
+                    reason: !sm ? 'no SoundManager' : 'no effectAudioSource',
+                });
+                AudioManager.Instance?.playSFX(clip);
+            }
+        } catch (e) {
+            this._logStarUpgradeSfx('playStarUpgradeSfxIfAny threw', { error: String(e) });
+        }
+    }
+
+    /** 与升星音效相同通路：SoundManager.effectAudioSource 优先，否则 AudioManager.playSFX */
+    private playBuildPlaceSfxIfAny() {
+        if (!this.buildPlaceSfx) return;
+        try {
+            const sm = SoundManager.getInstance();
+            const smHasEffectSource = sm ? !!(sm as any).effectAudioSource : false;
+            if (sm && smHasEffectSource) {
+                sm.playEffect(this.buildPlaceSfx);
+            } else {
+                AudioManager.Instance?.playSFX(this.buildPlaceSfx);
+            }
+        } catch {}
+    }
+
+    private resolveUnitSelectionManager(): UnitSelectionManager | null {
+        let n = find('UnitSelectionManager');
+        if (!n) n = find('Canvas/UnitSelectionManager');
+        const direct = n?.getComponent(UnitSelectionManager);
+        if (direct) return direct;
+        const scene = this.node?.scene;
+        return scene ? scene.getComponentInChildren(UnitSelectionManager) : null;
+    }
+
+    /**
+     * 参考备份版本的升星特效：星环爆开 + 汇聚 + 渐隐
+     * @param opts.hideUnitHeadStarsAfterIfNotSelected 特效结束时若单位未被选中则隐藏头顶星（仅角色单位）
+     * @param opts.unitStarLevelForFx 若传入则在特效开始时刷新头顶静态星（与特效同期显示）
+     */
+    private playStarUpgradeEffect(
+        node: Node | null,
+        opts?: { hideUnitHeadStarsAfterIfNotSelected?: boolean; unitStarLevelForFx?: number }
+    ) {
+        if (!node || !node.isValid || !node.active || !node.activeInHierarchy) return;
+
+        this._logStarUpgradeSfx('playStarUpgradeEffect', { target: node?.name, opts });
+
+        // 防止短时间重复叠加同名特效
+        const oldFx = node.getChildByName('StarUpgradeFx');
+        if (oldFx && oldFx.isValid) {
+            this.recycleStarUpgradeEffect(oldFx);
+        }
+
+        const fxStarLv = opts?.unitStarLevelForFx;
+        if (fxStarLv != null) {
+            this.applyStarToUnitNode(node, fxStarLv);
+        }
+
+        this.playStarUpgradeSfxIfAny();
+
+        const effectRoot = this.acquireStarUpgradeEffect();
+        effectRoot.setParent(node);
+        effectRoot.setPosition(0, 45, 0);
+        effectRoot.active = true;
+        effectRoot.setScale(1, 1, 1);
+        const opacity = effectRoot.getComponent(UIOpacity) || effectRoot.addComponent(UIOpacity);
+        opacity.opacity = 255;
+        this.ensureStarUpgradeEffectVisualReady(effectRoot);
+
+        const particleCount = 6;
+        const radius = 52;
+        const starFxSize = 16; // 与备份版一致
+        for (let i = 0; i < particleCount; i++) {
+            let pivot = effectRoot.getChildByName(`FxPivot_${i}`);
+            if (!pivot || !pivot.isValid) {
+                pivot = new Node(`FxPivot_${i}`);
+                pivot.setParent(effectRoot);
+            }
+            pivot.setPosition(0, 0, 0);
+
+            let p = pivot.getChildByName(`FxStar_${i}`);
+            if (!p || !p.isValid) {
+                p = new Node(`FxStar_${i}`);
+                p.setParent(pivot);
+                p.addComponent(UITransform);
+            }
+            const tr = p.getComponent(UITransform) || p.addComponent(UITransform);
+            tr.setContentSize(starFxSize, starFxSize);
+            const sp = p.getComponent(Sprite);
+            const g = p.getComponent(Graphics);
+            if (this.starIcon) {
+                if (sp) {
+                    sp.enabled = true;
+                    sp.spriteFrame = this.starIcon;
+                    sp.sizeMode = Sprite.SizeMode.CUSTOM;
+                    sp.color = new Color(255, 220, 90, 255);
+                }
+                if (g) {
+                    g.clear();
+                    g.enabled = false;
+                }
+            } else {
+                if (sp) {
+                    sp.enabled = true;
+                    sp.sizeMode = Sprite.SizeMode.CUSTOM;
+                    sp.color = new Color(255, 220, 90, 255);
+                } else {
+                    let ensuredG = g;
+                    if (!ensuredG) {
+                        ensuredG = p.addComponent(Graphics);
+                    }
+                    ensuredG.enabled = true;
+                    const pAny = p as any;
+                    if (!pAny[TowerBuilder.STAR_PARTICLE_GFX_READY_KEY]) {
+                        ensuredG.clear();
+                        ensuredG.fillColor = new Color(255, 220, 90, 255);
+                        ensuredG.circle(0, 0, Math.max(1, starFxSize * 0.35));
+                        ensuredG.fill();
+                        pAny[TowerBuilder.STAR_PARTICLE_GFX_READY_KEY] = true;
+                    }
+                }
+            }
+
+            const angleDeg = (360 * i) / particleCount;
+            const angleRad = (Math.PI * 2 * i) / particleCount;
+            const ringPos = new Vec3(Math.cos(angleRad) * radius, Math.sin(angleRad) * radius, 0);
+            p.setPosition(ringPos);
+            p.setScale(0.2, 0.2, 1);
+
+            Tween.stopAllByTarget(p);
+            tween(p)
+                .to(0.16, { scale: new Vec3(1.6, 1.6, 1) }, { easing: 'backOut' })
+                .to(0.22, { scale: new Vec3(1.0, 1.0, 1) }, { easing: 'sineOut' })
+                .to(1.0, { position: new Vec3(0, 0, 0), scale: new Vec3(0.25, 0.25, 1) }, { easing: 'quadIn' })
+                .start();
+
+            pivot.angle = angleDeg;
+            Tween.stopAllByTarget(pivot);
+            const targetAngle = angleDeg + 360 * 6;
+            tween(pivot)
+                .to(1.38, { angle: targetAngle + 120 }, { easing: 'linear' })
+                .start();
+        }
+
+        let burst = effectRoot.getChildByName('StarUpgradeFxBurst');
+        if (!burst || !burst.isValid) {
+            burst = new Node('StarUpgradeFxBurst');
+            burst.setParent(effectRoot);
+            const burstTr = burst.addComponent(UITransform);
+            burstTr.setContentSize(20, 20);
+            const burstG = burst.addComponent(Graphics);
+            burstG.fillColor = new Color(255, 235, 120, 180);
+            burstG.circle(0, 0, 9);
+            burstG.fill();
+        }
+        burst.setScale(0.2, 0.2, 1);
+        const burstOpacity = burst.getComponent(UIOpacity) || burst.addComponent(UIOpacity);
+        burstOpacity.opacity = 220;
+        Tween.stopAllByTarget(burst);
+        tween(burst)
+            .to(0.12, { scale: new Vec3(1.2, 1.2, 1) }, { easing: 'backOut' })
+            .to(0.22, { scale: new Vec3(0.7, 0.7, 1) })
+            .delay(0.95)
+            .to(0.24, { scale: new Vec3(1.45, 1.45, 1) }, { easing: 'quadIn' })
+            .start();
+        Tween.stopAllByTarget(burstOpacity);
+        tween(burstOpacity)
+            .to(0.35, { opacity: 0 })
+            .delay(0.95)
+            .to(0.35, { opacity: 220 })
+            .to(0.24, { opacity: 0 })
+            .start();
+
+        Tween.stopAllByTarget(opacity);
+        const hideHeadAfter = opts?.hideUnitHeadStarsAfterIfNotSelected;
+        const fxTarget = node;
+        tween(opacity)
+            .delay(1.2)
+            .to(0.8, { opacity: 0 })
+            .call(() => {
+                try {
+                    if (effectRoot && effectRoot.isValid) this.recycleStarUpgradeEffect(effectRoot);
+                    if (hideHeadAfter && fxTarget && fxTarget.isValid && fxTarget.getComponent('Role')) {
+                        const usm = this.resolveUnitSelectionManager();
+                        if (!usm || !usm.isUnitSelected(fxTarget)) {
+                            this.hideUnitStarNode(fxTarget);
+                        }
+                    }
+                } catch (e) {
+                    this._logStarUpgradeSfx('playStarUpgradeEffect tween call threw', { error: String(e) });
+                }
+            })
+            .start();
+    }
+
+    private getStarFxPoolRoot(): Node {
+        if (this.starFxPoolRoot && this.starFxPoolRoot.isValid) return this.starFxPoolRoot;
+        let root = this.node.getChildByName(this.STAR_FX_POOL_ROOT_NAME);
+        if (!root || !root.isValid) {
+            root = new Node(this.STAR_FX_POOL_ROOT_NAME);
+            root.setParent(this.node);
+            root.active = false;
+        }
+        this.starFxPoolRoot = root;
+        return root;
+    }
+
+    private createStarUpgradeEffectNode(): Node {
+        const effectRoot = new Node('StarUpgradeFx');
+        const opacity = effectRoot.addComponent(UIOpacity);
+        opacity.opacity = 255;
+        const particleCount = 6;
+        const starFxSize = 16;
+        for (let i = 0; i < particleCount; i++) {
+            const pivot = new Node(`FxPivot_${i}`);
+            pivot.setParent(effectRoot);
+            pivot.setPosition(0, 0, 0);
+            const p = new Node(`FxStar_${i}`);
+            p.setParent(pivot);
+            p.addComponent(UITransform).setContentSize(starFxSize, starFxSize);
+            if (this.starIcon) {
+                const sp = p.addComponent(Sprite);
+                sp.spriteFrame = this.starIcon;
+                sp.sizeMode = Sprite.SizeMode.CUSTOM;
+                sp.color = new Color(255, 220, 90, 255);
+            } else {
+                const g = p.addComponent(Graphics);
+                g.fillColor = new Color(255, 220, 90, 255);
+                g.circle(0, 0, Math.max(1, starFxSize * 0.35));
+                g.fill();
+                (p as any)[TowerBuilder.STAR_PARTICLE_GFX_READY_KEY] = true;
+            }
+        }
+        const burst = new Node('StarUpgradeFxBurst');
+        burst.setParent(effectRoot);
+        burst.addComponent(UITransform).setContentSize(20, 20);
+        const burstG = burst.addComponent(Graphics);
+        burstG.fillColor = new Color(255, 235, 120, 180);
+        burstG.circle(0, 0, 9);
+        burstG.fill();
+        (burst as any)[TowerBuilder.STAR_BURST_GFX_READY_KEY] = true;
+        burst.addComponent(UIOpacity).opacity = 220;
+        return effectRoot;
+    }
+
+    private acquireStarUpgradeEffect(): Node {
+        this.ensureMinStarFxPoolSize();
+        while (this.starFxPool.length > 0) {
+            const fx = this.starFxPool.pop()!;
+            if (fx && fx.isValid) {
+                this.stopTweensRecursive(fx);
+                return fx;
+            }
+        }
+        return this.createStarUpgradeEffectNode();
+    }
+
+    private recycleStarUpgradeEffect(effectRoot: Node | null) {
+        if (!effectRoot || !effectRoot.isValid) return;
+        this.stopTweensRecursive(effectRoot);
+        effectRoot.active = false;
+        effectRoot.setScale(1, 1, 1);
+        effectRoot.setPosition(0, 0, 0);
+        const opacity = effectRoot.getComponent(UIOpacity);
+        if (opacity) opacity.opacity = 255;
+        effectRoot.setParent(this.getStarFxPoolRoot());
+        if (this.starFxPool.length >= this.MAX_STAR_FX_POOL_SIZE) {
+            effectRoot.destroy();
+            return;
+        }
+        this.starFxPool.push(effectRoot);
+    }
+
+    private stopTweensRecursive(node: Node) {
+        if (!node || !node.isValid) return;
+        Tween.stopAllByTarget(node);
+        const op = node.getComponent(UIOpacity);
+        if (op) Tween.stopAllByTarget(op);
+        for (const c of node.children) {
+            this.stopTweensRecursive(c);
+        }
+    }
+
+    private ensureMinStarFxPoolSize() {
+        const need = Math.max(0, this.MIN_STAR_FX_POOL_SIZE - this.starFxPool.length);
+        for (let i = 0; i < need; i++) {
+            const fx = this.createStarUpgradeEffectNode();
+            fx.active = false;
+            fx.setParent(this.getStarFxPoolRoot());
+            this.starFxPool.push(fx);
+        }
+    }
+
+    private ensureStarUpgradeEffectVisualReady(effectRoot: Node) {
+        const particleCount = 6;
+        const starFxSize = 16;
+        for (let i = 0; i < particleCount; i++) {
+            let pivot = effectRoot.getChildByName(`FxPivot_${i}`);
+            if (!pivot || !pivot.isValid) {
+                pivot = new Node(`FxPivot_${i}`);
+                pivot.setParent(effectRoot);
+            }
+            pivot.active = true;
+            pivot.setPosition(0, 0, 0);
+            pivot.angle = 0;
+
+            let star = pivot.getChildByName(`FxStar_${i}`);
+            if (!star || !star.isValid) {
+                star = new Node(`FxStar_${i}`);
+                star.setParent(pivot);
+            }
+            star.active = true;
+            const tr = star.getComponent(UITransform) || star.addComponent(UITransform);
+            tr.setContentSize(starFxSize, starFxSize);
+        }
+
+        let burst = effectRoot.getChildByName('StarUpgradeFxBurst');
+        if (!burst || !burst.isValid) {
+            burst = new Node('StarUpgradeFxBurst');
+            burst.setParent(effectRoot);
+        }
+        burst.active = true;
+        const burstTr = burst.getComponent(UITransform) || burst.addComponent(UITransform);
+        burstTr.setContentSize(20, 20);
+        let burstG = burst.getComponent(Graphics);
+        if (!burstG) burstG = burst.addComponent(Graphics);
+        burstG.enabled = true;
+        const burstAny = burst as any;
+        if (!burstAny[TowerBuilder.STAR_BURST_GFX_READY_KEY]) {
+            burstG.clear();
+            burstG.fillColor = new Color(255, 235, 120, 180);
+            burstG.circle(0, 0, 9);
+            burstG.fill();
+            burstAny[TowerBuilder.STAR_BURST_GFX_READY_KEY] = true;
+        }
+        const burstOpacity = burst.getComponent(UIOpacity) || burst.addComponent(UIOpacity);
+        burstOpacity.opacity = 220;
+    }
+
+    /**
+     * 建筑升星时给已产出单位播放升星特效，并在特效期间显示头顶星标；
+     * 特效结束后若单位未被选中则收回星标（与「点击选中才常驻显示」一致）。
+     */
+    private playUpgradeEffectForProducedUnits(buildScript: any, nextStar: number) {
+        if (!buildScript) return;
+        const clampStar = (s: number) => Math.max(1, Math.min(3, Math.floor(s)));
+
+        const applyStatsToUnit = (u: Node) => {
+            if (!u || !u.isValid || !u.active || !u.activeInHierarchy) return;
+            const oldStar = clampStar(Number((u as any).__spawnStarLevel || 1));
+            const role = u.getComponent(Role);
+            if (role && typeof role.applyStarTierScaling === 'function') {
+                role.applyStarTierScaling(oldStar, nextStar);
+            }
+            (u as any).__spawnStarLevel = nextStar;
+        };
+
+        let fxCount = 0;
+        const tryPlayFx = (u: Node) => {
+            if (fxCount >= this.MAX_STAR_FX_PER_UPGRADE) return;
+            if (!u || !u.isValid || !u.active || !u.activeInHierarchy) return;
+            this.enqueueUnitStarApply(u, nextStar, true, true);
+            fxCount++;
+        };
+
+        try {
+            const arrays = [
+                'producedTowers',
+                'producedHunters',
+                'producedMages',
+                'producedPriests',
+                'producedSwordsmen',
+                'producedEagles',
+            ];
+            for (const key of arrays) {
+                const arr = buildScript[key];
+                if (!Array.isArray(arr)) continue;
+                for (const u of arr) {
+                    applyStatsToUnit(u);
+                }
+            }
+            const eagleContainer = buildScript.eagleContainer as Node | null;
+            if (eagleContainer && eagleContainer.isValid) {
+                for (const u of eagleContainer.children) {
+                    applyStatsToUnit(u);
+                }
+            }
+            for (const key of arrays) {
+                const arr = buildScript[key];
+                if (!Array.isArray(arr)) continue;
+                for (const u of arr) {
+                    tryPlayFx(u);
+                    if (fxCount >= this.MAX_STAR_FX_PER_UPGRADE) return;
+                }
+            }
+            if (eagleContainer && eagleContainer.isValid) {
+                for (const u of eagleContainer.children) {
+                    tryPlayFx(u);
+                    if (fxCount >= this.MAX_STAR_FX_PER_UPGRADE) return;
+                }
+            }
+        } catch {}
+    }
+
+    private ensureStarPoolRoot(): Node {
+        if (this.starPoolRoot && this.starPoolRoot.isValid) {
+            return this.starPoolRoot;
+        }
+        let root = this.node.getChildByName('StarPoolRoot');
+        if (!root || !root.isValid) {
+            root = new Node('StarPoolRoot');
+            root.setParent(this.node);
+        }
+        root.active = false;
+        this.starPoolRoot = root;
+        return root;
+    }
+
+    private acquireStarContainer(owner: Node): Node {
+        const existed = owner.getChildByName(this.STAR_CONTAINER_NAME);
+        if (existed && existed.isValid) {
+            existed.active = true;
+            return existed;
+        }
+        let container: Node | null = null;
+        while (this.starContainerPool.length > 0 && !container) {
+            const cand = this.starContainerPool.pop()!;
+            if (cand && cand.isValid) {
+                container = cand;
+            }
+        }
+        if (!container) {
+            container = new Node(this.STAR_CONTAINER_NAME);
+        }
+        container.name = this.STAR_CONTAINER_NAME;
+        container.setParent(owner);
+        container.active = true;
+        container.angle = 0;
+        return container;
+    }
+
+    private releaseStarContainer(owner: Node | null, container: Node) {
+        if (!container || !container.isValid) return;
+        Tween.stopAllByTarget(container);
+        container.angle = 0;
+        container.active = false;
+        container.setParent(this.ensureStarPoolRoot());
+        if (this.starContainerPool.indexOf(container) < 0) {
+            this.starContainerPool.push(container);
+        }
+        if (owner && owner.isValid) {
+            // 失效当前 owner 的旧显示 token，避免旧定时器影响新一轮显示
+            this.starHideTokenByNode.set(owner, this.starHideTokenSeq++);
+            const prevCb = this.starHideCbByNode.get(owner);
+            if (prevCb) {
+                try { this.unschedule(prevCb); } catch {}
+                this.starHideCbByNode.delete(owner);
+            }
+        }
     }
 
     private updateStarContainerAntiStretch(targetNode: Node, container?: Node | null) {
@@ -368,16 +1008,7 @@ export class TowerBuilder extends Component {
     }
 
     update() {
-        if (!this.trackedStarTargets.length) return;
-        const alive: Node[] = [];
-        for (const n of this.trackedStarTargets) {
-            if (!n || !n.isValid) continue;
-            const c = n.getChildByName(this.STAR_CONTAINER_NAME);
-            if (!c || !c.isValid) continue;
-            this.updateStarContainerAntiStretch(n, c);
-            alive.push(n);
-        }
-        this.trackedStarTargets = alive;
+        // 队列节流版本已关闭，保留空 update 以避免每帧额外开销
     }
 
     private isStarDisplayDisabledForBuilding(node: Node): boolean {
@@ -441,6 +1072,13 @@ export class TowerBuilder extends Component {
         const dstKey = this.getNodeBuildingTypeId(target, dstBuild);
         if (!srcKey || !dstKey || srcKey !== dstKey) return false;
 
+        // 阶段2：防御塔/石墙不参与合并升星
+        if (
+            srcKey === 'StoneWall' || srcKey === 'WatchTower' || srcKey === 'IceTower' || srcKey === 'ThunderTower'
+        ) {
+            return false;
+        }
+
         const srcStar = Math.max(1, Math.min(3, Math.floor(Number(srcBuild.starLevel || 1))));
         const dstStar = Math.max(1, Math.min(3, Math.floor(Number(dstBuild.starLevel || 1))));
         if (srcStar !== dstStar) return false;
@@ -450,28 +1088,12 @@ export class TowerBuilder extends Component {
         if (typeof dstBuild.setStarLevel === 'function') dstBuild.setStarLevel(nextStar);
         else dstBuild.starLevel = nextStar;
         this.applyStarToBuildingNode(target, nextStar);
+        this._logStarUpgradeSfx('tryMergeBuildings: merged', { type: srcKey, fromStar: srcStar, toStar: nextStar });
+        this.playStarUpgradeFxAndAutoHide(target);
+        this.playUpgradeEffectForProducedUnits(dstBuild, nextStar);
 
-        // 已训练的单位也同步星级（尽力而为）
-        try {
-            const arrays = [
-                'producedTowers',
-                'producedHunters',
-                'producedMages',
-                'producedPriests',
-                'producedSwordsmen',
-                'producedEagles',
-            ];
-            for (const k of arrays) {
-                const arr = (dstBuild as any)[k];
-                if (Array.isArray(arr)) {
-                    for (const u of arr) {
-                        if (u && u.isValid) this.applyStarToUnitNode(u, nextStar);
-                    }
-                }
-            }
-        } catch {}
+        // 只升级建筑本体；不批量同步已产出单位，避免瞬时重负载。
 
-        // 回收被合并的建筑
         try {
             const buildingPool = BuildingPool.getInstance();
             if (buildingPool) {
@@ -483,13 +1105,7 @@ export class TowerBuilder extends Component {
             if (source && source.isValid) source.destroy();
         }
 
-        // 升星音效（可选）
-        try {
-            if (this.starUpgradeSfx) {
-                SoundManager.getInstance()?.playEffect(this.starUpgradeSfx);
-            }
-        } catch {}
-
+        this.playBuildPlaceSfxIfAny();
         return true;
     }
 
@@ -508,12 +1124,11 @@ export class TowerBuilder extends Component {
         if (!srcTypeId || !dstTypeId) return false;
         if (srcTypeId !== dstTypeId) return false;
 
-        const srcStar = 1; // 候选框拖出的新建筑默认为1星
+        const srcStar = 1; // 候选框新建筑固定 1 星
         const dstStar = Math.max(1, Math.min(3, Math.floor(Number(dstBuild.starLevel || 1))));
         if (srcStar !== dstStar) return false;
         if (dstStar >= 3) return false;
 
-        // 候选建筑参与合并也要支付建造费用
         if (!this.gameManager) this.findGameManager();
         const unitId = this.getCandidateBuildingTypeId(building);
         let buildCost = building.cost;
@@ -521,7 +1136,7 @@ export class TowerBuilder extends Component {
         if (configCost > 0) buildCost = this.getActualBuildCost(unitId, configCost);
         if (!this.gameManager || !this.gameManager.canAfford(buildCost)) {
             GamePopup.showMessage('金币不足');
-            return true; // 已命中可合并目标，只是钱不够，阻断普通建造
+            return true; // 命中可合并目标但钱不够，阻断普通建造
         }
         this.gameManager.spendGold(buildCost);
 
@@ -529,12 +1144,17 @@ export class TowerBuilder extends Component {
         if (typeof dstBuild.setStarLevel === 'function') dstBuild.setStarLevel(nextStar);
         else dstBuild.starLevel = nextStar;
         this.applyStarToBuildingNode(target, nextStar);
+        this._logStarUpgradeSfx('tryMergeCandidateBuildingAtGrid: merged', {
+            type: srcTypeId,
+            fromStar: dstStar,
+            toStar: nextStar,
+            gridX,
+            gridY,
+        });
+        this.playStarUpgradeFxAndAutoHide(target);
+        this.playUpgradeEffectForProducedUnits(dstBuild, nextStar);
 
-        try {
-            if (this.starUpgradeSfx) {
-                SoundManager.getInstance()?.playEffect(this.starUpgradeSfx);
-            }
-        } catch {}
+        this.playBuildPlaceSfxIfAny();
         return true;
     }
 
@@ -733,6 +1353,7 @@ export class TowerBuilder extends Component {
         this.initialWatchTowersPlaced = false;
         this.initialWarAncientTreePlaced = false;
         this.initialMageTowerPlaced = false;
+        this.refreshCandidateManualGoldCost = this.refreshCandidateGoldCostBase;
 
         // 重置建筑网格占用状态
         if (!this.gridPanel) {
@@ -855,6 +1476,22 @@ export class TowerBuilder extends Component {
                     this.mageTowerContainer.setParent(canvas);
                 } else if (this.node.scene) {
                     this.mageTowerContainer.setParent(this.node.scene);
+                }
+            }
+        }
+
+        // 角鹰兽栏容器（与长按拖动拾取 getBuildingAtPosition 一致）
+        if (!this.eagleNestContainer) {
+            const existingNests = find('EagleNests');
+            if (existingNests) {
+                this.eagleNestContainer = existingNests;
+            } else {
+                this.eagleNestContainer = new Node('EagleNests');
+                const canvas = find('Canvas');
+                if (canvas) {
+                    this.eagleNestContainer.setParent(canvas);
+                } else if (this.node.scene) {
+                    this.eagleNestContainer.setParent(this.node.scene);
                 }
             }
         }
@@ -1084,17 +1721,19 @@ export class TowerBuilder extends Component {
             this.disableBuildingMode();
         });
 
-        // 设置刷新候选回调（手动刷新扣 10 金币）
+        // 设置刷新候选回调（本波内每次手动刷新后下次价格 +5，每波重置为基础价）
         this.buildingPanel.setOnRefreshRequest(() => {
             if (!this.gameManager) {
                 this.findGameManager();
             }
-            if (!this.gameManager || !this.gameManager.canAfford(this.refreshCandidateGoldCost)) {
+            const cost = this.refreshCandidateManualGoldCost;
+            if (!this.gameManager || !this.gameManager.canAfford(cost)) {
                 GamePopup.showMessage('金币不足');
                 this.updateRefreshButtonState();
                 return;
             }
-            this.gameManager.spendGold(this.refreshCandidateGoldCost);
+            this.gameManager.spendGold(cost);
+            this.refreshCandidateManualGoldCost = cost + 5;
             this.refreshCurrentWaveBuildingCandidates(false, true);
             this.updateRefreshButtonState();
         });
@@ -1105,8 +1744,9 @@ export class TowerBuilder extends Component {
         if (!this.buildingPanel) {
             return;
         }
-        const canRefresh = !!this.gameManager && this.gameManager.canAfford(this.refreshCandidateGoldCost);
-        this.buildingPanel.setRefreshButtonState(this.refreshCandidateGoldCost, canRefresh);
+        const cost = this.refreshCandidateManualGoldCost;
+        const canRefresh = !!this.gameManager && this.gameManager.canAfford(cost);
+        this.buildingPanel.setRefreshButtonState(cost, canRefresh);
     }
 
     private refreshCurrentWaveBuildingCandidates(forceIncludeCurrentSelection: boolean, avoidSameAsLast: boolean = false): void {
@@ -1150,8 +1790,22 @@ export class TowerBuilder extends Component {
             }
         }
 
-        this.buildingPanel.setBuildingTypes(picked);
+        this.currentWaveBuildingCandidates = [...picked];
+        this.buildingPanel.setBuildingTypes(this.currentWaveBuildingCandidates);
         this.lastCandidateKey = makeKey(picked);
+    }
+
+    private consumeCandidateAfterPlaced(placedBuilding: BuildingType | null): void {
+        if (!placedBuilding) return;
+        if (!this.currentWaveBuildingCandidates.length) return;
+        const idx = this.currentWaveBuildingCandidates.findIndex(
+            (item) => item && item.name === placedBuilding.name
+        );
+        if (idx < 0) return;
+        this.currentWaveBuildingCandidates.splice(idx, 1);
+        if (this.buildingPanel) {
+            this.buildingPanel.setBuildingTypes([...this.currentWaveBuildingCandidates]);
+        }
     }
 
     /**
@@ -1539,6 +2193,35 @@ export class TowerBuilder extends Component {
         this.hasShownDragTutorialInLevel1 = true;
     }
 
+    private tryShowLevel1BuildingLongPressHint() {
+        if (this.getCurrentLevelForTutorial() !== 1) {
+            return;
+        }
+
+        let shownCount = 0;
+        try {
+            const raw = sys.localStorage.getItem(TowerBuilder.LEVEL1_BUILDING_LONG_PRESS_HINT_KEY);
+            const parsed = raw ? parseInt(raw, 10) : 0;
+            shownCount = Number.isFinite(parsed) ? parsed : 0;
+        } catch {
+            shownCount = 0;
+        }
+
+        if (shownCount >= TowerBuilder.LEVEL1_BUILDING_LONG_PRESS_HINT_MAX) {
+            return;
+        }
+
+        GamePopup.showMessage('长按建筑物可以拖动', true, 2);
+        try {
+            sys.localStorage.setItem(
+                TowerBuilder.LEVEL1_BUILDING_LONG_PRESS_HINT_KEY,
+                String(shownCount + 1)
+            );
+        } catch {
+            // ignore localStorage errors
+        }
+    }
+
     disableBuildingMode() {
         this.isBuildingMode = false;
         this.currentSelectedBuilding = null;
@@ -1610,15 +2293,9 @@ export class TowerBuilder extends Component {
 
               //console.log('[TowerBuilder] onTouchEnd: 单击建筑物，打开信息面板', this.longPressBuilding.name, 'elapsedTime:', elapsedTime);
 
-            // 先清除长按检测状态，避免定时器继续运行
+            // 先清除长按检测状态（含建筑物上的 _towerBuilderHandlingClick）
             const building = this.longPressBuilding;
-            this.unschedule(this.checkLongPress);
-            this.isLongPressActive = false;
-            this.longPressBuilding = null;
-            this.longPressStartTime = 0;
-            this.longPressStartPos = null;
-            // 隐藏长按指示器
-            this.hideLongPressIndicator();
+            this.cancelLongPressDetection();
             // 阻止事件传播，防止其他系统处理（包括建筑物的节点级别事件）
             event.propagationStopped = true;
             // 立即打开建筑物信息面板，不要延迟
@@ -1627,6 +2304,7 @@ export class TowerBuilder extends Component {
                 (building as any)._showingInfoPanel = true;
                   //console.log('[TowerBuilder] 准备打开信息面板，已设置 _showingInfoPanel 标志');
 
+                this.tryShowLevel1BuildingLongPressHint();
                 this.showBuildingInfoPanel(building);
 
                 // 延迟清除标记，给面板时间显示
@@ -1766,6 +2444,7 @@ export class TowerBuilder extends Component {
                     if (occupied) {
                     const mergedOrHandled = this.tryMergeCandidateBuildingAtGrid(this.currentSelectedBuilding, g.x, g.y);
                     if (mergedOrHandled) {
+                        this.consumeCandidateAfterPlaced(this.currentSelectedBuilding);
                         this.disableBuildingMode();
                         if (this.gridPanel) this.gridPanel.clearHighlight();
                         if (this.stoneWallGridPanelComponent) this.stoneWallGridPanelComponent.clearHighlight();
@@ -1930,6 +2609,16 @@ export class TowerBuilder extends Component {
      * 建造建筑物（通用方法）
      */
     buildBuilding(building: BuildingType, worldPosition: Vec3) {
+        const nowMs = Date.now();
+        if (this.isBuildCommitInProgress || (nowMs - this.lastBuildCommitAtMs) < 120) {
+            return;
+        }
+        this.isBuildCommitInProgress = true;
+        this.lastBuildCommitAtMs = nowMs;
+        this.scheduleOnce(() => {
+            this.isBuildCommitInProgress = false;
+        }, 0.08);
+
         // 检查金币是否足够
         if (!this.gameManager) {
             this.findGameManager();
@@ -1979,6 +2668,7 @@ export class TowerBuilder extends Component {
             if (g) {
                 const mergedOrHandled = this.tryMergeCandidateBuildingAtGrid(building, g.x, g.y);
                 if (mergedOrHandled) {
+                    this.consumeCandidateAfterPlaced(building);
                     this.disableBuildingMode();
                     if (this.gridPanel) this.gridPanel.clearHighlight();
                     if (this.stoneWallGridPanelComponent) this.stoneWallGridPanelComponent.clearHighlight();
@@ -1997,24 +2687,56 @@ export class TowerBuilder extends Component {
             return;
         }
 
-        // 根据建筑物类型选择建造方法
+        // 根据建筑物类型选择建造方法（仅当对应预制体存在时才视为成功派发）
+        let placementDispatched = false;
         if (building.name === '弓箭手小屋' || building.prefab === this.warAncientTreePrefab) {
-            this.buildWarAncientTree(worldPosition);
+            if (this.warAncientTreePrefab) {
+                this.buildWarAncientTree(worldPosition);
+                placementDispatched = true;
+            }
         } else if (building.name === '猎手大厅' || building.prefab === this.hunterHallPrefab) {
-            this.buildHunterHall(worldPosition);
+            if (this.hunterHallPrefab) {
+                this.buildHunterHall(worldPosition);
+                placementDispatched = true;
+            }
         } else if (building.name === '法师塔' || building.prefab === this.mageTowerPrefab) {
-            this.buildMageTower(worldPosition);
+            if (this.mageTowerPrefab) {
+                this.buildMageTower(worldPosition);
+                placementDispatched = true;
+            }
         } else if (building.name === '石墙' || building.prefab === this.stoneWallPrefab) {
-            this.buildStoneWall(worldPosition);
+            if (this.stoneWallPrefab) {
+                this.buildStoneWall(worldPosition);
+                placementDispatched = true;
+            }
         } else if (building.name === '哨塔' || building.prefab === this.watchTowerPrefab) {
-            this.buildWatchTower(worldPosition);
+            if (this.watchTowerPrefab) {
+                this.buildWatchTower(worldPosition);
+                placementDispatched = true;
+            }
         } else if (building.name === '剑士小屋' || building.prefab === this.swordsmanHallPrefab) {
-            this.buildSwordsmanHall(worldPosition);
+            if (this.swordsmanHallPrefab) {
+                this.buildSwordsmanHall(worldPosition);
+                placementDispatched = true;
+            }
         } else if (building.name === '教堂' || building.prefab === this.churchPrefab) {
-            this.buildChurch(worldPosition);
+            if (this.churchPrefab) {
+                this.buildChurch(worldPosition);
+                placementDispatched = true;
+            }
         } else if (building.name === '角鹰兽栏' || building.prefab === this.eagleNestPrefab) {
-            this.buildEagleNest(worldPosition);
+            if (this.eagleNestPrefab) {
+                this.buildEagleNest(worldPosition);
+                placementDispatched = true;
+            }
         }
+
+        if (placementDispatched) {
+            this.playBuildPlaceSfxIfAny();
+        }
+
+        // 候选框中的建筑一旦成功安置，即从候选列表中移除
+        this.consumeCandidateAfterPlaced(building);
 
         // 只有在成功建造后才退出建造模式
         this.disableBuildingMode();
@@ -2048,7 +2770,7 @@ export class TowerBuilder extends Component {
             if (this.gridPanel) {
                 this.gridPanel.clearHighlight();
             }
-        }, 0);
+        }, 0.02);
     }
 
     /**
@@ -3026,6 +3748,9 @@ export class TowerBuilder extends Component {
                 this.gameManager.checkUnitFirstAppearance(unitType, towerScript);
             }
         }
+        if (towerScript && towerScript.gridX >= 0 && towerScript.gridY >= 0) {
+            this.playBuildPlaceSfxIfAny();
+        }
         // 记录操作
         const analytics = AnalyticsManager.getInstance();
         if (analytics && this.gameManager) {
@@ -3199,6 +3924,9 @@ export class TowerBuilder extends Component {
                 const unitType = towerScript.unitType || 'ThunderTower';
                 this.gameManager.checkUnitFirstAppearance(unitType, towerScript);
             }
+        }
+        if (towerScript && towerScript.gridX >= 0 && towerScript.gridY >= 0) {
+            this.playBuildPlaceSfxIfAny();
         }
         // 记录操作
         const analytics = AnalyticsManager.getInstance();
@@ -3545,8 +4273,10 @@ export class TowerBuilder extends Component {
         const containers = [
             this.warAncientTreeContainer,
             this.hunterHallContainer,
-            this.stoneWallContainer,
             this.swordsmanHallContainer,
+            this.mageTowerContainer,
+            this.eagleNestContainer,
+            this.stoneWallContainer,
             this.churchContainer
         ];
 
@@ -3560,6 +4290,18 @@ export class TowerBuilder extends Component {
                 const cp = child.worldPosition;
                 const bdx = worldPos.x - cp.x, bdy = worldPos.y - cp.y, bdz = worldPos.z - cp.z;
                 if (bdx * bdx + bdy * bdy + bdz * bdz < 50 * 50) { // 50像素的点击范围
+                    return child;
+                }
+            }
+        }
+
+        // 兼容：角鹰兽栏在未创建 EagleNests 容器时曾挂在 TowerBuilder 节点下
+        if (this.node && this.node.children?.length) {
+            for (const child of this.node.children) {
+                if (!child || !child.active || !child.getComponent('EagleNest')) continue;
+                const cp = child.worldPosition;
+                const bdx = worldPos.x - cp.x, bdy = worldPos.y - cp.y, bdz = worldPos.z - cp.z;
+                if (bdx * bdx + bdy * bdy + bdz * bdz < 50 * 50) {
                     return child;
                 }
             }
@@ -3599,6 +4341,7 @@ export class TowerBuilder extends Component {
      * 取消长按检测
      */
     cancelLongPressDetection() {
+        const prevBuilding = this.longPressBuilding;
         // 清除定时器
         this.unschedule(this.checkLongPress);
         this.isLongPressActive = false;
@@ -3608,6 +4351,9 @@ export class TowerBuilder extends Component {
         
         // 隐藏长按指示器
         this.hideLongPressIndicator();
+        if (prevBuilding && prevBuilding.isValid) {
+            (prevBuilding as any)._towerBuilderHandlingClick = false;
+        }
     }
 
     /**
@@ -3643,6 +4389,9 @@ export class TowerBuilder extends Component {
             this.longPressBuilding = null;
             this.longPressStartTime = 0;
             this.longPressStartPos = null;
+            if (building && building.isValid) {
+                (building as any)._towerBuilderHandlingClick = false;
+            }
             // 进入拖拽模式
             this.startDraggingBuilding(building);
         }
@@ -3663,7 +4412,6 @@ export class TowerBuilder extends Component {
             this.cancelLongPressDetection();
         }
 
-
         // 根据建筑物类型调用对应的showSelectionPanel方法
         const warAncientTree = building.getComponent(WarAncientTree);
           //console.log('[TowerBuilder] 获取 WarAncientTree 组件，结果:', warAncientTree != null);
@@ -3681,6 +4429,18 @@ export class TowerBuilder extends Component {
         const swordsmanHall = building.getComponent(SwordsmanHall);
         if (swordsmanHall && swordsmanHall.showSelectionPanel) {
             swordsmanHall.showSelectionPanel();
+            return;
+        }
+
+        const mageTower = building.getComponent(MageTower);
+        if (mageTower && mageTower.showSelectionPanel) {
+            mageTower.showSelectionPanel();
+            return;
+        }
+
+        const eagleNest = building.getComponent(EagleNest);
+        if (eagleNest && eagleNest.showSelectionPanel) {
+            eagleNest.showSelectionPanel();
             return;
         }
 

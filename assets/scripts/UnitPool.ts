@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Prefab, instantiate, find } from 'cc';
+import { _decorator, Component, Node, Prefab, instantiate, find, Tween, UIOpacity } from 'cc';
 const { ccclass, property } = _decorator;
 
 /**
@@ -199,6 +199,14 @@ export class UnitPool extends Component {
         const unitPos = unit.worldPosition;
        //console.log(`[UnitPool.release] ${prefabName}, unitId=${(unit.getComponent('Role') as any)?.unitId ?? 'N/A'}, pos=(${unitPos.x.toFixed(1)},${unitPos.y.toFixed(1)})`);
 
+        // 回收前先终止节点及子节点上的所有 tween，避免复活复用后旧特效继续运行
+        this.stopTweensRecursive(unit);
+        // 清理单位身上的升星瞬时特效残留（常驻星标由 TowerBuilder 在激活后按星级重刷）
+        const starFx = unit.getChildByName('StarUpgradeFx');
+        if (starFx && starFx.isValid) {
+            starFx.destroy();
+        }
+
         // 重置单位状态
         unit.active = false;
         unit.setParent(this.poolContainer); // 移回对象池容器节点
@@ -221,6 +229,16 @@ export class UnitPool extends Component {
             // 池已满，直接销毁
            //console.info(`[UnitPool] 释放 ${prefabName}: 池已满(${pool.length}/${this.MAX_POOL_SIZE}), 销毁对象: ${unit.name}`);
             unit.destroy();
+        }
+    }
+
+    private stopTweensRecursive(node: Node) {
+        if (!node || !node.isValid) return;
+        Tween.stopAllByTarget(node);
+        const opacity = node.getComponent(UIOpacity);
+        if (opacity) Tween.stopAllByTarget(opacity);
+        for (const child of node.children) {
+            this.stopTweensRecursive(child);
         }
     }
     

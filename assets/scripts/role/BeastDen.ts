@@ -1,10 +1,12 @@
-import { _decorator, Node, Vec3, find, Sprite, UITransform, Color, SpriteFrame, Label, UIOpacity, tween, Graphics, Prefab, assetManager, instantiate, resources } from 'cc';
+import { _decorator, Node, Vec3, find, Sprite, UITransform, Color, SpriteFrame, Label, UIOpacity, tween, Graphics, Prefab, assetManager, instantiate, resources, AudioClip } from 'cc';
 import { Build } from './Build';
 import { GameManager } from '../GameManager';
 import { UnitManager } from '../UnitManager';
 import { GameState } from '../GameState';
 import { AnalyticsManager } from '../AnalyticsManager';
 import { OperationType } from '../AnalyticsManager';
+import { SoundManager } from '../SoundManager';
+import { AudioManager } from '../AudioManager';
 const { ccclass, property } = _decorator;
 
 // 兽穴状态枚举
@@ -37,6 +39,10 @@ export class BeastDen extends Build {
     @property(SpriteFrame)
     bearGhostSpriteFrame: SpriteFrame = null!;
 
+    /** 巨熊虚影开始淡入显现时播放（可在兽穴预制体上配置） */
+    @property(AudioClip)
+    bearGhostAppearSfx: AudioClip = null!;
+
     // 状态相关
     private denState: BeastDenState = BeastDenState.Neutral;
     private unitManager: UnitManager = null!;
@@ -55,6 +61,7 @@ export class BeastDen extends Build {
 
     // 巨熊虚影相关
     private bearGhostNode: Node = null!;
+    private bearGhostSprite: Sprite = null!;
     private bearGhostOpacity: UIOpacity = null!;
     private bearGhostTimer: number = 0;
     private readonly BEAR_GHOST_FADE_IN_DURATION: number = 2.0;
@@ -379,6 +386,7 @@ export class BeastDen extends Build {
         this.bearGhostNode.setWorldPosition(this.node.worldPosition);
 
         const sprite = this.bearGhostNode.addComponent(Sprite);
+        this.bearGhostSprite = sprite;
         const uiTransform = this.bearGhostNode.addComponent(UITransform);
 
         // 先设置 SpriteFrame 和 sizeMode
@@ -409,6 +417,19 @@ export class BeastDen extends Build {
         this.bearGhostNode.setSiblingIndex(45);
     }
 
+    private playBearGhostAppearSfxIfAny() {
+        if (!this.bearGhostAppearSfx) return;
+        try {
+            const sm = SoundManager.getInstance();
+            const smHasEffectSource = sm ? !!(sm as any).effectAudioSource : false;
+            if (sm && smHasEffectSource) {
+                sm.playEffect(this.bearGhostAppearSfx);
+            } else {
+                AudioManager.Instance?.playSFX(this.bearGhostAppearSfx);
+            }
+        } catch {}
+    }
+
     /**
      * 更新巨熊出生流程：等待 2 秒 → 虚影出现 2 秒凝实 → 生成真实巨熊
      */
@@ -434,21 +455,32 @@ export class BeastDen extends Build {
 
                     // 确保虚影大小为 70x60
                     const uiTransform = this.bearGhostNode.getComponent(UITransform);
-                    const sprite = this.bearGhostNode.getComponent('Sprite') as Sprite;
+                    const sprite = this.bearGhostSprite && this.bearGhostSprite.isValid
+                        ? this.bearGhostSprite
+                        : this.bearGhostNode.getComponent(Sprite);
+                    this.bearGhostSprite = sprite || null!;
                     if (uiTransform) {
                         uiTransform.setContentSize(70, 60);
                     }
                     if (sprite) {
                         if (sprite.sizeMode !== Sprite.SizeMode.CUSTOM || !sprite.spriteFrame) {
+                            sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+                            if (!sprite.spriteFrame && this.bearGhostSpriteFrame) {
+                                sprite.spriteFrame = this.bearGhostSpriteFrame;
+                            }
                         }
                     } else {
-                        console.warn('[BeastDen] 虚影 Sprite 组件不存在，尝试重新添加');
-                        this.bearGhostNode.addComponent(Sprite);
+                        // 异常兜底：不在 update 中动态 addComponent，避免重复添加渲染组件引发警告/卡顿
+                        this.bearGhostNode.active = false;
+                        this.bearGhostFadeInComplete = true;
+                        return;
                     }
 
                     this.bearGhostNode.setScale(1, 1, 1);
                     this.bearGhostTimer = 0;
                     this.bearGhostFadeInComplete = false;
+
+                    this.playBearGhostAppearSfxIfAny();
 
                     // 使用 tween 实现 2 秒淡入效果（不再缩放，保持 70x60 大小）
                     // 在 tween 完成时生成真实巨熊（确保虚影完全凝实后才生成）

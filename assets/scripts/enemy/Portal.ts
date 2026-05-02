@@ -1,6 +1,7 @@
 import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, UITransform, resources, Label, LabelOutline, Color, UIOpacity, tween, Sprite, SpriteFrame } from 'cc';
 import { UnitType } from '../UnitType';
 import { HealthBar } from '../HealthBar';
+import { BattleFloatTextPool } from '../BattleFloatTextPool';
 const { ccclass, property } = _decorator;
 
 @ccclass('Portal')
@@ -509,65 +510,20 @@ export class Portal extends Component {
     // 否则走 showDamageNumber 内置的 Label 方案，避免报 bundle 缺失的警告。
 
     private showDamageNumber(damage: number) {
-        let damageNode: Node;
-        if (this.damageNumberPrefab) {
-            damageNode = instantiate(this.damageNumberPrefab);
-        } else {
-            damageNode = new Node('DamageNumber');
-        }
-
-        const canvas = find('Canvas');
-        if (canvas) {
-            damageNode.setParent(canvas);
-            // 确保飘字不遮挡 UI：将其放在 UI 之下
-            try {
-                const uiNode = find('Canvas/UI') || find('Canvas/HUD') || find('Canvas/TopUI');
-                if (uiNode) {
-                    const uiIndex = uiNode.getSiblingIndex();
-                    damageNode.setSiblingIndex(Math.max(0, uiIndex - 1));
-                }
-            } catch {}
-        } else if (this.node.scene) {
-            damageNode.setParent(this.node.scene);
-        } else {
-            damageNode.setParent(this.node.parent);
-        }
-
         const startPos = this.node.worldPosition.clone();
         startPos.y += 40;
-        damageNode.setWorldPosition(startPos);
-
-        let label: Label | null = damageNode.getComponent(Label);
-        if (!label) {
-            const labels = damageNode.getComponentsInChildren(Label);
-            if (labels && labels.length > 0) label = labels[0];
-        }
-        if (!label) {
-            label = damageNode.addComponent(Label);
-            label.fontSize = 20;
-        }
-        label.string = `-${Math.floor(Math.max(1, damage))}`;
-        label.color = new Color(255, 255, 255, 255);
-        // 与普通敌人一致：添加 LabelOutline 组件，并使用 Label 的非弃用描边属性
-        let outline = label.node.getComponent(LabelOutline);
-        if (!outline) {
-            outline = label.node.addComponent(LabelOutline);
-        }
-        (label as any).outlineColor = new Color(0, 0, 0, 255);
-        outline.width = 2;
-
-        const opacity = damageNode.getComponent(UIOpacity) || damageNode.addComponent(UIOpacity);
-        opacity.opacity = 255;
-
-        const endPos = startPos.clone();
-        endPos.y += 30;
-        tween(damageNode)
-            .to(0.6, { worldPosition: endPos }, { easing: 'sineOut' })
-            .parallel(tween(opacity).to(0.6, { opacity: 0 }))
-            .call(() => {
-                if (damageNode && damageNode.isValid) damageNode.destroy();
-            })
-            .start();
+        BattleFloatTextPool.spawnFloatText({
+            owner: this,
+            prefab: this.damageNumberPrefab,
+            worldPos: startPos,
+            text: `-${Math.floor(Math.max(1, damage))}`,
+            color: new Color(255, 255, 255, 255),
+            fontSize: 20,
+            duration: 0.6,
+            moveOffset: new Vec3(0, 30, 0),
+            outlineColor: new Color(0, 0, 0, 255),
+            outlineWidth: 2,
+        });
     }
 
     private getTopCornersWorld(): { topLeft: Vec3 | null; topRight: Vec3 | null } {

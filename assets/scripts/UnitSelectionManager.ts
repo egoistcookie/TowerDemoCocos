@@ -44,10 +44,14 @@ export class UnitSelectionManager extends Component {
     onGlobalTouchEnd(event: EventTouch) {
         // 检查点击的是否是建筑物，如果是建筑物则跳过清除选择
         const targetNode = event.target as Node;
-        if (targetNode) {
-            const building = targetNode.getComponent(Build);
-            if (building) {
-                return;
+        if (targetNode && targetNode.isValid) {
+            try {
+                const building = targetNode.getComponent(Build);
+                if (building) {
+                    return;
+                }
+            } catch {
+                // 某些高频点击/节点销毁时，target 可能在本帧失效，忽略并继续
             }
         }
 
@@ -206,6 +210,8 @@ export class UnitSelectionManager extends Component {
 
         // 显示范围
         this.showRangeDisplay(unitNode, unitInfo);
+        // 单位头顶星：默认隐藏，仅在被点击选中时显示
+        this.refreshUnitStarVisibility(unitNode, true);
           //console.log('[UnitSelectionManager] selectUnit completed');
     }
 
@@ -251,6 +257,11 @@ export class UnitSelectionManager extends Component {
 
         if (this.currentSelectedUnits.length === 0) {
             return;
+        }
+
+        // 多选也显示各单位星级（仅选中期间）
+        for (const node of this.currentSelectedUnits) {
+            this.refreshUnitStarVisibility(node, true);
         }
 
         // 获取第一个单位的信息
@@ -515,7 +526,7 @@ export class UnitSelectionManager extends Component {
      * @returns 是否点击在单位碰撞体积内
      */
     private isTouchOnUnit(unitNode: Node, touchLocation: Vec2, camera: Camera | null): boolean {
-        if (!camera) return false;
+        if (!camera || !unitNode || !unitNode.isValid) return false;
 
         // 获取 Role 组件并调用其公共方法（性能优化点 2）
         const roleScript = unitNode.getComponent('Role') as any;
@@ -569,12 +580,14 @@ export class UnitSelectionManager extends Component {
         
         // 清除单选单位的高亮
         if (selectedUnit && selectedUnit.isValid) {
+            this.refreshUnitStarVisibility(selectedUnit, false);
             this.clearUnitHighlight(selectedUnit);
         }
         
         // 清除多选单位的高亮
         for (const unitNode of selectedUnits) {
             if (unitNode && unitNode.isValid) {
+                this.refreshUnitStarVisibility(unitNode, false);
                 this.clearUnitHighlight(unitNode);
             }
         }
@@ -644,6 +657,26 @@ export class UnitSelectionManager extends Component {
         const buildScript = unitNode.getComponent('Build') as any;
         if (buildScript && buildScript.setHighlight) {
             buildScript.setHighlight(false);
+        }
+    }
+
+    private refreshUnitStarVisibility(unitNode: Node, visible: boolean) {
+        if (!unitNode || !unitNode.isValid) return;
+        // 仅处理“角色单位”，不处理建筑
+        const roleScript = unitNode.getComponent('Role') as any;
+        if (!roleScript) return;
+        const tbNode = find('Canvas/TowerBuilder') || find('TowerBuilder');
+        const tb = tbNode?.getComponent('TowerBuilder') as any;
+        if (!tb) return;
+        if (visible) {
+            const lv = Math.max(1, Math.min(3, Math.floor(Number((unitNode as any).__spawnStarLevel || 1))));
+            if (typeof tb.applyStarToUnitNode === 'function') {
+                tb.applyStarToUnitNode(unitNode, lv);
+            }
+        } else {
+            if (typeof tb.hideUnitStarNode === 'function') {
+                tb.hideUnitStarNode(unitNode);
+            }
         }
     }
     

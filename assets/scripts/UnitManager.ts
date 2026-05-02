@@ -738,6 +738,40 @@ export class UnitManager extends Component {
     /**
      * 手动刷新单位列表（当单位被创建或销毁时调用）
      */
+    public getDebugSnapshot() {
+        const safeLen = (arr: Node[] | null | undefined) => Array.isArray(arr) ? arr.length : 0;
+        const enemyCount = safeLen(this.enemies);
+        const friendlyCount =
+            safeLen(this.towers) +
+            safeLen(this.warAncientTrees) +
+            safeLen(this.hunterHalls) +
+            safeLen(this.swordsmanHalls) +
+            safeLen(this.churches) +
+            safeLen(this.stoneWalls) +
+            safeLen(this.watchTowers) +
+            safeLen(this.iceTowers) +
+            safeLen(this.thunderTowers) +
+            safeLen(this.hunters) +
+            safeLen(this.mages) +
+            safeLen(this.elfSwordsmans) +
+            safeLen(this.eagles);
+
+        return {
+            enemyCount,
+            friendlyCount,
+            towers: safeLen(this.towers),
+            churches: safeLen(this.churches),
+            hunters: safeLen(this.hunters),
+            mages: safeLen(this.mages),
+            swordsmen: safeLen(this.elfSwordsmans),
+            eagles: safeLen(this.eagles),
+            stoneWalls: safeLen(this.stoneWalls),
+            watchTowers: safeLen(this.watchTowers),
+            iceTowers: safeLen(this.iceTowers),
+            thunderTowers: safeLen(this.thunderTowers),
+        };
+    }
+
     refreshUnitLists() {
         this.updateUnitLists();
     }

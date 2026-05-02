@@ -1,6 +1,8 @@
-import { _decorator, Component, Node, Prefab, Sprite, SpriteFrame, Label, Color, UITransform, Graphics, EventTouch, Vec3, Vec2, tween, UIOpacity, find, instantiate, Camera, ScrollView, Mask } from 'cc';
+import { _decorator, Component, Node, Prefab, Sprite, SpriteFrame, Label, Color, UITransform, Graphics, EventTouch, Vec3, Vec2, tween, UIOpacity, find, instantiate, Camera, ScrollView, Mask, LabelOutline, Button, resources, AudioClip } from 'cc';
 import { GameManager } from './GameManager';
 import { GamePopup } from './GamePopup';
+import { SoundManager } from './SoundManager';
+import { AudioManager } from './AudioManager';
 import { BuildingGridPanel } from './BuildingGridPanel';
 import { StoneWallGridPanel } from './StoneWallGridPanel';
 import { UnitSelectionManager } from './UnitSelectionManager';
@@ -39,9 +41,15 @@ export class BuildingSelectionPanel extends Component {
     private lastIsDragging: boolean = false; // 上一帧的拖拽状态，用于检测状态变化
     private refreshButtonCost: number = 10;
     private refreshButtonEnabled: boolean = true;
-    private refreshProgress: number = 0; // 0=整圈金边；1=完全消失
+    private refreshProgress: number = 0; // 0=整圈；1=完成
     private refreshButtonNode: Node | null = null;
+    private refreshMainButton: Button | null = null;
+    private refreshIconSprite: Sprite | null = null;
+    private refreshCostLabel: Label | null = null;
     private refreshRingGraphics: Graphics | null = null;
+    /** 落地去抖时间戳（强隔离 End/Cancel/Canvas 多路径重入） */
+    private lastDropFinalizeAtMs: number = -999999;
+    private nextAllowedDropFinalizeAtMs: number = -999999;
 
     start() {
         this.findGameManager();
@@ -369,6 +377,14 @@ export class BuildingSelectionPanel extends Component {
      * Canvas触摸结束事件（处理拖拽到游戏界面中松开的情况）
      */
     onCanvasTouchEnd(event: EventTouch) {
+        const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        // 强隔离：同一次鼠标松手可能走到 End/Cancel/Canvas 多条路径，这里只允许一次 finalize
+        if (now < this.nextAllowedDropFinalizeAtMs) {
+            return;
+        }
+        this.nextAllowedDropFinalizeAtMs = now + 220;
+        this.lastDropFinalizeAtMs = now;
+
         const location = event.getLocation();
         const targetNode = event.target as Node;
         
@@ -441,16 +457,8 @@ export class BuildingSelectionPanel extends Component {
                     this.node.setScale(1, 1, 1);
                 }
 
-                // 优先使用拖拽预览的当前位置（已经对齐到网格中心）
-                let worldPos: Vec3 | null = null;
-                if (this.dragPreview) {
-                    worldPos = this.dragPreview.worldPosition.clone();
-                }
-                
-                // 如果没有拖拽预览位置，使用触摸结束位置并对齐到网格中心
-                if (!worldPos) {
-                    worldPos = this.getWorldPositionFromScreen(new Vec3(location.x, location.y, 0));
-                }
+                // 必须使用“松开时鼠标位置”作为落地判定依据（避免用预览的历史吸附位置导致误建造/触发升星链路）
+                let worldPos: Vec3 | null = this.getWorldPositionFromScreen(new Vec3(location.x, location.y, 0));
                 
                 // 判断是否是石墙或哨塔（都使用石墙网格）
                 const isStoneWall = this.selectedBuilding.name === '石墙';
@@ -465,7 +473,7 @@ export class BuildingSelectionPanel extends Component {
                             this.findStoneWallGridPanel();
                         }
                         
-                        if (this.stoneWallGridPanel) {
+                        if (this.stoneWallGridPanel && worldPos) {
                             const gridCenter = this.stoneWallGridPanel.getNearestGridCenter(worldPos);
                             if (gridCenter) {
                                 // 检查目标网格是否被占用
@@ -517,7 +525,7 @@ export class BuildingSelectionPanel extends Component {
                         }
                     } else {
                         // 其他建筑使用普通网格面板
-                        if (this.gridPanel) {
+                        if (this.gridPanel && worldPos) {
                             const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
                             if (gridCenter) {
                                 worldPos = gridCenter;
@@ -546,6 +554,8 @@ export class BuildingSelectionPanel extends Component {
                 
                 if (worldPos && this.onBuildCallback) {
                 this.onBuildCallback(this.selectedBuilding, worldPos);
+                // 成功建造后，再额外延长短窗口，防止同一松手链路的迟到回调再次进入
+                this.nextAllowedDropFinalizeAtMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) + 260;
                 
                 // 清除拖拽预览和状态
                 this.clearDragPreview();
@@ -571,7 +581,7 @@ export class BuildingSelectionPanel extends Component {
                     if (this.stoneWallGridPanel) {
                         this.stoneWallGridPanel.clearHighlight();
                     }
-                }, 0);
+                }, 0.02);
                 
                 // 阻止事件传播
                 event.propagationStopped = true;
@@ -636,18 +646,18 @@ export class BuildingSelectionPanel extends Component {
     }
 
     /**
-     * 设置刷新按钮状态
+     * 仅存金币/可否刷新状态，仅重绘刷新按钮，不触发整面板重建。
      */
     setRefreshButtonState(cost: number, enabled: boolean) {
         this.refreshButtonCost = cost;
         this.refreshButtonEnabled = enabled;
-        this.updatePanel();
+        this.updateRefreshButtonVisuals();
     }
 
     /**
-     * 设置刷新按钮金边进度（0~1）
-     * - 0：整圈
-     * - 1：完全消失
+     * 设置刷新按钮金边进度（0~1）。
+     * - 0：整圈金边
+     * - 1：金边完全消失（本波刷完）
      */
     setRefreshProgress(progress01: number) {
         this.refreshProgress = Math.max(0, Math.min(1, progress01));
@@ -666,16 +676,108 @@ export class BuildingSelectionPanel extends Component {
             return;
         }
 
-        const diameter = this.refreshButtonNode.getComponent(UITransform)?.contentSize.width || 112;
-        // 圆环半径：尽量贴合按钮外沿（避免“悬浮”在外面）
+        const diameter = this.refreshButtonNode.getComponent(UITransform)?.contentSize.width || 92;
         const lineWidth = 6;
         const radius = diameter / 2 + Math.max(0, lineWidth / 2 - 1);
         const startAngle = -Math.PI / 2;
         const endAngle = startAngle + remaining * Math.PI * 2;
         g.lineWidth = lineWidth;
-        g.strokeColor = new Color(255, 215, 0, 255); // 金边
+        g.strokeColor = new Color(255, 215, 0, 255);
         g.arc(0, 0, radius, startAngle, endAngle, false);
         g.stroke();
+    }
+
+    private updateRefreshButtonVisuals() {
+        if (this.refreshMainButton) {
+            this.refreshMainButton.interactable = this.refreshButtonEnabled;
+        }
+        if (this.refreshIconSprite) {
+            this.refreshIconSprite.grayscale = !this.refreshButtonEnabled;
+            this.refreshIconSprite.color = this.refreshButtonEnabled ? Color.WHITE : new Color(200, 200, 200, 255);
+        }
+        if (this.refreshCostLabel) {
+            this.refreshCostLabel.string = `💰${this.refreshButtonCost}`;
+            this.refreshCostLabel.color = this.refreshButtonEnabled ? Color.YELLOW : new Color(180, 180, 180, 255);
+        }
+        this.redrawRefreshRing();
+    }
+
+    /**
+     * assets/resources/textures/icon/刷新1.png、刷新2.png；加载路径与 UIManager.setupButtonSprite 相同：`textures/icon/{文件名不含扩展名}/spriteFrame`
+     */
+    private applyRefreshButtonIconSprites(buttonRoot: Node, diameter: number) {
+        const sprite = buttonRoot.getComponent(Sprite);
+        const button = buttonRoot.getComponent(Button);
+        if (!sprite || !button) return;
+
+        const normalPath = 'textures/icon/刷新1/spriteFrame';
+        const pressedPath = 'textures/icon/刷新2/spriteFrame';
+
+        resources.load(normalPath, SpriteFrame, (err, sf) => {
+            if (err || !sprite.isValid) return;
+            sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+            sprite.type = Sprite.Type.SIMPLE;
+            sprite.spriteFrame = sf;
+            button.normalSprite = sf;
+            button.hoverSprite = sf;
+            const tr = buttonRoot.getComponent(UITransform);
+            if (tr && sf) {
+                const rect = sf.rect;
+                const w = rect.width || (sf as any).width;
+                const h = rect.height || (sf as any).height;
+                if (w > 0 && h > 0) {
+                    const scale = Math.min(diameter / w, diameter / h);
+                    tr.setContentSize(w * scale, h * scale);
+                }
+            }
+            this.redrawRefreshRing();
+        });
+
+        resources.load(pressedPath, SpriteFrame, (err, sf2) => {
+            if (err || !button.isValid || !sf2) return;
+            button.pressedSprite = sf2;
+            button.disabledSprite = sf2;
+        });
+    }
+
+    private onRefreshButtonClicked() {
+        if (!this.refreshButtonEnabled) {
+            GamePopup.showMessage('金币不足');
+            return;
+        }
+        BuildingSelectionPanel.playCardSelectSfxShared();
+        if (this.onRefreshRequestCallback) {
+            this.onRefreshRequestCallback();
+        }
+    }
+
+    /** resources/sounds/抽卡.mp3，与 BuffCardPopup 抽卡确认同源通路 */
+    private static readonly CARD_SELECT_SFX_RES = 'sounds/抽卡';
+    private static cardSelectSfxClip: AudioClip | null = null;
+    private static cardSelectSfxLoading = false;
+
+    private static playCardSelectSfxShared() {
+        if (BuildingSelectionPanel.cardSelectSfxClip) {
+            BuildingSelectionPanel.playClip(BuildingSelectionPanel.cardSelectSfxClip);
+            return;
+        }
+        if (BuildingSelectionPanel.cardSelectSfxLoading) return;
+        BuildingSelectionPanel.cardSelectSfxLoading = true;
+        resources.load(BuildingSelectionPanel.CARD_SELECT_SFX_RES, AudioClip, (err, clip) => {
+            BuildingSelectionPanel.cardSelectSfxLoading = false;
+            if (err || !clip) return;
+            BuildingSelectionPanel.cardSelectSfxClip = clip;
+            BuildingSelectionPanel.playClip(clip);
+        });
+    }
+
+    private static playClip(clip: AudioClip) {
+        try {
+            const sm = SoundManager.getInstance();
+            const smHasEffectSource = sm ? !!(sm as any).effectAudioSource : false;
+            if (sm && smHasEffectSource) sm.playEffect(clip);
+            else AudioManager.Instance?.playSFX(clip);
+        } catch {}
     }
 
     /**
@@ -779,11 +881,14 @@ export class BuildingSelectionPanel extends Component {
      * 更新面板内容
      */
     updatePanel() {
-        // 设置面板固定宽度为 750（游戏画面宽度）
-        const panelWidth = 750;
-        const panelHeight = 220; // 拉高到建造按钮底部位置
-        const refreshButtonAreaWidth = 140;
-        const contentAreaWidth = panelWidth - refreshButtonAreaWidth;
+        const itemWidth = 120;
+        const spacing = 20;
+        const maxCandidateSlots = 3;
+        const hMargin = 10;
+        const contentAreaWidth = maxCandidateSlots * (itemWidth + spacing) + 12;
+        const refreshButtonAreaWidth = 100;
+        const panelWidth = hMargin + contentAreaWidth + refreshButtonAreaWidth + hMargin;
+        const panelHeight = 220;
 
         // 获取 Canvas 节点，用于计算屏幕底部位置
         const canvas = find('Canvas');
@@ -829,9 +934,8 @@ export class BuildingSelectionPanel extends Component {
         // 创建内容容器（直接作为 panelNode 的子节点，便于 GameManager 查找）
         const contentNode = new Node('Content');
         contentNode.setParent(this.node);
-        // 内容容器位置：因为面板锚点是 (0.5, 0.5)，原点在中心，所以要偏移到左边缘
-        // 内容容器锚点是 (0, 0.5)，原点在左侧，所以位置应该是 (-panelWidth/2, 0)
-        contentNode.setPosition(-panelWidth / 2, 0, 0);
+        // 内容容器锚点 (0, 0.5)；初始 x 在下方按 hMargin 与滚动范围再定
+        contentNode.setPosition(-panelWidth / 2 + hMargin, 0, 0);
 
         const contentTransform = contentNode.addComponent(UITransform);
         contentTransform.anchorPoint = new Vec2(0, 0.5);
@@ -839,8 +943,6 @@ export class BuildingSelectionPanel extends Component {
         this.panelContent = contentNode;
 
         // 创建建筑物选项
-        const itemWidth = 120;
-        const spacing = 20;
         this.buildingTypes.forEach((building, index) => {
             const item = this.createBuildingItem(building, index, itemWidth, spacing);
             this.panelContent.addChild(item);
@@ -862,9 +964,9 @@ export class BuildingSelectionPanel extends Component {
         const contentWidth = this.buildingTypes.length * (itemWidth + spacing);
         const isCentered = contentWidth < contentAreaWidth;
 
-        // 初始位置：居中时以内容区中心居中，否则靠左
-        const contentAreaCenterX = -panelWidth / 2 + contentAreaWidth / 2;
-        const initialPosX = isCentered ? (contentAreaCenterX - contentWidth / 2) : -panelWidth / 2;
+        // 初始位置：居中时以内容区中心居中，否则靠左（均相对左右各 hMargin 的内侧区域）
+        const contentAreaCenterX = -panelWidth / 2 + hMargin + contentAreaWidth / 2;
+        const initialPosX = isCentered ? (contentAreaCenterX - contentWidth / 2) : -panelWidth / 2 + hMargin;
 
         // 设置内容容器初始位置
         contentNode.setPosition(initialPosX, 0, 0);
@@ -886,10 +988,8 @@ export class BuildingSelectionPanel extends Component {
 
             // 限制滚动范围（只有当内容宽度大于面板宽度时才允许滚动）
             if (contentWidth > contentAreaWidth) {
-                // 最大滚动位置：content 左边缘对齐内容区左边缘（scrollX = -panelWidth/2）
-                // 最小滚动位置：content 右边缘对齐内容区右边缘
-                const maxScrollX = -panelWidth / 2;
-                const minScrollX = -panelWidth / 2 + contentAreaWidth - contentWidth;
+                const maxScrollX = -panelWidth / 2 + hMargin;
+                const minScrollX = -panelWidth / 2 + hMargin + contentAreaWidth - contentWidth;
 
                 if (newScrollX > maxScrollX) {
                     contentNode.setPosition(maxScrollX, 0, 0);
@@ -901,21 +1001,27 @@ export class BuildingSelectionPanel extends Component {
             }
         }, this);
 
-        // 候选池右侧刷新按钮（圆形）
+        // 候选池右侧刷新按钮：贴图 刷新1/刷新2（resources/textures/icon）+ 金边圆环 + 金币文案
         const refreshNode = new Node('RefreshButton');
         refreshNode.setParent(this.node);
-        refreshNode.setPosition(panelWidth / 2 - refreshButtonAreaWidth / 2, 0, 0);
+        refreshNode.setPosition(panelWidth / 2 - hMargin - refreshButtonAreaWidth / 2, 0, 0);
         const refreshTransform = refreshNode.addComponent(UITransform);
-        const refreshDiameter = 112;
+        const refreshDiameter = 92;
         refreshTransform.setContentSize(refreshDiameter, refreshDiameter);
 
-        const refreshBg = refreshNode.addComponent(Graphics);
-        const buttonColor = this.refreshButtonEnabled ? new Color(40, 120, 220, 220) : new Color(80, 80, 80, 220);
-        refreshBg.fillColor = buttonColor;
-        refreshBg.circle(0, 0, refreshDiameter / 2);
-        refreshBg.fill();
+        const refreshSprite = refreshNode.addComponent(Sprite);
+        refreshSprite.sizeMode = Sprite.SizeMode.CUSTOM;
 
-        // 金边圆环（随刷怪进度缩短）
+        const refreshBtn = refreshNode.addComponent(Button);
+        refreshBtn.transition = Button.Transition.SPRITE;
+        refreshBtn.target = refreshNode;
+        refreshBtn.zoomScale = 1;
+        refreshBtn.interactable = this.refreshButtonEnabled;
+        refreshBtn.node.on(Button.EventType.CLICK, this.onRefreshButtonClicked, this);
+
+        this.refreshMainButton = refreshBtn;
+        this.refreshIconSprite = refreshSprite;
+
         const ringNode = new Node('RefreshRing');
         ringNode.setParent(refreshNode);
         ringNode.setPosition(0, 0, 0);
@@ -923,58 +1029,24 @@ export class BuildingSelectionPanel extends Component {
         ringTransform.setContentSize(refreshDiameter + 8, refreshDiameter + 8);
         const ringGraphics = ringNode.addComponent(Graphics);
 
-        const refreshLabelNode = new Node('RefreshLabel');
-        refreshLabelNode.setParent(refreshNode);
-        refreshLabelNode.setPosition(0, 14, 0);
-        const refreshLabel = refreshLabelNode.addComponent(Label);
-        refreshLabel.string = '刷新';
-        refreshLabel.fontSize = 24;
-        refreshLabel.color = Color.WHITE;
-
         const refreshCostNode = new Node('RefreshCostLabel');
         refreshCostNode.setParent(refreshNode);
-        refreshCostNode.setPosition(0, -18, 0);
+        refreshCostNode.setPosition(0, -36, 0);
         const refreshCostLabel = refreshCostNode.addComponent(Label);
         refreshCostLabel.string = `💰${this.refreshButtonCost}`;
-        refreshCostLabel.fontSize = 20;
+        refreshCostLabel.fontSize = 18;
         refreshCostLabel.color = this.refreshButtonEnabled ? Color.YELLOW : new Color(180, 180, 180, 255);
+        const refreshCostOutline = refreshCostNode.addComponent(LabelOutline);
+        refreshCostOutline.color = new Color(0, 0, 0, 255);
+        refreshCostOutline.width = 2;
 
-        refreshNode.on(Node.EventType.TOUCH_END, (event: EventTouch) => {
-            event.propagationStopped = true;
-            // 圆形命中检测：点击落在圆外则忽略（把触摸热区从方形变为真正的圆形）
-            try {
-                const tr = refreshNode.getComponent(UITransform);
-                if (tr) {
-                    const loc = event.getLocation();
-                    const cameraNode = find('Canvas/Camera');
-                    const camera = cameraNode?.getComponent(Camera);
-                    if (camera) {
-                        const screenPos = new Vec3(loc.x, loc.y, 0);
-                        const worldPos = new Vec3();
-                        camera.screenToWorld(screenPos, worldPos);
-                        const local = tr.convertToNodeSpaceAR(worldPos);
-                        const radius = (tr.contentSize.width || refreshDiameter) / 2;
-                        const dx = local.x;
-                        const dy = local.y;
-                        if (dx * dx + dy * dy > radius * radius) {
-                            return;
-                        }
-                    }
-                }
-            } catch {}
-            if (!this.refreshButtonEnabled) {
-                GamePopup.showMessage('金币不足');
-                return;
-            }
-            if (this.onRefreshRequestCallback) {
-                this.onRefreshRequestCallback();
-            }
-        }, this);
+        this.applyRefreshButtonIconSprites(refreshNode, refreshDiameter);
 
-        // 缓存引用并绘制一次圆环
         this.refreshButtonNode = refreshNode;
+        this.refreshCostLabel = refreshCostLabel;
         this.refreshRingGraphics = ringGraphics;
         this.redrawRefreshRing();
+        this.updateRefreshButtonVisuals();
     }
 
     /**
@@ -1188,262 +1260,47 @@ export class BuildingSelectionPanel extends Component {
      * 建筑物选项触摸结束
      */
     onBuildingItemTouchEnd(building: BuildingType, event: EventTouch) {
+        const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        if (now < this.nextAllowedDropFinalizeAtMs) {
+            event.propagationStopped = true;
+            return;
+        }
         const location = event.getLocation();
         const startLocation = event.getStartLocation();
         const dragDistance = Math.sqrt(
             Math.pow(location.x - startLocation.x, 2) + 
             Math.pow(location.y - startLocation.y, 2)
         );
-        const targetNode = event.target as Node;
-        
-        
-        // 无论什么情况，都先清除网格高亮
-        this.clearGridHighlight();
-        
-        // 延迟一帧再次清除，确保清除完成
-        this.scheduleOnce(() => {
-            this.clearGridHighlight();
-        }, 0);
-        
         if (this.selectedBuilding !== building) {
             return;
         }
 
-        // 检查是否发生了拖拽（移动距离超过5像素）
-        // location, startLocation, dragDistance 已在方法开头声明
-
-        // 立即停止拖拽状态，防止触摸移动事件继续处理
-        this.isDragging = false;
-        this.clearGridHighlight();
-
-        // 如果没有发生拖拽，不处理
+        // 点击未拖拽：仅清理，不走建造。
         if (dragDistance <= 5) {
+            this.isDragging = false;
             this.clearDragPreview();
             this.selectedBuilding = null;
+            this.clearGridHighlight();
             event.propagationStopped = true;
             return;
         }
 
-        // 检查触摸结束位置是否在建筑物选择面板区域内
-        let isInPanelArea = false;
-        const panelOpacity = this.node.getComponent(UIOpacity);
-        const isPanelVisible = this.node.active && (!panelOpacity || panelOpacity.opacity > 0) && this.node.scale.x > 0;
-        
-        if (isPanelVisible) {
-            const panelTransform = this.node.getComponent(UITransform);
-            if (panelTransform) {
-                const panelWorldPos = this.node.worldPosition;
-                const panelSize = panelTransform.contentSize;
-                
-                const cameraNode = find('Canvas/Camera');
-                if (cameraNode) {
-                    const camera = cameraNode.getComponent(Camera);
-                    if (camera) {
-                        const panelScreenPos = new Vec3();
-                        camera.worldToScreen(panelWorldPos, panelScreenPos);
-                        
-                        const panelScreenRect = {
-                            x: panelScreenPos.x - panelSize.width / 2,
-                            y: panelScreenPos.y - panelSize.height / 2,
-                            width: panelSize.width,
-                            height: panelSize.height
-                        };
-                        
-                        if (location.x >= panelScreenRect.x && 
-                            location.x <= panelScreenRect.x + panelScreenRect.width &&
-                            location.y >= panelScreenRect.y && 
-                            location.y <= panelScreenRect.y + panelScreenRect.height) {
-                            isInPanelArea = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        // 如果触摸位置在面板区域内，先关闭面板
-        if (isInPanelArea) {
-            this.node.active = false;
-            if (panelOpacity) {
-                panelOpacity.opacity = 255;
-            }
-            this.node.setScale(1, 1, 1);
-        }
-
-        // 尝试建造
-        if (this.dragPreview && this.selectedBuilding) {
-            // 优先使用拖拽预览的当前位置（已经对齐到网格中心）
-            let buildPos: Vec3 | null = null;
-            
-            // 判断是否是石墙或哨塔（都使用石墙网格）
-            const isStoneWall = this.selectedBuilding && this.selectedBuilding.name === '石墙';
-            const isWatchTower = this.selectedBuilding && this.selectedBuilding.name === '哨塔';
-            const useStoneWallGrid = isStoneWall || isWatchTower;
-            
-            // 对于所有建筑（包括石墙），统一使用世界坐标
-            if (this.dragPreview) {
-                buildPos = this.dragPreview.worldPosition.clone();
-            } else {
-                buildPos = this.getWorldPositionFromScreen(new Vec3(location.x, location.y, 0));
-            }
-            
-            // 根据建筑类型选择对应的网格面板进行对齐
-            if (buildPos) {
-                if (useStoneWallGrid) {
-                    // 石墙和哨塔使用石墙网格面板
-                    if (!this.stoneWallGridPanel) {
-                        this.findStoneWallGridPanel();
-                    }
-                    
-                    if (this.stoneWallGridPanel) {
-                        // 先尝试使用拖拽预览位置获取网格中心
-                        let gridCenter = this.stoneWallGridPanel.getNearestGridCenter(buildPos);
-                        
-                        // 如果拖拽预览位置不在网格内，尝试使用触摸结束位置
-                        if (!gridCenter) {
-                            const touchWorldPos = this.getWorldPositionFromScreen(new Vec3(location.x, location.y, 0));
-                            if (touchWorldPos) {
-                                gridCenter = this.stoneWallGridPanel.getNearestGridCenter(touchWorldPos);
-                            }
-                        }
-                        
-                        if (gridCenter) {
-                            // 检查目标网格是否被占用
-                            const grid = this.stoneWallGridPanel.worldToGrid(gridCenter);
-                            if (grid) {
-                                // 哨塔占据两个网格高度，需要检查两个网格是否都被占用
-                                let isOccupied = false;
-                                if (isWatchTower) {
-                                    // 检查第二个网格是否存在
-                                    if (grid.y + 1 >= this.stoneWallGridPanel.gridHeight) {
-                                        // 第二个网格超出范围，无法放置
-                                        isOccupied = true;
-                                    } else {
-                                        // 检查两个网格是否都被占用
-                                        isOccupied = this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y) || 
-                                                    this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y + 1);
-                                    }
-                                } else {
-                                    // 石墙只占用一个网格
-                                    isOccupied = this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y);
-                                }
-                                
-                                if (!isOccupied) {
-                                    buildPos = gridCenter;
-                                } else {
-                                    // 网格被占用，建造失败
-                                    this.clearDragPreview();
-                                    this.selectedBuilding = null;
-                                    this.clearGridHighlight();
-                                    if (this.onBuildCancelCallback) {
-                                        this.onBuildCancelCallback();
-                                    }
-                                    event.propagationStopped = true;
-                                    return;
-                                }
-                            } else {
-                                this.clearDragPreview();
-                                this.selectedBuilding = null;
-                                this.clearGridHighlight();
-                                if (this.onBuildCancelCallback) {
-                                    this.onBuildCancelCallback();
-                                }
-                                event.propagationStopped = true;
-                                return;
-                            }
-                        } else {
-                            // 石墙和哨塔必须建造在石墙网格内，否则建造失败
-                            this.clearDragPreview();
-                            this.selectedBuilding = null;
-                            this.clearGridHighlight();
-                            if (this.onBuildCancelCallback) {
-                                this.onBuildCancelCallback();
-                            }
-                            event.propagationStopped = true;
-                            return;
-                        }
-                    } else {
-                        // 没有石墙网格面板，建造失败
-                        this.clearDragPreview();
-                        this.selectedBuilding = null;
-                        if (this.onBuildCancelCallback) {
-                            this.onBuildCancelCallback();
-                        }
-                        event.propagationStopped = true;
-                        return;
-                    }
-                } else {
-                    // 其他建筑使用普通网格面板
-                    if (this.gridPanel) {
-                        const gridCenter = this.gridPanel.getNearestGridCenter(buildPos);
-                        if (gridCenter) {
-                            buildPos = gridCenter;
-                        } else {
-                            // 如果不在网格内，建造失败，退出建造模式
-                            this.clearDragPreview();
-                            this.selectedBuilding = null;
-                            // 确保清除网格高亮
-                            if (this.gridPanel) {
-                                this.gridPanel.clearHighlight();
-                            }
-                            if (this.onBuildCancelCallback) {
-                                this.onBuildCancelCallback();
-                            }
-                            event.propagationStopped = true;
-                            return;
-                        }
-                    }
-                }
-            }
-            
-            if (buildPos && this.onBuildCallback) {
-                // 标记触摸结束事件已处理（成功建造）
-                this.touchEndHandled = true;
-                this.onBuildCallback(building, buildPos);
-                
-                // 清除拖拽预览和状态
-                this.clearDragPreview();
-                this.selectedBuilding = null;
-                
-                // 再次确保清除网格高亮
-                if (this.gridPanel) {
-                    this.gridPanel.clearHighlight();
-                }
-                if (this.stoneWallGridPanel) {
-                    this.stoneWallGridPanel.clearHighlight();
-                }
-                
-                // 立即清除建筑物的选中状态（如果有）
-                this.clearBuildingSelection();
-                
-                // 延迟一帧再次清除选中状态和网格高亮，确保建筑物创建完成后清除
-                this.scheduleOnce(() => {
-                    this.clearBuildingSelection();
-                    if (this.gridPanel) {
-                        this.gridPanel.clearHighlight();
-                    }
-                    if (this.stoneWallGridPanel) {
-                        this.stoneWallGridPanel.clearHighlight();
-                    }
-                }, 0);
-                
-                event.propagationStopped = true;
-                return;
-            }
-        }
-        
-        // 如果没有成功建造，清除状态并重新显示面板
-        this.clearDragPreview();
-        this.selectedBuilding = null;
-        this.show();
-        
-        // 阻止事件传播
+        // 拖拽结束：统一交给 Canvas 的单一路径处理，避免 End/Cancel 双分支重复触发导致卡死。
+        this.isDragging = true;
+        this.onCanvasTouchEnd(event);
         event.propagationStopped = true;
+        return;
     }
 
     /**
      * 建筑物选项触摸取消
      */
     onBuildingItemTouchCancel(building: BuildingType, event: EventTouch) {
+        const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        if (now < this.nextAllowedDropFinalizeAtMs) {
+            event.propagationStopped = true;
+            return;
+        }
         if (this.selectedBuilding !== building) {
             this.clearDragPreview();
             this.selectedBuilding = null;
@@ -1451,255 +1308,48 @@ export class BuildingSelectionPanel extends Component {
             event.propagationStopped = true;
             return;
         }
-
-        // 如果正在拖拽，尝试处理建造逻辑（和TOUCH_END相同的逻辑）
-        if (this.isDragging && this.selectedBuilding && this.dragPreview) {
-            // 立即停止拖拽状态，防止触摸移动事件继续处理
+        // Cancel 和 End 统一走同一条落地路径，避免双路径重复触发。
+        const location = event.getLocation();
+        const startLocation = event.getStartLocation();
+        const dragDistance = Math.sqrt(
+            Math.pow(location.x - startLocation.x, 2) +
+            Math.pow(location.y - startLocation.y, 2)
+        );
+        if (dragDistance <= 5) {
+            this.clearDragPreview();
+            this.selectedBuilding = null;
             this.isDragging = false;
             this.clearGridHighlight();
-            
-            // 检查是否发生了拖拽（移动距离超过5像素）
-            const location = event.getLocation();
-            const startLocation = event.getStartLocation();
-            const dragDistance = Math.sqrt(
-                Math.pow(location.x - startLocation.x, 2) + 
-                Math.pow(location.y - startLocation.y, 2)
-            );
-
-            // 如果拖拽距离超过5像素，检查是否可以建造
-            if (dragDistance > 5) {
-                // 检查触摸结束位置是否在建筑物选择面板区域内
-                let isInPanelArea = false;
-                const panelOpacity = this.node.getComponent(UIOpacity);
-                const isPanelVisible = this.node.active && (!panelOpacity || panelOpacity.opacity > 0) && this.node.scale.x > 0;
-                
-                if (isPanelVisible) {
-                    const panelTransform = this.node.getComponent(UITransform);
-                    if (panelTransform) {
-                        const panelWorldPos = this.node.worldPosition;
-                        const panelSize = panelTransform.contentSize;
-                        
-                        const cameraNode = find('Canvas/Camera');
-                        if (cameraNode) {
-                            const camera = cameraNode.getComponent(Camera);
-                            if (camera) {
-                                const panelScreenPos = new Vec3();
-                                camera.worldToScreen(panelWorldPos, panelScreenPos);
-                                
-                                const panelScreenRect = {
-                                    x: panelScreenPos.x - panelSize.width / 2,
-                                    y: panelScreenPos.y - panelSize.height / 2,
-                                    width: panelSize.width,
-                                    height: panelSize.height
-                                };
-                                
-                                if (location.x >= panelScreenRect.x && 
-                                    location.x <= panelScreenRect.x + panelScreenRect.width &&
-                                    location.y >= panelScreenRect.y && 
-                                    location.y <= panelScreenRect.y + panelScreenRect.height) {
-                                    isInPanelArea = true;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 如果触摸位置在面板区域内，先关闭面板
-                if (isInPanelArea) {
-                    this.node.active = false;
-                    if (panelOpacity) {
-                        panelOpacity.opacity = 255;
-                    }
-                    this.node.setScale(1, 1, 1);
-                }
-
-                // 优先使用拖拽预览的当前位置（已经对齐到网格中心）
-                let worldPos: Vec3 | null = null;
-                if (this.dragPreview) {
-                    worldPos = this.dragPreview.worldPosition.clone();
-                }
-                
-                // 如果没有拖拽预览位置，使用触摸结束位置并对齐到网格中心
-                if (!worldPos) {
-                    worldPos = this.getWorldPositionFromScreen(new Vec3(location.x, location.y, 0));
-                }
-                
-                // 判断是否是石墙或哨塔（都使用石墙网格）
-                const isStoneWall = this.selectedBuilding && this.selectedBuilding.name === '石墙';
-                const isWatchTower = this.selectedBuilding && this.selectedBuilding.name === '哨塔';
-                const useStoneWallGrid = isStoneWall || isWatchTower;
-                
-                // 根据建筑类型选择对应的网格面板进行对齐
-                if (worldPos) {
-                    if (useStoneWallGrid) {
-                        if (!this.stoneWallGridPanel) {
-                            this.findStoneWallGridPanel();
-                        }
-
-                        if (this.stoneWallGridPanel) {
-                            // 先尝试使用拖拽预览位置获取网格中心
-                            let gridCenter = this.stoneWallGridPanel.getNearestGridCenter(worldPos);
-                            
-                            // 如果拖拽预览位置不在网格内，尝试使用触摸结束位置
-                            if (!gridCenter) {
-                                const touchWorldPos = this.getWorldPositionFromScreen(new Vec3(location.x, location.y, 0));
-                                if (touchWorldPos) {
-                                    gridCenter = this.stoneWallGridPanel.getNearestGridCenter(touchWorldPos);
-                                }
-                            }
-                            
-                            if (gridCenter) {
-                                // 检查目标网格是否被占用
-                                const grid = this.stoneWallGridPanel.worldToGrid(gridCenter);
-                                // 哨塔占据两个网格高度，需要检查两个网格是否都被占用
-                                let canPlace = false;
-                                if (isWatchTower) {
-                                    // 检查第二个网格是否存在
-                                    if (grid.y + 1 < this.stoneWallGridPanel.gridHeight) {
-                                        // 检查两个网格是否都被占用
-                                        canPlace = !this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y) && 
-                                                   !this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y + 1);
-                                    }
-                                } else {
-                                    // 石墙只占用一个网格
-                                    canPlace = !this.stoneWallGridPanel.isGridOccupied(grid.x, grid.y);
-                                }
-                                if (grid && canPlace) {
-                                    worldPos = gridCenter;
-                                } else {
-                                    this.clearDragPreview();
-                                    this.selectedBuilding = null;
-                                    this.clearGridHighlight();
-                                    if (this.onBuildCancelCallback) {
-                                        this.onBuildCancelCallback();
-                                    }
-                                    event.propagationStopped = true;
-                                    return;
-                                }
-                            } else {
-                                // 石墙和哨塔必须建造在石墙网格内
-                                this.clearDragPreview();
-                                this.selectedBuilding = null;
-                                this.clearGridHighlight();
-                                if (this.onBuildCancelCallback) {
-                                    this.onBuildCancelCallback();
-                                }
-                                event.propagationStopped = true;
-                                return;
-                            }
-                        } else {
-                            // 没有石墙网格面板
-                            this.clearDragPreview();
-                            this.selectedBuilding = null;
-                            if (this.onBuildCancelCallback) {
-                                this.onBuildCancelCallback();
-                            }
-                            event.propagationStopped = true;
-                            return;
-                        }
-                    } else if (this.gridPanel) {
-                        const gridCenter = this.gridPanel.getNearestGridCenter(worldPos);
-                        if (gridCenter) {
-                            worldPos = gridCenter;
-                        } else {
-                            // 不在普通网格内，建造失败
-                            this.clearDragPreview();
-                            this.selectedBuilding = null;
-                            if (this.gridPanel) {
-                                this.gridPanel.clearHighlight();
-                            }
-                            if (this.onBuildCancelCallback) {
-                                this.onBuildCancelCallback();
-                            }
-                            event.propagationStopped = true;
-                            return;
-                        }
-                    }
-                }
-                
-                if (worldPos && this.onBuildCallback) {
-                    // 标记触摸结束事件已处理（成功建造）
-                    this.touchEndHandled = true;
-                    this.onBuildCallback(building, worldPos);
-                    
-                    // 清除拖拽预览和状态
-                    this.clearDragPreview();
-                    this.selectedBuilding = null;
-                    
-                    // 再次确保清除网格高亮
-                    if (this.gridPanel) {
-                        this.gridPanel.clearHighlight();
-                    }
-                    
-                    // 立即清除建筑物的选中状态（如果有）
-                    this.clearBuildingSelection();
-                    
-                    // 延迟一帧再次清除选中状态和网格高亮，确保建筑物创建完成后清除
-                    this.scheduleOnce(() => {
-                        this.clearBuildingSelection();
-                        if (this.gridPanel) {
-                            this.gridPanel.clearHighlight();
-                        }
-                    }, 0);
-                    
-                    event.propagationStopped = true;
-                    return;
-                }
-            } else {
-                // 拖拽距离不够，清除状态
-                this.clearDragPreview();
-                this.selectedBuilding = null;
-                // 确保清除网格高亮
-                if (this.gridPanel) {
-                    this.gridPanel.clearHighlight();
-                }
-            }
+            event.propagationStopped = true;
+            return;
         }
-
-        // 如果没有成功建造，清除状态并重新显示面板
-        this.clearDragPreview();
-        this.selectedBuilding = null;
-        // 确保清除网格高亮
-        if (this.gridPanel) {
-            this.gridPanel.clearHighlight();
-        }
-        this.show();
-        
-        // 阻止事件传播
+        this.isDragging = true;
+        this.onCanvasTouchEnd(event);
         event.propagationStopped = true;
+        return;
     }
 
     /**
      * 创建拖拽预览
      */
     createDragPreview(building: BuildingType, screenPos: Vec3) {
-        if (!building.prefab) {
-            return;
-        }
-
-        // 创建预览节点
-        this.dragPreview = instantiate(building.prefab);
-        
-        // 只禁用功能性的组件（如WarAncientTree），保留视觉组件（如Sprite）
-        const disableFunctionalComponents = (node: Node) => {
-            // 禁用WarAncientTree组件（防止开始生产Arrower）
-            const warAncientTree = node.getComponent('WarAncientTree');
-            if (warAncientTree) {
-                warAncientTree.enabled = false;
-            }
-            
-            // 禁用其他可能执行逻辑的组件
-            const arrower = node.getComponent('Arrower');
-            if (arrower) {
-                arrower.enabled = false;
-            }
-            
-            // 递归处理子节点
-            node.children.forEach(child => {
-                disableFunctionalComponents(child);
-            });
-        };
-        disableFunctionalComponents(this.dragPreview);
+        // 重要：拖拽预览不要 instantiate 真实预制体（例如 Church 会在 onEnable/start 里 schedule/update，导致“未落地就卡死”）。
+        // 改为纯图标预览：只包含 Sprite/UITransform/UIOpacity，无任何逻辑组件。
+        this.dragPreview = new Node('DragPreview');
+        const ui = this.dragPreview.addComponent(UITransform);
+        const desired = 100;
+        const sp = this.dragPreview.addComponent(Sprite);
+        sp.spriteFrame = building.icon || null!;
+        sp.sizeMode = Sprite.SizeMode.CUSTOM;
+        sp.type = Sprite.Type.SIMPLE;
+        // 预览大小：按贴图原尺寸等比缩放到 desired（避免某些资源仍按原像素看起来很大）
+        const rect = sp.spriteFrame?.rect;
+        const w = rect?.width || desired;
+        const h = rect?.height || desired;
+        const denom = Math.max(1, Math.max(w, h));
+        const s = desired / denom;
+        ui.setContentSize(w, h);
+        this.dragPreview.setScale(s, s, 1);
         
         // 设置父节点到Canvas，确保它不受面板隐藏影响
         const canvas = find('Canvas');

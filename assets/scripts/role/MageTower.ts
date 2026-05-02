@@ -153,16 +153,18 @@ export class MageTower extends Build {
         // 同步建筑星级到训练单位头顶
         this.applyStarToProducedUnit(mage);
         this.producedMages.push(mage);
-        const idx = this.producedMages.length - 1;
-        const dir = idx % 2 === 0 ? 1 : -1;
-		let targetPos = new Vec3(mage.worldPosition.x + dir * this.moveAwayDistance, mage.worldPosition.y, mage.worldPosition.z);
-        // 与其他兵营一致：优先前往集结点
-        if (this.rallyPoint) {
-            targetPos = this.findOptimalRallyPointPosition(this.rallyPoint, mage.worldPosition.clone());
-        }
-		// 目标点也做一次防重叠微调，避免多名新兵同一帧朝同一点出发卡位
-		targetPos = this.findNonOverlappingPosition(targetPos, collisionRadius * 1.2, 12);
-		this.scheduleOnce(() => mageScript?.setManualMoveTargetPosition?.(targetPos), 0.05);
+		this.scheduleOnce(() => {
+            if (!mage || !mage.isValid || !mageScript) return;
+            // 目标点计算延后到后置队列，进一步削峰
+            const idx = this.producedMages.length - 1;
+            const dir = idx % 2 === 0 ? 1 : -1;
+            let targetPos = new Vec3(mage.worldPosition.x + dir * this.moveAwayDistance, mage.worldPosition.y, mage.worldPosition.z);
+            if (this.rallyPoint) {
+                targetPos = this.findOptimalRallyPointPosition(this.rallyPoint, mage.worldPosition.clone());
+            }
+            targetPos = this.findNonOverlappingPosition(targetPos, collisionRadius * 1.2, 12);
+            mageScript.setManualMoveTargetPosition?.(targetPos);
+        }, 0.05);
     }
 
 	/**

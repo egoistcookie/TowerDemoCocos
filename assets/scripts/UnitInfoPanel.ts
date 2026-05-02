@@ -274,7 +274,7 @@ export class UnitInfoPanel extends Component {
         const gridTransform = this.buttonGridNode.addComponent(UITransform);
         gridTransform.setContentSize(buttonAreaWidth, panelHeight);
         // 按钮区域位置：右侧区域中心（相对于父节点），整体往上移10像素
-        this.buttonGridNode.setPosition(panelWidth / 2 - buttonAreaWidth / 2, 10, 0);
+        this.buttonGridNode.setPosition(panelWidth / 2 - buttonAreaWidth / 2 - 20, 0, 0);
 
         // 按钮大小和间距
         const buttonSize = Math.min(buttonAreaWidth / 3.5, panelHeight / 3.5); // 按钮大小

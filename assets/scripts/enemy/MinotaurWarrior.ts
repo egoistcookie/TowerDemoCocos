@@ -220,7 +220,15 @@ export class MinotaurWarrior extends Boss {
     private bossHealthBar: any = null!; // 顶部 Boss 血条组件
     private static bossHealthBarList: MinotaurWarrior[] = []; // 所有存活牛头人列表，用于血条排列
     private static bossHealthBarContainer: Node = null!; // 血条容器节点
+    /** 相对画布顶边的内边距：50 + 再下移 100 避开安全区 */
+    private static readonly BOSS_BAR_CONTAINER_TOP_INSET = 150;
     private bossHealthBarIndex: number = -1; // 当前牛头人在血条列表中的索引
+
+    private static getBossBarContainerLocalY(canvas: Node): number {
+        const ui = canvas.getComponent(UITransform);
+        if (ui) return ui.contentSize.height / 2 - MinotaurWarrior.BOSS_BAR_CONTAINER_TOP_INSET;
+        return 400;
+    }
 
     // 对象池相关
     public prefabName: string = "MinotaurWarrior";
@@ -926,14 +934,11 @@ export class MinotaurWarrior extends Boss {
             const uiTransform = canvas.getComponent(UITransform);
             console.log('[MinotaurWarrior.createBossHealthBar] Canvas UITransform:', uiTransform ? `size=${uiTransform.contentSize.width}x${uiTransform.contentSize.height}` : '未找到');
             if (uiTransform) {
-                // Cocos Creator 坐标系统：(0,0) 是中心点，向上为正
-                // 顶部边缘 Y = contentSize.height / 2
-                // 血条容器位置：X=0 (居中), Y=顶部边缘 - 50 像素偏移
-                const topY = uiTransform.contentSize.height / 2 - 50;
+                const topY = MinotaurWarrior.getBossBarContainerLocalY(canvas);
                 MinotaurWarrior.bossHealthBarContainer.setPosition(0, topY, 0);
                 console.log('[MinotaurWarrior.createBossHealthBar] 容器位置设置为 (0,', topY, ', 0)');
             } else {
-                MinotaurWarrior.bossHealthBarContainer.setPosition(0, 500, 0);
+                MinotaurWarrior.bossHealthBarContainer.setPosition(0, 400, 0);
             }
 
             // 将容器放到 Canvas 的最顶层（最高 siblingIndex）
@@ -942,6 +947,7 @@ export class MinotaurWarrior extends Boss {
             console.log('[MinotaurWarrior.createBossHealthBar] 血条容器设置为最顶层，siblingIndex=', siblingIndex);
         } else {
             console.log('[MinotaurWarrior.createBossHealthBar] 血条容器节点已存在');
+            MinotaurWarrior.bossHealthBarContainer.setPosition(0, MinotaurWarrior.getBossBarContainerLocalY(canvas), 0);
             // 确保容器在最顶层
             const siblingIndex = canvas.children.length - 1;
             MinotaurWarrior.bossHealthBarContainer.setSiblingIndex(siblingIndex);
