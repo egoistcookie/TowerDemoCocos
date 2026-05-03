@@ -507,16 +507,13 @@ export class Arrower extends Role {
                 // 更新技能状态
                 this.hasSkill = this.isPenetrateArrowEnabled;
                 
-                // 如果技能激活，创建蓝量条；否则隐藏
+                // 如果技能激活，确保蓝量条节点存在（默认隐藏，射箭消耗蓝后才临时显示）
                 if (this.isPenetrateArrowEnabled) {
                     if (!this.manaBarNode || !this.manaBarNode.isValid) {
                         this.createManaBar();
-                    } else {
-                        this.manaBarNode.active = true;
-                        // 确保蓝条出现时血条也同时可见
-                        if (this.healthBarNode && this.healthBarNode.isValid) {
-                            this.healthBarNode.active = true;
-                        }
+                    } else if (this.manaBar) {
+                        this.manaBar.setMaxMana(this.maxMana);
+                        this.manaBar.setMana(this.currentMana);
                     }
                 } else {
                     if (this.manaBarNode && this.manaBarNode.isValid) {
@@ -1239,13 +1236,7 @@ export class Arrower extends Role {
         this._hasArrivedAtFishingSpot = false;
         this._fishingGoldTimer = 0;
 
-        // 恢复血条和蓝条
-        if (this.healthBarNode && this.healthBarNode.isValid) {
-            this.healthBarNode.active = true;
-        }
-        if (this.manaBarNode && this.manaBarNode.isValid && this.isPenetrateArrowEnabled) {
-            this.manaBarNode.active = true;
-        }
+        // 血条/蓝条均为受击或消耗后临时显示，结束钓鱼不强制常驻打开
 
         // 如果是当前钓鱼弓箭手，清除全局引用和锁
         if (Arrower.fishingArcher === this) {

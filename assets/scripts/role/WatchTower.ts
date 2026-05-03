@@ -8,6 +8,7 @@ import { GameManager, GameState } from '../GameManager';
 import { Arrow } from '../Arrow';
 import { AudioManager } from '../AudioManager';
 import { UnitManager } from '../UnitManager';
+import { getEnemyLikeScript } from '../EnemyScriptLookup';
 const { ccclass, property } = _decorator;
 
 // 占领状态枚举
@@ -829,12 +830,7 @@ export class WatchTower extends Build {
             if (containerNode) {
                 for (const enemy of containerNode.children) {
                     if (!enemy || !enemy.isValid || !enemy.active) continue;
-                    const enemyScript = enemy.getComponent('Enemy') as any ||
-                                       enemy.getComponent('OrcWarlord') as any ||
-                                       enemy.getComponent('OrcWarrior') as any ||
-                                       enemy.getComponent('TrollSpearman') as any ||
-                                       enemy.getComponent('MinotaurWarrior') as any ||
-                                       enemy.getComponent('Boss') as any;
+                    const enemyScript = getEnemyLikeScript(enemy);
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const dx = enemy.worldPosition.x - center.x;
                         const dy = enemy.worldPosition.y - center.y;
@@ -994,12 +990,7 @@ export class WatchTower extends Build {
             if (containerNode) {
                 for (const enemy of containerNode.children) {
                     if (!enemy || !enemy.isValid || !enemy.active) continue;
-                    const enemyScript = enemy.getComponent('Enemy') as any ||
-                                       enemy.getComponent('OrcWarlord') as any ||
-                                       enemy.getComponent('OrcWarrior') as any ||
-                                       enemy.getComponent('TrollSpearman') as any ||
-                                       enemy.getComponent('MinotaurWarrior') as any ||
-                                       enemy.getComponent('Boss') as any;
+                    const enemyScript = getEnemyLikeScript(enemy);
                     if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) continue;
                     const enemyPos = enemy.worldPosition;
                     const dx = center.x - enemyPos.x;
@@ -1111,12 +1102,7 @@ export class WatchTower extends Build {
         //                   this.currentTarget.getComponent('Priest') as any;
         // } else {
             // 我方占领或中立，攻击敌人（哨塔只能归属我方）
-            targetScript = this.currentTarget.getComponent('Enemy') as any ||
-                           this.currentTarget.getComponent('OrcWarlord') as any ||
-                           this.currentTarget.getComponent('OrcWarrior') as any ||
-                           this.currentTarget.getComponent('TrollSpearman') as any ||
-                           this.currentTarget.getComponent('MinotaurWarrior') as any ||
-                           this.currentTarget.getComponent('Boss') as any;
+            targetScript = getEnemyLikeScript(this.currentTarget);
         // }
         
         if (!targetScript || !targetScript.isAlive || !targetScript.isAlive()) {
@@ -1214,12 +1200,7 @@ export class WatchTower extends Build {
                                       targetNode.getComponent('ElfSwordsman') as any ||
                                       targetNode.getComponent('Priest') as any;
                     } else {
-                        targetScript = targetNode.getComponent('Enemy') as any ||
-                                       targetNode.getComponent('OrcWarlord') as any ||
-                                       targetNode.getComponent('OrcWarrior') as any ||
-                                       targetNode.getComponent('TrollSpearman') as any ||
-                                       targetNode.getComponent('MinotaurWarrior') as any ||
-                                       targetNode.getComponent('Boss') as any;
+                        targetScript = getEnemyLikeScript(targetNode);
                     }
                     
                     if (targetScript && targetScript.takeDamage) {

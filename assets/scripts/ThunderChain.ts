@@ -1,5 +1,6 @@
 import { _decorator, Component, Node, Vec3, find, Graphics, Color, UITransform, Sprite, SpriteFrame, tween, UIOpacity } from 'cc';
 import { GameManager, GameState } from './GameManager';
+import { getEnemyLikeScript } from './EnemyScriptLookup';
 const { ccclass, property } = _decorator;
 
 /**
@@ -170,10 +171,7 @@ export class ThunderChain extends Component {
             if (!enemy || !enemy.isValid || !enemy.active) continue;
             if (this.hitEnemies.has(enemy)) continue; // 已命中过
 
-            const enemyScript = enemy.getComponent('Enemy') as any || 
-                               enemy.getComponent('OrcWarlord') as any ||
-                               enemy.getComponent('OrcWarrior') as any ||
-                               enemy.getComponent('TrollSpearman') as any;
+            const enemyScript = getEnemyLikeScript(enemy);
             
             if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) continue;
 

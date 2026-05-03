@@ -3,6 +3,7 @@ import { BuffManager } from './BuffManager';
 import { AnalyticsManager, OperationType, CardSelectionItem, CardSelectionMode } from './AnalyticsManager';
 import { SoundManager } from './SoundManager';
 import { AudioManager } from './AudioManager';
+import { MemoryProbe } from './MemoryProbe';
 const { ccclass, property } = _decorator;
 
 /**
@@ -211,6 +212,7 @@ export class BuffCardPopup extends Component {
     private invokeCloseOnce() {
         if (this.hasInvokedCloseCallback) return;
         this.hasInvokedCloseCallback = true;
+        MemoryProbe.snapshot('BuffCard.close', {});
         const cb = this.onCloseCallback;
         this.onCloseCallback = null;
         try {
@@ -301,7 +303,11 @@ export class BuffCardPopup extends Component {
         // 显示弹窗（参考UnitIntroPopup的实现，不重新绘制Graphics，直接使用创建时绘制的内容）
         this.container.active = true;
         this.isShowing = true;
-        
+        MemoryProbe.snapshot('BuffCard.show', {
+            cardCount: this.cardData.length,
+            unitIds: this.cardData.map((c) => c.unitId),
+        });
+
         // 重置再抽一次模式标志
         this.isRerollMode = false;
     }

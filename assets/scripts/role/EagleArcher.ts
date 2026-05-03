@@ -2,6 +2,7 @@ import { _decorator, Vec3, find, Node } from 'cc';
 import { Arrower } from './Arrower';
 import { PlayerDataManager } from '../PlayerDataManager';
 import { GamePopup } from '../GamePopup';
+import { getEnemyLikeScript } from '../EnemyScriptLookup';
 const { ccclass, property } = _decorator;
 
 /**
@@ -241,24 +242,7 @@ export class EagleArcher extends Arrower {
 
         // 在狙击目标头上创建红色准星标记
         if (isSnipeTarget) {
-            // 尝试获取 Enemy 组件（基类）
-            let enemyComponent: any = null;
-
-            // 先尝试直接获取 Enemy 组件
-            enemyComponent = this.currentTarget.getComponent('Enemy');
-
-            // 如果没有找到，尝试通过继承链查找
-            if (!enemyComponent) {
-                // 尝试获取常见的敌人组件类型
-                const enemyTypes = ['Orc', 'OrcWarrior', 'OrcWarlord', 'TrollSpearman', 'Dragon', 'OrcShaman', 'MinotaurWarrior', 'Boss'];
-                for (const type of enemyTypes) {
-                    enemyComponent = this.currentTarget.getComponent(type);
-                    if (enemyComponent) {
-                      //console.log(`[EagleArcher] 找到敌人组件类型：${type}`);
-                        break;
-                    }
-                }
-            }
+            const enemyComponent = getEnemyLikeScript(this.currentTarget);
 
             if (enemyComponent && enemyComponent.createSniperMark) {
                 enemyComponent.createSniperMark();
@@ -286,22 +270,7 @@ export class EagleArcher extends Arrower {
         // 遍历所有敌人，移除准星标记
         for (const enemy of enemiesNode.children) {
             if (enemy && enemy.isValid && enemy.active) {
-                // 尝试获取任意敌人组件（基类或子类）
-                let enemyComponent: any = null;
-
-                // 先尝试获取 Enemy 基类组件
-                enemyComponent = enemy.getComponent('Enemy');
-
-                // 如果没有找到，尝试获取子类组件
-                if (!enemyComponent) {
-                    const enemyTypes = ['Orc', 'OrcWarrior', 'OrcWarlord', 'TrollSpearman', 'Dragon', 'OrcShaman', 'MinotaurWarrior', 'Boss'];
-                    for (const type of enemyTypes) {
-                        enemyComponent = enemy.getComponent(type);
-                        if (enemyComponent) {
-                            break;
-                        }
-                    }
-                }
+                const enemyComponent = getEnemyLikeScript(enemy);
 
                 if (enemyComponent && enemyComponent.removeSniperMark) {
                     enemyComponent.removeSniperMark();

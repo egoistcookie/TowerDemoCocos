@@ -1,4 +1,5 @@
 import { _decorator, Component, Node, Prefab, instantiate, find, Tween, UIOpacity } from 'cc';
+import { MemoryProbe } from './MemoryProbe';
 const { ccclass, property } = _decorator;
 
 /**
@@ -18,9 +19,9 @@ export class UnitPool extends Component {
     // 预制体映射
     private prefabMap: Map<string, Prefab> = new Map();
     
-    // 对象池配置
-    private readonly INITIAL_POOL_SIZE: number = 5; // 初始池大小（我方单位通常较少）
-    private readonly MAX_POOL_SIZE: number = 30; // 最大池大小（每种类型）
+    // 对象池配置（略收紧；我方单位同屏种类有限，过高则池内多棵整 prefab 常驻）
+    private readonly INITIAL_POOL_SIZE: number = 4;
+    private readonly MAX_POOL_SIZE: number = 22;
     
     // 活跃对象计数（用于调试）
     private activeCount: Map<string, number> = new Map();
@@ -129,6 +130,14 @@ export class UnitPool extends Component {
             // 仅更新活跃计数，表示池中有一个对象被取出使用
             const count = this.activeCount.get(prefabName) || 0;
             this.activeCount.set(prefabName, count + 1);
+
+            if (source === '新建对象') {
+                MemoryProbe.snapshot('UnitPool.new', {
+                    prefabName,
+                    poolLenBefore: poolSizeBefore,
+                    active: count + 1,
+                });
+            }
 
             // 调试日志：记录从对象池获取时的位置
             const unitPos = unit.worldPosition;
@@ -279,6 +288,18 @@ export class UnitPool extends Component {
             };
         }
         return stats;
+    }
+
+    /** 与 getStats 同数据，键名便于 Tick.summary JSON */
+    getDebugStats(): Record<string, { pool: number; active: number }> {
+        const out: Record<string, { pool: number; active: number }> = {};
+        for (const [name, pool] of this.pools.entries()) {
+            out[name] = {
+                pool: pool.length,
+                active: this.activeCount.get(name) || 0,
+            };
+        }
+        return out;
     }
 }
 

@@ -2,6 +2,7 @@ import { _decorator, Component, Node, Vec3, Graphics, UITransform, Color, view, 
 import { GameState } from './GameState';
 import { GridBuildingSelectionPanel } from './GridBuildingSelectionPanel';
 import { UnitSelectionManager } from './UnitSelectionManager';
+import { getEnemyLikeScript } from './EnemyScriptLookup';
 const { ccclass, property } = _decorator;
 
 /**
@@ -903,14 +904,7 @@ export class StoneWallGridPanel extends Component {
             for (const enemyNode of container.children) {
                 if (!enemyNode || !enemyNode.isValid || !enemyNode.activeInHierarchy) continue;
                 scanned++;
-                const enemyScript =
-                    enemyNode.getComponent('Enemy') as any ||
-                    enemyNode.getComponent('OrcWarlord') as any ||
-                    enemyNode.getComponent('OrcWarrior') as any ||
-                    enemyNode.getComponent('TrollSpearman') as any ||
-                    enemyNode.getComponent('OrcShaman') as any ||
-                    enemyNode.getComponent('MinotaurWarrior') as any ||
-                    enemyNode.getComponent('Boss') as any;
+                const enemyScript = getEnemyLikeScript(enemyNode);
                 if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) continue;
                 const enemyCell = this.worldToGrid(enemyNode.worldPosition);
                 if (!enemyCell) continue;
@@ -944,14 +938,7 @@ export class StoneWallGridPanel extends Component {
             if (!container || !container.isValid) continue;
             for (const enemyNode of container.children) {
                 if (!enemyNode || !enemyNode.isValid || !enemyNode.activeInHierarchy) continue;
-                const enemyScript =
-                    enemyNode.getComponent('Enemy') as any ||
-                    enemyNode.getComponent('OrcWarlord') as any ||
-                    enemyNode.getComponent('OrcWarrior') as any ||
-                    enemyNode.getComponent('TrollSpearman') as any ||
-                    enemyNode.getComponent('OrcShaman') as any ||
-                    enemyNode.getComponent('MinotaurWarrior') as any ||
-                    enemyNode.getComponent('Boss') as any;
+                const enemyScript = getEnemyLikeScript(enemyNode);
                 if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) continue;
                 const enemyCell = this.worldToGrid(enemyNode.worldPosition);
                 if (!enemyCell) continue;

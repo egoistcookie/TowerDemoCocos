@@ -4,6 +4,7 @@ import { UnitInfo } from '../UnitInfoPanel';
 import { GameManager, GameState } from '../GameManager';
 import { AudioManager } from '../AudioManager';
 import { UnitManager } from '../UnitManager';
+import { getEnemyLikeScript } from '../EnemyScriptLookup';
 const { ccclass, property } = _decorator;
 
 // 占领状态枚举
@@ -368,14 +369,7 @@ export class GoldMine extends Build {
             if (containerNode && containerNode.isValid) {
                 for (const enemy of containerNode.children) {
                     if (!enemy || !enemy.isValid || !enemy.active) continue;
-                    const enemyScript = enemy.getComponent('Enemy') as any ||
-                                       enemy.getComponent('OrcWarlord') as any ||
-                                       enemy.getComponent('OrcWarrior') as any ||
-                                       enemy.getComponent('TrollSpearman') as any ||
-                                       enemy.getComponent('MinotaurWarrior') as any ||
-                                       enemy.getComponent('Boss') as any ||
-                                       enemy.getComponent('Dragon') as any ||
-                                       enemy.getComponent('Portal') as any;
+                    const enemyScript = getEnemyLikeScript(enemy);
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const dx = enemy.worldPosition.x - center.x;
                         const dy = enemy.worldPosition.y - center.y;

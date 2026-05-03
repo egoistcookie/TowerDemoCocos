@@ -3,6 +3,7 @@ import { Role } from './Role';
 import { Boomerang } from '../Boomerang';
 import { AudioManager } from '../AudioManager';
 import { Tornado } from '../Tornado';
+import { getEnemyLikeScript } from '../EnemyScriptLookup';
 const { ccclass, property } = _decorator;
 
 @ccclass('Hunter')
@@ -138,12 +139,9 @@ export class Hunter extends Role {
         if (this.hasSkill) {
             if (!this.manaBarNode || !this.manaBarNode.isValid) {
                 this.createManaBar();
-            } else {
-                this.manaBarNode.active = true;
-                if (this.manaBar) {
-                    this.manaBar.setMaxMana(this.maxMana);
-                    this.manaBar.setMana(this.currentMana);
-                }
+            } else if (this.manaBar) {
+                this.manaBar.setMaxMana(this.maxMana);
+                this.manaBar.setMana(this.currentMana);
             }
         } else if (this.manaBarNode && this.manaBarNode.isValid) {
             this.manaBarNode.active = false;
@@ -167,8 +165,7 @@ export class Hunter extends Role {
         // 攻击时停止移动
         this.stopMoving();
 
-		// 获取敌人脚本，支持OrcWarlord、OrcWarrior、Enemy、TrollSpearman、Portal
-		const enemyScript = this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('TrollSpearman') as any || this.currentTarget.getComponent('MinotaurWarrior') as any || this.currentTarget.getComponent('Boss') as any;
+		const enemyScript = getEnemyLikeScript(this.currentTarget);
 		const portalScript = this.currentTarget.getComponent('Portal') as any;
 		if ((enemyScript && enemyScript.isAlive && enemyScript.isAlive()) || (portalScript && typeof portalScript.takeDamage === 'function')) {
             // 播放攻击动画，动画完成后才射出回旋镖
@@ -393,12 +390,7 @@ export class Hunter extends Role {
         const targetNode = this.currentTarget;
         if (!targetNode || !targetNode.isValid || !targetNode.active) return;
 
-        // 仅对当前可攻击目标自动释放（敌人/传送门）
-        const enemyScript = targetNode.getComponent('OrcWarlord') as any ||
-                            targetNode.getComponent('OrcWarrior') as any ||
-                            targetNode.getComponent('Enemy') as any ||
-                            targetNode.getComponent('TrollSpearman') as any ||
-                            targetNode.getComponent('Boss') as any;
+        const enemyScript = getEnemyLikeScript(targetNode);
         const portalScript = targetNode.getComponent('Portal') as any;
         const canAttackEnemy = !!(enemyScript && enemyScript.isAlive && enemyScript.isAlive());
         const canAttackPortal = !!(portalScript && typeof portalScript.takeDamage === 'function');
@@ -468,8 +460,7 @@ export class Hunter extends Role {
             return;
         }
 
-		// 获取敌人脚本，支持OrcWarlord、OrcWarrior、Enemy、TrollSpearman、Portal
-		const enemyScript = this.currentTarget.getComponent('OrcWarlord') as any || this.currentTarget.getComponent('OrcWarrior') as any || this.currentTarget.getComponent('Enemy') as any || this.currentTarget.getComponent('TrollSpearman') as any || this.currentTarget.getComponent('MinotaurWarrior') as any || this.currentTarget.getComponent('Boss') as any;
+		const enemyScript = getEnemyLikeScript(this.currentTarget);
 		const portalScript = this.currentTarget.getComponent('Portal') as any;
 		const canAttackEnemy = !!(enemyScript && enemyScript.isAlive && enemyScript.isAlive());
 		const canAttackPortal = !!(portalScript && typeof portalScript.takeDamage === 'function');
@@ -566,17 +557,16 @@ export class Hunter extends Role {
                 
 				// 检查目标是否仍然有效
                 if (targetNode && targetNode.isValid && targetNode.active) {
-					// 支持Enemy、OrcWarrior、OrcWarlord、TrollSpearman、Portal
-					const enemyScript = targetNode.getComponent('Enemy') as any || targetNode.getComponent('OrcWarrior') as any || targetNode.getComponent('OrcWarlord') as any || targetNode.getComponent('TrollSpearman') as any || targetNode.getComponent('MinotaurWarrior') as any || targetNode.getComponent('Boss') as any;
 					const portalScript = targetNode.getComponent('Portal') as any;
-					if (enemyScript && enemyScript.isAlive && enemyScript.isAlive() && typeof enemyScript.takeDamage === 'function') {
-						enemyScript.takeDamage(damage);
-						// 记录伤害统计
-						this.recordDamageToStatistics(damage);
-					} else if (portalScript && typeof portalScript.takeDamage === 'function') {
+					if (portalScript && typeof portalScript.takeDamage === 'function') {
 						portalScript.takeDamage(damage);
-						// 记录伤害统计
 						this.recordDamageToStatistics(damage);
+					} else {
+						const enemyScript = getEnemyLikeScript(targetNode);
+						if (enemyScript && enemyScript.isAlive && enemyScript.isAlive() && typeof enemyScript.takeDamage === 'function') {
+							enemyScript.takeDamage(damage);
+							this.recordDamageToStatistics(damage);
+						}
 					}
                 }
             },

@@ -1,5 +1,6 @@
 import { _decorator, Component, Node, Vec3, find } from 'cc';
 import { GameManager, GameState } from './GameManager';
+import { getEnemyLikeScript } from './EnemyScriptLookup';
 const { ccclass, property } = _decorator;
 
 /**
@@ -211,15 +212,7 @@ export class Arrow2 extends Component {
                 continue;
             }
 
-            // 检查是否是敌人（包括兽人督军、牛头人、巨熊等）
-            const enemyScript = (enemy.getComponent('OrcWarlord') as any) ||
-                               (enemy.getComponent('OrcWarrior') as any) ||
-                               (enemy.getComponent('Enemy') as any) ||
-                               (enemy.getComponent('TrollSpearman') as any) ||
-                               (enemy.getComponent('Portal') as any) ||
-                               (enemy.getComponent('MinotaurWarrior') as any) ||
-                               (enemy.getComponent('Boss') as any) ||
-                               (enemy.getComponent('Bear') as any);
+            const enemyScript = getEnemyLikeScript(enemy);
 
             if (!enemyScript) {
                 continue;

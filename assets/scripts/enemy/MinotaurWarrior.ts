@@ -39,6 +39,7 @@ import { UnitType } from '../role/WarAncientTree';
 import { EnemyPool } from '../EnemyPool';
 import { UnitManager } from '../UnitManager';
 import { Boss } from './Boss';
+import { getEnemyLikeScript } from '../EnemyScriptLookup';
 const { ccclass, property } = _decorator;
 
 @ccclass('MinotaurWarrior')
@@ -698,6 +699,7 @@ export class MinotaurWarrior extends Boss {
 
     onEnable() {
         console.log('[MinotaurWarrior.onEnable] 被调用，node.name=', this.node.name);
+        this.destroyTransientHealthBarNow();
         // 清理所有插在身上的武器（箭矢、长矛等）
         this.clearAttachedWeapons();
 
@@ -814,15 +816,6 @@ export class MinotaurWarrior extends Boss {
                 this.targetCrystal = crystalNode;
             }
         }
-        
-        // 重新创建血条（如果不存在）
-        if (!this.healthBarNode || !this.healthBarNode.isValid || !this.healthBar) {
-            this.createHealthBar();
-        } else {
-            // 如果血条已存在，更新血条状态
-            this.healthBar.setMaxHealth(this.maxHealth);
-            this.healthBar.setHealth(this.currentHealth);
-        }
 
         // 创建顶部 Boss 血条
         this.createBossHealthBar();
@@ -873,31 +866,12 @@ export class MinotaurWarrior extends Boss {
                 this.targetCrystal = crystalNode;
             }
         }
-        
-        // 创建血条（如果不存在）
-        if (!this.healthBarNode || !this.healthBarNode.isValid || !this.healthBar) {
-            this.createHealthBar();
-        }
 
         // 创建顶部 Boss 血条
         this.createBossHealthBar();
 
         // 初始播放待机动画
         this.playIdleAnimation();
-    }
-
-    createHealthBar() {
-        // 创建血条节点
-        this.healthBarNode = new Node('HealthBar');
-        this.healthBarNode.setParent(this.node);
-        this.healthBarNode.setPosition(0, 40, 0); // 在敌人上方
-        
-        // 添加HealthBar组件
-        this.healthBar = this.healthBarNode.addComponent(HealthBar);
-        if (this.healthBar) {
-            this.healthBar.setMaxHealth(this.maxHealth);
-            this.healthBar.setHealth(this.currentHealth);
-        }
     }
 
     /**
@@ -2180,9 +2154,7 @@ export class MinotaurWarrior extends Boss {
 
         if (this.isPlayingWarcryAnimation || this.isPlayingStompAnimation) {
             this.currentHealth -= damage;
-            if (this.healthBar) {
-                this.healthBar.setHealth(this.currentHealth);
-            }
+            this.bumpTransientHealthBarAfterHit();
             // 更新顶部 Boss 血条
             this.updateBossHealthBar();
             this.showDamageNumber(damage);
@@ -2230,9 +2202,7 @@ export class MinotaurWarrior extends Boss {
 
         this.currentHealth -= damage;
 
-        if (this.healthBar) {
-            this.healthBar.setHealth(this.currentHealth);
-        }
+        this.bumpTransientHealthBarAfterHit();
 
         // 更新顶部 Boss 血条
         this.updateBossHealthBar();
@@ -2314,9 +2284,7 @@ export class MinotaurWarrior extends Boss {
         // 显示 +xGold 飘字
         this.showGoldRewardText();
 
-        if (this.healthBarNode && this.healthBarNode.isValid) {
-            this.healthBarNode.destroy();
-        }
+        this.destroyTransientHealthBarNow();
 
         // 隐藏顶部 Boss 血条
         this.hideBossHealthBar();
@@ -2408,11 +2376,6 @@ export class MinotaurWarrior extends Boss {
             this.stompCrackNode.destroy();
         }
         this.stompCrackNode = null!;
-        if (this.healthBarNode && this.healthBarNode.isValid) {
-            this.healthBarNode.destroy();
-        }
-        this.healthBarNode = null!;
-        this.healthBar = null!;
         // 重置狂暴状态
         this.hasTriggeredFrenzy = false;
         this.isFrenzy = false;
@@ -2860,9 +2823,7 @@ export class MinotaurWarrior extends Boss {
                 continue;
             }
 
-            const enemyScript = enemy.getComponent('Enemy') as any || 
-                               enemy.getComponent('OrcWarlord') as any ||
-                               enemy.getComponent('MinotaurWarrior') as any;
+            const enemyScript = getEnemyLikeScript(enemy);
             
             if (!enemyScript) {
                 continue;

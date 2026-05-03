@@ -11,6 +11,8 @@ import { EnemyPool } from '../EnemyPool';
 import { UnitConfigManager } from '../UnitConfigManager';
 import { SniperMark } from '../SniperMark';
 import { BattleFloatTextPool } from '../BattleFloatTextPool';
+import { cancelTransientHealthBarHide, scheduleTransientHealthBarHide } from '../TransientHealthBar';
+import { getEnemyLikeScript } from '../EnemyScriptLookup';
 // import { PerformanceMonitor } from './PerformanceMonitor';
 const { ccclass, property } = _decorator;
 
@@ -226,9 +228,6 @@ export class Enemy extends Component {
             }
         }
         
-        // 创建血条
-        this.createHealthBar();
-        
         // 初始化对话框系统
         this.initDialogSystem();
         
@@ -244,6 +243,7 @@ export class Enemy extends Component {
      * 从对象池获取的敌人会调用此方法，而不是start方法
      */
     onEnable() {
+        this.destroyTransientHealthBarNow();
         // 对象池复用时先恢复燃血改写的属性，避免数值叠加
         this.restoreBloodRageAttributesIfNeeded();
         // 对象池复用时清理冰塔减速残留，避免“死亡重生后仍减速”
@@ -291,11 +291,6 @@ export class Enemy extends Component {
             this.targetCrystal = find('Crystal') || null!;
         }
         
-        // 重新创建血条（如果不存在）
-        if (!this.healthBarNode || !this.healthBarNode.isValid) {
-            this.createHealthBar();
-        }
-        
         // 重新初始化对话框系统
         this.initDialogSystem();
         
@@ -307,17 +302,61 @@ export class Enemy extends Component {
     }
 
     createHealthBar() {
-        // 创建血条节点
+        // 预制体若已有 HealthBar，再 new 会叠两条
+        const siblings = this.node.children;
+        const existingBars: Node[] = [];
+        for (let i = 0; i < siblings.length; i++) {
+            const n = siblings[i];
+            if (n.name === 'HealthBar' && n.getComponent(HealthBar)) {
+                existingBars.push(n);
+            }
+        }
+        if (existingBars.length > 0) {
+            this.healthBarNode = existingBars[0];
+            this.healthBar = this.healthBarNode.getComponent(HealthBar)!;
+            for (let j = 1; j < existingBars.length; j++) {
+                if (existingBars[j].isValid) {
+                    existingBars[j].destroy();
+                }
+            }
+            this.healthBarNode.setPosition(0, 30, 0);
+            this.healthBar.setMaxHealth(this.maxHealth);
+            this.healthBar.setHealth(this.currentHealth);
+            return;
+        }
+
         this.healthBarNode = new Node('HealthBar');
         this.healthBarNode.setParent(this.node);
-        this.healthBarNode.setPosition(0, 30, 0); // 在敌人上方
-        
-        // 添加HealthBar组件
+        this.healthBarNode.setPosition(0, 30, 0);
+
         this.healthBar = this.healthBarNode.addComponent(HealthBar);
         if (this.healthBar) {
             this.healthBar.setMaxHealth(this.maxHealth);
             this.healthBar.setHealth(this.currentHealth);
         }
+    }
+
+    protected destroyTransientHealthBarNow(): void {
+        cancelTransientHealthBarHide(this);
+        if (this.healthBarNode && this.healthBarNode.isValid) {
+            this.healthBarNode.destroy();
+        }
+        this.healthBarNode = null!;
+        this.healthBar = null!;
+    }
+
+    protected bumpTransientHealthBarAfterHit(): void {
+        if (!this.healthBarNode || !this.healthBarNode.isValid) {
+            this.createHealthBar();
+        } else {
+            if (this.healthBar) {
+                this.healthBar.setMaxHealth(this.maxHealth);
+                this.healthBar.setHealth(this.currentHealth);
+            }
+            this.healthBarNode.active = true;
+        }
+        cancelTransientHealthBarHide(this);
+        scheduleTransientHealthBarHide(this, () => this.destroyTransientHealthBarNow());
     }
 
     /**
@@ -1581,10 +1620,7 @@ export class Enemy extends Component {
 
         this.currentHealth -= finalDamage;
 
-        // 更新血条
-        if (this.healthBar) {
-            this.healthBar.setHealth(this.currentHealth);
-        }
+        this.bumpTransientHealthBarAfterHit();
 
         if (this.currentHealth <= 0) {
             this.currentHealth = 0;
@@ -1610,9 +1646,8 @@ export class Enemy extends Component {
         this.currentHealth = Math.min(this.currentHealth + amount, this.maxHealth);
         const actualHeal = this.currentHealth - oldHealth;
 
-        // 更新血条
-        if (this.healthBar) {
-            this.healthBar.setHealth(this.currentHealth);
+        if (actualHeal > 0) {
+            this.bumpTransientHealthBarAfterHit();
         }
 
         // 显示治疗特效（绿光）
@@ -1812,10 +1847,7 @@ export class Enemy extends Component {
             console.warn(`[Enemy] GameManager not found when ${this.unitName || 'Enemy'} died, expReward: ${this.expReward}`);
         }
 
-        // 销毁血条节点
-        if (this.healthBarNode && this.healthBarNode.isValid) {
-            this.healthBarNode.destroy();
-        }
+        this.destroyTransientHealthBarNow();
 
         // 播放死亡音效
         if (this.deathSound) {
@@ -2479,12 +2511,7 @@ export class Enemy extends Component {
         this.dialogNode = null;
         this.dialogLabel = null;
 
-        // 清理血条
-        if (this.healthBarNode && this.healthBarNode.isValid) {
-            this.healthBarNode.destroy();
-        }
-        this.healthBarNode = null!;
-        this.healthBar = null!;
+        this.destroyTransientHealthBarNow();
 
         // 清理狙击准星标记
         if (this.sniperMarkNode && this.sniperMarkNode.isValid) {
@@ -2541,8 +2568,7 @@ export class Enemy extends Component {
             }
 
             // 获取敌人的脚本组件
-            const enemyScript = enemy.getComponent('Enemy') as any || 
-                               enemy.getComponent('OrcWarlord') as any;
+            const enemyScript = getEnemyLikeScript(enemy);
             
             if (!enemyScript) {
                 continue;
@@ -2618,8 +2644,7 @@ export class Enemy extends Component {
             }
 
             // 获取敌人的脚本组件
-            const enemyScript = enemy.getComponent('Enemy') as any || 
-                               enemy.getComponent('OrcWarlord') as any;
+            const enemyScript = getEnemyLikeScript(enemy);
             
             if (!enemyScript) {
                 continue;

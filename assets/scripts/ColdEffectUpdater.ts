@@ -1,4 +1,5 @@
 import { _decorator, Component, Node, Graphics, Color } from 'cc';
+import { getEnemyLikeScript } from './EnemyScriptLookup';
 const { ccclass } = _decorator;
 
 /**
@@ -28,10 +29,7 @@ export class ColdEffectUpdater extends Component {
         }
         
         // 检查敌人是否存活
-        const enemyScript = this.enemy.getComponent('Enemy') as any || 
-                           this.enemy.getComponent('OrcWarlord') as any ||
-                           this.enemy.getComponent('OrcWarrior') as any ||
-                           this.enemy.getComponent('TrollSpearman') as any;
+        const enemyScript = getEnemyLikeScript(this.enemy);
         
         if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) {
             // 敌人已死亡，销毁特效

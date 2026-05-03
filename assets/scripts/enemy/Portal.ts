@@ -2,6 +2,7 @@ import { _decorator, Component, Node, Vec3, Prefab, instantiate, find, UITransfo
 import { UnitType } from '../UnitType';
 import { HealthBar } from '../HealthBar';
 import { BattleFloatTextPool } from '../BattleFloatTextPool';
+import { cancelTransientHealthBarHide, scheduleTransientHealthBarHide } from '../TransientHealthBar';
 const { ccclass, property } = _decorator;
 
 @ccclass('Portal')
@@ -95,8 +96,7 @@ export class Portal extends Component {
         this.currentHealth = this.maxHealth;
         this.leftCooldown = 0;
         this.rightCooldown = 0;
-        this.ensureHealthBar();
-        this.updateHealthBar();
+        this.destroyPortalHealthBarNow();
         // 伤害飘字：若未在编辑器指定预制体，则使用内置Label方案，无需异步加载
 		// 贴图循环动画初始化
 		this.sprite = this.node.getComponent(Sprite) || null;
@@ -333,7 +333,7 @@ export class Portal extends Component {
             return;
         }
         this.currentHealth -= amount;
-        this.updateHealthBar();
+        this.bumpPortalTransientHealthBar();
         this.showDamageNumber(amount);
         if (this.currentHealth <= 0) {
             this.onPortalDestroyed();
@@ -402,6 +402,7 @@ export class Portal extends Component {
             }
         } catch {}
 
+        this.destroyPortalHealthBarNow();
         if (this.node && this.node.isValid) {
             this.node.destroy();
         }
@@ -478,12 +479,20 @@ export class Portal extends Component {
         }
     }
 
+    private destroyPortalHealthBarNow() {
+        cancelTransientHealthBarHide(this);
+        if (this.healthBarNode && this.healthBarNode.isValid) {
+            this.healthBarNode.destroy();
+        }
+        this.healthBarNode = null!;
+        this.healthBar = null!;
+    }
+
     private ensureHealthBar() {
         if (!this.node || !this.node.isValid) return;
         if (!this.healthBarNode || !this.healthBarNode.isValid) {
             this.healthBarNode = new Node('HealthBar');
             this.healthBarNode.setParent(this.node);
-            // 放在顶端上方
             const ui = this.node.getComponent(UITransform);
             const y = ui ? (ui.contentSize.height * 0.5 + 20) : 50;
             this.healthBarNode.setPosition(0, y, 0);
@@ -498,6 +507,15 @@ export class Portal extends Component {
             this.healthBar.setMaxHealth(this.maxHealth);
             this.healthBar.setHealth(this.currentHealth);
         }
+    }
+
+    private bumpPortalTransientHealthBar() {
+        this.ensureHealthBar();
+        if (this.healthBarNode && this.healthBarNode.isValid) {
+            this.healthBarNode.active = true;
+        }
+        cancelTransientHealthBarHide(this);
+        scheduleTransientHealthBarHide(this, () => this.destroyPortalHealthBarNow());
     }
 
     private updateHealthBar() {
@@ -696,15 +714,15 @@ export class Portal extends Component {
 			const newMax = Math.floor(oldMax * 1.5);
 			p.maxHealth = newMax;
 			p.currentHealth = Math.floor(newMax * ratio);
-			// 同步刷新血条最大值与当前值
-			if (typeof p.ensureHealthBar === 'function') p.ensureHealthBar();
 			try {
 				const hb = (p as any).healthBar;
 				if (hb && typeof hb.setMaxHealth === 'function') {
 					hb.setMaxHealth(p.maxHealth);
+					if (typeof hb.setHealth === 'function') {
+						hb.setHealth(p.currentHealth);
+					}
 				}
 			} catch {}
-			if (typeof p.updateHealthBar === 'function') p.updateHealthBar();
 			// 攻击力提升 50%
 			if (typeof p.attackDamage === 'number') {
 				p.attackDamage = Math.max(1, Math.floor(p.attackDamage * 1.5));

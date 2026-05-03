@@ -1,4 +1,6 @@
 import { _decorator, Component, Node, Prefab, instantiate, find } from 'cc';
+import { MemoryProbe } from './MemoryProbe';
+import { getEnemyLikeScript } from './EnemyScriptLookup';
 const { ccclass, property } = _decorator;
 
 /**
@@ -18,9 +20,9 @@ export class EnemyPool extends Component {
     // 预制体映射
     private prefabMap: Map<string, Prefab> = new Map();
     
-    // 对象池配置
-    private readonly INITIAL_POOL_SIZE: number = 10; // 初始池大小
-    private readonly MAX_POOL_SIZE: number = 50; // 最大池大小（每种类型）
+    // 对象池配置（略收紧以降低常驻节点/内存，仍覆盖常规波次峰值）
+    private readonly INITIAL_POOL_SIZE: number = 8;
+    private readonly MAX_POOL_SIZE: number = 36;
     
     // 活跃对象计数（用于调试）
     private activeCount: Map<string, number> = new Map();
@@ -146,15 +148,7 @@ export class EnemyPool extends Component {
                 }
             }
             
-            // 重置敌人脚本状态（如果存在）
-            const enemyScript = enemy.getComponent('Enemy') as any;
-            const orcWarlordScript = enemy.getComponent('OrcWarlord') as any;
-            const orcWarriorScript = enemy.getComponent('OrcWarrior') as any;
-            const trollSpearmanScript = enemy.getComponent('TrollSpearman') as any;
-            const orcShamanScript = enemy.getComponent('OrcShaman') as any;
-            const minotaurWarriorScript = enemy.getComponent('MinotaurWarrior') as any;
-
-            const script = enemyScript || orcWarlordScript || orcWarriorScript || trollSpearmanScript || orcShamanScript || minotaurWarriorScript;
+            const script = getEnemyLikeScript(enemy);
             if (script) {
                 // 重置状态
                 if (script.resetEnemyState) {
@@ -163,17 +157,6 @@ export class EnemyPool extends Component {
                     // 如果脚本有 onEnable，会在激活时自动调用
                 }
                 
-                // 确保血条存在（如果脚本有 createHealthBar 方法）
-                if (script.createHealthBar) {
-                    // 检查血条是否已存在
-                    const healthBarNode = enemy.children.find(child => {
-                        const name = child.name.toLowerCase();
-                        return name === 'healthbar' || name === 'health bar';
-                    });
-                    if (!healthBarNode || !healthBarNode.isValid) {
-                        script.createHealthBar();
-                    }
-                }
             }
             
             // 激活对象
@@ -185,6 +168,15 @@ export class EnemyPool extends Component {
             
             if (childrenToRemove.length > 0) {
                //console.info(`[EnemyPool] 获取 ${prefabName}: 已清理 ${childrenToRemove.length} 个子节点（箭矢/长矛）`);
+            }
+
+            if (source === '新建对象') {
+                const active = this.activeCount.get(prefabName) || 0;
+                MemoryProbe.snapshot('EnemyPool.new', {
+                    prefabName,
+                    poolLenBefore: poolSizeBefore,
+                    active,
+                });
             }
         }
         
@@ -331,6 +323,17 @@ export class EnemyPool extends Component {
             };
         }
         return stats;
+    }
+
+    getDebugStats(): Record<string, { pool: number; active: number }> {
+        const out: Record<string, { pool: number; active: number }> = {};
+        for (const [name, pool] of this.pools.entries()) {
+            out[name] = {
+                pool: pool.length,
+                active: this.activeCount.get(name) || 0,
+            };
+        }
+        return out;
     }
 }
 

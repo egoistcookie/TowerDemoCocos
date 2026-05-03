@@ -1,6 +1,7 @@
 import { _decorator, Component, Node, Vec3, find, Graphics, Color, UITransform } from 'cc';
 import { GameManager, GameState } from './GameManager';
 import { ColdEffectUpdater } from './ColdEffectUpdater';
+import { getEnemyLikeScript } from './EnemyScriptLookup';
 const { ccclass, property } = _decorator;
 
 /**
@@ -124,10 +125,7 @@ export class IceArrow extends Component {
         for (const enemy of enemiesNode.children) {
             if (!enemy || !enemy.isValid || !enemy.active) continue;
 
-            const enemyScript = enemy.getComponent('Enemy') as any ||
-                               enemy.getComponent('OrcWarlord') as any ||
-                               enemy.getComponent('OrcWarrior') as any ||
-                               enemy.getComponent('TrollSpearman') as any;
+            const enemyScript = getEnemyLikeScript(enemy);
 
             if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) continue;
 
@@ -160,10 +158,7 @@ export class IceArrow extends Component {
      * 应用减速效果
      */
     private applySlowDown(enemy: Node) {
-        const enemyScript = enemy.getComponent('Enemy') as any || 
-                           enemy.getComponent('OrcWarlord') as any ||
-                           enemy.getComponent('OrcWarrior') as any ||
-                           enemy.getComponent('TrollSpearman') as any;
+        const enemyScript = getEnemyLikeScript(enemy);
         
         if (enemyScript && enemyScript.moveSpeed) {
             // 保存原始速度（如果还没有保存）
@@ -243,10 +238,7 @@ export class IceArrow extends Component {
             if (!enemy || !enemy.isValid || !enemy.active) continue;
             if (this.hitEnemies.has(enemy)) continue; // 已命中过
 
-            const enemyScript = enemy.getComponent('Enemy') as any || 
-                               enemy.getComponent('OrcWarlord') as any ||
-                               enemy.getComponent('OrcWarrior') as any ||
-                               enemy.getComponent('TrollSpearman') as any;
+            const enemyScript = getEnemyLikeScript(enemy);
             
             if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) continue;
 

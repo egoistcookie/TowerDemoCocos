@@ -8,6 +8,8 @@ import { EnemyPool } from '../EnemyPool';
 import { UnitManager } from '../UnitManager';
 import { SniperMark } from '../SniperMark';
 import { BattleFloatTextPool } from '../BattleFloatTextPool';
+import { cancelTransientHealthBarHide, scheduleTransientHealthBarHide } from '../TransientHealthBar';
+import { getEnemyLikeScript } from '../EnemyScriptLookup';
 const { ccclass, property } = _decorator;
 
 /**
@@ -183,6 +185,7 @@ export class Boss extends Component {
     // ====== 生命周期与初始化 ======
 
     onEnable() {
+        this.destroyTransientHealthBarNow();
         // 清理所有插在身上的武器（箭矢、长矛等）
         this.clearAttachedWeapons();
         this.restoreBloodRageAttributesIfNeeded();
@@ -291,17 +294,6 @@ export class Boss extends Component {
             }
         }
         
-        // 重新创建血条（如果不存在）
-        if (!this.healthBarNode || !this.healthBarNode.isValid) {
-            this.createHealthBar();
-        } else {
-            // 如果血条已存在，更新血条状态
-            if (this.healthBar) {
-                this.healthBar.setMaxHealth(this.maxHealth);
-                this.healthBar.setHealth(this.currentHealth);
-            }
-        }
-        
         // 初始播放待机动画
         this.playIdleAnimation();
     }
@@ -349,27 +341,65 @@ export class Boss extends Component {
             }
         }
         
-        // 创建血条（如果不存在）
-        if (!this.healthBarNode || !this.healthBarNode.isValid) {
-            this.createHealthBar();
-        }
-        
         // 初始播放待机动画
         this.playIdleAnimation();
     }
 
     createHealthBar() {
-        // 创建血条节点
+        const siblings = this.node.children;
+        const existingBars: Node[] = [];
+        for (let i = 0; i < siblings.length; i++) {
+            const n = siblings[i];
+            if (n.name === 'HealthBar' && n.getComponent(HealthBar)) {
+                existingBars.push(n);
+            }
+        }
+        if (existingBars.length > 0) {
+            this.healthBarNode = existingBars[0];
+            this.healthBar = this.healthBarNode.getComponent(HealthBar)!;
+            for (let j = 1; j < existingBars.length; j++) {
+                if (existingBars[j].isValid) {
+                    existingBars[j].destroy();
+                }
+            }
+            this.healthBarNode.setPosition(0, 40, 0);
+            this.healthBar.setMaxHealth(this.maxHealth);
+            this.healthBar.setHealth(this.currentHealth);
+            return;
+        }
+
         this.healthBarNode = new Node('HealthBar');
         this.healthBarNode.setParent(this.node);
-        this.healthBarNode.setPosition(0, 40, 0); // 在敌人上方
-        
-        // 添加HealthBar组件
+        this.healthBarNode.setPosition(0, 40, 0);
+
         this.healthBar = this.healthBarNode.addComponent(HealthBar);
         if (this.healthBar) {
             this.healthBar.setMaxHealth(this.maxHealth);
             this.healthBar.setHealth(this.currentHealth);
         }
+    }
+
+    protected destroyTransientHealthBarNow(): void {
+        cancelTransientHealthBarHide(this);
+        if (this.healthBarNode && this.healthBarNode.isValid) {
+            this.healthBarNode.destroy();
+        }
+        this.healthBarNode = null!;
+        this.healthBar = null!;
+    }
+
+    protected bumpTransientHealthBarAfterHit(): void {
+        if (!this.healthBarNode || !this.healthBarNode.isValid) {
+            this.createHealthBar();
+        } else {
+            if (this.healthBar) {
+                this.healthBar.setMaxHealth(this.maxHealth);
+                this.healthBar.setHealth(this.currentHealth);
+            }
+            this.healthBarNode.active = true;
+        }
+        cancelTransientHealthBarHide(this);
+        scheduleTransientHealthBarHide(this, () => this.destroyTransientHealthBarNow());
     }
 
     findGameManager() {
@@ -2070,9 +2100,7 @@ export class Boss extends Component {
         // 如果正在播放战争咆哮动画，不被打断，只扣血（所有 Boss 默认享受该特性）
         if (this.isPlayingWarcryAnimation) {
             this.currentHealth -= damage;
-            if (this.healthBar) {
-                this.healthBar.setHealth(this.currentHealth);
-            }
+            this.bumpTransientHealthBarAfterHit();
             this.showDamageNumber(damage);
             
             if (this.currentHealth <= 0) {
@@ -2121,10 +2149,7 @@ export class Boss extends Component {
 
         this.currentHealth -= damage;
 
-        // 更新血条
-        if (this.healthBar) {
-            this.healthBar.setHealth(this.currentHealth);
-        }
+        this.bumpTransientHealthBarAfterHit();
 
         if (this.currentHealth <= 0) {
             this.currentHealth = 0;
@@ -2214,10 +2239,7 @@ export class Boss extends Component {
             const dy = myPos2.y - enemyPos.y;
             const distanceSq = dx * dx + dy * dy;
             if (distanceSq <= warcryRangeSq) {
-                const enemyScript = enemy.getComponent('Enemy') as any || 
-                                   enemy.getComponent('OrcWarrior') as any || 
-                                   enemy.getComponent('OrcWarlord') as any ||
-                                   enemy.getComponent('Boss') as any;
+                const enemyScript = getEnemyLikeScript(enemy);
                 if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                     this.applyWarcryBuff(enemy, enemyScript, currentTime);
                 }
@@ -2303,10 +2325,7 @@ export class Boss extends Component {
             
             const endTime = this.warcryBuffEndTime.get(enemy);
             if (endTime !== undefined && currentTime >= endTime) {
-                const enemyScript = enemy.getComponent('Enemy') as any || 
-                                   enemy.getComponent('OrcWarrior') as any || 
-                                   enemy.getComponent('OrcWarlord') as any ||
-                                   enemy.getComponent('Boss') as any;
+                const enemyScript = getEnemyLikeScript(enemy);
                 if (enemyScript) {
                     this.removeWarcryBuff(enemy, enemyScript);
                 }
@@ -2323,10 +2342,7 @@ export class Boss extends Component {
     protected clearAllWarcryBuffs() {
         for (const enemy of this.warcryBuffedEnemies) {
             if (enemy && enemy.isValid) {
-                const enemyScript = enemy.getComponent('Enemy') as any || 
-                                   enemy.getComponent('OrcWarrior') as any || 
-                                   enemy.getComponent('OrcWarlord') as any ||
-                                   enemy.getComponent('Boss') as any;
+                const enemyScript = getEnemyLikeScript(enemy);
                 if (enemyScript) {
                     this.removeWarcryBuff(enemy, enemyScript);
                 }
@@ -2380,10 +2396,7 @@ export class Boss extends Component {
             this.gameManager.addExperience(this.expReward);
         }
 
-        // 销毁血条节点
-        if (this.healthBarNode && this.healthBarNode.isValid) {
-            this.healthBarNode.destroy();
-        }
+        this.destroyTransientHealthBarNow();
 
         // 播放死亡音效
         if (this.deathSound) {
@@ -2503,11 +2516,7 @@ export class Boss extends Component {
             }
         }
         
-        if (this.healthBarNode && this.healthBarNode.isValid) {
-            this.healthBarNode.destroy();
-        }
-        this.healthBarNode = null!;
-        this.healthBar = null!;
+        this.destroyTransientHealthBarNow();
 
         // 清理狙击准星标记
         if (this.sniperMarkNode && this.sniperMarkNode.isValid) {
@@ -2701,8 +2710,7 @@ export class Boss extends Component {
                 continue;
             }
 
-            const enemyScript = enemy.getComponent('Enemy') as any || 
-                               enemy.getComponent('Boss') as any;
+            const enemyScript = getEnemyLikeScript(enemy);
             
             if (!enemyScript) {
                 continue;

@@ -1,5 +1,6 @@
 import { Color, Component, Label, LabelOutline, Node, Prefab, UIOpacity, UITransform, Vec3, find, instantiate, tween } from 'cc';
 import { DamageNumber } from './DamageNumber';
+import { MemoryProbe } from './MemoryProbe';
 
 type SpawnFloatTextOptions = {
     owner: Component;
@@ -24,7 +25,8 @@ type PoolStats = {
 export class BattleFloatTextPool {
     private static readonly POOL_ROOT_NAME = 'BattleFloatPoolRoot';
     private static readonly FALLBACK_KEY = '__fallback__';
-    private static readonly MAX_POOL_SIZE_PER_KEY = 120;
+    /** 每类飘字最大缓存：过大则常驻节点与 Label 增多；48 仍远高于同屏并发 */
+    private static readonly MAX_POOL_SIZE_PER_KEY = 48;
     private static readonly MEMORY_LOG_INTERVAL_MS = 10000;
     // 临时开关：用于定位内存问题时一键禁用战斗飘字
     private static readonly TEMP_DISABLE_FLOAT_TEXT = false;
@@ -102,6 +104,15 @@ export class BattleFloatTextPool {
             inUse,
             pooled,
         };
+    }
+
+    /** Tick.summary：按 key 的池长与占用 */
+    static getDebugStats(): Record<string, unknown> {
+        const perKey: Record<string, { pooled: number; inUse: number }> = {};
+        for (const [k, arr] of this.pools.entries()) {
+            perKey[k] = { pooled: arr.length, inUse: this.inUseCount.get(k) || 0 };
+        }
+        return { ...this.getStats(), perKey };
     }
 
     private static resolveParent(owner: Component): Node | null {
@@ -209,14 +220,17 @@ export class BattleFloatTextPool {
         this.lastMemoryLogTime = now;
 
         const stats = this.getStats();
-        const perfAny = (globalThis as any).performance;
-        const memory = perfAny?.memory;
-        const usedMB = memory?.usedJSHeapSize ? (memory.usedJSHeapSize / 1024 / 1024).toFixed(1) : 'N/A';
-        const totalMB = memory?.totalJSHeapSize ? (memory.totalJSHeapSize / 1024 / 1024).toFixed(1) : 'N/A';
         const parentChildren = parent?.children?.length ?? -1;
-
-        console.log(
-            `[BattleFloatTextPool] jsHeap=${usedMB}/${totalMB}MB, created=${stats.created}, reused=${stats.reused}, inUse=${stats.inUse}, pooled=${stats.pooled}, parentChildren=${parentChildren}`
+        MemoryProbe.snapshot(
+            'BattleFloatTextPool.interval',
+            {
+                floatCreated: stats.created,
+                floatReused: stats.reused,
+                floatInUse: stats.inUse,
+                floatPooled: stats.pooled,
+                parentChildren,
+            },
+            { includeSceneNodes: true }
         );
     }
 }

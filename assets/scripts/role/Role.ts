@@ -16,6 +16,13 @@ import { BuffManager } from '../BuffManager';
 import { TalentEffectManager } from '../TalentEffectManager';
 import { UnitConfigManager } from '../UnitConfigManager';
 import { UnitStarScaling } from '../UnitStarScaling';
+import {
+    cancelTransientHealthBarHide,
+    scheduleTransientHealthBarHide,
+    cancelTransientManaBarHide,
+    scheduleTransientManaBarHide,
+} from '../TransientHealthBar';
+import { getEnemyLikeScript } from '../EnemyScriptLookup';
 // import { PerformanceMonitor } from './PerformanceMonitor';
 const { ccclass, property } = _decorator;
 
@@ -389,9 +396,6 @@ export class Role extends Component {
         // 初始化节点缓存（只在第一个单位创建时执行一次）
         this.initializeNodeCache();
         
-        // 创建血条
-        this.createHealthBar();
-        
         // 检查是否有技能（在onEnable中创建蓝量条，因为需要先应用天赋增幅）
         
         // 初始化对话框系统
@@ -599,19 +603,72 @@ export class Role extends Component {
     }
 
     createHealthBar() {
-        // 创建血条节点
+        // 预制体里若已有 HealthBar 子节点，再 new 会叠两条；先复用并去掉多余
+        const siblings = this.node.children;
+        const existingBars: Node[] = [];
+        for (let i = 0; i < siblings.length; i++) {
+            const n = siblings[i];
+            if (n.name === 'HealthBar' && n.getComponent(HealthBar)) {
+                existingBars.push(n);
+            }
+        }
+        if (existingBars.length > 0) {
+            this.healthBarNode = existingBars[0];
+            this.healthBar = this.healthBarNode.getComponent(HealthBar)!;
+            for (let j = 1; j < existingBars.length; j++) {
+                if (existingBars[j].isValid) {
+                    existingBars[j].destroy();
+                }
+            }
+            this.healthBarNode.setPosition(0, 30, 0);
+            this.refreshOverheadNodesScale();
+            this.healthBar.setMaxHealth(this.maxHealth);
+            this.healthBar.setHealth(this.currentHealth);
+            return;
+        }
+
         this.healthBarNode = new Node('HealthBar');
         this.healthBarNode.setParent(this.node);
         this.healthBarNode.setPosition(0, 30, 0); // 在弓箭手上方
-        // 确保血条初始缩放为正数（正常朝向）
         this.refreshOverheadNodesScale();
-        
-        // 添加HealthBar组件
+
         this.healthBar = this.healthBarNode.addComponent(HealthBar);
         if (this.healthBar) {
             this.healthBar.setMaxHealth(this.maxHealth);
             this.healthBar.setHealth(this.currentHealth);
         }
+    }
+
+    protected shouldShowTransientHealthBar(): boolean {
+        return true;
+    }
+
+    protected destroyTransientHealthBarNow(): void {
+        cancelTransientHealthBarHide(this);
+        if (this.healthBarNode && this.healthBarNode.isValid) {
+            this.healthBarNode.destroy();
+        }
+        this.healthBarNode = null!;
+        this.healthBar = null!;
+    }
+
+    /** 受击后显示血条，约 3 秒后销毁节点 */
+    protected bumpTransientHealthBarAfterHit(): void {
+        if (!this.shouldShowTransientHealthBar()) {
+            return;
+        }
+        if (!this.healthBarNode || !this.healthBarNode.isValid) {
+            this.createHealthBar();
+        } else {
+            if (this.healthBar) {
+                this.healthBar.setMaxHealth(this.maxHealth);
+                this.healthBar.setHealth(this.currentHealth);
+            }
+            this.healthBarNode.active = true;
+        }
+        this.refreshOverheadNodesScale();
+        cancelTransientHealthBarHide(this);
+        scheduleTransientHealthBarHide(this, () => this.destroyTransientHealthBarNow());
     }
 
     /**
@@ -622,20 +679,10 @@ export class Role extends Component {
             return; // 没有技能，不创建蓝量条
         }
 
-        // 确保在显示蓝条的同时，血条也存在并可见
-        if (!this.healthBarNode || !this.healthBarNode.isValid) {
-            // 如果还没创建血条，先创建血条
-            this.createHealthBar();
-        } else {
-            // 已有血条，则保证它是激活状态
-            this.healthBarNode.active = true;
-        }
-        
-        // 创建蓝量条节点
+        // 创建蓝量条节点（血条改为受击临时显示，蓝条常驻时单独占头顶偏上）
         this.manaBarNode = new Node('ManaBar');
         this.manaBarNode.setParent(this.node);
-        // 蓝量条在血条下方，血条在30位置，蓝量条在25位置（血条高度约4，间距约1）
-        this.manaBarNode.setPosition(0, 25, 0);
+        this.manaBarNode.setPosition(0, 28, 0);
         // 确保蓝量条初始缩放为正数（正常朝向）
         this.refreshOverheadNodesScale();
         
@@ -646,8 +693,36 @@ export class Role extends Component {
             this.manaBar.setMana(this.currentMana);
         }
         
-        // 显示蓝量条
-        this.manaBarNode.active = true;
+        // 蓝条改为消耗后才临时显示，创建后默认隐藏
+        this.manaBarNode.active = false;
+    }
+
+    /** 隐藏头顶蓝条并取消计时（不销毁节点，便于对象池复用） */
+    protected hideTransientManaBarNow(): void {
+        cancelTransientManaBarHide(this);
+        if (this.manaBarNode && this.manaBarNode.isValid) {
+            this.manaBarNode.active = false;
+        }
+    }
+
+    /** 消耗蓝量后显示蓝条，约 2 秒内未再消耗则隐藏 */
+    protected bumpTransientManaBarAfterConsume(): void {
+        if (!this.hasSkill) {
+            return;
+        }
+        if (!this.manaBarNode || !this.manaBarNode.isValid) {
+            this.createManaBar();
+        }
+        if (this.manaBar) {
+            this.manaBar.setMaxMana(this.maxMana);
+            this.manaBar.setMana(this.currentMana);
+        }
+        if (this.manaBarNode && this.manaBarNode.isValid) {
+            this.manaBarNode.active = true;
+        }
+        this.refreshOverheadNodesScale();
+        cancelTransientManaBarHide(this);
+        scheduleTransientManaBarHide(this, () => this.hideTransientManaBarNow());
     }
     
     /**
@@ -694,6 +769,9 @@ export class Role extends Component {
             this.currentMana -= amount;
             if (this.manaBar) {
                 this.manaBar.setMana(this.currentMana);
+            }
+            if (amount > 0) {
+                this.bumpTransientManaBarAfterConsume();
             }
             return true;
         }
@@ -1690,9 +1768,7 @@ export class Role extends Component {
             // 攻击范围小于 100 的单位视为近战单位
             if (!this.isFlying && this.attackRange < 100) {
                 enemies = enemies.filter(enemy => {
-                    const enemyScript = enemy.getComponent('Enemy') as any ||
-                                       enemy.getComponent('Role') as any ||
-                                       enemy.getComponent('Dragon') as any;
+                    const enemyScript = getEnemyLikeScript(enemy) || enemy.getComponent('Role') as any;
                     // 如果敌人是飞行单位，过滤掉
                     if (enemyScript && enemyScript.isFlying === true) {
                         return false;
@@ -3862,10 +3938,7 @@ export class Role extends Component {
             }
         }
 
-        // 更新血条
-        if (this.healthBar) {
-            this.healthBar.setHealth(this.currentHealth);
-        }
+        this.bumpTransientHealthBarAfterHit();
 
         // 更新单位信息面板
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
@@ -3899,9 +3972,8 @@ export class Role extends Component {
         this.currentHealth = Math.min(this.currentHealth + amount, this.maxHealth);
         const actualHeal = this.currentHealth - oldHealth;
 
-        // 更新血条
-        if (this.healthBar) {
-            this.healthBar.setHealth(this.currentHealth);
+        if (actualHeal > 0) {
+            this.bumpTransientHealthBarAfterHit();
         }
 
         // 更新单位信息面板
@@ -4075,6 +4147,8 @@ export class Role extends Component {
         }
 
         this.isDestroyed = true;
+        this.destroyTransientHealthBarNow();
+        this.hideTransientManaBarNow();
 
         // 清理对话框
         if (this.dialogNode && this.dialogNode.isValid) {
@@ -4127,10 +4201,7 @@ export class Role extends Component {
         
         // 延迟返回对象池，等待死亡动画播放完成
         this.scheduleOnce(() => {
-            // 销毁血条节点
-            if (this.healthBarNode && this.healthBarNode.isValid) {
-                this.healthBarNode.destroy();
-            }
+            this.destroyTransientHealthBarNow();
             // 返回对象池而不是销毁
             returnToPool();
         }, this.deathAnimationDuration); // 延迟时间与死亡动画时长相同，确保死亡动画完整播放
@@ -4202,13 +4273,9 @@ export class Role extends Component {
         this.dialogNode = null;
         this.dialogLabel = null;
         
-        // 清理血条
-        if (this.healthBarNode && this.healthBarNode.isValid) {
-            this.healthBarNode.destroy();
-        }
-        this.healthBarNode = null!;
-        this.healthBar = null!;
-        
+        this.destroyTransientHealthBarNow();
+        this.hideTransientManaBarNow();
+
         // 移除高亮效果
         this.removeHighlight();
         
@@ -4221,6 +4288,8 @@ export class Role extends Component {
      * 从对象池获取的单位会调用此方法，而不是start方法
      */
     onEnable() {
+        this.destroyTransientHealthBarNow();
+        this.hideTransientManaBarNow();
 
         // 重置增幅标志，让每次从对象池获取时都能重新安排自动上移
         this._enhancementsApplied = false;
@@ -4284,17 +4353,6 @@ export class Role extends Component {
         // 重新查找单位选择管理器
         this.findUnitSelectionManager();
         
-        // 重新创建血条（如果不存在）
-        if (!this.healthBarNode || !this.healthBarNode.isValid) {
-            this.createHealthBar();
-        } else {
-            // 如果血条已存在，先更新为当前值（应用增益前）
-            if (this.healthBar) {
-                this.healthBar.setMaxHealth(this.maxHealth);
-                this.healthBar.setHealth(this.currentHealth);
-            }
-        }
-        
         // 检查是否有技能（在应用天赋增幅后检查）
         // 注意：技能检查需要在applyTalentEnhancements之后，因为技能可能通过天赋系统激活
         // 这里先设置一个默认值，子类可以重写checkSkill方法来检查技能
@@ -4332,7 +4390,7 @@ export class Role extends Component {
         
         // 应用天赋增幅后，如果有技能，创建蓝量条
         if (this.hasSkill) {
-            // 如果蓝量条不存在，创建它
+            // 如果蓝量条不存在，创建它（默认隐藏，消耗蓝后再临时显示）
             if (!this.manaBarNode || !this.manaBarNode.isValid) {
                 this.createManaBar();
             } else {
@@ -4341,11 +4399,7 @@ export class Role extends Component {
                     this.manaBar.setMaxMana(this.maxMana);
                     this.manaBar.setMana(this.currentMana);
                 }
-                this.manaBarNode.active = true;
-                // 确保蓝条出现时血条也同时可见
-                if (this.healthBarNode && this.healthBarNode.isValid) {
-                    this.healthBarNode.active = true;
-                }
+                this.manaBarNode.active = false;
             }
         } else {
             // 没有技能，隐藏蓝量条

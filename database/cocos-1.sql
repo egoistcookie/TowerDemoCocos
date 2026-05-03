@@ -27,7 +27,7 @@ select * from game_sessions where DATE(created_at) = CURDATE() -1
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106') and player_id not in (select player_id from visitor_source_records where channel='unknown') 
 order by created_at desc ;
 --查询具体某玩家的游戏记录
-select * from game_sessions where player_id='player_1774265446223_9255';
+select * from game_sessions where player_id='player_1777550666619_7376';
 --统计每天有多少局游戏（包括0到12秒的游戏记录）（20260423之后才开始保存进行了0到12秒的游戏记录）
 select DATE(created_at),count(*) from game_sessions 
  where  player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106') and player_id not in (select player_id from visitor_source_records where channel='unknown') 
@@ -58,7 +58,7 @@ select * from card_selection_events  order by created_at desc ;
 select session_id,player_id,level,game_time ,selection_mode,cards_json,created_at  from card_selection_events where DATE(created_at) = CURDATE()
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1775652153130_8335','player_1772722064044_978','player_1772465771074_4106') and player_id not in (select player_id from visitor_source_records where channel='unknown')  
 order by created_at desc ;
---查询昨天有多少次非测试抽卡
+--查询昨天有多少次测试抽卡
 select session_id,player_id,level,game_time ,selection_mode,cards_json,created_at from card_selection_events where DATE(created_at) = CURDATE()-1
  and player_id  in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1775652153130_8335','player_1772722064044_978','player_1772465771074_4106') and player_id not in (select player_id from visitor_source_records where channel='unknown')  
 order by created_at desc ;
@@ -67,10 +67,10 @@ select DATE(created_at),player_id,count(*) from card_selection_events where sele
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106') and player_id not in (select player_id from visitor_source_records where channel='unknown')  
 group by DATE(created_at),player_id order by DATE(created_at) desc ;
 --统计每天非测试广告抽卡及该玩家的创建时间（创建时间为空，则代表该玩家一局游戏都没有完整结束过）
-select DATE(a.created_at),a.player_id,ps.created_at ,count(*) from card_selection_events a left join player_statistics ps on a.player_id =ps.player_id 
-where a.selection_mode  in ('get_all','reroll') 
- and a.player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106') and player_id not in (select player_id from visitor_source_records where channel='unknown')  
-group by DATE(a.created_at),a.player_id,ps.created_at order by DATE(created_at) desc ;
+select DATE(a.created_at),a.player_id, a.created_at ,a.selection_mode, ps.created_at ,count(*) from card_selection_events a left join player_statistics ps on a.player_id =ps.player_id 
+where a.selection_mode  in ('get_all','reroll','single_video')  and  DATE(a.created_at) = CURDATE()
+ and a.player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106') and a.player_id not in (select player_id from visitor_source_records where channel='unknown')  
+group by DATE(a.created_at),a.player_id, a.created_at, a.selection_mode, ps.created_at order by DATE(a.created_at)  desc;
 
 --游戏记录主表（游戏正常结束了才会记录）
 select * from game_records where player_id='player_1774265446223_9255';
@@ -82,7 +82,7 @@ order by created_at desc;
 select * from game_records where defend_time !=0 order by created_at desc;
 --玩家信息表
 select * from player_statistics where created_at>'20260429' order by created_at desc;
-select * from player_statistics where player_id like '%player_1777095847465_6130';
+select * from player_statistics where player_id like '%player_1775465792664_5664';
 --统计：一个敌人都没击败的玩家： 0个
 select * from player_statistics where total_kills =0;
 --操作类型统计表
@@ -114,7 +114,7 @@ select unit_id,rarity,count(*) from card_selection_summary group by unit_id,rari
 -- player_1772465771074_4106 家里开发工具
 -- player_1772530937065_3381 公司360浏览器
 --  公司开发工具
-select * from player_leaderboard ps where ps.player_id ='player_1775223388887_5027' ;
+select * from player_leaderboard ps where ps.player_id ='player_1775465792664_5664' ;
 --视图-关卡难度分析
 select * from level_difficulty_analysis;
 --视图-击杀榜
@@ -129,7 +129,7 @@ select * from player_feedback_votes pfv ;
 
 --访客表（非玩家，只是停留在首页就会记录）（统计玩家之来源）
 select * from visitor_source_records order by created_at desc ;
-select * from visitor_source_records where player_id like '%player_1777171248460_4225%'
+select * from visitor_source_records where player_id like '%player_1775465792664_5664%'
 select scene,count(*) from visitor_source_records where  player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381'
 ,'player_1775652153130_8335','player_1772722064044_978','player_1772465771074_4106')  group by scene;
 

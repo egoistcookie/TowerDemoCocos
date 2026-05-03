@@ -9,6 +9,7 @@ import { ThunderChain } from '../ThunderChain';
 import { AudioManager } from '../AudioManager';
 import { UnitManager } from '../UnitManager';
 import { ThunderTowerLightningEffect } from '../ThunderTowerLightningEffect';
+import { getEnemyLikeScript } from '../EnemyScriptLookup';
 const { ccclass, property } = _decorator;
 
 // 建造阶段枚举
@@ -685,12 +686,7 @@ export class ThunderTower extends Build {
         for (const enemy of enemies) {
             if (!enemy || !enemy.isValid || !enemy.active) continue;
 
-            const enemyScript = enemy.getComponent('Enemy') as any ||
-                               enemy.getComponent('OrcWarlord') as any ||
-                               enemy.getComponent('OrcWarrior') as any ||
-                               enemy.getComponent('TrollSpearman') as any ||
-                               enemy.getComponent('MinotaurWarrior') as any ||
-                               enemy.getComponent('Boss') as any;
+            const enemyScript = getEnemyLikeScript(enemy);
 
             if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) continue;
 
@@ -815,12 +811,7 @@ export class ThunderTower extends Build {
         }
 
         // 应用伤害
-        const enemyScript = enemy.getComponent('Enemy') as any ||
-                           enemy.getComponent('OrcWarlord') as any ||
-                           enemy.getComponent('OrcWarrior') as any ||
-                           enemy.getComponent('TrollSpearman') as any ||
-                           enemy.getComponent('MinotaurWarrior') as any ||
-                           enemy.getComponent('Boss') as any;
+        const enemyScript = getEnemyLikeScript(enemy);
 
         if (enemyScript && enemyScript.takeDamage) {
             enemyScript.takeDamage(damage);

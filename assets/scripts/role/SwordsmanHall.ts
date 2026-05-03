@@ -5,6 +5,7 @@ import { TalentEffectManager } from '../TalentEffectManager';
 import { UnitInfo } from '../UnitInfoPanel';
 import { Build } from './Build';
 import { UnitPool } from '../UnitPool';
+import { getEnemyLikeScript } from '../EnemyScriptLookup';
 const { ccclass, property } = _decorator;
 
 @ccclass('SwordsmanHall')
@@ -528,7 +529,7 @@ export class SwordsmanHall extends Build {
             const enemies = enemiesNode.children || [];
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid && enemy.active) {
-                    const enemyScript = enemy.getComponent('Enemy') as any;
+                    const enemyScript = getEnemyLikeScript(enemy);
                     if (enemyScript && enemyScript.isAlive && enemyScript.isAlive()) {
                         const dx3 = enemy.worldPosition.x - position.x;
                         const dy3 = enemy.worldPosition.y - position.y;

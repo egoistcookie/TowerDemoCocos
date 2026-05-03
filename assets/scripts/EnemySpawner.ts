@@ -9,6 +9,8 @@ import { Boss } from './enemy/Boss';
 import { MinotaurWarrior } from './enemy/MinotaurWarrior';
 import { EnemyPool } from './EnemyPool';
 import { UnitManager } from './UnitManager';
+import { MemoryProbe } from './MemoryProbe';
+import { getEnemyLikeScript } from './EnemyScriptLookup';
 const { ccclass, property } = _decorator;
 
 // 定义波次配置接口
@@ -164,6 +166,8 @@ export class EnemySpawner extends Component {
     // 传送门被摧毁/堵门触发狂暴时：仅第10关提升到 1.2，其它关统一 1.1（降低前期难度）
     private readonly ORC_RAGE_PERSISTENT_GROWTH_FACTOR_LEVEL10: number = 1.2;
     private readonly ORC_RAGE_PERSISTENT_GROWTH_FACTOR_DEFAULT: number = 1.1;
+    /** 传送门摧毁等多次叠加后，相对关卡原始属性的成长倍率上限 */
+    private readonly PERSISTENT_ENEMY_GROWTH_CAP: number = 2;
     private orcBlockCheckTimer: number = 0;
     private orcMonitorElapsed: number = 0;
     private lastOrcBreakthroughTime: number = 0;
@@ -376,13 +380,7 @@ export class EnemySpawner extends Component {
         enemy.setParent(this.enemyContainer || this.node);
         enemy.setWorldPosition(spawnPos);
 
-        const enemyScript = enemy.getComponent('Enemy') as any
-            || enemy.getComponent('OrcWarrior') as any
-            || enemy.getComponent('OrcWarlord') as any
-            || enemy.getComponent('TrollSpearman') as any
-            || enemy.getComponent('Dragon') as any
-            || enemy.getComponent('Boss') as any
-            || enemy.getComponent(Boss) as any; // 兼容类引用
+        const enemyScript = getEnemyLikeScript(enemy);
 
         if (enemyScript) {
             enemyScript.prefabName = prefabName;
@@ -492,13 +490,7 @@ export class EnemySpawner extends Component {
         enemy.setParent(this.enemyContainer || this.node);
         enemy.setWorldPosition(worldPos);
 
-        const enemyScript = enemy.getComponent('Enemy') as any
-            || enemy.getComponent('OrcWarrior') as any
-            || enemy.getComponent('OrcWarlord') as any
-            || enemy.getComponent('TrollSpearman') as any
-            || enemy.getComponent('Dragon') as any
-            || enemy.getComponent('Boss') as any
-            || enemy.getComponent(Boss) as any;
+        const enemyScript = getEnemyLikeScript(enemy);
 
         if (enemyScript) {
             enemyScript.prefabName = prefabName;
@@ -1427,6 +1419,11 @@ export class EnemySpawner extends Component {
         }
 
         const waveNumber = this.currentWaveIndex + 1;
+        MemoryProbe.snapshot('EnemySpawner.endWave', {
+            currentWaveIndex: this.currentWaveIndex,
+            waveNumber,
+            isLastWave,
+        });
         // 波次刷新完成：金边完全消失
         this.pushWaveSpawnProgressToRefreshButton(true);
 
@@ -1615,6 +1612,11 @@ export class EnemySpawner extends Component {
             this.uiManager.showAnnouncement(`${this.currentWave.name} - ${this.currentWave.description}`);
             this.uiManager.showWarningEffect();
         }
+        MemoryProbe.snapshot('EnemySpawner.startWave', {
+            currentWaveIndex: this.currentWaveIndex,
+            waveName: this.currentWave?.name,
+            waveMultiplier: this.currentWaveCountMultiplier,
+        });
     }
     
     
@@ -1827,8 +1829,7 @@ export class EnemySpawner extends Component {
         enemy.setParent(this.enemyContainer || this.node);
         enemy.setWorldPosition(spawnPos);
 
-        // 设置敌人的目标水晶，支持所有敌人类型
-        const enemyScript = enemy.getComponent(Enemy) as any || enemy.getComponent(OrcWarrior) as any || enemy.getComponent(OrcWarlord) as any || enemy.getComponent(TrollSpearman) as any || enemy.getComponent(Boss) as any || enemy.getComponent('Boss') as any || enemy.getComponent('Dragon') as any;
+        const enemyScript = getEnemyLikeScript(enemy);
         if (enemyScript) {
             // 设置prefabName（用于对象池回收）
             enemyScript.prefabName = this.testEnemyType;
@@ -2105,7 +2106,10 @@ export class EnemySpawner extends Component {
                 this.currentLevel === 10
                     ? this.ORC_RAGE_PERSISTENT_GROWTH_FACTOR_LEVEL10
                     : this.ORC_RAGE_PERSISTENT_GROWTH_FACTOR_DEFAULT;
-            this.persistentEnemyGrowthMultiplier *= growthFactor;
+            this.persistentEnemyGrowthMultiplier = Math.min(
+                this.PERSISTENT_ENEMY_GROWTH_CAP,
+                this.persistentEnemyGrowthMultiplier * growthFactor
+            );
             this.isOrcRageSpawnBuffActive = true;
             this.orcRageSpawnBuffEndAt = -1;
             this.currentOrcRageTier = Math.max(1, rageTier);
@@ -2167,9 +2171,7 @@ export class EnemySpawner extends Component {
             }
         }
 
-        return enemyNode.getComponent('Enemy') as any ||
-            enemyNode.getComponent('Boss') as any ||
-            null;
+        return getEnemyLikeScript(enemyNode);
     }
 
     /**
@@ -2199,12 +2201,7 @@ export class EnemySpawner extends Component {
             }
             
             // 检查敌人是否存活
-            const enemyScript = enemy.getComponent('Enemy') as any ||
-                               enemy.getComponent('OrcWarrior') as any ||
-                               enemy.getComponent('OrcWarlord') as any ||
-                               enemy.getComponent('TrollSpearman') as any ||
-                               enemy.getComponent('MinotaurWarrior') as any ||
-                               enemy.getComponent('Boss') as any;
+            const enemyScript = getEnemyLikeScript(enemy);
             
             if (enemyScript) {
                 // 检查是否有isAlive方法

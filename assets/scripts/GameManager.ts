@@ -10,7 +10,11 @@ import { BuffCardConfigManager } from './BuffCardConfigManager';
 import { PlayerDataManager } from './PlayerDataManager';
 import { UnitManager } from './UnitManager';
 import { UnitPool } from './UnitPool';
+import { EnemyPool } from './EnemyPool';
 import { BuildingPool } from './BuildingPool';
+import { BattleFloatTextPool } from './BattleFloatTextPool';
+import { MemoryProbe } from './MemoryProbe';
+import { getEnemyLikeScript } from './EnemyScriptLookup';
 import { GameState } from './GameState';
 import { GamePopup } from './GamePopup';
 import { DamageStatistics } from './DamageStatistics';
@@ -185,7 +189,12 @@ export class GameManager extends Component {
     // 磨剑技能全局冷却（所有剑士共享）
     private swordSharpenSkillGlobalCooldownEndMs: number = 0;
     private swordSharpenSkillCooldownRefreshLoopId: number | null = null;
-    
+
+    private static readonly MEM_PROBE_SUMMARY_INTERVAL_SEC = 25;
+    private _memProbeSummaryAccumSec = 0;
+    private static readonly MEM_PROBE_NODE_TREE_INTERVAL_SEC = 30;
+    private _memProbeNodeTreeAccumSec = 0;
+
     /**
      * 加载全局增益卡片图标资源
      */
@@ -1990,6 +1999,51 @@ export class GameManager extends Component {
         this.updateUI();
         // 战斗中动态对话检测（内部有日志节流）
         this.tryTriggerBattleDialogs();
+
+        this.tickMemProbeSummary(deltaTime);
+        this.tickMemProbeNodeTree(deltaTime);
+    }
+
+    private tickMemProbeSummary(deltaTime: number): void {
+        if (!MemoryProbe.ENABLED) {
+            return;
+        }
+        this._memProbeSummaryAccumSec += deltaTime;
+        if (this._memProbeSummaryAccumSec < GameManager.MEM_PROBE_SUMMARY_INTERVAL_SEC) {
+            return;
+        }
+        this._memProbeSummaryAccumSec = 0;
+        const um = UnitManager.getInstance();
+        MemoryProbe.snapshot(
+            'Tick.summary',
+            {
+                gameTimeSec: Math.floor(this.gameTime),
+                currentWave: this.getCurrentWave(),
+                units: um?.getDebugSnapshot() ?? null,
+                unitPool: UnitPool.getInstance()?.getDebugStats() ?? {},
+                enemyPool: EnemyPool.getInstance()?.getDebugStats() ?? {},
+                buildingPool: BuildingPool.getInstance()?.getDebugStats() ?? {},
+                floatText: BattleFloatTextPool.getDebugStats(),
+            },
+            { includeSceneNodes: true }
+        );
+    }
+
+    /** 每 30 秒打印当前场景完整节点路径表，便于对照哪些在池内/隐藏等 */
+    private tickMemProbeNodeTree(deltaTime: number): void {
+        if (!MemoryProbe.ENABLED) {
+            return;
+        }
+        this._memProbeNodeTreeAccumSec += deltaTime;
+        if (this._memProbeNodeTreeAccumSec < GameManager.MEM_PROBE_NODE_TREE_INTERVAL_SEC) {
+            return;
+        }
+        this._memProbeNodeTreeAccumSec = 0;
+        try {
+            MemoryProbe.logSceneNodeTreeFull(Math.floor(this.gameTime));
+        } catch (e) {
+            console.error('[MEM_NODE] tick dump failed', e);
+        }
     }
 
     /**
@@ -5729,7 +5783,18 @@ export class GameManager extends Component {
             // 如果游戏准备就绪，开始游戏
             this.hasEndGameTriggered = false;
             this.gameState = GameState.Playing;
-            
+            MemoryProbe.resetBaseline();
+            this._memProbeSummaryAccumSec = 0;
+            this._memProbeNodeTreeAccumSec = 0;
+            // 约 5 秒后打一次节点树，避免只测半分钟却等不到 30s 周期；并用于确认当前包已含转储逻辑
+            if (MemoryProbe.ENABLED) {
+                this.scheduleOnce(() => {
+                    if (this.gameState === GameState.Playing && MemoryProbe.ENABLED) {
+                        MemoryProbe.logSceneNodeTreeFull(Math.floor(this.gameTime));
+                    }
+                }, 5);
+            }
+
             // 显示所有游戏元素
             this.showGameElements();
 
@@ -6843,6 +6908,7 @@ export class GameManager extends Component {
         root.on(Node.EventType.MOUSE_LEAVE, onEnd, this, true);
 
         this.startBowstringRealtimeLoop(barX, barY, barW, barH);
+        MemoryProbe.snapshot('MiniGame.bowstring.open', { requireReleaseGuard });
     }
 
     /**
@@ -7100,6 +7166,9 @@ export class GameManager extends Component {
             return;
         }
         this.bowstringMiniGameFinalized = true;
+        MemoryProbe.snapshot('MiniGame.bowstring.finalize', {
+            energy: Math.max(0, Math.min(1, this.bowstringMiniGameEnergyValue)),
+        });
       //console.log(`[BowstringMiniGame] finalize t=${Date.now()} energy=${this.bowstringMiniGameEnergyValue.toFixed(3)} cycle=${this.bowstringMiniGameCycleTime.toFixed(3)}`);
         this.bowstringMiniGameHold = false;
         this.stopBowstringHoldLoopSfx();
@@ -7490,6 +7559,7 @@ export class GameManager extends Component {
         setTimeout(() => {
             this.finalizeSwordsmanSharpenMiniGame();
         }, 5_000);
+        MemoryProbe.snapshot('MiniGame.swordSharpen.open', { requireInputGuard });
     }
 
     private finalizeSwordsmanSharpenMiniGame() {
@@ -7497,6 +7567,9 @@ export class GameManager extends Component {
             return;
         }
         this.swordSharpenMiniGameFinalized = true;
+        MemoryProbe.snapshot('MiniGame.swordSharpen.finalize', {
+            clicks: this.swordSharpenMiniGameClickCount,
+        });
         this.clearSwordSharpenRealtimeLoop();
 
         const clicks = this.swordSharpenMiniGameClickCount;
@@ -9971,7 +10044,7 @@ export class GameManager extends Component {
             const enemies = enemiesNode.children.slice(); // 复制数组，避免在遍历时修改
             for (const enemy of enemies) {
                 if (enemy && enemy.isValid) {
-                    const enemyScript = enemy.getComponent('Enemy') as any;
+                    const enemyScript = getEnemyLikeScript(enemy);
                     if (enemyScript && enemyScript.die) {
                         enemyScript.die();
                     } else {

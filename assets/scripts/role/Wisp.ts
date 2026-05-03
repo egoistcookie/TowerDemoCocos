@@ -1,6 +1,5 @@
 import { _decorator, Component, Node, Vec2, Vec3, Prefab, instantiate, find, Graphics, UITransform, Label, Color, EventTouch, Sprite, SpriteFrame, resources } from 'cc';
 import { GameManager, GameState } from '../GameManager';
-import { HealthBar } from '../HealthBar';
 import { DamageNumber } from '../DamageNumber';
 import { UnitSelectionManager } from '../UnitSelectionManager';
 import { UnitInfo } from '../UnitInfoPanel';
@@ -51,6 +50,22 @@ export class Wisp extends Role {
     private isInForestArea: boolean = false;
     private originalSpriteColor: Color | null = null;
     
+    /** 小精灵不展示头顶血条；预制体里若挂有 HealthBar 则移除 */
+    createHealthBar() {
+        const list = this.node.children.slice();
+        for (const n of list) {
+            if (n && n.isValid && n.name === 'HealthBar') {
+                n.destroy();
+            }
+        }
+        this.healthBarNode = null!;
+        this.healthBar = null!;
+    }
+
+    protected shouldShowTransientHealthBar(): boolean {
+        return false;
+    }
+
     start() {
         // 设置单位类型为CHARACTER
         this.unitType = UnitType.CHARACTER;
@@ -1123,12 +1138,12 @@ export class Wisp extends Role {
         const oldHealth = this.currentHealth;
         // 恢复血量，不超过最大值
         this.currentHealth = Math.min(this.currentHealth + amount, this.maxHealth);
-        
-        // 更新血条
-        if (this.healthBar) {
-            this.healthBar.setHealth(this.currentHealth);
+        const actualHeal = this.currentHealth - oldHealth;
+
+        if (actualHeal > 0) {
+            this.bumpTransientHealthBarAfterHit();
         }
-        
+
         // 更新单位信息面板
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
             this.unitSelectionManager.updateUnitInfo({

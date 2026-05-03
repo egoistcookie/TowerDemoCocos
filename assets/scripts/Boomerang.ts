@@ -1,5 +1,6 @@
 import { _decorator, Component, Node, Vec3, Sprite, tween, find } from 'cc';
 import { GameManager, GameState } from './GameManager';
+import { getEnemyLikeScript } from './EnemyScriptLookup';
 const { ccclass, property } = _decorator;
 
 @ccclass('Boomerang')
@@ -142,25 +143,21 @@ export class Boomerang extends Component {
 
         this.hasHitTarget = true;
 
-		// 直接对当前目标造成伤害，支持Enemy、OrcWarrior、OrcWarlord、TrollSpearman、Portal
-		const enemyScript = this.targetNode.getComponent('Enemy') as any
-			|| this.targetNode.getComponent('OrcWarrior') as any
-			|| this.targetNode.getComponent('OrcWarlord') as any
-			|| this.targetNode.getComponent('TrollSpearman') as any;
-		const portalScript = this.targetNode.getComponent('Portal') as any;
-		if (enemyScript && typeof enemyScript.isAlive === 'function' && enemyScript.isAlive() && typeof enemyScript.takeDamage === 'function') {
-			// 使用当前飞行方向作为受击方向
-			const currentPos = this.node.worldPosition.clone();
-			const dir = new Vec3();
-			Vec3.subtract(dir, currentPos, this.lastPos);
-			if (dir.length() > 0.001) {
-				dir.normalize();
-			}
-			enemyScript.takeDamage(this.currentDamage, dir);
-		} else if (portalScript && typeof portalScript.takeDamage === 'function') {
-			// 传送门不需要受击方向
-			portalScript.takeDamage(this.currentDamage);
+		// Portal 优先：takeDamage 签名与普通敌人不同
+		const portalOnly = this.targetNode.getComponent('Portal') as any;
+		if (portalOnly && typeof portalOnly.takeDamage === 'function') {
+			portalOnly.takeDamage(this.currentDamage);
 		} else {
+			const enemyScript = getEnemyLikeScript(this.targetNode);
+			if (enemyScript && typeof enemyScript.isAlive === 'function' && enemyScript.isAlive() && typeof enemyScript.takeDamage === 'function') {
+				const currentPos = this.node.worldPosition.clone();
+				const dir = new Vec3();
+				Vec3.subtract(dir, currentPos, this.lastPos);
+				if (dir.length() > 0.001) {
+					dir.normalize();
+				}
+				enemyScript.takeDamage(this.currentDamage, dir);
+			}
 		}
         
         // 调用回调函数，用于播放音效等辅助效果
@@ -223,11 +220,7 @@ export class Boomerang extends Component {
                     continue;
                 }
 
-				// 检查敌人是否存活，支持OrcWarlord、OrcWarrior、Enemy、TrollSpearman、Portal
-				const enemyScript = enemy.getComponent('OrcWarlord') as any
-					|| enemy.getComponent('OrcWarrior') as any
-					|| enemy.getComponent('Enemy') as any
-					|| enemy.getComponent('TrollSpearman') as any;
+				const enemyScript = getEnemyLikeScript(enemy);
 				const portalScript = enemy.getComponent('Portal') as any;
 				const isEnemyAlive = enemyScript && typeof enemyScript.isAlive === 'function' && enemyScript.isAlive();
 				// 对传送门：视作可被攻击（Portal.takeDamage 内部会在休眠时拒绝伤害）

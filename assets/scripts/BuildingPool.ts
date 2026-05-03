@@ -1,4 +1,5 @@
 import { _decorator, Component, Node, Prefab, instantiate, find } from 'cc';
+import { MemoryProbe } from './MemoryProbe';
 import { Build } from './role/Build';
 const { ccclass, property } = _decorator;
 
@@ -19,9 +20,9 @@ export class BuildingPool extends Component {
     // 预制体映射
     private prefabMap: Map<string, Prefab> = new Map();
     
-    // 对象池配置
-    private readonly INITIAL_POOL_SIZE: number = 3; // 初始池大小（建筑物通常较少）
-    private readonly MAX_POOL_SIZE: number = 20; // 最大池大小（每种类型）
+    // 对象池配置（建筑单类同时回收到池的量小，略降上限减少树下挂的整 prefab）
+    private readonly INITIAL_POOL_SIZE: number = 2;
+    private readonly MAX_POOL_SIZE: number = 14;
     
     // 活跃对象计数（用于调试）
     private activeCount: Map<string, number> = new Map();
@@ -171,6 +172,14 @@ export class BuildingPool extends Component {
             // 更新活跃计数
             const count = this.activeCount.get(prefabName) || 0;
             this.activeCount.set(prefabName, count + 1);
+
+            if (source.startsWith('新建对象')) {
+                MemoryProbe.snapshot('BuildingPool.new', {
+                    prefabName,
+                    source,
+                    active: count + 1,
+                });
+            }
         }
         
         return building;
@@ -292,6 +301,17 @@ export class BuildingPool extends Component {
             };
         }
         return stats;
+    }
+
+    getDebugStats(): Record<string, { pool: number; active: number }> {
+        const out: Record<string, { pool: number; active: number }> = {};
+        for (const [name, pool] of this.pools.entries()) {
+            out[name] = {
+                pool: pool.length,
+                active: this.activeCount.get(name) || 0,
+            };
+        }
+        return out;
     }
 }
 

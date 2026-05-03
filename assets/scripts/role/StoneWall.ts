@@ -5,6 +5,7 @@ import { BuildingGridPanel } from '../BuildingGridPanel';
 import { StoneWallGridPanel } from '../StoneWallGridPanel';
 import { UnitType } from './WarAncientTree';
 import { BuildingPool } from '../BuildingPool';
+import { getEnemyLikeScript } from '../EnemyScriptLookup';
 const { ccclass, property } = _decorator;
 
 @ccclass('StoneWall')
@@ -356,7 +357,7 @@ export class StoneWall extends Build {
         const enemies = enemiesNode ? enemiesNode.children : [];
         for (const enemy of enemies) {
             if (!enemy || !enemy.isValid || !enemy.active) continue;
-            const enemyScript = enemy.getComponent('Enemy') as any;
+            const enemyScript = getEnemyLikeScript(enemy);
             if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) continue;
             const enemyPos = enemy.worldPosition;
             const dx = enemyPos.x - trapPos.x;

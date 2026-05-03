@@ -1,5 +1,6 @@
 import { _decorator, Component, Node, Vec3, find, Sprite, SpriteFrame, UITransform, resources, UIOpacity } from 'cc';
 import { GameManager } from './GameManager';
+import { getEnemyLikeScript } from './EnemyScriptLookup';
 const { ccclass, property } = _decorator;
 
 /**
@@ -162,11 +163,7 @@ export class Tornado extends Component {
 		const r2 = radius * radius;
 		for (const enemy of enemiesNode.children) {
 			if (!enemy || !enemy.isValid || !enemy.active) continue;
-			const enemyScript = enemy.getComponent('Enemy') as any ||
-								enemy.getComponent('OrcWarlord') as any ||
-								enemy.getComponent('OrcWarrior') as any ||
-								enemy.getComponent('TrollSpearman') as any ||
-								enemy.getComponent('Boss') as any;
+			const enemyScript = getEnemyLikeScript(enemy);
 			if (!enemyScript) continue;
 			// 判断是否活着（Boss/Enemy都有 isAlive）
 			if (enemyScript.isAlive && typeof enemyScript.isAlive === 'function') {

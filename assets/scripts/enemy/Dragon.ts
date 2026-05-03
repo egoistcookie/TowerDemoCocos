@@ -794,10 +794,7 @@ export class Dragon extends Enemy {
 
         this.currentHealth -= damage;
 
-        // 更新血条
-        if (this.healthBar) {
-            this.healthBar.setHealth(this.currentHealth);
-        }
+        this.bumpTransientHealthBarAfterHit();
 
         if (this.currentHealth <= 0) {
             this.currentHealth = 0;

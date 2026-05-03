@@ -2,6 +2,7 @@ import { _decorator, AudioClip, SpriteFrame, Node, Color, Label, UIOpacity, twee
 import { Boss } from './Boss';
 import { AudioManager } from '../AudioManager';
 import { EnemyPool } from '../EnemyPool';
+import { getEnemyLikeScript } from '../EnemyScriptLookup';
 
 const { ccclass, property } = _decorator;
 
@@ -158,9 +159,7 @@ export class OrcWarlord extends Boss {
             
             // 手动扣血（跳过父类的 takeDamage，避免受击动画干扰）
             bossThis.currentHealth = healthAfterDamage;
-            if (bossThis.healthBar) {
-                bossThis.healthBar.setHealth(bossThis.currentHealth);
-            }
+            this.bumpTransientHealthBarAfterHit();
             
             // 显示伤害数字
             this.showDamageNumber(damage);
@@ -246,11 +245,7 @@ export class OrcWarlord extends Boss {
                         return;
                     }
                     if (!enemy || !enemy.isValid) return;
-                    const enemyScript =
-                        (enemy.getComponent('Enemy') as any) ||
-                        (enemy.getComponent('OrcWarrior') as any) ||
-                        (enemy.getComponent('OrcWarlord') as any) ||
-                        (enemy.getComponent('Boss') as any);
+                    const enemyScript = getEnemyLikeScript(enemy);
                     if (enemyScript) {
                         // 使用基类提供的移除接口
                         (this as any).removeWarcryBuff(enemy, enemyScript);
@@ -274,10 +269,7 @@ export class OrcWarlord extends Boss {
         // 显示 +xGold 飘字
         this.showGoldRewardText();
 
-        // 销毁血条节点
-        if ((this as any).healthBarNode && (this as any).healthBarNode.isValid) {
-            (this as any).healthBarNode.destroy();
-        }
+        this.destroyTransientHealthBarNow();
 
         // 播放死亡音效
         if (this.deathSound) {
@@ -301,10 +293,10 @@ export class OrcWarlord extends Boss {
             }
         };
 
-        // 与基类保持一致：尸体暂留1分钟后返回对象池
+        // 尸体暂留 30 秒后返回对象池（基类 Boss 为 60 秒，督军单独缩短）
         setTimeout(() => {
             returnToPool();
-        }, 60000);
+        }, 30000);
     }
     
     /**

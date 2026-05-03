@@ -24,6 +24,7 @@ import { Build } from './role/Build';
 import { Role } from './role/Role';
 import { SoundManager } from './SoundManager';
 import { AudioManager } from './AudioManager';
+import { MemoryProbe } from './MemoryProbe';
 const { ccclass, property } = _decorator;
 
 @ccclass('TowerBuilder')
@@ -238,19 +239,13 @@ export class TowerBuilder extends Component {
     private readonly UNIT_STAR_Y = 55;
     private readonly STAR_EFFECT_DURATION = 3.0; // 升星旋转特效时长（秒）
     private readonly STAR_SHOW_DURATION = 5.0; // 星标显示时长（秒）
-    private starPoolRoot: Node | null = null;
-    private readonly starContainerPool: Node[] = [];
     private readonly starHideTokenByNode = new WeakMap<Node, number>();
     private readonly starHideCbByNode = new WeakMap<Node, () => void>();
     private starHideTokenSeq = 1;
-    private readonly STAR_FX_POOL_ROOT_NAME = 'StarUpgradeFxPool';
     private static readonly STAR_PARTICLE_GFX_READY_KEY = '__starParticleGfxReady';
     private static readonly STAR_BURST_GFX_READY_KEY = '__starBurstGfxReady';
-    private readonly MIN_STAR_FX_POOL_SIZE = 4;
-    private readonly MAX_STAR_FX_POOL_SIZE = 24;
+    /** 建筑升星时对已产出单位播放特效的上限（非池化，用完即销毁） */
     private readonly MAX_STAR_FX_PER_UPGRADE = 8;
-    private starFxPoolRoot: Node | null = null;
-    private readonly starFxPool: Node[] = [];
 
     /**
      * 由 GameManager 在分包加载完毕后调用，注入分包中的预制体
@@ -330,7 +325,7 @@ export class TowerBuilder extends Component {
     }
 
     public applyStarToBuildingNode(node: Node, starLevel: number) {
-        // 防御塔/石墙不展示星标（若此前有残留则回收进星池）
+        // 防御塔/石墙不展示星标（若此前有残留则销毁）
         if (this.isStarDisplayDisabledForBuilding(node)) {
             const old = node.getChildByName(this.STAR_CONTAINER_NAME);
             if (old && old.isValid) this.releaseStarContainer(node, old);
@@ -340,31 +335,25 @@ export class TowerBuilder extends Component {
     }
 
     public applyStarToUnitNode(node: Node, starLevel: number) {
-        // 单位头顶星：轻量独立路径（仅选中或升星特效期间展示，见 enqueueUnitStarApply / UnitSelectionManager）
+        // 单位头顶星：每次展示整棵子树新建；收起时 hideUnitStarNode 整棵销毁（不入池）
         if (!node || !node.isValid) return;
         if (!this.starIcon) return;
         const level = Math.max(1, Math.min(3, Math.floor(Number(starLevel || 1))));
 
-        let container = node.getChildByName(this.STAR_CONTAINER_NAME);
-        if (!container || !container.isValid) {
-            container = new Node(this.STAR_CONTAINER_NAME);
-            container.setParent(node);
-        }
+        const existed = node.getChildByName(this.STAR_CONTAINER_NAME);
+        if (existed && existed.isValid) existed.destroy();
+
+        const container = new Node(this.STAR_CONTAINER_NAME);
+        container.setParent(node);
         container.active = true;
         container.setPosition(0, this.UNIT_STAR_Y, 0);
         container.angle = 0;
 
-        // 仅在刷新时做一次反拉伸补偿，不做每帧维护
         this.updateStarContainerAntiStretch(node, container);
 
-        const starSize = 16; // 单位星标缩放为原来的 0.8 倍
+        const starSize = 16;
         const gap = 2;
-        while (container.children.length > level) {
-            const ch = container.children[container.children.length - 1];
-            if (ch && ch.isValid) ch.destroy();
-            else break;
-        }
-        while (container.children.length < level) {
+        for (let i = 0; i < level; i++) {
             const star = new Node('Star');
             star.setParent(container);
             star.addComponent(UITransform).setContentSize(starSize, starSize);
@@ -584,7 +573,7 @@ export class TowerBuilder extends Component {
         // 防止短时间重复叠加同名特效
         const oldFx = node.getChildByName('StarUpgradeFx');
         if (oldFx && oldFx.isValid) {
-            this.recycleStarUpgradeEffect(oldFx);
+            this.disposeStarUpgradeEffect(oldFx);
         }
 
         const fxStarLv = opts?.unitStarLevelForFx;
@@ -715,7 +704,7 @@ export class TowerBuilder extends Component {
             .to(0.8, { opacity: 0 })
             .call(() => {
                 try {
-                    if (effectRoot && effectRoot.isValid) this.recycleStarUpgradeEffect(effectRoot);
+                    if (effectRoot && effectRoot.isValid) this.disposeStarUpgradeEffect(effectRoot);
                     if (hideHeadAfter && fxTarget && fxTarget.isValid && fxTarget.getComponent('Role')) {
                         const usm = this.resolveUnitSelectionManager();
                         if (!usm || !usm.isUnitSelected(fxTarget)) {
@@ -727,18 +716,6 @@ export class TowerBuilder extends Component {
                 }
             })
             .start();
-    }
-
-    private getStarFxPoolRoot(): Node {
-        if (this.starFxPoolRoot && this.starFxPoolRoot.isValid) return this.starFxPoolRoot;
-        let root = this.node.getChildByName(this.STAR_FX_POOL_ROOT_NAME);
-        if (!root || !root.isValid) {
-            root = new Node(this.STAR_FX_POOL_ROOT_NAME);
-            root.setParent(this.node);
-            root.active = false;
-        }
-        this.starFxPoolRoot = root;
-        return root;
     }
 
     private createStarUpgradeEffectNode(): Node {
@@ -780,31 +757,14 @@ export class TowerBuilder extends Component {
     }
 
     private acquireStarUpgradeEffect(): Node {
-        this.ensureMinStarFxPoolSize();
-        while (this.starFxPool.length > 0) {
-            const fx = this.starFxPool.pop()!;
-            if (fx && fx.isValid) {
-                this.stopTweensRecursive(fx);
-                return fx;
-            }
-        }
         return this.createStarUpgradeEffectNode();
     }
 
-    private recycleStarUpgradeEffect(effectRoot: Node | null) {
+    /** 升星特效子树用完即销毁（不入池），减少场景常驻节点 */
+    private disposeStarUpgradeEffect(effectRoot: Node | null) {
         if (!effectRoot || !effectRoot.isValid) return;
         this.stopTweensRecursive(effectRoot);
-        effectRoot.active = false;
-        effectRoot.setScale(1, 1, 1);
-        effectRoot.setPosition(0, 0, 0);
-        const opacity = effectRoot.getComponent(UIOpacity);
-        if (opacity) opacity.opacity = 255;
-        effectRoot.setParent(this.getStarFxPoolRoot());
-        if (this.starFxPool.length >= this.MAX_STAR_FX_POOL_SIZE) {
-            effectRoot.destroy();
-            return;
-        }
-        this.starFxPool.push(effectRoot);
+        effectRoot.destroy();
     }
 
     private stopTweensRecursive(node: Node) {
@@ -814,16 +774,6 @@ export class TowerBuilder extends Component {
         if (op) Tween.stopAllByTarget(op);
         for (const c of node.children) {
             this.stopTweensRecursive(c);
-        }
-    }
-
-    private ensureMinStarFxPoolSize() {
-        const need = Math.max(0, this.MIN_STAR_FX_POOL_SIZE - this.starFxPool.length);
-        for (let i = 0; i < need; i++) {
-            const fx = this.createStarUpgradeEffectNode();
-            fx.active = false;
-            fx.setParent(this.getStarFxPoolRoot());
-            this.starFxPool.push(fx);
         }
     }
 
@@ -938,54 +888,27 @@ export class TowerBuilder extends Component {
         } catch {}
     }
 
-    private ensureStarPoolRoot(): Node {
-        if (this.starPoolRoot && this.starPoolRoot.isValid) {
-            return this.starPoolRoot;
-        }
-        let root = this.node.getChildByName('StarPoolRoot');
-        if (!root || !root.isValid) {
-            root = new Node('StarPoolRoot');
-            root.setParent(this.node);
-        }
-        root.active = false;
-        this.starPoolRoot = root;
-        return root;
-    }
-
+    /**
+     * 建筑头顶常驻星标容器：仅在带星标的生产建筑上保留；不放入全局池，避免与「用完即销毁」策略混用。
+     */
     private acquireStarContainer(owner: Node): Node {
         const existed = owner.getChildByName(this.STAR_CONTAINER_NAME);
         if (existed && existed.isValid) {
             existed.active = true;
             return existed;
         }
-        let container: Node | null = null;
-        while (this.starContainerPool.length > 0 && !container) {
-            const cand = this.starContainerPool.pop()!;
-            if (cand && cand.isValid) {
-                container = cand;
-            }
-        }
-        if (!container) {
-            container = new Node(this.STAR_CONTAINER_NAME);
-        }
-        container.name = this.STAR_CONTAINER_NAME;
+        const container = new Node(this.STAR_CONTAINER_NAME);
         container.setParent(owner);
         container.active = true;
         container.angle = 0;
         return container;
     }
 
+    /** 石墙/哨塔等不展示星标时移除子节点（销毁，不再入池） */
     private releaseStarContainer(owner: Node | null, container: Node) {
         if (!container || !container.isValid) return;
         Tween.stopAllByTarget(container);
-        container.angle = 0;
-        container.active = false;
-        container.setParent(this.ensureStarPoolRoot());
-        if (this.starContainerPool.indexOf(container) < 0) {
-            this.starContainerPool.push(container);
-        }
         if (owner && owner.isValid) {
-            // 失效当前 owner 的旧显示 token，避免旧定时器影响新一轮显示
             this.starHideTokenByNode.set(owner, this.starHideTokenSeq++);
             const prevCb = this.starHideCbByNode.get(owner);
             if (prevCb) {
@@ -993,6 +916,7 @@ export class TowerBuilder extends Component {
                 this.starHideCbByNode.delete(owner);
             }
         }
+        container.destroy();
     }
 
     private updateStarContainerAntiStretch(targetNode: Node, container?: Node | null) {
@@ -1089,6 +1013,16 @@ export class TowerBuilder extends Component {
         else dstBuild.starLevel = nextStar;
         this.applyStarToBuildingNode(target, nextStar);
         this._logStarUpgradeSfx('tryMergeBuildings: merged', { type: srcKey, fromStar: srcStar, toStar: nextStar });
+        MemoryProbe.snapshot(
+            'Tower.mergeStar',
+            {
+                path: 'tryMergeBuildings',
+                type: srcKey,
+                fromStar: srcStar,
+                toStar: nextStar,
+            },
+            { includeSceneNodes: true }
+        );
         this.playStarUpgradeFxAndAutoHide(target);
         this.playUpgradeEffectForProducedUnits(dstBuild, nextStar);
 
@@ -1151,6 +1085,18 @@ export class TowerBuilder extends Component {
             gridX,
             gridY,
         });
+        MemoryProbe.snapshot(
+            'Tower.mergeStar',
+            {
+                path: 'tryMergeCandidateBuildingAtGrid',
+                type: srcTypeId,
+                fromStar: dstStar,
+                toStar: nextStar,
+                gridX,
+                gridY,
+            },
+            { includeSceneNodes: true }
+        );
         this.playStarUpgradeFxAndAutoHide(target);
         this.playUpgradeEffectForProducedUnits(dstBuild, nextStar);
 
@@ -1793,6 +1739,11 @@ export class TowerBuilder extends Component {
         this.currentWaveBuildingCandidates = [...picked];
         this.buildingPanel.setBuildingTypes(this.currentWaveBuildingCandidates);
         this.lastCandidateKey = makeKey(picked);
+        MemoryProbe.snapshot('Tower.refreshCandidates', {
+            manualRefresh: avoidSameAsLast,
+            candidateNames: picked.map((t) => t?.name).filter(Boolean),
+            pickCount: picked.length,
+        });
     }
 
     private consumeCandidateAfterPlaced(placedBuilding: BuildingType | null): void {
@@ -2733,6 +2684,17 @@ export class TowerBuilder extends Component {
 
         if (placementDispatched) {
             this.playBuildPlaceSfxIfAny();
+            let grid: { x: number; y: number } | undefined;
+            if (this.gridPanel) {
+                const g = this.gridPanel.worldToGrid(worldPosition);
+                if (g) {
+                    grid = { x: g.x, y: g.y };
+                }
+            }
+            MemoryProbe.snapshot('Tower.place', {
+                buildingName: building.name,
+                grid,
+            });
         }
 
         // 候选框中的建筑一旦成功安置，即从候选列表中移除

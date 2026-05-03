@@ -1,6 +1,7 @@
 import { _decorator, Node, Vec3, find, EventTouch } from 'cc';
 import { Role } from './Role';
 import { UnitManager } from '../UnitManager';
+import { getEnemyLikeScript } from '../EnemyScriptLookup';
 import { UnitType } from '../UnitType';
 import { GameState } from '../GameState';
 import { UnitInfoPanel } from '../UnitInfoPanel';
@@ -276,9 +277,9 @@ export class Bear extends Role {
 
         if (this.currentTarget && this.currentTarget.isValid) {
             const dist = this.getDistanceToTarget();
-            const enemyComp = this.currentTarget.getComponent('Enemy');
+            const enemyComp = getEnemyLikeScript(this.currentTarget);
             const isAlive = enemyComp && (enemyComp as any).isAlive ? (enemyComp as any).isAlive() : 'N/A';
-            const hasEnemyComp = !!this.currentTarget.getComponent('Enemy');
+            const hasEnemyComp = !!getEnemyLikeScript(this.currentTarget);
             const hasOrcComp = !!this.currentTarget.getComponent('Orc');
             // console.log(`[Bear] 当前目标：${this.currentTarget.name}, 距离：${dist.toFixed(1)}, 位置：(${this.currentTarget.worldPosition.x.toFixed(1)}, ${this.currentTarget.worldPosition.y.toFixed(1)}), isAlive=${isAlive}, hasEnemy=${hasEnemyComp}, hasOrc=${hasOrcComp}`);
             if (dist <= this.attackRange) {
@@ -340,8 +341,7 @@ export class Bear extends Role {
             return;
         }
 
-        const targetScript = this.currentTarget.getComponent('Enemy') as any ||
-                            this.currentTarget.getComponent('Portal') as any ||
+        const targetScript = getEnemyLikeScript(this.currentTarget) ||
                             this.currentTarget.getComponent('Role') as any ||
                             this.currentTarget.getComponent('Build') as any;
 
@@ -398,9 +398,7 @@ export class Bear extends Role {
 
         // 巨熊是地面近战单位，过滤掉飞行单位（无法攻击到空中目标）
         targets = targets.filter(target => {
-            const targetScript = target.getComponent('Enemy') as any ||
-                                target.getComponent('Role') as any ||
-                                target.getComponent('Dragon') as any;
+            const targetScript = getEnemyLikeScript(target) || target.getComponent('Role') as any;
             // 如果目标是飞行单位，过滤掉
             if (targetScript && targetScript.isFlying === true) {
                 return false;
@@ -425,8 +423,7 @@ export class Bear extends Role {
                 continue;
             }
 
-            const targetScript = target.getComponent('Enemy') ||
-                                target.getComponent('Orc') ||
+            const targetScript = getEnemyLikeScript(target) ||
                                 target.getComponent('Role') ||
                                 target.getComponent('Arrower') ||
                                 target.getComponent('Hunter') ||
@@ -681,14 +678,11 @@ export class Bear extends Role {
 
         this.currentHealth = Math.max(0, this.currentHealth - damage);
 
+        // 与 Role 一致：受击后临时头顶血条（约 3 秒后收起）
+        this.bumpTransientHealthBarAfterHit();
+
         // 显示伤害数字
         this.showDamageNumber(damage, false, hitDirection);
-
-        // 更新血条
-        const healthBar = (this as any).healthBar;
-        if (healthBar && healthBar.setHealth) {
-            healthBar.setHealth(this.currentHealth);
-        }
 
         // 只有超过韧性阈值才播放受击动画
         if (shouldPlayHitAnimation) {
@@ -703,12 +697,7 @@ export class Bear extends Role {
             // 立即停止所有动画（移动、攻击等），只保留死亡动画
             this.stopAllAnimations();
 
-            // 销毁血条
-            if (this.healthBarNode && this.healthBarNode.isValid) {
-                this.healthBarNode.destroy();
-            }
-            this.healthBarNode = null!;
-            this.healthBar = null!;
+            this.destroyTransientHealthBarNow();
 
             this.playDeathAnimation();
             // 尸体留存 10 秒后销毁

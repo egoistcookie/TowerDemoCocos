@@ -13,6 +13,7 @@ import { DamageStatistics } from '../DamageStatistics';
 import { BuffManager } from '../BuffManager';
 import { TalentEffectManager } from '../TalentEffectManager';
 import { BattleFloatTextPool } from '../BattleFloatTextPool';
+import { cancelTransientHealthBarHide, scheduleTransientHealthBarHide } from '../TransientHealthBar';
 import { Role } from './Role';
 const { ccclass, property } = _decorator;
 
@@ -167,6 +168,7 @@ export class Build extends Component {
      */
     onEnable() {
        //console.info(`[Build] onEnable 被调用，单位类型: ${this.constructor.name}`);
+        this.destroyTransientHealthBarNow();
         
         // 先获取关卡信息并应用关卡血量规则，再进行本轮状态初始化
         this.findGameManager();
@@ -184,17 +186,6 @@ export class Build extends Component {
         
         // 重新查找网格面板
         this.findGridPanel();
-        
-        // 重新创建血条（如果不存在）
-        if (!this.healthBarNode || !this.healthBarNode.isValid) {
-            this.createHealthBar();
-        } else {
-            // 如果血条已存在，更新血条状态
-            if (this.healthBar) {
-                this.healthBar.setMaxHealth(this.maxHealth);
-                this.healthBar.setHealth(this.currentHealth);
-            }
-        }
         
         // 应用天赋增幅（必须在应用卡片增幅之前）
         this.applyTalentEnhancements();
@@ -230,9 +221,6 @@ export class Build extends Component {
 
         // 查找网格面板
         this.findGridPanel();
-
-        // 创建血条
-        this.createHealthBar();
         
         // 应用天赋增幅（必须在应用卡片增幅之前）
         this.applyTalentEnhancements();
@@ -337,6 +325,28 @@ export class Build extends Component {
     }
 
     protected createHealthBar() {
+        const siblings = this.node.children;
+        const existingBars: Node[] = [];
+        for (let i = 0; i < siblings.length; i++) {
+            const n = siblings[i];
+            if (n.name === 'HealthBar' && n.getComponent(HealthBar)) {
+                existingBars.push(n);
+            }
+        }
+        if (existingBars.length > 0) {
+            this.healthBarNode = existingBars[0];
+            this.healthBar = this.healthBarNode.getComponent(HealthBar)!;
+            for (let j = 1; j < existingBars.length; j++) {
+                if (existingBars[j].isValid) {
+                    existingBars[j].destroy();
+                }
+            }
+            this.healthBarNode.setPosition(0, 50, 0);
+            this.healthBar.setMaxHealth(this.maxHealth);
+            this.healthBar.setHealth(this.currentHealth);
+            return;
+        }
+
         this.healthBarNode = new Node('HealthBar');
         this.healthBarNode.setParent(this.node);
         this.healthBarNode.setPosition(0, 50, 0);
@@ -346,6 +356,29 @@ export class Build extends Component {
             this.healthBar.setMaxHealth(this.maxHealth);
             this.healthBar.setHealth(this.currentHealth);
         }
+    }
+
+    protected destroyTransientHealthBarNow(): void {
+        cancelTransientHealthBarHide(this);
+        if (this.healthBarNode && this.healthBarNode.isValid) {
+            this.healthBarNode.destroy();
+        }
+        this.healthBarNode = null!;
+        this.healthBar = null!;
+    }
+
+    protected bumpTransientHealthBarAfterHit(): void {
+        if (!this.healthBarNode || !this.healthBarNode.isValid) {
+            this.createHealthBar();
+        } else {
+            if (this.healthBar) {
+                this.healthBar.setMaxHealth(this.maxHealth);
+                this.healthBar.setHealth(this.currentHealth);
+            }
+            this.healthBarNode.active = true;
+        }
+        cancelTransientHealthBarHide(this);
+        scheduleTransientHealthBarHide(this, () => this.destroyTransientHealthBarNow());
     }
 
     // 最近一次受击方向（用于伤害数字沿攻击方向飘动）
@@ -375,9 +408,7 @@ export class Build extends Component {
         this.showDamageNumber(finalDamage, isCritical, hitDirection);
 
         // 更新血条
-        if (this.healthBar) {
-            this.healthBar.setHealth(this.currentHealth);
-        }
+        this.bumpTransientHealthBarAfterHit();
 
         if (this.currentHealth <= 0) {
             this.die();
@@ -445,9 +476,8 @@ export class Build extends Component {
         this.currentHealth = Math.min(this.currentHealth + amount, this.maxHealth);
         const actualHeal = this.currentHealth - oldHealth;
 
-        // 更新血条
-        if (this.healthBar) {
-            this.healthBar.setHealth(this.currentHealth);
+        if (actualHeal > 0) {
+            this.bumpTransientHealthBarAfterHit();
         }
 
         // 更新单位信息面板
@@ -525,6 +555,7 @@ export class Build extends Component {
         }
 
         this.isDestroyed = true;
+        this.destroyTransientHealthBarNow();
 
         // 释放网格占用（确保能找到网格面板）
         if (!this.gridPanel) {
@@ -612,27 +643,7 @@ export class Build extends Component {
         // 重置baseY，确保下次建造时重新计算
         this.baseY = Number.NaN;
         
-        // 重置血条（如果血条节点存在，尝试更新；否则重新创建）
-        if (this.healthBarNode && this.healthBarNode.isValid) {
-            // 血条节点存在，尝试获取或重新获取HealthBar组件
-            if (!this.healthBar) {
-                this.healthBar = this.healthBarNode.getComponent(HealthBar);
-            }
-            if (this.healthBar) {
-                this.healthBar.setMaxHealth(this.maxHealth);
-                this.healthBar.setHealth(this.currentHealth);
-            } else {
-                // 如果HealthBar组件丢失，重新创建
-                this.createHealthBar();
-            }
-        } else {
-            // 血条节点不存在，重新创建
-            this.healthBarNode = null!;
-            this.healthBar = null!;
-            if (this.node && this.node.isValid) {
-                this.createHealthBar();
-            }
-        }
+        this.destroyTransientHealthBarNow();
         
         // 重置节点状态
         if (this.node) {
