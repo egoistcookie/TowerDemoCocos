@@ -30,6 +30,9 @@ export class AudioManager extends Component {
 
     // 专用祈祷音效节点（不会被其他音效占用）
     private holyPrayerSFXNode: Node | null = null;
+
+    /** 狼专用单声道：播完前不打断、不叠播 */
+    private wolfSFXNode: Node | null = null;
     
     /**
      * 获取单例实例（只在场景中查找，找不到则打印日志并返回 null）
@@ -134,6 +137,8 @@ export class AudioManager extends Component {
         
         // 初始化专用祈祷音效节点
         this.initHolyPrayerSFXNode();
+
+        this.initWolfSFXNode();
     }
     
     /**
@@ -163,6 +168,21 @@ export class AudioManager extends Component {
         this.holyPrayerSFXNode.setParent(this.node);
         this.holyPrayerSFXNode.active = true;
         const audioSource = this.holyPrayerSFXNode.addComponent(AudioSource);
+        audioSource.loop = false;
+        audioSource.volume = this.sfxVolume;
+    }
+
+    private initWolfSFXNode(): void {
+        if (!this.node || !this.node.isValid) {
+            return;
+        }
+        if (this.wolfSFXNode && this.wolfSFXNode.isValid) {
+            return;
+        }
+        this.wolfSFXNode = new Node('WolfSFX');
+        this.wolfSFXNode.setParent(this.node);
+        this.wolfSFXNode.active = true;
+        const audioSource = this.wolfSFXNode.addComponent(AudioSource);
         audioSource.loop = false;
         audioSource.volume = this.sfxVolume;
     }
@@ -286,6 +306,35 @@ export class AudioManager extends Component {
     }
 
     /**
+     * 狼类音效：单通道播放；当前仍在播放时忽略新请求（不叠播、不打断）
+     */
+    public playWolfSFX(clip: AudioClip): void {
+        if (!clip) {
+            return;
+        }
+        if (!this.wolfSFXNode || !this.wolfSFXNode.isValid) {
+            this.initWolfSFXNode();
+        }
+        if (!this.wolfSFXNode || !this.wolfSFXNode.isValid) {
+            this.playSFX(clip);
+            return;
+        }
+        const audioSource = this.wolfSFXNode.getComponent(AudioSource);
+        if (!audioSource) {
+            this.playSFX(clip);
+            return;
+        }
+        if (audioSource.playing) {
+            return;
+        }
+        audioSource.stop();
+        audioSource.clip = clip;
+        audioSource.volume = this.sfxVolume;
+        audioSource.loop = false;
+        audioSource.play();
+    }
+
+    /**
      * 播放祈祷音效（使用专用节点，不会被其他音效打断）
      * @param clip 音频资源
      * @param volumeMultiplier 音量倍数（例如 1.5 表示 1.5 倍音量）
@@ -344,6 +393,12 @@ export class AudioManager extends Component {
                 }
             }
         }
+        if (this.wolfSFXNode && this.wolfSFXNode.isValid) {
+            const as = this.wolfSFXNode.getComponent(AudioSource);
+            if (as) {
+                as.stop();
+            }
+        }
     }
     
     /**
@@ -373,6 +428,12 @@ export class AudioManager extends Component {
         // 更新专用祈祷音效节点的音量
         if (this.holyPrayerSFXNode && this.holyPrayerSFXNode.isValid) {
             const audioSource = this.holyPrayerSFXNode.getComponent(AudioSource);
+            if (audioSource) {
+                audioSource.volume = this.sfxVolume;
+            }
+        }
+        if (this.wolfSFXNode && this.wolfSFXNode.isValid) {
+            const audioSource = this.wolfSFXNode.getComponent(AudioSource);
             if (audioSource) {
                 audioSource.volume = this.sfxVolume;
             }
@@ -414,6 +475,14 @@ export class AudioManager extends Component {
                 }
                 this.holyPrayerSFXNode.destroy();
                 this.holyPrayerSFXNode = null;
+            }
+            if (this.wolfSFXNode && this.wolfSFXNode.isValid) {
+                const audioSource = this.wolfSFXNode.getComponent(AudioSource);
+                if (audioSource) {
+                    audioSource.stop();
+                }
+                this.wolfSFXNode.destroy();
+                this.wolfSFXNode = null;
             }
         }
     }

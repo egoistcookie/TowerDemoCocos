@@ -23,27 +23,33 @@ export class HealthBar extends Component {
     private currentHealth: number = 100;
     private nameLabel: Label = null!;
 
-    start() {
-        // 添加 UITransform 组件
-        const uiTransform = this.node.getComponent(UITransform);
+    onLoad() {
+        // 必须在 onLoad 完成 Graphics：Enemy.createHealthBar 在 addComponent 后会立刻 setHealth，
+        // 若放到 start() 则首帧 updateBar 时 graphics 仍为 null，近战首刀常不出现血条。
+        let uiTransform = this.node.getComponent(UITransform);
         if (!uiTransform) {
-            this.node.addComponent(UITransform);
+            uiTransform = this.node.addComponent(UITransform);
         }
 
-        // 添加 Graphics 组件
         this.graphics = this.node.getComponent(Graphics);
         if (!this.graphics) {
             this.graphics = this.node.addComponent(Graphics);
         }
 
-        // 如果是 Boss 血条，创建名称标签
         if (this.isBossBar) {
             this.createNameLabel();
         }
 
-        // 设置节点大小
-        if (uiTransform) {
-            uiTransform.setContentSize(this.barWidth + 4, this.barHeight + 4);
+        uiTransform.setContentSize(this.barWidth + 4, this.barHeight + 4);
+        this.updateBar();
+    }
+
+    /**
+     * addComponent 后 onLoad 早于外部写入 isBossBar，Boss 名标签需在 start 补建
+     */
+    start() {
+        if (this.isBossBar && !this.nameLabel) {
+            this.createNameLabel();
         }
     }
 
@@ -233,6 +239,9 @@ export class HealthBar extends Component {
      */
     setBossName(name: string) {
         this.bossName = name;
+        if (this.isBossBar && !this.nameLabel) {
+            this.createNameLabel();
+        }
         if (this.nameLabel) {
             this.nameLabel.string = name;
         }

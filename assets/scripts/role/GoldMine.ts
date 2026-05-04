@@ -16,6 +16,18 @@ enum CaptureState {
 
 @ccclass('GoldMine')
 export class GoldMine extends Build {
+    /**
+     * Canvas 下战场单位/建筑容器名（与 docs/节点路径.md「敌人与容器」「我方单位容器」等一致），
+     * 用于占领/被夺飘字 siblingIndex 置于其之上，避免被狼/箭塔等盖住。
+     */
+    private static readonly FLOAT_TEXT_ABOVE_UNIT_CONTAINERS = new Set<string>([
+        'Towers', 'Enemies', 'Orcs', 'TrollSpearmans', 'OrcWarriors', 'OrcWarlords',
+        'MinotaurWarriors', 'Dragons', 'Boss', 'Portals', 'GoldMines', 'Wolves',
+        'Hunters', 'ElfSwordsmans', 'Mages', 'EagleArchers', 'Eagles', 'Bears',
+        'WarAncientTrees', 'HunterHalls', 'MageTowers', 'SwordsmanHalls', 'Churches',
+        'WatchTowers', 'IceTowers', 'ThunderTowers', 'StoneWalls', 'Wisps', 'Crystal',
+    ]);
+
     // 金矿属性
     @property
     goldOutputRate: number = 1; // 每秒产出的金币
@@ -225,6 +237,14 @@ export class GoldMine extends Build {
                   //console.log('[GoldMine] 被我方占领');
                 // 播放占领成功音效
                 this.playCaptureSuccessSound();
+                this.showMineFloatText(
+                    '占领金矿！',
+                    22,
+                    new Color(255, 215, 0, 255),
+                    new Color(0, 0, 0, 255),
+                    3,
+                    'aboveBattleUnits'
+                );
             }
         } else if (enemyAdvantage && this.captureState !== CaptureState.Enemy) {
             // 敌方优势且金矿不属于敌方，增加占领进度
@@ -240,6 +260,14 @@ export class GoldMine extends Build {
                   //console.log('[GoldMine] 被敌方占领');
                 // 播放被敌人占领音效
                 this.playEnemyCaptureSound();
+                this.showMineFloatText(
+                    '金矿被夺！',
+                    22,
+                    new Color(150, 150, 150, 255),
+                    new Color(45, 45, 45, 255),
+                    3,
+                    'aboveBattleUnits'
+                );
             }
         } else {
             // 平衡状态或已占领，隐藏指示器并重置进度
@@ -491,9 +519,45 @@ export class GoldMine extends Build {
     }
 
     /**
-     * 显示金币奖励飘字
+     * 显示金币奖励飘字（字号 20；占领提示为其「大一号」）
      */
     private showGoldRewardText() {
+        this.showMineFloatText('+1 gold', 20, new Color(255, 215, 0, 255), new Color(0, 0, 0, 255), 2);
+    }
+
+    /**
+     * 将飘字置于 Canvas 上所有战场单位容器之后（见 docs/节点路径.md Canvas sibling 顺序）。
+     */
+    private applyFloatTextSiblingAboveBattleUnits(floatNode: Node, canvas: Node) {
+        let maxIdx = -1;
+        const children = canvas.children || [];
+        for (let i = 0; i < children.length; i++) {
+            const ch = children[i];
+            if (ch?.isValid && GoldMine.FLOAT_TEXT_ABOVE_UNIT_CONTAINERS.has(ch.name)) {
+                maxIdx = Math.max(maxIdx, ch.getSiblingIndex());
+            }
+        }
+        const target = maxIdx >= 0 ? maxIdx + 1 : 48;
+        try {
+            floatNode.setSiblingIndex(Math.min(target, Math.max(0, children.length - 1)));
+        } catch {
+            try {
+                floatNode.setSiblingIndex(48);
+            } catch {}
+        }
+    }
+
+    /**
+     * 金矿上方飘字：可配字号/颜色/描边；placement 为 aboveBattleUnits 时盖住敌我单位贴图（仍低于 TopHUD 等高层 UI）。
+     */
+    private showMineFloatText(
+        text: string,
+        fontSize: number,
+        color: Color,
+        outlineColor: Color,
+        outlineWidth: number,
+        placement: 'damageNumberBand' | 'aboveBattleUnits' = 'damageNumberBand'
+    ) {
         if (!this.node || !this.node.isValid) return;
 
         const canvas = find('Canvas');
@@ -503,30 +567,32 @@ export class GoldMine extends Build {
         const basePos = this.tempVec3_1.set(this.node.worldPosition);
         basePos.y += 50; // 在金矿上方显示
 
-        const n = new Node('GoldRewardText');
+        const n = new Node('GoldMineFloatText');
         n.setParent(parentNode);
 
-        // 放到石墙（索引 30）之后，UI 层之前，确保不被石墙遮挡
-        // 参考 DamageNumber 的位置（索引 48-50）
-        try {
-            n.setSiblingIndex(48);
-        } catch {}
+        if (placement === 'aboveBattleUnits' && canvas?.isValid && parentNode === canvas) {
+            this.applyFloatTextSiblingAboveBattleUnits(n, canvas);
+        } else {
+            // +1 gold：与 DamageNumber 同带（docs/节点路径.md 索引 48–50）
+            try {
+                n.setSiblingIndex(48);
+            } catch {}
+        }
 
         n.setWorldPosition(basePos);
 
         let label: Label | null = n.getComponent(Label);
         if (!label) label = n.addComponent(Label);
-        label.string = '+1 gold';
-        label.fontSize = 20;
-        label.color = new Color(255, 215, 0, 255); // 金色
+        label.string = text;
+        label.fontSize = fontSize;
+        label.color = color;
 
-        // 添加 LabelOutline 组件实现描边效果
         let outline = label.node.getComponent(LabelOutline);
         if (!outline) {
             outline = label.node.addComponent(LabelOutline);
         }
-        outline.color = new Color(0, 0, 0, 255);
-        outline.width = 2;
+        outline.color = outlineColor;
+        outline.width = outlineWidth;
 
         const opacity = n.getComponent(UIOpacity) || n.addComponent(UIOpacity);
         opacity.opacity = 255;

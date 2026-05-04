@@ -823,7 +823,7 @@ export class WatchTower extends Build {
         // 降级方案：直接查找
         let count = 0;
         const rangeSq = range * range;
-        const enemyContainers = ['Canvas/Enemies', 'Canvas/Orcs', 'Canvas/TrollSpearmans', 'Canvas/OrcWarriors', 'Canvas/OrcWarlords'];
+        const enemyContainers = ['Canvas/Enemies', 'Canvas/Orcs', 'Canvas/TrollSpearmans', 'Canvas/OrcWarriors', 'Canvas/OrcWarlords', 'Canvas/Wolves'];
         
         for (const containerName of enemyContainers) {
             const containerNode = find(containerName);
@@ -983,7 +983,7 @@ export class WatchTower extends Build {
         }
 
         // 降级方案：直接查找
-        const enemyContainers = ['Canvas/Enemies', 'Canvas/Orcs', 'Canvas/TrollSpearmans', 'Canvas/OrcWarriors', 'Canvas/OrcWarlords', 'Canvas/MinotaurWarriors'];
+        const enemyContainers = ['Canvas/Enemies', 'Canvas/Orcs', 'Canvas/TrollSpearmans', 'Canvas/OrcWarriors', 'Canvas/OrcWarlords', 'Canvas/MinotaurWarriors', 'Canvas/Wolves'];
         
         for (const containerName of enemyContainers) {
             const containerNode = find(containerName);

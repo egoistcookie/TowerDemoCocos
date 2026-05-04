@@ -341,8 +341,12 @@ export class ElfSwordsman extends Role {
             if (this.hitSound && AudioManager.Instance) {
                 AudioManager.Instance.playSFX(this.hitSound);
             }
-            // 直接造成伤害
-            enemyScript.takeDamage(effectiveDamage);
+            const hitDir = new Vec3();
+            Vec3.subtract(hitDir, this.currentTarget.worldPosition, this.node.worldPosition);
+            if (hitDir.length() > 0.001) {
+                hitDir.normalize();
+            }
+            enemyScript.takeDamage(effectiveDamage, hitDir);
             // 记录伤害统计
             this.recordDamageToStatistics(effectiveDamage);
         }

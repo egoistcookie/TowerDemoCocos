@@ -133,6 +133,14 @@ export class Enemy extends Component {
     
     @property(AudioClip)
     attackSound: AudioClip = null!; // 敌人攻击音效
+
+    /** 攻击/死亡等敌方一次性音效；子类可改为专用播放策略（如狼单声道互斥） */
+    protected playEnemyOneShotSfx(clip: AudioClip | null): void {
+        if (!clip || !AudioManager.Instance) {
+            return;
+        }
+        AudioManager.Instance.playSFX(clip);
+    }
     
     // 动画相关私有属性
     protected sprite: Sprite = null!;
@@ -322,6 +330,7 @@ export class Enemy extends Component {
             this.healthBarNode.setPosition(0, 30, 0);
             this.healthBar.setMaxHealth(this.maxHealth);
             this.healthBar.setHealth(this.currentHealth);
+            this.syncHealthBarFacingFromParent();
             return;
         }
 
@@ -334,6 +343,7 @@ export class Enemy extends Component {
             this.healthBar.setMaxHealth(this.maxHealth);
             this.healthBar.setHealth(this.currentHealth);
         }
+        this.syncHealthBarFacingFromParent();
     }
 
     protected destroyTransientHealthBarNow(): void {
@@ -355,8 +365,20 @@ export class Enemy extends Component {
             }
             this.healthBarNode.active = true;
         }
+        this.syncHealthBarFacingFromParent();
         cancelTransientHealthBarHide(this);
         scheduleTransientHealthBarHide(this, () => this.destroyTransientHealthBarNow());
+    }
+
+    /**
+     * 血条挂在敌人根节点下；父节点水平翻转时子血条需反向缩放，否则受击新建血条后绿条会镜像。
+     */
+    protected syncHealthBarFacingFromParent(): void {
+        if (!this.healthBarNode || !this.healthBarNode.isValid) {
+            return;
+        }
+        const px = this.node.scale.x;
+        this.healthBarNode.setScale(px < 0 ? -1 : 1, 1, 1);
     }
 
     /**
@@ -904,7 +926,7 @@ export class Enemy extends Component {
     }
 
 
-    private moveTowardsTarget(deltaTime: number) {
+    protected moveTowardsTarget(deltaTime: number) {
         if (!this.currentTarget) {
             return;
         }
@@ -1300,7 +1322,7 @@ export class Enemy extends Component {
         // 2. 播放攻击音效
         // const soundStartTime = PerformanceMonitor.startTiming('Enemy.playAttackAnimation.playSound');
         if (this.attackSound) {
-            AudioManager.Instance.playSFX(this.attackSound);
+            this.playEnemyOneShotSfx(this.attackSound);
         } else {
         }
         // PerformanceMonitor.endTiming('Enemy.playAttackAnimation.playSound', soundStartTime, 0);
@@ -1851,7 +1873,7 @@ export class Enemy extends Component {
 
         // 播放死亡音效
         if (this.deathSound) {
-            AudioManager.Instance.playSFX(this.deathSound);
+            this.playEnemyOneShotSfx(this.deathSound);
         }
 
         // 优先播放死亡动画
@@ -2093,8 +2115,10 @@ export class Enemy extends Component {
                 this.currentTarget = null!;
             }
         } else {
-            // 不在攻击动画中，正常索敌
-            this.findTargetInRange();
+            // 不在攻击动画中，正常索敌（子类可跳过，例如跳跃越墙期间保持目标）
+            if (!this.shouldSkipRetarget()) {
+                this.findTargetInRange();
+            }
         }
 
         // 步骤2：根据是否有目标决定行动
@@ -2110,20 +2134,32 @@ export class Enemy extends Component {
             if (this.isPlayingAttackAnimation) {
                 // 攻击动画期间不移动
                 this.stopMoving();
-            } else if (distanceSq <= attackRangeSq) {
-                // 在攻击范围内，停止移动并尝试攻击
+            } else if (this.isPlayingHitAnimation) {
+                // 受击动画期间不移动，避免本帧位移覆盖巨熊/哨塔等外部击退
                 this.stopMoving();
-                if (this.attackTimer >= this.attackInterval) {
-                    this.attackTimer = 0;
-                    this.attack();
-                }
             } else {
-                // 不在攻击范围内，向目标移动
-                this.moveTowardsTarget(deltaTime);
+                const combat = this.resolveCombatMovement(distanceSq, attackRangeSq, deltaTime);
+                if (combat === 'handled') {
+                    // 子类已处理本帧移动/特殊行为
+                } else if (combat === 'attack') {
+                    this.stopMoving();
+                    if (this.attackTimer >= this.attackInterval) {
+                        this.attackTimer = 0;
+                        this.attack();
+                    }
+                } else {
+                    if (!this.tryCustomApproachTarget(deltaTime)) {
+                        this.moveTowardsTarget(deltaTime);
+                    }
+                }
             }
         } else {
-            // 没有目标：朝下方移动
-            this.moveDownwards(deltaTime);
+            // 没有目标：朝下方移动（受击时不要位移，以免盖住击退）
+            if (!this.isPlayingHitAnimation) {
+                this.moveDownwards(deltaTime);
+            } else {
+                this.stopMoving();
+            }
         }
 
         // 更新动画
@@ -2132,9 +2168,33 @@ export class Enemy extends Component {
     }
 
     /**
+     * 子类在跳跃/冲锋等期间返回 true，本帧不重新 findTargetInRange。
+     */
+    protected shouldSkipRetarget(): boolean {
+        return false;
+    }
+
+    /**
+     * 有目标且不在攻击动画中时：返回 attack / move，或由子类返回 handled（本帧不再移动普攻）。
+     */
+    protected resolveCombatMovement(distanceSq: number, attackRangeSq: number, _deltaTime: number): 'attack' | 'move' | 'handled' {
+        if (distanceSq <= attackRangeSq) {
+            return 'attack';
+        }
+        return 'move';
+    }
+
+    /**
+     * 朝目标移动前的子类钩子（如狼越墙）：返回 true 表示已处理移动，不再调用 moveTowardsTarget。
+     */
+    protected tryCustomApproachTarget(_deltaTime: number): boolean {
+        return false;
+    }
+
+    /**
      * 在索敌范围内查找目标（所有单位一视同仁）
      */
-    private findTargetInRange() {
+    protected findTargetInRange() {
         // 动态索敌范围：在画面下方三分之一时扩大索敌范围
         const screenHeight = view.getVisibleSize().height;
         const isInLowerThird = this.node.worldPosition.y < screenHeight / 3;
@@ -2448,10 +2508,6 @@ export class Enemy extends Component {
         if (direction.x < 0) {
             // 向左移动，翻转
             this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-            // 血条反向翻转，保持正常朝向
-            if (this.healthBarNode && this.healthBarNode.isValid) {
-                this.healthBarNode.setScale(-1, 1, 1);
-            }
             // 对话框反向翻转，保持正常朝向（文字从左往右）
             if (this.dialogNode && this.dialogNode.isValid) {
                 this.dialogNode.setScale(-1, 1, 1);
@@ -2459,15 +2515,12 @@ export class Enemy extends Component {
         } else {
             // 向右移动或垂直移动，正常朝向
             this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-            // 血条正常朝向
-            if (this.healthBarNode && this.healthBarNode.isValid) {
-                this.healthBarNode.setScale(1, 1, 1);
-            }
             // 对话框正常朝向（文字从左往右）
             if (this.dialogNode && this.dialogNode.isValid) {
                 this.dialogNode.setScale(1, 1, 1);
             }
         }
+        this.syncHealthBarFacingFromParent();
     }
 
     /**
@@ -2551,7 +2604,7 @@ export class Enemy extends Component {
      */
     private checkCollisionWithEnemy(position: Vec3): boolean {
         // 查找所有敌人容器，使用直接路径
-        const enemyContainers = ['Canvas/Enemies', 'Canvas/Orcs', 'Canvas/TrollSpearmans', 'Canvas/OrcWarriors', 'Canvas/OrcWarlords', 'Canvas/MinotaurWarriors'];
+        const enemyContainers = ['Canvas/Enemies', 'Canvas/Orcs', 'Canvas/TrollSpearmans', 'Canvas/OrcWarriors', 'Canvas/OrcWarlords', 'Canvas/MinotaurWarriors', 'Canvas/Wolves'];
         const allEnemies: Node[] = [];
 
         for (const containerName of enemyContainers) {
@@ -2624,7 +2677,7 @@ export class Enemy extends Component {
         };
 
         // 查找所有敌人容器
-        const enemyContainers = ['Enemies', 'Orcs', 'TrollSpearmans', 'OrcWarriors', 'OrcWarlords', 'MinotaurWarriors'];
+        const enemyContainers = ['Enemies', 'Orcs', 'TrollSpearmans', 'OrcWarriors', 'OrcWarlords', 'MinotaurWarriors', 'Canvas/Wolves'];
         const allEnemies: Node[] = [];
 
         for (const containerName of enemyContainers) {

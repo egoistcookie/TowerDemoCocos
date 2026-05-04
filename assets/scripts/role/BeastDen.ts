@@ -141,6 +141,11 @@ export class BeastDen extends Build {
         const gameState = gameManager.getGameState();
         if (gameState !== GameState.Playing) return;
 
+        // 单位介绍框打开时会 pause；防御性：若弹窗仍显示则不再推进感叹号/巨熊阶段（避免与异步回调竞态）
+        if (gameManager.isUnitIntroPanelOpen()) {
+            return;
+        }
+
         // 每 0.5 秒检测一次范围内单位，降低 CPU 开销
         this.detectionTimer += deltaTime;
         if (this.detectionTimer >= this.DETECTION_INTERVAL) {

@@ -293,10 +293,10 @@ export class OrcWarlord extends Boss {
             }
         };
 
-        // 尸体暂留 30 秒后返回对象池（基类 Boss 为 60 秒，督军单独缩短）
+        // 尸体暂留 15 秒后返回对象池（基类 Boss 为 60 秒，督军单独缩短）
         setTimeout(() => {
             returnToPool();
-        }, 30000);
+        }, 15000);
     }
     
     /**

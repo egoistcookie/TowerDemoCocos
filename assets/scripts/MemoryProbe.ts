@@ -2,11 +2,11 @@ import { Component, director, Node } from 'cc';
 
 /**
  * 专用内存排查：统一前缀 [MEM_PROBE]；节点树前缀 [MEM_NODE]（仅 logSceneNodeTreeFull）。
- * 若控制台只有 MemoryProbe.ts:84 而无 142+ 行，说明运行包未含节点转储或日志被过滤。测完将 ENABLED 设为 false。
+ * 若控制台只有 MemoryProbe.ts:84 而无 142+ 行，说明运行包未含节点转储或日志被过滤。排查阶段结束后将 ENABLED 设为 false。
  * Chromium 系有 performance.memory；微信等环境常为 N/A，需结合 sceneNodes / 池统计。
  */
 export class MemoryProbe {
-    static ENABLED = true;
+    static ENABLED = false;
 
     private static baselineUsedBytes: number | null = null;
 

@@ -853,89 +853,75 @@ export class SelectionManager extends Component {
         }
     }
 
-
+    /**
+     * 框选拖拽时每帧会更新选中列表；若对整表先关再高亮，Role.setHighlight 会每帧 destroy/create Graphics，
+     * 造成资源与原生内存暴涨。仅对「离开集合」「新进入集合」的对象切换高亮。
+     */
+    private syncMultiSelectHighlight<T>(prev: T[], next: T[], setHighlight: (item: T, on: boolean) => void) {
+        const nextSet = new Set(next);
+        for (const item of prev) {
+            if (item && !nextSet.has(item)) {
+                setHighlight(item, false);
+            }
+        }
+        const prevSet = new Set(prev);
+        for (const item of next) {
+            if (item && !prevSet.has(item)) {
+                setHighlight(item, true);
+            }
+        }
+    }
 
     /**
      * 设置选中的精灵剑士
      */
     setSelectedSwordsmen(swordsmen: ElfSwordsman[]) {
-        // 取消之前选中的高亮
-        for (const swordsman of this.selectedSwordsmen) {
-            if (swordsman && swordsman.node && swordsman.node.isValid) {
-                swordsman.setHighlight(false);
+        const prev = this.selectedSwordsmen;
+        this.syncMultiSelectHighlight(prev, swordsmen, (s, on) => {
+            if (s && s.node && s.node.isValid) {
+                s.setHighlight(on);
             }
-        }
-
-        // 设置新的选中
+        });
         this.selectedSwordsmen = swordsmen;
-
-        // 高亮显示选中的精灵剑士
-        for (const swordsman of this.selectedSwordsmen) {
-            if (swordsman && swordsman.node && swordsman.node.isValid) {
-                swordsman.setHighlight(true);
-            }
-        }
     }
 
     /**
      * 设置选中的牧师
      */
     setSelectedPriests(priests: Priest[]) {
-        // 取消之前选中的高亮
-        for (const priest of this.selectedPriests) {
-            if (priest && priest.node && priest.node.isValid) {
-                priest.setHighlight(false);
+        const prev = this.selectedPriests;
+        this.syncMultiSelectHighlight(prev, priests, (p, on) => {
+            if (p && p.node && p.node.isValid) {
+                p.setHighlight(on);
             }
-        }
-
-        // 设置新的选中
+        });
         this.selectedPriests = priests;
-
-        // 高亮显示选中的牧师
-        for (const priest of this.selectedPriests) {
-            if (priest && priest.node && priest.node.isValid) {
-                priest.setHighlight(true);
-            }
-        }
     }
 
     /**
      * 设置选中的法师
      */
     setSelectedMages(mages: Mage[]) {
-        for (const mage of this.selectedMages) {
-            if (mage && mage.node && mage.node.isValid) {
-                mage.setHighlight(false);
+        const prev = this.selectedMages;
+        this.syncMultiSelectHighlight(prev, mages, (m, on) => {
+            if (m && m.node && m.node.isValid) {
+                m.setHighlight(on);
             }
-        }
+        });
         this.selectedMages = mages;
-        for (const mage of this.selectedMages) {
-            if (mage && mage.node && mage.node.isValid) {
-                mage.setHighlight(true);
-            }
-        }
     }
 
     /**
      * 设置选中的角鹰
      */
     setSelectedEagles(eagles: Array<Eagle | EagleArcher>) {
-        // 取消之前选中的高亮
-        for (const eagle of this.selectedEagles) {
-            if (eagle && eagle.node && eagle.node.isValid) {
-                eagle.setHighlight(false);
+        const prev = this.selectedEagles;
+        this.syncMultiSelectHighlight(prev, eagles, (e, on) => {
+            if (e && e.node && e.node.isValid) {
+                e.setHighlight(on);
             }
-        }
-
-        // 设置新的选中
+        });
         this.selectedEagles = eagles;
-
-        // 高亮显示选中的角鹰
-        for (const eagle of this.selectedEagles) {
-            if (eagle && eagle.node && eagle.node.isValid) {
-                eagle.setHighlight(true);
-            }
-        }
 
         // 检查是否有选中的角鹰，如果有，注册移动命令
         if (this.selectedEagles.length > 0) {
@@ -947,28 +933,14 @@ export class SelectionManager extends Component {
      * 设置选中的女猎手
      */
     setSelectedHunters(hunters: Hunter[]) {
-        
-        // 取消之前选中的高亮
-        for (const hunter of this.selectedHunters) {
-            if (hunter && hunter.node && hunter.node.isValid) {
-                hunter.setHighlight(false);
+        const prev = this.selectedHunters;
+        this.syncMultiSelectHighlight(prev, hunters, (h, on) => {
+            if (h && h.node && h.node.isValid) {
+                h.setHighlight(on);
             }
-        }
-
-        // 设置新的选中
+        });
         this.selectedHunters = hunters;
 
-        // 高亮显示选中的女猎手
-        let highlightedCount = 0;
-        for (const hunter of this.selectedHunters) {
-            if (hunter && hunter.node && hunter.node.isValid) {
-                hunter.setHighlight(true);
-                highlightedCount++;
-            } else {
-            }
-        }
-        
-        
         // 检查是否有选中的女猎手，如果有，注册移动命令
         if (this.selectedHunters.length > 0) {
             this.registerMoveCommand();
@@ -980,27 +952,13 @@ export class SelectionManager extends Component {
      * 设置选中的防御单位
      */
     setSelectedTowers(towers: Arrower[]) {
-        
-        // 取消之前选中的高亮
-        for (const tower of this.selectedTowers) {
-            if (tower && tower.node && tower.node.isValid) {
-                tower.setHighlight(false);
+        const prev = this.selectedTowers;
+        this.syncMultiSelectHighlight(prev, towers, (t, on) => {
+            if (t && t.node && t.node.isValid) {
+                t.setHighlight(on);
             }
-        }
-
-        // 设置新的选中
+        });
         this.selectedTowers = towers;
-
-        // 高亮显示选中的防御单位
-        let highlightedCount = 0;
-        for (const tower of this.selectedTowers) {
-            if (tower && tower.node && tower.node.isValid) {
-                tower.setHighlight(true);
-                highlightedCount++;
-            } else {
-            }
-        }
-        
     }
 
     /**

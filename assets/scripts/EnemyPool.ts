@@ -204,6 +204,8 @@ export class EnemyPool extends Component {
                 prefabName = 'OrcShaman';
             } else if (nodeName.includes('OrcWarlord') || nodeName.includes('Warlord')) {
                 prefabName = 'OrcWarlord';
+            } else if (nodeName.includes('Wolf')) {
+                prefabName = 'Wolf';
             } else if (nodeName.includes('OrcWarrior') || (nodeName.includes('Orc') && nodeName.includes('Warrior'))) {
                 prefabName = 'OrcWarrior';
             } else if (nodeName.includes('Troll') || nodeName.includes('Spearman')) {

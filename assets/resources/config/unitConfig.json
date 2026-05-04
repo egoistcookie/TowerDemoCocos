@@ -456,6 +456,31 @@
       "经验奖励": "1点"
     }
   },
+  "Wolf": {
+    "baseStats": {
+      "maxHealth": 50,
+      "attackRange": 58,
+      "attackDamage": 10,
+      "attackInterval": 0.65,
+      "moveSpeed": 78,
+      "collisionRadius": 2,
+      "goldReward": 2,
+      "expReward": 4
+    },
+    "displayInfo": {
+      "name": "狼",
+      "description": "兽人饲养的狼，可跃过石墙。"
+    },
+    "displayStats": {
+      "生命值": 50,
+      "攻击力": 10,
+      "攻击范围": "58像素",
+      "攻击间隔": "0.65秒",
+      "移动速度": "78像素/秒",
+      "金币奖励": "2金币",
+      "经验奖励": "4点"
+    }
+  },
   "OrcWarlord": {
     "baseStats": {
       "maxHealth": 100,

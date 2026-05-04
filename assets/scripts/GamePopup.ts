@@ -18,6 +18,20 @@ export class GamePopup extends Component {
     private autoHideTimer: number = 0;
     private autoHideDelay: number = 2.0; // 默认2秒后自动隐藏
 
+    /**
+     * 当前是否有一条「正在展示且会自动消失」的提示（供 showMessage 排队用）。
+     * 必须同时满足节点在层级中可见，否则会误判为忙：首条入队后永远不 show，表现为一次提示都没有。
+     */
+    public isMessagePopupBusy(): boolean {
+        if (!this.node?.isValid || !this.node.activeInHierarchy) {
+            return false;
+        }
+        return this.isShowing && this.autoHideTimer >= 0;
+    }
+
+    /** 多条 showMessage 连续调用时，在已有自动消失提示未关闭前先排队，避免只表现为一次 */
+    private static pendingMessages: Array<{ message: string; autoHide: boolean; delay: number }> = [];
+
     // 遮罩层节点，使弹窗始终处于最上层并遮挡其他元素
     private maskLayer: Node | null = null;
     private _deferredAdjustRunner: (() => void) | null = null;
@@ -26,7 +40,9 @@ export class GamePopup extends Component {
     
     start() {
         this.node.active = false; // 初始隐藏
-        
+        this.isShowing = false;
+        this.autoHideTimer = -1;
+
         // 初始化所有必要的组件和节点
         this.initComponents();
         
@@ -274,6 +290,7 @@ export class GamePopup extends Component {
         // 检查必要的属性是否存在
         if (!this.node || !this.content) {
             this.isShowing = false;
+            this.flushNextPendingMessage();
             return;
         }
         
@@ -295,6 +312,20 @@ export class GamePopup extends Component {
 
         // 关闭后停止自动隐藏计时
         this.autoHideTimer = -1;
+
+        this.flushNextPendingMessage();
+    }
+
+    private flushNextPendingMessage(): void {
+        const next = GamePopup.pendingMessages.shift();
+        if (!next || !this.node?.isValid) {
+            return;
+        }
+        this.scheduleOnce(() => {
+            if (this.node?.isValid) {
+                this.show(next.message, next.autoHide, next.delay);
+            }
+        }, 0);
     }
     
     /**
@@ -585,6 +616,10 @@ export class GamePopup extends Component {
         }
         
         if (popup) {
+            if (autoHide && popup.isMessagePopupBusy()) {
+                GamePopup.pendingMessages.push({ message, autoHide, delay });
+                return;
+            }
             popup.show(message, autoHide, delay);
         } else {
         }
@@ -952,7 +987,9 @@ export class GamePopup extends Component {
             'TrollSpearman': '巨魔投矛手',
             'Dragon': '飞龙',
             'OrcShaman': '兽人萨满',
-            'MinotaurWarrior': '牛头人领主'
+            'MinotaurWarrior': '牛头人领主',
+            'Wolf': '狼',
+            'wolf': '狼'
         };
     }
 }

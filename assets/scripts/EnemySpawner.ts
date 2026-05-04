@@ -11,6 +11,7 @@ import { EnemyPool } from './EnemyPool';
 import { UnitManager } from './UnitManager';
 import { MemoryProbe } from './MemoryProbe';
 import { getEnemyLikeScript } from './EnemyScriptLookup';
+import { EnemySlaveWolfSpawner } from './EnemySlaveWolfSpawner';
 const { ccclass, property } = _decorator;
 
 // 定义波次配置接口
@@ -140,6 +141,7 @@ export class EnemySpawner extends Component {
     // Orc / OrcWarrior / TrollSpearman / Dragon / OrcWarlord / OrcShaman 敌人预制体（从分包懒加载并注入），减少主包体积
     private static sharedOrcPrefab: Prefab | null = null; // 所有 EnemySpawner 实例共享
     private static sharedOrcWarriorPrefab: Prefab | null = null;
+    private static sharedWolfPrefab: Prefab | null = null;
     private static sharedTrollSpearmanPrefab: Prefab | null = null;
     private static sharedDragonPrefab: Prefab | null = null;
     private static sharedOrcWarlordPrefab: Prefab | null = null;
@@ -147,6 +149,7 @@ export class EnemySpawner extends Component {
     private static sharedMinotaurWarriorPrefab: Prefab | null = null; // 牛头人领主预制体
     private static orcPrefabLoaded: boolean = false; // 全局标记：整个游戏过程中只加载一次
     private static orcWarriorPrefabLoaded: boolean = false;
+    private static wolfPrefabLoaded: boolean = false;
     private static trollSpearmanPrefabLoaded: boolean = false;
     private static dragonPrefabLoaded: boolean = false;
     private static orcWarlordPrefabLoaded: boolean = false;
@@ -242,11 +245,17 @@ export class EnemySpawner extends Component {
         // 初始化敌人预制体映射表（此时只包含主包里通过属性面板指定的敌人）
         this.initEnemyPrefabMap();
 
+        // 从刷怪器：与 Orc 同坐标共刷狼（无则自动挂载，无需改场景）
+        if (!this.node.getComponent(EnemySlaveWolfSpawner)) {
+            this.node.addComponent(EnemySlaveWolfSpawner);
+        }
+
         // 敌人预制体：从分包懒加载 Orc / OrcWarrior / TrollSpearman / Dragon / OrcWarlord / OrcShaman，全部尝试完成后再初始化对象池和波次配置
         this.loadAllEnemyPrefabsFromSubpackage(() => {
             // 将已经加载到内存中的敌人预制体注入当前 Spawner 的映射表
             this.injectOrcPrefabToMap();
             this.injectOrcWarriorPrefabToMap();
+            this.injectWolfPrefabToMap();
             this.injectTrollSpearmanPrefabToMap();
             this.injectDragonPrefabToMap();
             this.injectOrcWarlordPrefabToMap();
@@ -400,6 +409,14 @@ export class EnemySpawner extends Component {
             }
         }
 
+        if (prefabName === 'Orc' && this.shouldCoSpawnWolfWithBasicOrc() && this.levelSpawnsWolves()) {
+            const slave = this.node.getComponent(EnemySlaveWolfSpawner);
+            slave?.spawnMirrorWolfAt(spawnPos.clone(), true);
+        } else if (prefabName === 'OrcWarrior' && this.shouldCoSpawnWolfWithOrc() && this.levelSpawnsWolves()) {
+            const slave = this.node.getComponent(EnemySlaveWolfSpawner);
+            slave?.spawnMirrorWolfAt(spawnPos.clone(), false);
+        }
+
         // 增加已生成敌人计数并处理切换/结束逻辑
         this.enemiesSpawnedCount++;
         this.waveSpawnedTotal++;
@@ -426,6 +443,9 @@ export class EnemySpawner extends Component {
         let total = 0;
         for (const cfg of this.currentWave.enemies) {
             if (!cfg) continue;
+            if (cfg.prefabName === 'Wolf' && !this.levelSpawnsWolves()) {
+                continue;
+            }
             // 预制体缺失的不计入总数，避免进度永远到不了 100%
             const prefab = this.enemyPrefabMap.get(cfg.prefabName);
             if (!prefab) continue;
@@ -517,13 +537,16 @@ export class EnemySpawner extends Component {
      * 优先在常用候选集中筛选已加载的类型；若均不可用，则回退到任何已注册的类型。
      */
     public getRandomEnemyPrefabNameForPortal(): string | null {
-        const preferred = ['Orc', 'TrollSpearman', 'OrcWarrior', 'OrcShaman', 'OrcWarlord', 'Dragon'];
+        const noWolf = !this.levelSpawnsWolves();
+        const preferred = noWolf
+            ? ['Orc', 'TrollSpearman', 'OrcWarrior', 'OrcShaman', 'OrcWarlord', 'Dragon']
+            : ['Orc', 'TrollSpearman', 'OrcWarrior', 'Wolf', 'OrcShaman', 'OrcWarlord', 'Dragon'];
         const availablePreferred = preferred.filter(n => this.enemyPrefabMap.has(n));
         if (availablePreferred.length > 0) {
             const idx = Math.floor(Math.random() * availablePreferred.length);
             return availablePreferred[idx];
         }
-        const all = Array.from(this.enemyPrefabMap.keys());
+        const all = Array.from(this.enemyPrefabMap.keys()).filter(n => !noWolf || n !== 'Wolf');
         if (all.length === 0) return null;
         const idx = Math.floor(Math.random() * all.length);
         return all[idx];
@@ -569,6 +592,21 @@ export class EnemySpawner extends Component {
                     if (prefab) {
                         EnemySpawner.sharedOrcWarriorPrefab = prefab;
                         EnemySpawner.orcWarriorPrefabLoaded = true;
+                    }
+                    doneOne();
+                }
+            );
+        }
+
+        // 需要加载 Wolf
+        if (!EnemySpawner.wolfPrefabLoaded) {
+            pending++;
+            this.loadSingleEnemyPrefabFromSubpackage(
+                ['Wolf', 'wolf'],
+                (prefab) => {
+                    if (prefab) {
+                        EnemySpawner.sharedWolfPrefab = prefab;
+                        EnemySpawner.wolfPrefabLoaded = true;
                     }
                     doneOne();
                 }
@@ -816,6 +854,12 @@ export class EnemySpawner extends Component {
         }
     }
 
+    private injectWolfPrefabToMap() {
+        if (EnemySpawner.sharedWolfPrefab) {
+            this.enemyPrefabMap.set('Wolf', EnemySpawner.sharedWolfPrefab);
+        }
+    }
+
     private injectTrollSpearmanPrefabToMap() {
         if (EnemySpawner.sharedTrollSpearmanPrefab) {
             this.enemyPrefabMap.set('TrollSpearman', EnemySpawner.sharedTrollSpearmanPrefab);
@@ -904,6 +948,8 @@ export class EnemySpawner extends Component {
                 prefabName = 'OrcShaman';
             } else if (prefabName.toLowerCase().includes('orcwarlord') || prefabName.toLowerCase().includes('warlord')) {
                 prefabName = 'OrcWarlord';
+            } else if (prefabName.toLowerCase().includes('wolf')) {
+                prefabName = 'Wolf';
             } else if (prefabName.toLowerCase().includes('orcwarrior') || (prefabName.toLowerCase().includes('orc') && prefabName.toLowerCase().includes('warrior'))) {
                 prefabName = 'OrcWarrior';
             } else if (prefabName.toLowerCase() === 'orc' || (prefabName.toLowerCase().includes('orc') && !prefabName.toLowerCase().includes('warrior') && !prefabName.toLowerCase().includes('warlord') && !prefabName.toLowerCase().includes('shaman'))) {
@@ -1036,6 +1082,7 @@ export class EnemySpawner extends Component {
                     // 将已经加载到内存中的敌人预制体注入当前 Spawner 的映射表
                     this.injectOrcPrefabToMap();
                     this.injectOrcWarriorPrefabToMap();
+                    this.injectWolfPrefabToMap();
                     this.injectTrollSpearmanPrefabToMap();
                     this.injectDragonPrefabToMap();
                     this.injectOrcWarlordPrefabToMap();
@@ -1380,7 +1427,7 @@ export class EnemySpawner extends Component {
                 }
                 return c;
             };
-            enemyCount = countActiveChildren('Canvas/Enemies');
+            enemyCount = countActiveChildren('Canvas/Enemies') + countActiveChildren('Canvas/Wolves');
             friendlyCount =
                 countActiveChildren('Canvas/Towers') +
                 countActiveChildren('Canvas/WatchTowers') +
@@ -1447,21 +1494,20 @@ export class EnemySpawner extends Component {
             return;
         }
 
-        // 第 2、4、6、8 波：显示 10 秒倒计时（可手动关闭），倒计时结束后显示增益卡片
+        // 第 2、4、6、8 波：休息倒计时（可手动关闭），倒计时结束后显示增益卡片；8~10 关为 20 秒，其余 10 秒
         const is10SecondPause = waveNumber === 2 || waveNumber === 4 || waveNumber === 6 || waveNumber === 8;
+        const intermissionSeconds = this.getIntermissionCountdownSeconds();
 
         //console.log(`[EnemySpawner] endCurrentWave() 波次=${waveNumber}, is10SecondPause=${is10SecondPause}`);
 
         if (is10SecondPause) {
-            // 显示 10 秒倒计时弹窗（右上角可点击，立即开始倒计时）
-            //console.log(`[EnemySpawner] 第${waveNumber}波完成，显示 10 秒倒计时弹窗`);
             // 设置倒计时激活标志，防止 updateWave() 提前开始下一波
             this.isCountdownActive = true;
             if (this.uiManager) {
                 this.uiManager.showCountdownPopup(
                     () => {
-                        // 倒计时完成回调：10 秒后显示增益卡片
-                        //console.log('[EnemySpawner] 10 秒倒计时结束回调被调用，准备显示增益卡片');
+                        // 倒计时完成回调：休息结束后显示增益卡片
+                        //console.log('[EnemySpawner] 倒计时结束回调被调用，准备显示增益卡片');
                         if (this.gameManager) {
                             this.gameManager.showBuffCards(() => {
                                 //console.log('[EnemySpawner] 增益卡片选择完成，准备继续下一波');
@@ -1473,7 +1519,7 @@ export class EnemySpawner extends Component {
                     },
                     () => {
                         // 手动关闭回调：立即显示增益卡片
-                        //console.log('[EnemySpawner] 玩家手动关闭 10 秒倒计时回调被调用，准备显示增益卡片');
+                        //console.log('[EnemySpawner] 玩家手动关闭倒计时回调被调用，准备显示增益卡片');
                         if (this.gameManager) {
                             this.gameManager.showBuffCards(() => {
                                 //console.log('[EnemySpawner] 增益卡片选择完成，准备继续下一波（手动关闭）');
@@ -1483,11 +1529,11 @@ export class EnemySpawner extends Component {
                             this.continueToNextWaves(transitionSeq);
                         }
                     },
-                    10, // 10 秒倒计时
+                    intermissionSeconds,
                     true // skipInitialDelay = true，立即开始倒计时
                 );
             } else {
-                // UI 管理器不存在，直接等待 10 秒后显示卡片
+                // UI 管理器不存在，直接等待后显示卡片
                 this.scheduleOnce(() => {
                     if (this.gameManager) {
                         this.gameManager.showBuffCards(() => {
@@ -1496,7 +1542,7 @@ export class EnemySpawner extends Component {
                     } else {
                         this.continueToNextWaves(transitionSeq);
                     }
-                }, 10);
+                }, intermissionSeconds);
             }
             return;
         }
@@ -1699,6 +1745,112 @@ export class EnemySpawner extends Component {
         }
     }
     
+    /** 任意关卡第一波（waveIndex 0）：Orc / 兽人战士 均不与狼同 tick 随行；第二波起随行共刷（兽人战士）。 */
+    private shouldCoSpawnWolfWithOrc(): boolean {
+        return this.currentWaveIndex >= 1;
+    }
+
+    /** 普通 Orc 与狼同 tick 随行：第二关起才启用；第一关仅兽人战士可有随行狼。 */
+    private shouldCoSpawnWolfWithBasicOrc(): boolean {
+        return this.shouldCoSpawnWolfWithOrc() && this.currentLevel > 1;
+    }
+
+    /** 第 2/4/6/8 波后的休息倒计时：第 8~10 关 20 秒，其余 10 秒 */
+    private getIntermissionCountdownSeconds(): number {
+        const lv = this.currentLevel;
+        if (lv >= 8 && lv <= 10) {
+            return 20;
+        }
+        return 10;
+    }
+
+    /** 第 8~10 关不刷狼（配置行、随行、传送门随机均排除） */
+    private levelSpawnsWolves(): boolean {
+        const lv = this.currentLevel;
+        return !(lv >= 8 && lv <= 10);
+    }
+
+    /**
+     * 从刷怪器回调：生成一只狼（不推进主配置行的 enemiesSpawnedCount）。
+     * @param addToWaveSpawnTotal Orc+紧随 Wolf 配置行时为 true；兽人战士随行狼为 false。
+     */
+    public spawnPairedWolfForSlave(spawnPos: Vec3, addToWaveSpawnTotal: boolean = true) {
+        if (!this.levelSpawnsWolves()) {
+            return;
+        }
+        const prefabName = 'Wolf';
+        const enemyPrefab = this.enemyPrefabMap.get(prefabName);
+        if (!enemyPrefab) {
+            return;
+        }
+        let enemy: Node | null = null;
+        if (this.enemyPool) {
+            enemy = this.enemyPool.get(prefabName);
+        }
+        if (!enemy) {
+            enemy = instantiate(enemyPrefab);
+        }
+        enemy.setParent(this.enemyContainer || this.node);
+        enemy.setWorldPosition(spawnPos);
+
+        const enemyScript = getEnemyLikeScript(enemy);
+
+        if (enemyScript) {
+            enemyScript.prefabName = prefabName;
+            if (enemyScript.loadRewardsFromConfig && typeof enemyScript.loadRewardsFromConfig === 'function') {
+                enemyScript.loadRewardsFromConfig();
+            }
+            this.applyLevelBuff(enemyScript);
+            if (this.targetCrystal) {
+                enemyScript.targetCrystal = this.targetCrystal;
+            }
+            if (this.gameManager) {
+                const unitType = enemyScript.unitType || prefabName;
+                this.gameManager.checkUnitFirstAppearance(unitType, enemyScript);
+            }
+            if (this.isOrcRageSpawnBuffActive) {
+                this.applyBloodRageToEnemy(enemy, enemyScript, this.currentOrcRageTier);
+            }
+        }
+
+        if (addToWaveSpawnTotal) {
+            this.waveSpawnedTotal++;
+            this.pushWaveSpawnProgressToRefreshButton(false);
+        }
+    }
+
+    /** 同屏刷怪上限用：狼不计入（与 Canvas/Wolves 下的单位一致） */
+    private getActiveEnemyCountExcludingWolvesForSpawnCap(): number {
+        const unitManager = UnitManager.getInstance();
+        if (unitManager) {
+            let c = 0;
+            const list = unitManager.getEnemies();
+            for (let i = 0; i < list.length; i++) {
+                const n = list[i];
+                if (!n || !n.isValid || !n.active) {
+                    continue;
+                }
+                if (n.getComponent('Wolf')) {
+                    continue;
+                }
+                c++;
+            }
+            return c;
+        }
+        let c = 0;
+        const enemiesNode = find('Canvas/Enemies');
+        if (enemiesNode && enemiesNode.isValid) {
+            const children = enemiesNode.children || [];
+            for (let i = 0; i < children.length; i++) {
+                const node = children[i];
+                if (node && node.isValid && node.active) {
+                    c++;
+                }
+            }
+        }
+        return c;
+    }
+
     /**
      * 获取当前敌人配置
      * @returns 是否获取到敌人配置
@@ -1726,6 +1878,28 @@ export class EnemySpawner extends Component {
         // 循环查找下一个存在的预制体
         while (attempts < maxAttempts) {
             const baseConfig = this.currentWave.enemies[this.currentEnemyIndex];
+            if (baseConfig.prefabName === 'Wolf' && !this.levelSpawnsWolves()) {
+                this.currentEnemyIndex++;
+                attempts++;
+                if (this.currentEnemyIndex >= this.currentWave.enemies.length) {
+                    return false;
+                }
+                continue;
+            }
+            // 紧跟在 Orc 后的 Wolf：仅当普通 Orc 启用随行共刷时跳过该行（第一关 Orc 不随行，走配置 Wolf 行）
+            if (
+                baseConfig.prefabName === 'Wolf' &&
+                this.currentEnemyIndex > 0 &&
+                this.currentWave.enemies[this.currentEnemyIndex - 1]?.prefabName === 'Orc' &&
+                this.shouldCoSpawnWolfWithBasicOrc()
+            ) {
+                this.currentEnemyIndex++;
+                attempts++;
+                if (this.currentEnemyIndex >= this.currentWave.enemies.length) {
+                    return false;
+                }
+                continue;
+            }
             const multiplier = Math.max(1, this.currentWaveCountMultiplier);
             // 使用副本，避免污染关卡原始配置
             const baseInterval = Math.max(0.01, baseConfig.interval);
@@ -1864,26 +2038,8 @@ export class EnemySpawner extends Component {
             }
         }
 
-        // 限制同屏敌人数量：若场上敌人数量达到上限，则本次不再刷怪
-        let currentEnemyCount = 0;
-        const unitManager = UnitManager.getInstance();
-        if (unitManager) {
-            const enemies = unitManager.getEnemies();
-            currentEnemyCount = enemies ? enemies.length : 0;
-        } else {
-            // 降级方案：直接统计 Canvas/Enemies 下的激活子节点数量
-            const enemiesNode = find('Canvas/Enemies');
-            if (enemiesNode && enemiesNode.isValid) {
-                const children = enemiesNode.children || [];
-                for (let i = 0; i < children.length; i++) {
-                    const node = children[i];
-                    if (node && node.isValid && node.active) {
-                        currentEnemyCount++;
-                    }
-                }
-            }
-        }
-
+        // 限制同屏敌人数量（狼不计入）；每次主 tick 只刷一种主配置单位，随行狼不占名额
+        const currentEnemyCount = this.getActiveEnemyCountExcludingWolvesForSpawnCap();
         if (currentEnemyCount >= this.maxEnemiesOnScreen) {
            //console.info(`[EnemySpawner.spawnEnemy] 当前敌人数量 ${currentEnemyCount} 已达到上限 ${this.maxEnemiesOnScreen}，暂停本次刷怪`);
             return;
@@ -2143,16 +2299,23 @@ export class EnemySpawner extends Component {
 
     private applyBloodRageToAllActiveEnemies(rageTier: number): number {
         let affectedCount = 0;
-        const enemiesNode = this.enemyContainer || find('Canvas/Enemies');
-        if (!enemiesNode || !enemiesNode.isValid) {
-            return affectedCount;
+        const containers: Node[] = [];
+        const main = this.enemyContainer || find('Canvas/Enemies');
+        const wolves = find('Canvas/Wolves');
+        if (main?.isValid) {
+            containers.push(main);
         }
-        for (const enemy of enemiesNode.children) {
-            if (!enemy || !enemy.isValid || !enemy.active) continue;
-            const script = this.resolveEnemyScript(enemy);
-            if (!script || (script.isAlive && !script.isAlive())) continue;
-            this.applyBloodRageToEnemy(enemy, script, rageTier);
-            affectedCount++;
+        if (wolves?.isValid && wolves !== main) {
+            containers.push(wolves);
+        }
+        for (const enemiesNode of containers) {
+            for (const enemy of enemiesNode.children) {
+                if (!enemy || !enemy.isValid || !enemy.active) continue;
+                const script = this.resolveEnemyScript(enemy);
+                if (!script || (script.isAlive && !script.isAlive())) continue;
+                this.applyBloodRageToEnemy(enemy, script, rageTier);
+                affectedCount++;
+            }
         }
         return affectedCount;
     }
@@ -2179,54 +2342,47 @@ export class EnemySpawner extends Component {
      * @returns 如果所有敌人都被消灭，返回true
      */
     private checkVictoryCondition(): boolean {
-        const enemiesNode = find('Canvas/Enemies');
-        if (!enemiesNode || !enemiesNode.isValid) {
-            // 如果Enemies节点不存在，认为没有敌人
-           //console.info('[EnemySpawner.checkVictoryCondition] Enemies节点不存在，返回true');
-            return true;
-        }
-        
-        const enemies = enemiesNode.children || [];
+        const paths = ['Canvas/Enemies', 'Canvas/Wolves'];
         let aliveCount = 0;
-        
-        for (let i = 0; i < enemies.length; i++) {
-            const enemy = enemies[i];
-            if (!enemy || !enemy.isValid || !enemy.active) {
+
+        for (let p = 0; p < paths.length; p++) {
+            const enemiesNode = find(paths[p]);
+            if (!enemiesNode?.isValid) {
                 continue;
             }
-            // 传送门不计入胜利判定（允许存在传送门时依然通关）
-            const portalComp = enemy.getComponent('Portal') as any;
-            if (portalComp) {
-                continue;
-            }
-            
-            // 检查敌人是否存活
-            const enemyScript = getEnemyLikeScript(enemy);
-            
-            if (enemyScript) {
-                // 检查是否有isAlive方法
-                if (enemyScript.isAlive && typeof enemyScript.isAlive === 'function') {
-                    if (enemyScript.isAlive()) {
+
+            const enemies = enemiesNode.children || [];
+            for (let i = 0; i < enemies.length; i++) {
+                const enemy = enemies[i];
+                if (!enemy || !enemy.isValid || !enemy.active) {
+                    continue;
+                }
+                const portalComp = enemy.getComponent('Portal') as any;
+                if (portalComp) {
+                    continue;
+                }
+
+                const enemyScript = getEnemyLikeScript(enemy);
+
+                if (enemyScript) {
+                    if (enemyScript.isAlive && typeof enemyScript.isAlive === 'function') {
+                        if (enemyScript.isAlive()) {
+                            aliveCount++;
+                        }
+                    } else if (enemyScript.health !== undefined && enemyScript.health > 0) {
+                        aliveCount++;
+                    } else if (enemyScript.currentHealth !== undefined && enemyScript.currentHealth > 0) {
                         aliveCount++;
                     }
-                } else if (enemyScript.health !== undefined && enemyScript.health > 0) {
-                    aliveCount++;
-                } else if (enemyScript.currentHealth !== undefined && enemyScript.currentHealth > 0) {
+                } else {
                     aliveCount++;
                 }
-            } else {
-                // 如果没有脚本，认为节点存在就是有敌人
-                aliveCount++;
             }
         }
-        
+
         if (aliveCount > 0) {
-           //console.info(`[EnemySpawner.checkVictoryCondition] 还有 ${aliveCount} 个存活的敌人`);
             return false;
         }
-        
-        // 所有敌人都被消灭
-       //console.info('[EnemySpawner.checkVictoryCondition] 所有敌人都被消灭，返回true');
         return true;
     }
     
@@ -2264,6 +2420,7 @@ export class EnemySpawner extends Component {
         // 重要：重新注入从分包加载的预制体（这些预制体已经在内存中，不需要重新加载）
         this.injectOrcPrefabToMap();
         this.injectOrcWarriorPrefabToMap();
+        this.injectWolfPrefabToMap();
         this.injectTrollSpearmanPrefabToMap();
         this.injectDragonPrefabToMap();
         this.injectOrcWarlordPrefabToMap();

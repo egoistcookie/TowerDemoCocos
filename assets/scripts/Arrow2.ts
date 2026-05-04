@@ -179,7 +179,7 @@ export class Arrow2 extends Component {
      * 检查是否命中敌人
      */
     checkHitEnemies(currentPos: Vec3) {
-        // 合并 Canvas/Enemies、Canvas/MinotaurWarriors 和 Canvas/Bears 的子节点
+        // 合并 Canvas/Enemies、Canvas/MinotaurWarriors、Canvas/Bears、Canvas/Wolves 的子节点
         const allEnemies: Node[] = [];
 
         const enemiesNode = find('Canvas/Enemies');
@@ -199,6 +199,13 @@ export class Arrow2 extends Component {
         if (bearsNode) {
             const bearChildren = bearsNode.children || [];
             allEnemies.push(...bearChildren);
+        }
+
+        // 狼挂在 Canvas/Wolves（与普通箭跟踪目标无关；穿透箭必须扫描此容器否则会无伤穿过）
+        const wolvesNode = find('Canvas/Wolves');
+        if (wolvesNode) {
+            const wolfChildren = wolvesNode.children || [];
+            allEnemies.push(...wolfChildren);
         }
 
         if (allEnemies.length === 0) {

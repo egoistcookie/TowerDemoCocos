@@ -5483,7 +5483,12 @@ export class GameManager extends Component {
     getGameState(): GameState {
         return this.gameState;
     }
-    
+
+    /** 单位介绍框是否正在显示（兽穴感叹号/巨熊流程等需与暂停态一致，避免打断） */
+    isUnitIntroPanelOpen(): boolean {
+        return this.unitIntroPopup?.isOpen?.() ?? false;
+    }
+
     /**
      * 暂停游戏
      */
@@ -6615,6 +6620,7 @@ export class GameManager extends Component {
         return [
             'Orc',        // 兽人
             'OrcWarrior', // 兽人战士
+            'Wolf',       // 狼
             'OrcWarlord', // 兽人督军
             'TrollSpearman', // 巨魔投矛手
             'Dragon',     // 飞龙
@@ -7313,6 +7319,9 @@ export class GameManager extends Component {
         }
 
         const fallbackIcon = archer?.cardIcon || archer?.defaultSpriteFrame || null;
+        if (isInBestZone) {
+            BuffCardPopup.playCardSelectSfxIfAny();
+        }
         this.unitIntroPopup.show({
             unitName: '弓箭手',
             unitDescription: description,
@@ -7838,6 +7847,7 @@ export class GameManager extends Component {
         let description = '……无妨。战场上的磨损远甚于此。';
         if (clicks > 20) {
             description = '指挥官，卓越的手艺。此剑如今映出的寒光，胜过往昔。';
+            BuffCardPopup.playCardSelectSfxIfAny();
         } else if (clicks >= 10) {
             description = '嗯，已堪使用，多谢指挥官。';
         }
@@ -10514,6 +10524,7 @@ export class GameManager extends Component {
         this.scheduleOnce(() => {
             // 兽人战士
             this.loadEnemyPrefabFromSubpackage(bundle, ['OrcWarrior', 'orcwarrior', 'orc_warrior'], 'OrcWarrior', () => {});
+            this.loadEnemyPrefabFromSubpackage(bundle, ['Wolf', 'wolf'], 'Wolf', () => {});
             // 督军
             this.loadEnemyPrefabFromSubpackage(bundle, ['OrcWarlord', 'orcwarlord', 'orc_warlord'], 'OrcWarlord', () => {});
             // 飞龙（第 8 波才出现，可以更晚加载）
@@ -10556,6 +10567,7 @@ export class GameManager extends Component {
                         'Orc': 'sharedOrcPrefab',
                         'TrollSpearman': 'sharedTrollSpearmanPrefab',
                         'OrcWarrior': 'sharedOrcWarriorPrefab',
+                        'Wolf': 'sharedWolfPrefab',
                         'OrcWarlord': 'sharedOrcWarlordPrefab',
                         'Dragon': 'sharedDragonPrefab',
                         'OrcShaman': 'sharedOrcShamanPrefab'
@@ -11136,8 +11148,10 @@ export class GameManager extends Component {
                         if (eagleArcherScript) {
                             // 强化属性：提升生命值、攻击力、攻击速度
                             const buffFactor = 1.5; // 提升 50%
+                            const eagleArcherDragonMeatMaxHp = 1000; // 龙肉多次喂养：生命上限最多叠到 1000；攻击力不设顶
                             if (eagleArcherScript.maxHealth !== undefined) {
-                                eagleArcherScript.maxHealth = Math.floor(eagleArcherScript.maxHealth * buffFactor);
+                                const nextMax = Math.floor(eagleArcherScript.maxHealth * buffFactor);
+                                eagleArcherScript.maxHealth = Math.min(eagleArcherDragonMeatMaxHp, nextMax);
                             }
                             if (eagleArcherScript.attackDamage !== undefined) {
                                 eagleArcherScript.attackDamage = Math.floor(eagleArcherScript.attackDamage * buffFactor);

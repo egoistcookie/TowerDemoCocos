@@ -146,6 +146,18 @@ export class UnitManager extends Component {
             }
         }
 
+        // 狼挂在 Canvas/Wolves（渲染在石墙之上），合并进敌人列表供索敌/统计
+        const wolvesNode = find('Canvas/Wolves');
+        if (wolvesNode && wolvesNode.isValid) {
+            const wolfChildren = wolvesNode.children || [];
+            for (let i = 0; i < wolfChildren.length; i++) {
+                const node = wolfChildren[i];
+                if (node && node.isValid && node.active) {
+                    this.enemies.push(node);
+                }
+            }
+        }
+
         // 更新防御塔列表
         if (this.towersNode && this.towersNode.isValid) {
             this.towers = this.towersNode.children.filter(node => 
@@ -634,7 +646,7 @@ export class UnitManager extends Component {
             return null;
         }
         
-        const possibleComponentNames = ['TrollSpearman', 'OrcWarrior', 'OrcWarlord', 'MinotaurWarrior', 'Boss', 'Enemy', 'Orc', 'Portal'];
+        const possibleComponentNames = ['TrollSpearman', 'Wolf', 'OrcWarrior', 'OrcWarlord', 'MinotaurWarrior', 'Boss', 'Enemy', 'Orc', 'Portal'];
         for (const compName of possibleComponentNames) {
             const comp = node.getComponent(compName);
             if (comp && (comp as any).unitType === UnitType.ENEMY) {

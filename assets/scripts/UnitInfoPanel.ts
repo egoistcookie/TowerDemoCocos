@@ -413,6 +413,7 @@ export class UnitInfoPanel extends Component {
         const typeMap: Record<string, string> = {
             'Orc': '兽人',
             'OrcWarrior': '兽人战士',
+            'Wolf': '狼',
             'OrcWarlord': '兽人督军',
             'TrollSpearman': '巨魔投矛手',
             'Dragon': '飞龙',

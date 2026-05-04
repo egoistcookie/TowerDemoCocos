@@ -365,6 +365,7 @@ export class Boss extends Component {
             this.healthBarNode.setPosition(0, 40, 0);
             this.healthBar.setMaxHealth(this.maxHealth);
             this.healthBar.setHealth(this.currentHealth);
+            this.syncHealthBarFacingFromParent();
             return;
         }
 
@@ -377,6 +378,7 @@ export class Boss extends Component {
             this.healthBar.setMaxHealth(this.maxHealth);
             this.healthBar.setHealth(this.currentHealth);
         }
+        this.syncHealthBarFacingFromParent();
     }
 
     protected destroyTransientHealthBarNow(): void {
@@ -398,8 +400,21 @@ export class Boss extends Component {
             }
             this.healthBarNode.active = true;
         }
+        this.syncHealthBarFacingFromParent();
         cancelTransientHealthBarHide(this);
         scheduleTransientHealthBarHide(this, () => this.destroyTransientHealthBarNow());
+    }
+
+    /**
+     * 血条挂在敌人根节点下；父节点水平翻转时子节点需反向缩放，否则绿条会从右往左“抽”或镜像。
+     * 受击时若新建血条，默认 scale 为 1，必须按当前朝向同步一次。
+     */
+    protected syncHealthBarFacingFromParent(): void {
+        if (!this.healthBarNode || !this.healthBarNode.isValid) {
+            return;
+        }
+        const px = this.node.scale.x;
+        this.healthBarNode.setScale(px < 0 ? -1 : 1, 1, 1);
     }
 
     findGameManager() {
@@ -1246,18 +1261,11 @@ export class Boss extends Component {
         if (direction.x < 0) {
             // 向左移动，翻转
             this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-            // 血条反向翻转，保持正常朝向
-            if (this.healthBarNode && this.healthBarNode.isValid) {
-                this.healthBarNode.setScale(-1, 1, 1);
-            }
         } else {
             // 向右移动，正常朝向
             this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-            // 血条正常朝向
-            if (this.healthBarNode && this.healthBarNode.isValid) {
-                this.healthBarNode.setScale(1, 1, 1);
-            }
         }
+        this.syncHealthBarFacingFromParent();
     }
 
     /**

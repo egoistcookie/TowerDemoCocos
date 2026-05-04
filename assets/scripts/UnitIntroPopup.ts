@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Sprite, Label, Button, EventTouch, find, UITransform, Vec3, tween, Color, UIOpacity, Graphics, view } from 'cc';
+import { _decorator, Component, Node, Sprite, Label, Button, EventTouch, find, UITransform, Vec3, tween, Tween, Color, UIOpacity, Graphics, view } from 'cc';
 import { GamePopup } from './GamePopup';
 const { ccclass, property } = _decorator;
 
@@ -24,6 +24,8 @@ export class UnitIntroPopup extends Component {
     private maskLayer: Node = null!; // 遮罩层节点
     private lastShownUnitType: string = ''; // 当前显示的介绍框对应的单位类型（用于小精灵关闭后触发新手教程）
     private currentCloseCallback: (() => void) | null = null; // 弹窗关闭回调（可选）
+    /** 已有介绍框显示时后续 show 入队，关闭后再播，避免打断（如兽穴提示与「熊来啦」异步重叠） */
+    private pendingIntroQueue: any[] = [];
     private unitIconOriginalWidth: number = 100; // 保存 unitIcon 的原始宽度，用于恢复默认尺寸
     private unitIconOriginalHeight: number = 100; // 保存 unitIcon 的原始高度，用于恢复默认尺寸
 
@@ -263,12 +265,28 @@ export class UnitIntroPopup extends Component {
         }
     }
     
+    /** 是否正在展示介绍框（含遮罩暂停态） */
+    public isOpen(): boolean {
+        return !!(this.container && this.container.isValid && this.container.active);
+    }
+
     /**
      * 显示单位介绍弹窗
      * @param unitInfo 单位信息对象
      */
     show(unitInfo: any) {
         if (!this.container) return;
+        if (this.container.active) {
+            this.pendingIntroQueue.push(unitInfo);
+            return;
+        }
+        this._applyShowUnitInfo(unitInfo);
+    }
+
+    /**
+     * 实际打开介绍框（单例容器）；若已有弹窗在显示，请走 {@link show} 入队。
+     */
+    private _applyShowUnitInfo(unitInfo: any) {
         this.currentCloseCallback = (unitInfo && typeof unitInfo.onCloseCallback === 'function')
             ? unitInfo.onCloseCallback
             : null;
@@ -301,19 +319,19 @@ export class UnitIntroPopup extends Component {
                 }
             }
         }
-        
+
         if (unitInfo.unitName && this.unitName) {
             this.unitName.string = unitInfo.unitName;
             this.unitName.horizontalAlign = Label.HorizontalAlign.CENTER;
             this.unitName.verticalAlign = Label.VerticalAlign.CENTER;
         }
-        
+
         // 设置单位描述，即使为空字符串也要设置（因为可能是预制体中配置的）
         if (this.unitDescription) {
             // 如果 unitDescription 存在（包括空字符串），就设置它
             // 如果不存在或为 undefined/null，则使用默认值
-            this.unitDescription.string = unitInfo.unitDescription !== undefined && unitInfo.unitDescription !== null 
-                ? unitInfo.unitDescription 
+            this.unitDescription.string = unitInfo.unitDescription !== undefined && unitInfo.unitDescription !== null
+                ? unitInfo.unitDescription
                 : '暂无描述';
             this.unitDescription.horizontalAlign = Label.HorizontalAlign.CENTER;
             this.unitDescription.verticalAlign = Label.VerticalAlign.CENTER;
@@ -321,18 +339,26 @@ export class UnitIntroPopup extends Component {
 
         // 可选：支持外部传入特殊边框高亮色（如兽人燃血狂暴介绍框）
         this.applyCustomBorderStyle(unitInfo?.introBorderColor);
-        
+
+        // 连续弹出时：停掉容器上的补间并重置不透明度（避免与上一次关闭动画叠加变半透明）
+        Tween.stopAllByTarget(this.container);
+        const panelOpacity = this.container.getComponent(UIOpacity);
+        if (panelOpacity) {
+            Tween.stopAllByTarget(panelOpacity);
+            panelOpacity.opacity = 255;
+        }
+
         // 显示遮罩层（置灰效果）
         this.showMaskLayer();
-        
+
         // 设置容器为最上层（在遮罩层之上）
         this.container.setSiblingIndex(Number.MAX_SAFE_INTEGER);
-        
+
         // 显示弹窗
         this.container.active = true;
-        
+
         // 不播放闪烁动画，直接显示（保持高亮边框）
-        
+
         // 记录当前显示的单位 ID（小精灵 prefabName 为 Wisp，关闭后用于触发新手教程）
         this.lastShownUnitType = (unitInfo.unitId != null ? String(unitInfo.unitId) : '') || '';
 
@@ -397,19 +423,11 @@ export class UnitIntroPopup extends Component {
         this.maskLayer.active = true;
         this.maskLayer.setSiblingIndex(Number.MAX_SAFE_INTEGER - 1);
         
-        // 淡入动画
         const uiOpacity = this.maskLayer.getComponent(UIOpacity);
         if (uiOpacity) {
+            Tween.stopAllByTarget(uiOpacity);
             uiOpacity.opacity = 0;
-            tween({ opacity: 0 })
-                .to(0.3, { opacity: 180 }, {
-                    onUpdate: (target: any) => {
-                        if (uiOpacity && uiOpacity.isValid) {
-                            uiOpacity.opacity = Math.floor(target.opacity);
-                        }
-                    }
-                })
-                .start();
+            tween(uiOpacity).to(0.3, { opacity: 180 }).start();
         }
     }
     
@@ -417,26 +435,20 @@ export class UnitIntroPopup extends Component {
      * 隐藏遮罩层
      */
     private hideMaskLayer() {
-        if (!this.maskLayer) return;
+        if (!this.maskLayer || !this.maskLayer.isValid) return;
         
-        // 淡出动画
         const uiOpacity = this.maskLayer.getComponent(UIOpacity);
         if (uiOpacity) {
-            tween({ opacity: uiOpacity.opacity })
-                .to(0.2, { opacity: 0 }, {
-                    onUpdate: (target: any) => {
-                        if (uiOpacity) {
-                            uiOpacity.opacity = Math.floor(target.opacity);
-                        }
-                    },
-                    onComplete: () => {
-                        // 动画完成后隐藏遮罩层
+            Tween.stopAllByTarget(uiOpacity);
+            tween(uiOpacity)
+                .to(0.2, { opacity: 0 })
+                .call(() => {
+                    if (this.maskLayer && this.maskLayer.isValid) {
                         this.maskLayer.active = false;
                     }
                 })
                 .start();
         } else {
-            // 如果没有 UIOpacity 组件，直接隐藏
             this.maskLayer.active = false;
         }
     }
@@ -628,14 +640,21 @@ export class UnitIntroPopup extends Component {
         const closeCallback = this.currentCloseCallback;
         this.currentCloseCallback = null;
 
+        const nextIntro = this.pendingIntroQueue.length > 0 ? this.pendingIntroQueue.shift()! : null;
+
         // 先隐藏当前弹窗，再异步执行关闭回调，避免回调里新弹窗被本次 hide 立刻关闭
         this.container.active = false;
-        if (closeCallback) {
+        if (closeCallback || nextIntro) {
             this.scheduleOnce(() => {
-                try {
-                    closeCallback();
-                } catch (e) {
-                    console.warn('[UnitIntroPopup] 执行关闭回调失败:', e);
+                if (closeCallback) {
+                    try {
+                        closeCallback();
+                    } catch (e) {
+                        console.warn('[UnitIntroPopup] 执行关闭回调失败:', e);
+                    }
+                }
+                if (nextIntro) {
+                    this._applyShowUnitInfo(nextIntro);
                 }
             }, 0);
         }

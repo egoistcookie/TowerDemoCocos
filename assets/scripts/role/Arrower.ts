@@ -202,6 +202,12 @@ export class Arrower extends Role {
     private readonly fishingSlogans: string[] = ['钓鱼！钓鱼！钓鱼！', '我来养活大家！', '怎么还不上钩呀'];
     private readonly SP_MULTI_ARROW_SLOGAN = '我的箭……会分叉？';
 
+    /** 连环箭：仅三星兵营产出的弓箭手可累计击杀并领悟；死亡回池 resetRoleState 时清零 */
+    private chainArrowKillCount = 0;
+    private chainArrowUnlocked = false;
+    private readonly CHAIN_ARROW_KILLS_REQUIRED = 10;
+    private readonly CHAIN_ARROW_DOUBLE_DELAY_SEC = 0.12;
+
     public override tryTriggerSloganOnAction() {
         const slogans = this.isFishing ? this.fishingSlogans : this.battleSlogans;
         if (!slogans || slogans.length === 0) {
@@ -251,6 +257,59 @@ export class Arrower extends Role {
     protected checkSkill() {
         // 技能状态由isPenetrateArrowEnabled控制，如果开启则hasSkill为true
         this.hasSkill = this.isPenetrateArrowEnabled;
+    }
+
+    protected override resetRoleState(): void {
+        this.chainArrowKillCount = 0;
+        this.chainArrowUnlocked = false;
+        super.resetRoleState();
+    }
+
+    executeAttack() {
+        if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active || this.isDestroyed) {
+            return;
+        }
+        if (!this.isAliveEnemy(this.currentTarget)) {
+            this.currentTarget = null!;
+            return;
+        }
+        if (!this.chainArrowUnlocked || !this.arrowPrefab || this.spawnStarTier < 3) {
+            super.executeAttack();
+            return;
+        }
+        this.createArrow();
+        this.scheduleOnce(() => {
+            if (this.isDestroyed || !this.node?.isValid || !this.node.active) {
+                return;
+            }
+            if (!this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active) {
+                return;
+            }
+            if (!this.isAliveEnemy(this.currentTarget)) {
+                return;
+            }
+            this.createArrow();
+        }, this.CHAIN_ARROW_DOUBLE_DELAY_SEC);
+    }
+
+    protected onAfterArrowDamagedEnemy(_targetNode: Node, enemyScript: any): void {
+        if (this.chainArrowUnlocked || !enemyScript || this.spawnStarTier < 3) {
+            return;
+        }
+        let killed = false;
+        if (enemyScript.isAlive && typeof enemyScript.isAlive === 'function') {
+            killed = !enemyScript.isAlive();
+        } else if (typeof enemyScript.currentHealth === 'number') {
+            killed = enemyScript.currentHealth <= 0;
+        }
+        if (!killed) {
+            return;
+        }
+        this.chainArrowKillCount++;
+        if (this.chainArrowKillCount >= this.CHAIN_ARROW_KILLS_REQUIRED) {
+            this.chainArrowUnlocked = true;
+            GamePopup.showMessage('一名弓箭手领悟技能：连环箭！', true, 4);
+        }
     }
     
     /**
@@ -454,6 +513,7 @@ export class Arrower extends Role {
                     enemyScript.takeDamage(damage, hitDirection);
                     // 记录伤害统计
                     this.recordDamageToStatistics(damage);
+                    this.onAfterArrowDamagedEnemy(enemy, enemyScript);
                 }
             }
         );

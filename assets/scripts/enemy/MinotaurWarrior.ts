@@ -2307,9 +2307,10 @@ export class MinotaurWarrior extends Boss {
             }
         };
         
+        // 尸体暂留 30 秒后返回对象池
         setTimeout(() => {
             returnToPool();
-        }, 60000);
+        }, 30000);
     }
 
     /**
@@ -2502,17 +2503,7 @@ export class MinotaurWarrior extends Boss {
     }
 
     flipDirection(direction: Vec3) {
-        if (direction.x < 0) {
-            this.node.setScale(-Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-            if (this.healthBarNode && this.healthBarNode.isValid) {
-                this.healthBarNode.setScale(-1, 1, 1);
-            }
-        } else {
-            this.node.setScale(Math.abs(this.defaultScale.x), this.defaultScale.y, this.defaultScale.z);
-            if (this.healthBarNode && this.healthBarNode.isValid) {
-                this.healthBarNode.setScale(1, 1, 1);
-            }
-        }
+        super.flipDirection(direction);
     }
 
     checkPathBlockedByStoneWall(): Node | null {

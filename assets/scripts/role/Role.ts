@@ -182,6 +182,8 @@ export class Role extends Component {
     protected defaultScale: Vec3 = new Vec3(1, 1, 1); // 默认缩放（用于恢复翻转）
     /** 建筑产出星级对应的体型倍率（×defaultScale），朝向翻转时一并乘算 */
     protected _starVisualMultiplier: number = 1;
+    /** 当前单位对应的兵营星级 1~3（由 applyStarTierScaling 同步；对象池回收时复位） */
+    protected spawnStarTier: number = 1;
     protected isPlayingAttackAnimation: boolean = false; // 是否正在播放攻击动画
     protected isPlayingHitAnimation: boolean = false; // 是否正在播放被攻击动画
     protected isPlayingDeathAnimation: boolean = false; // 是否正在播放死亡动画
@@ -448,6 +450,7 @@ export class Role extends Component {
             }
         } catch {}
         this.syncBuffOriginalStatsFromCurrent();
+        this.spawnStarTier = n;
     }
 
     /**
@@ -1697,7 +1700,19 @@ export class Role extends Component {
         }
         
         // 尝试获取所有可能的敌人组件类型（包括 Portal 和 Bear）
-        const possibleComponentNames = ['TrollSpearman', 'OrcWarrior', 'OrcWarlord', 'MinotaurWarrior', 'Boss', 'Enemy', 'Portal', 'Bear'];
+        const possibleComponentNames = [
+            'TrollSpearman',
+            'Orc',
+            'OrcWarrior',
+            'OrcWarlord',
+            'OrcShaman',
+            'Dragon',
+            'MinotaurWarrior',
+            'Boss',
+            'Enemy',
+            'Portal',
+            'Bear',
+        ];
         for (const compName of possibleComponentNames) {
             const comp = node.getComponent(compName) as any;
             // Bear 是中立单位，不需要检查 unitType
@@ -3786,6 +3801,9 @@ export class Role extends Component {
         }
     }
 
+    /** 箭矢命中并结算伤害后的钩子（弓箭手系用于连环箭击杀计数等） */
+    protected onAfterArrowDamagedEnemy(_targetNode: Node, _enemyScript: any): void {}
+
     protected createArrow() {
         if (!this.arrowPrefab || !this.currentTarget) {
             return;
@@ -3852,6 +3870,7 @@ export class Role extends Component {
                             enemyScript.takeDamage(damage, hitDirection);
                             // 记录伤害统计
                             this.recordDamageToStatistics(damage);
+                            this.onAfterArrowDamagedEnemy(targetNode, enemyScript);
                         }
                     }
                 }
@@ -4257,6 +4276,7 @@ export class Role extends Component {
         // 重置节点状态
         if (this.node) {
             this._starVisualMultiplier = 1;
+            this.spawnStarTier = 1;
             this.node.setScale(this.defaultScale);
             this.node.angle = 0;
             if (this.sprite) {

@@ -1,4 +1,5 @@
 import { _decorator, Component, Node, EventTarget, instantiate, EventTouch, Sprite, SpriteFrame, find, Graphics, UITransform, Color, Prefab, Vec3, resources } from 'cc';
+import { BattleFloatTextPool } from '../BattleFloatTextPool';
 import { UnitSelectionManager } from '../UnitSelectionManager';
 import { UnitInfo } from '../UnitInfoPanel';
 import { GameState } from '../GameState';
@@ -48,9 +49,38 @@ export class Crystal extends Component {
 
     private currentHealth: number = 100;
     private isDestroyed: boolean = false;
+
+    /** 每次升级增加的最大生命 */
+    private readonly MAX_HP_BONUS_PER_UPGRADE = 200;
+    /** 脱战后每秒恢复生命（未再受伤一段时间后生效） */
+    private readonly REGEN_HP_PER_SECOND = 10;
+    /** 自上次受伤起满多少秒视为「未受攻击」，开始回复 */
+    private readonly REGEN_DELAY_AFTER_DAMAGE_SEC = 1;
+    private timeSinceLastDamage: number = 1e6;
+    private regenFraction: number = 0;
     private unitSelectionManager: UnitSelectionManager = null!; // 单位选择管理器
     private sprite: Sprite = null!; // Sprite组件引用
     private defaultSpriteFrame: SpriteFrame = null!; // 默认SpriteFrame
+    private readonly restScale: Vec3 = new Vec3(1, 1, 1);
+    private readonly _scratchFloatWorldPos = new Vec3();
+    private readonly _floatMoveOffset = new Vec3(0, 40, 0);
+    private readonly _floatTextColor = new Color(255, 40, 40, 255);
+    private readonly _floatOutlineColor = new Color(0, 0, 0, 255);
+    private readonly _hitFlashHiColor = new Color(255, 235, 120, 255);
+    private readonly _hitFlashSavedSpriteColor = new Color(255, 255, 255, 255);
+    private readonly _finishCrystalHitFlash = (): void => {
+        if (!this.node?.isValid || this.isDestroyed) {
+            return;
+        }
+        const bx = this.restScale.x;
+        const by = this.restScale.y;
+        const bz = this.restScale.z;
+        this.node.setScale(bx, by, bz);
+        const sp = this.sprite;
+        if (sp?.isValid) {
+            sp.color = this._hitFlashSavedSpriteColor;
+        }
+    };
     private gameManager: any = null!; // 游戏管理器（使用 any，避免与 GameManager 形成循环依赖）
     
     // 升级相关
@@ -105,6 +135,8 @@ export class Crystal extends Component {
     }
 
     onDestroy() {
+        this.unschedule(this._finishCrystalHitFlash);
+
         // 移除点击事件监听
         this.node.off(Node.EventType.TOUCH_END, this.onCrystalClick, this);
 
@@ -122,7 +154,15 @@ export class Crystal extends Component {
             return;
         }
 
+        this.timeSinceLastDamage = 0;
+        this.regenFraction = 0;
+        const dmgInt = Math.max(0, Math.floor(damage));
         this.currentHealth -= damage;
+
+        if (dmgInt > 0) {
+            this.showCrystalDamageFloat(dmgInt);
+            this.playCrystalHitHighlightFlash();
+        }
 
         // 更新单位信息面板
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
@@ -138,12 +178,53 @@ export class Crystal extends Component {
         }
     }
 
+    private showCrystalDamageFloat(damage: number): void {
+        this._scratchFloatWorldPos.set(this.node.worldPosition);
+        this._scratchFloatWorldPos.y += 45;
+        BattleFloatTextPool.spawnFloatText({
+            owner: this,
+            worldPos: this._scratchFloatWorldPos,
+            text: `-${damage}`,
+            color: this._floatTextColor,
+            fontSize: 22,
+            duration: 0.72,
+            moveOffset: this._floatMoveOffset,
+            outlineColor: this._floatOutlineColor,
+            outlineWidth: 3,
+        });
+    }
+
+    private playCrystalHitHighlightFlash(): void {
+        if (!this.node?.isValid || this.isDestroyed) {
+            return;
+        }
+        this.unschedule(this._finishCrystalHitFlash);
+
+        const bx = this.restScale.x;
+        const by = this.restScale.y;
+        const bz = this.restScale.z;
+        const mul = 1.15;
+        this.node.setScale(bx * mul, by * mul, bz);
+
+        const sp = this.sprite;
+        if (sp?.isValid) {
+            this._hitFlashSavedSpriteColor.set(sp.color);
+            sp.color = this._hitFlashHiColor;
+        }
+
+        this.scheduleOnce(this._finishCrystalHitFlash, 0.28);
+    }
+
     destroyCrystal() {
         if (this.isDestroyed) {
             return;
         }
 
         this.isDestroyed = true;
+        this.unschedule(this._finishCrystalHitFlash);
+        if (this.node?.isValid) {
+            this.node.setScale(this.restScale.x, this.restScale.y, this.restScale.z);
+        }
 
         // 清除单位信息面板和范围显示
         if (this.unitSelectionManager) {
@@ -318,6 +399,29 @@ export class Crystal extends Component {
             }
         }
 
+        this.timeSinceLastDamage += deltaTime;
+        if (
+            this.currentHealth > 0 &&
+            this.currentHealth < this.maxHealth &&
+            this.timeSinceLastDamage >= this.REGEN_DELAY_AFTER_DAMAGE_SEC
+        ) {
+            this.regenFraction += this.REGEN_HP_PER_SECOND * deltaTime;
+            const whole = Math.floor(this.regenFraction);
+            if (whole >= 1) {
+                this.regenFraction -= whole;
+                const prev = this.currentHealth;
+                this.currentHealth = Math.min(this.maxHealth, this.currentHealth + whole);
+                if (this.currentHealth !== prev) {
+                    if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
+                        this.unitSelectionManager.updateUnitInfo({
+                            currentHealth: this.currentHealth,
+                            maxHealth: this.maxHealth
+                        });
+                    }
+                }
+            }
+        }
+
         // 升级逻辑
         if (this.isUpgrading) {
             this.upgradeTimer += deltaTime;
@@ -418,6 +522,9 @@ export class Crystal extends Component {
      */
     completeUpgrade() {
         this.level++;
+
+        this.maxHealth += this.MAX_HP_BONUS_PER_UPGRADE;
+        this.currentHealth = Math.min(this.maxHealth, this.currentHealth + this.MAX_HP_BONUS_PER_UPGRADE);
         
         // 增加人口上限
         if (this.gameManager) {
@@ -440,7 +547,9 @@ export class Crystal extends Component {
         // 更新单位信息面板（如果被选中）
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
             this.unitSelectionManager.updateUnitInfo({
-                level: this.level
+                level: this.level,
+                currentHealth: this.currentHealth,
+                maxHealth: this.maxHealth
             });
         }
     }
@@ -551,6 +660,7 @@ export class Crystal extends Component {
             default:
                 scalePercent = 0.4 + (this.level - 1) * 0.15; // 默认计算方式
         }
+        this.restScale.set(scalePercent, scalePercent, 1);
         this.node.setScale(scalePercent, scalePercent, 1);
     }
 

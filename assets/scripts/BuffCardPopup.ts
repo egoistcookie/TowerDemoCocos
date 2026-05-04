@@ -63,9 +63,9 @@ export class BuffCardPopup extends Component {
     card3Button: Button = null!;
 
     private static readonly CARD_SELECT_SFX_RES = 'sounds/抽卡';
-    private cardSelectSfxCachedClip: AudioClip | null = null;
-    private cardSelectSfxLoading = false;
-    private cardSelectSfxPlayPending = false;
+    private static cardSelectSfxCachedClip: AudioClip | null = null;
+    private static cardSelectSfxLoading = false;
+    private static cardSelectSfxPlayPending = false;
 
     private gameManager: any = null!; // GameManager引用
     private maskLayer: Node = null!; // 遮罩层节点
@@ -164,30 +164,33 @@ export class BuffCardPopup extends Component {
     private isClosing: boolean = false;
     private hasInvokedCloseCallback: boolean = false;
 
-    private playCardSelectSfxIfAny() {
-        if (this.cardSelectSfxCachedClip) {
-            this.playCardSelectSfxClip(this.cardSelectSfxCachedClip);
+    /**
+     * 与抽卡选卡同款音效；静态方法供磨剑/控弦小游戏等复用（共享缓存与加载逻辑）。
+     */
+    public static playCardSelectSfxIfAny() {
+        if (BuffCardPopup.cardSelectSfxCachedClip) {
+            BuffCardPopup.playCardSelectSfxClip(BuffCardPopup.cardSelectSfxCachedClip);
             return;
         }
-        this.cardSelectSfxPlayPending = true;
-        if (this.cardSelectSfxLoading) return;
-        this.cardSelectSfxLoading = true;
+        BuffCardPopup.cardSelectSfxPlayPending = true;
+        if (BuffCardPopup.cardSelectSfxLoading) return;
+        BuffCardPopup.cardSelectSfxLoading = true;
         resources.load(BuffCardPopup.CARD_SELECT_SFX_RES, AudioClip, (err, clip) => {
-            this.cardSelectSfxLoading = false;
+            BuffCardPopup.cardSelectSfxLoading = false;
             if (err || !clip) {
-                this.cardSelectSfxPlayPending = false;
+                BuffCardPopup.cardSelectSfxPlayPending = false;
                 console.warn('[BuffCardPopup] 加载抽卡音效失败:', BuffCardPopup.CARD_SELECT_SFX_RES, err);
                 return;
             }
-            this.cardSelectSfxCachedClip = clip;
-            if (this.cardSelectSfxPlayPending) {
-                this.playCardSelectSfxClip(clip);
+            BuffCardPopup.cardSelectSfxCachedClip = clip;
+            if (BuffCardPopup.cardSelectSfxPlayPending) {
+                BuffCardPopup.playCardSelectSfxClip(clip);
             }
-            this.cardSelectSfxPlayPending = false;
+            BuffCardPopup.cardSelectSfxPlayPending = false;
         });
     }
 
-    private playCardSelectSfxClip(clip: AudioClip) {
+    private static playCardSelectSfxClip(clip: AudioClip) {
         try {
             const sm = SoundManager.getInstance();
             const smHasEffectSource = sm ? !!(sm as any).effectAudioSource : false;
@@ -197,6 +200,10 @@ export class BuffCardPopup extends Component {
                 AudioManager.Instance?.playSFX(clip);
             }
         } catch {}
+    }
+
+    private playCardSelectSfxIfAny() {
+        BuffCardPopup.playCardSelectSfxIfAny();
     }
 
     private setAllButtonsInteractable(interactable: boolean) {
