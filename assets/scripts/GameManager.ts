@@ -4340,7 +4340,7 @@ export class GameManager extends Component {
         
         // 判断是否是建筑物的辅助函数
         const isBuilding = (unit: any): boolean => {
-            const buildingTypes = ['WatchTower', 'IceTower', 'ThunderTower', 'WarAncientTree',
+            const buildingTypes = ['WatchTower', 'CannonTower', 'IceTower', 'ThunderTower', 'WarAncientTree',
                                   'HunterHall', 'MageTower', 'SwordsmanHall', 'Church', 'StoneWall'];
             return buildingTypes.indexOf(unit.unitType) >= 0;
         };
@@ -4536,7 +4536,7 @@ export class GameManager extends Component {
       //console.log('[GameManager.setDefaultMVPUnit] 开始设置默认MVP单位');
         // 判断是否是建筑物的辅助函数
         const isBuildingType = (unitType: string): boolean => {
-            const buildingTypes = ['WatchTower', 'IceTower', 'ThunderTower', 'WarAncientTree',
+            const buildingTypes = ['WatchTower', 'CannonTower', 'IceTower', 'ThunderTower', 'WarAncientTree',
                                   'HunterHall', 'MageTower', 'SwordsmanHall', 'Church', 'StoneWall'];
             return buildingTypes.indexOf(unitType) >= 0;
         };
@@ -5729,7 +5729,7 @@ export class GameManager extends Component {
                     // 非第一关：加载全部建筑预制体
                     const shouldLoadMageTower = currentLevel !== 1;
                     const shouldLoadEagleNest = currentLevel >= 4;
-                    const totalSteps = (shouldLoadMageTower ? 9 : 8) + (shouldLoadEagleNest ? 1 : 0);
+                    const totalSteps = (shouldLoadMageTower ? 10 : 9) + (shouldLoadEagleNest ? 1 : 0);
                     this.loadAllBuildingPrefabs(bundle, shouldLoadMageTower, shouldLoadEagleNest, totalSteps, () => {
                         // 预制体加载完成，停止平滑进度定时器，立刻进入游戏
                         if (this.isLoadingLinearProgress) {
@@ -6544,8 +6544,10 @@ export class GameManager extends Component {
             const shouldDeferIntroToClick =
                 rawUnitId === 'StoneWall' ||
                 rawUnitId === 'WatchTower' ||
+                rawUnitId === 'CannonTower' ||
                 uniqueUnitType === '石墙' ||
-                uniqueUnitType === '哨塔';
+                uniqueUnitType === '哨塔' ||
+                uniqueUnitType === '炮塔';
             if (shouldDeferIntroToClick) {
                 this.deferredIntroUnitIds.add(String(rawUnitId));
                 return true;
@@ -8669,6 +8671,7 @@ export class GameManager extends Component {
         const watchList: Array<{ path: string; comp: string }> = [
             { path: 'Canvas/WarAncientTrees', comp: 'WarAncientTree' },
             { path: 'Canvas/WatchTowers', comp: 'WatchTower' },
+            { path: 'Canvas/WatchTowers', comp: 'CannonTower' },
             { path: 'Canvas/IceTowers', comp: 'IceTower' },
             { path: 'Canvas/ThunderTowers', comp: 'ThunderTower' },
         ];
@@ -8925,6 +8928,7 @@ export class GameManager extends Component {
             'Priest': ['Canvas/Towers'],
             'StoneWall': ['Canvas/StoneWalls'],
             'WatchTower': ['Canvas/WatchTowers'],
+            'CannonTower': ['Canvas/WatchTowers'],
             'IceTower': ['Canvas/IceTowers'],
             'ThunderTower': ['Canvas/ThunderTowers'],
             'WarAncientTree': ['Canvas/WarAncientTrees'],
@@ -8946,7 +8950,7 @@ export class GameManager extends Component {
                             // 对于建筑类单位（WatchTower, IceTower, ThunderTower等），需要检查具体的组件类名
                             // 对于其他单位，检查Role或Build组件
                             let script: any = null;
-                            if (unitType === 'WatchTower' || unitType === 'IceTower' || unitType === 'ThunderTower' ||
+                            if (unitType === 'WatchTower' || unitType === 'CannonTower' || unitType === 'IceTower' || unitType === 'ThunderTower' ||
                                 unitType === 'StoneWall' ||
                                 unitType === 'WarAncientTree' || unitType === 'HunterHall' || 
                                 unitType === 'SwordsmanHall' || unitType === 'Church') {
@@ -9308,7 +9312,7 @@ export class GameManager extends Component {
         // 角色类型（继承Role的单位）
         const roleTypes = ['Arrower', 'EagleArcher', 'Hunter', 'ElfSwordsman', 'Priest', 'Mage'];
         // 防御塔类型
-        const towerTypes = ['WatchTower', 'IceTower', 'ThunderTower'];
+        const towerTypes = ['WatchTower', 'CannonTower', 'IceTower', 'ThunderTower'];
         
         // 筛选出既是已上场单位，又是角色或防御塔的单位类型
         return activeUnitTypes.filter(type => 
@@ -9381,7 +9385,7 @@ export class GameManager extends Component {
         
         // 如果是 SP（彩色）卡片：目前支持 角色 + 防御塔(Watch/Ice/Thunder) + 石墙
         // 其它单位暂不支持 SP，降级为 SSR 普通属性卡
-        const spAllowedNonRoleUnits = new Set<string>(['StoneWall', 'WatchTower', 'IceTower', 'ThunderTower']);
+        const spAllowedNonRoleUnits = new Set<string>(['StoneWall', 'WatchTower', 'CannonTower', 'IceTower', 'ThunderTower']);
         if (rarity === 'SP' && unitCategory !== 'role' && !spAllowedNonRoleUnits.has(unitType)) {
             rarity = 'SSR';
         }
@@ -9601,6 +9605,7 @@ export class GameManager extends Component {
             'Priest': ['Canvas/Towers', 'Canvas/Priests'],
             'MageTower': ['Canvas/MageTowers'],
             'WatchTower': ['Canvas/WatchTowers'],
+            'CannonTower': ['Canvas/WatchTowers'],
             'IceTower': ['Canvas/IceTowers'],
             'ThunderTower': ['Canvas/ThunderTowers'],
             'WarAncientTree': ['Canvas/WarAncientTrees'],
@@ -9620,7 +9625,7 @@ export class GameManager extends Component {
                     
                     // 检查是否有对应的组件
                     let script: any = null;
-                    if (unitType === 'WatchTower' || unitType === 'IceTower' || unitType === 'ThunderTower' ||
+                    if (unitType === 'WatchTower' || unitType === 'CannonTower' || unitType === 'IceTower' || unitType === 'ThunderTower' ||
                         unitType === 'WarAncientTree' || unitType === 'HunterHall' || 
                         unitType === 'SwordsmanHall' || unitType === 'Church') {
                         // 建筑类单位，检查具体的组件类名
@@ -10243,9 +10248,10 @@ export class GameManager extends Component {
      */
     private loadLevel1MinimalPrefabs(bundle: any, onLoaded: () => void) {
         let loadedCount = 0;
-        const totalSteps = 3; // 石墙、哨塔、战争古树（弓箭手小屋）
+        const totalSteps = 4; // 石墙、哨塔、炮塔、战争古树（弓箭手小屋）
         let stoneWallPrefab: Prefab | null = null;
         let watchTowerPrefab: Prefab | null = null;
+        let cannonTowerPrefab: Prefab | null = null;
         let warAncientTreePrefab: Prefab | null = null;
 
         const checkComplete = () => {
@@ -10260,6 +10266,9 @@ export class GameManager extends Component {
                     }
                     if (watchTowerPrefab && typeof towerBuilder.setWatchTowerPrefab === 'function') {
                         towerBuilder.setWatchTowerPrefab(watchTowerPrefab);
+                    }
+                    if (cannonTowerPrefab && typeof towerBuilder.setCannonTowerPrefab === 'function') {
+                        towerBuilder.setCannonTowerPrefab(cannonTowerPrefab);
                     }
                     if (warAncientTreePrefab && typeof towerBuilder.setWarAncientTreePrefab === 'function') {
                         towerBuilder.setWarAncientTreePrefab(warAncientTreePrefab);
@@ -10293,7 +10302,15 @@ export class GameManager extends Component {
                 watchTowerPrefab = prefab as Prefab;
                 //console.info('[GameManager] 从分包 prefabs_sub 成功加载 WatchTower');
             }
-            // 进度：0.3 + 0.7 * (2/3)
+            checkComplete();
+        });
+
+        bundle.load('CannonTower', Prefab, (err: any, prefab: Prefab | null) => {
+            if (err || !prefab) {
+                console.error('[GameManager] 从分包 prefabs_sub 加载 CannonTower 失败:', err);
+            } else {
+                cannonTowerPrefab = prefab as Prefab;
+            }
             checkComplete();
         });
 
@@ -10335,6 +10352,7 @@ export class GameManager extends Component {
             iceTowerPrefab: Prefab | null,
             thunderTowerPrefab: Prefab | null,
             watchTowerPrefab: Prefab | null,
+            cannonTowerPrefab: Prefab | null,
             warAncientTreePrefab: Prefab | null,
             hunterHallPrefab: Prefab | null,
             swordsmanHallPrefab: Prefab | null,
@@ -10356,6 +10374,9 @@ export class GameManager extends Component {
                     }
                     if (watchTowerPrefab && typeof towerBuilder.setWatchTowerPrefab === 'function') {
                         towerBuilder.setWatchTowerPrefab(watchTowerPrefab);
+                    }
+                    if (cannonTowerPrefab && typeof towerBuilder.setCannonTowerPrefab === 'function') {
+                        towerBuilder.setCannonTowerPrefab(cannonTowerPrefab);
                     }
                     if (warAncientTreePrefab && typeof towerBuilder.setWarAncientTreePrefab === 'function') {
                         towerBuilder.setWarAncientTreePrefab(warAncientTreePrefab);
@@ -10406,41 +10427,79 @@ export class GameManager extends Component {
             loadPrefab('IceTower', 2, (iceTowerPrefab) => {
                 loadPrefab('ThunderTower', 3, (thunderTowerPrefab) => {
                     loadPrefab('WatchTower', 4, (watchTowerPrefab) => {
-                        loadPrefab('WarAncientTree', 5, (warAncientTreePrefab) => {
-                            loadPrefab('HunterHall', 6, (hunterHallPrefab) => {
-                                loadPrefab('SwordsmanHall', 7, (swordsmanHallPrefab) => {
-                                    loadPrefab('Church', 8, (churchPrefab) => {
-                                        if (shouldLoadMageTower) {
-                                            loadPrefab('MageTower', 9, (mageTowerPrefab) => {
-                                                if (shouldLoadEagleNest) {
-                                                    loadPrefab('EagleNest', 10, (eagleNestPrefab) => {
+                        loadPrefab('CannonTower', 5, (cannonTowerPrefab) => {
+                            loadPrefab('WarAncientTree', 6, (warAncientTreePrefab) => {
+                                loadPrefab('HunterHall', 7, (hunterHallPrefab) => {
+                                    loadPrefab('SwordsmanHall', 8, (swordsmanHallPrefab) => {
+                                        loadPrefab('Church', 9, (churchPrefab) => {
+                                            if (shouldLoadMageTower) {
+                                                loadPrefab('MageTower', 10, (mageTowerPrefab) => {
+                                                    if (shouldLoadEagleNest) {
+                                                        loadPrefab('EagleNest', 11, (eagleNestPrefab) => {
+                                                            finalizeInjection(
+                                                                stoneWallPrefab,
+                                                                iceTowerPrefab,
+                                                                thunderTowerPrefab,
+                                                                watchTowerPrefab,
+                                                                cannonTowerPrefab,
+                                                                warAncientTreePrefab,
+                                                                hunterHallPrefab,
+                                                                swordsmanHallPrefab,
+                                                                churchPrefab,
+                                                                mageTowerPrefab,
+                                                                eagleNestPrefab,
+                                                            );
+                                                        });
+                                                    } else {
                                                         finalizeInjection(
-                                                            stoneWallPrefab, iceTowerPrefab, thunderTowerPrefab, watchTowerPrefab,
-                                                            warAncientTreePrefab, hunterHallPrefab, swordsmanHallPrefab, churchPrefab, mageTowerPrefab, eagleNestPrefab
+                                                            stoneWallPrefab,
+                                                            iceTowerPrefab,
+                                                            thunderTowerPrefab,
+                                                            watchTowerPrefab,
+                                                            cannonTowerPrefab,
+                                                            warAncientTreePrefab,
+                                                            hunterHallPrefab,
+                                                            swordsmanHallPrefab,
+                                                            churchPrefab,
+                                                            mageTowerPrefab,
+                                                            null,
+                                                        );
+                                                    }
+                                                });
+                                            } else {
+                                                if (shouldLoadEagleNest) {
+                                                    loadPrefab('EagleNest', 11, (eagleNestPrefab) => {
+                                                        finalizeInjection(
+                                                            stoneWallPrefab,
+                                                            iceTowerPrefab,
+                                                            thunderTowerPrefab,
+                                                            watchTowerPrefab,
+                                                            cannonTowerPrefab,
+                                                            warAncientTreePrefab,
+                                                            hunterHallPrefab,
+                                                            swordsmanHallPrefab,
+                                                            churchPrefab,
+                                                            null,
+                                                            eagleNestPrefab,
                                                         );
                                                     });
                                                 } else {
                                                     finalizeInjection(
-                                                        stoneWallPrefab, iceTowerPrefab, thunderTowerPrefab, watchTowerPrefab,
-                                                        warAncientTreePrefab, hunterHallPrefab, swordsmanHallPrefab, churchPrefab, mageTowerPrefab, null
+                                                        stoneWallPrefab,
+                                                        iceTowerPrefab,
+                                                        thunderTowerPrefab,
+                                                        watchTowerPrefab,
+                                                        cannonTowerPrefab,
+                                                        warAncientTreePrefab,
+                                                        hunterHallPrefab,
+                                                        swordsmanHallPrefab,
+                                                        churchPrefab,
+                                                        null,
+                                                        null,
                                                     );
                                                 }
-                                            });
-                                        } else {
-                                            if (shouldLoadEagleNest) {
-                                                loadPrefab('EagleNest', 10, (eagleNestPrefab) => {
-                                                    finalizeInjection(
-                                                        stoneWallPrefab, iceTowerPrefab, thunderTowerPrefab, watchTowerPrefab,
-                                                        warAncientTreePrefab, hunterHallPrefab, swordsmanHallPrefab, churchPrefab, null, eagleNestPrefab
-                                                    );
-                                                });
-                                            } else {
-                                                finalizeInjection(
-                                                    stoneWallPrefab, iceTowerPrefab, thunderTowerPrefab, watchTowerPrefab,
-                                                    warAncientTreePrefab, hunterHallPrefab, swordsmanHallPrefab, churchPrefab, null, null
-                                                );
                                             }
-                                        }
+                                        });
                                     });
                                 });
                             });

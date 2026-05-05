@@ -2,6 +2,7 @@ import { _decorator, Prefab, Node, Vec3, find, instantiate, SpriteFrame, Color, 
 import { Enemy } from './Enemy';
 import { AudioManager } from '../AudioManager';
 import { EnemyPool } from '../EnemyPool';
+import { getWatchTowerFamilyScript } from '../WatchTowerFamily';
 
 const { ccclass, property } = _decorator;
 
@@ -292,7 +293,7 @@ export class OrcShaman extends Enemy {
                     const mageScript = targetNode.getComponent('Mage') as any;
                     const elfSwordsmanScript = targetNode.getComponent('ElfSwordsman') as any;
                     const stoneWallScript = targetNode.getComponent('StoneWall') as any;
-                    const watchTowerScript = targetNode.getComponent('WatchTower') as any;
+                    const watchTowerScript = getWatchTowerFamilyScript(targetNode);
                     const iceTowerScript = targetNode.getComponent('IceTower') as any;
                     const thunderTowerScript = targetNode.getComponent('ThunderTower') as any;
                     const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || crystalScript ||

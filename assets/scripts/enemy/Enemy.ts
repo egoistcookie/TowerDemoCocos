@@ -13,6 +13,7 @@ import { SniperMark } from '../SniperMark';
 import { BattleFloatTextPool } from '../BattleFloatTextPool';
 import { cancelTransientHealthBarHide, scheduleTransientHealthBarHide } from '../TransientHealthBar';
 import { getEnemyLikeScript } from '../EnemyScriptLookup';
+import { getWatchTowerFamilyScript } from '../WatchTowerFamily';
 // import { PerformanceMonitor } from './PerformanceMonitor';
 const { ccclass, property } = _decorator;
 
@@ -1572,7 +1573,7 @@ export class Enemy extends Component {
             this.currentTarget = null!;
             return;
         }
-        const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
+        const watchTowerScript = getWatchTowerFamilyScript(this.currentTarget);
         const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
         const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
         const bearScript = this.currentTarget.getComponent('Bear') as any;
@@ -2229,7 +2230,7 @@ export class Enemy extends Component {
         if (watchTowersNode) {
             for (const tower of watchTowersNode.children) {
                 if (tower && tower.active && tower.isValid) {
-                    const towerScript = tower.getComponent('WatchTower') as any;
+                    const towerScript = getWatchTowerFamilyScript(tower);
                     if (towerScript && towerScript.isAlive && towerScript.isAlive()) {
                         allTargets.push(tower);
                     }

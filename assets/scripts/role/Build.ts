@@ -259,6 +259,7 @@ export class Build extends Component {
         const unitId = this.getUnitIdForEnhancement();
         const isDefenseTower =
             unitId === 'WatchTower' ||
+            unitId === 'CannonTower' ||
             unitId === 'IceTower' ||
             unitId === 'ThunderTower';
 
@@ -1559,6 +1560,11 @@ export class Build extends Component {
             // 忽略错误，避免影响游戏流程
             console.warn('[Build] 记录伤害统计失败:', error);
         }
+    }
+
+    /** 供炮弹等非 Build 子类脚本上报伤害统计（内部调用 {@link recordDamageToStatistics}） */
+    public reportDamageForStatistics(damage: number) {
+        this.recordDamageToStatistics(damage);
     }
     
     /**

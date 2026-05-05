@@ -8,6 +8,7 @@ import { HunterHall } from './role/HunterHall';
 import { MageTower } from './role/MageTower';
 import { StoneWall } from './role/StoneWall';
 import { WatchTower } from './role/WatchTower';
+import { CannonTower } from './role/CannonTower';
 import { IceTower } from './role/IceTower';
 import { ThunderTower } from './role/ThunderTower';
 import { SwordsmanHall } from './role/SwordsmanHall';
@@ -57,6 +58,9 @@ export class TowerBuilder extends Component {
 
     // 哨塔预制体：不再通过 Cocos 属性面板指定，而是从分包 prefabs_sub 中加载后由 GameManager 注入
     private watchTowerPrefab: Prefab = null!; // 哨塔预制体（运行时赋值）
+
+    /** 炮塔预制体（分包注入） */
+    private cannonTowerPrefab: Prefab = null!;
 
     @property(SpriteFrame)
     watchTowerIcon: SpriteFrame = null!; // 哨塔图标
@@ -253,6 +257,11 @@ export class TowerBuilder extends Component {
     public setWatchTowerPrefab(prefab: Prefab) {
         this.watchTowerPrefab = prefab;
         // 预制体更新后，尝试从中提取图标
+        this.ensureIconsFromPrefabs();
+    }
+
+    public setCannonTowerPrefab(prefab: Prefab) {
+        this.cannonTowerPrefab = prefab;
         this.ensureIconsFromPrefabs();
     }
 
@@ -939,6 +948,7 @@ export class TowerBuilder extends Component {
         if (!node || !node.isValid) return false;
         return !!(
             node.getComponent(StoneWall) ||
+            node.getComponent(CannonTower) ||
             node.getComponent(WatchTower) ||
             node.getComponent(IceTower) ||
             node.getComponent(ThunderTower)
@@ -955,6 +965,7 @@ export class TowerBuilder extends Component {
         if (node.getComponent(Church)) return 'Church';
         if (node.getComponent('EagleNest')) return 'EagleNest';
         if (node.getComponent(StoneWall)) return 'StoneWall';
+        if (node.getComponent(CannonTower)) return 'CannonTower';
         if (node.getComponent(WatchTower)) return 'WatchTower';
         if (node.getComponent(IceTower)) return 'IceTower';
         if (node.getComponent(ThunderTower)) return 'ThunderTower';
@@ -982,6 +993,7 @@ export class TowerBuilder extends Component {
             if (building.prefab === this.eagleNestPrefab) return 'EagleNest';
             if (building.prefab === this.stoneWallPrefab) return 'StoneWall';
             if (building.prefab === this.watchTowerPrefab) return 'WatchTower';
+            if (building.prefab === this.cannonTowerPrefab) return 'CannonTower';
         }
         return building?.name || '';
     }
@@ -998,7 +1010,11 @@ export class TowerBuilder extends Component {
 
         // 阶段2：防御塔/石墙不参与合并升星
         if (
-            srcKey === 'StoneWall' || srcKey === 'WatchTower' || srcKey === 'IceTower' || srcKey === 'ThunderTower'
+            srcKey === 'StoneWall' ||
+            srcKey === 'WatchTower' ||
+            srcKey === 'CannonTower' ||
+            srcKey === 'IceTower' ||
+            srcKey === 'ThunderTower'
         ) {
             return false;
         }
@@ -2612,6 +2628,7 @@ export class TowerBuilder extends Component {
         const unitTypeIdForMerge = this.getCandidateBuildingTypeId(building);
         const isMergeEligibleType = unitTypeIdForMerge !== 'StoneWall' &&
             unitTypeIdForMerge !== 'WatchTower' &&
+            unitTypeIdForMerge !== 'CannonTower' &&
             unitTypeIdForMerge !== 'IceTower' &&
             unitTypeIdForMerge !== 'ThunderTower';
         if (isMergeEligibleType && this.gridPanel) {
@@ -3302,6 +3319,130 @@ export class TowerBuilder extends Component {
                 this.gameManager.getGameTime(),
                 { position: { x: towerScript.gridX, y: towerScript.gridY } }
             );
+        }
+    }
+
+    /**
+     * 哨塔读条结束后替换为炮塔（同一双格占位、继承当前/最大生命）
+     */
+    public upgradeWatchTowerToCannonTower(watch: WatchTower) {
+        if (!this.cannonTowerPrefab || !watch?.node?.isValid) {
+            if (this.gameManager) {
+                this.gameManager.addGold(10);
+            }
+            GamePopup.showMessage('炮塔预制体未加载，已退回金币', true, 2);
+            return;
+        }
+
+        if (!this.stoneWallGridPanelComponent) {
+            this.findStoneWallGridPanel();
+        }
+        const panel = this.stoneWallGridPanelComponent;
+        const gx = watch.gridX;
+        const gy = watch.gridY;
+        const watchAny = watch as any;
+        const hp = watchAny.currentHealth as number;
+        const mh = watchAny.maxHealth as number;
+
+        watchAny.hideSelectionPanel?.();
+        watchAny.findUnitSelectionManager?.();
+        const usm = watchAny.unitSelectionManager;
+        if (usm && typeof (usm as any).isUnitSelected === 'function' && (usm as any).isUnitSelected(watch.node)) {
+            (usm as any).clearSelection?.();
+        }
+
+        if (panel && gx >= 0 && gy >= 0 && gy + 1 < panel.gridHeight) {
+            panel.releaseGrid(gx, gy);
+            panel.releaseGrid(gx, gy + 1);
+        }
+
+        const pool = BuildingPool.getInstance();
+        if (pool) {
+            pool.release(watch.node, 'WatchTower');
+        } else if (watch.node?.isValid) {
+            watch.node.destroy();
+        }
+
+        let tower: Node | null = null;
+        if (pool) {
+            const stats = pool.getStats();
+            if (!stats['CannonTower']) {
+                pool.registerPrefab('CannonTower', this.cannonTowerPrefab);
+            }
+            tower = pool.get('CannonTower');
+        }
+        if (!tower) {
+            tower = instantiate(this.cannonTowerPrefab);
+        }
+        if (!tower?.isValid) {
+            if (this.gameManager) {
+                this.gameManager.addGold(10);
+            }
+            GamePopup.showMessage('创建炮塔失败，已退回金币', true, 2);
+            return;
+        }
+
+        if (!this.watchTowerContainer) {
+            const canvas = find('Canvas');
+            if (canvas) {
+                this.watchTowerContainer =
+                    canvas.getChildByName('WatchTowers') ||
+                    canvas.getChildByName('Towers') ||
+                    canvas;
+            }
+        }
+
+        const parent = this.watchTowerContainer || this.node;
+        tower.setParent(parent);
+        tower.active = true;
+        tower.setScale(1, 1, 1);
+        tower.setRotationFromEuler(0, 0, 0);
+
+        const cannonScript = tower.getComponent(CannonTower);
+        if (!cannonScript) {
+            if (this.gameManager) {
+                this.gameManager.addGold(10);
+            }
+            tower.destroy();
+            GamePopup.showMessage('炮塔组件缺失，已退回金币', true, 2);
+            return;
+        }
+
+        cannonScript.prefabName = 'CannonTower';
+        const configManager = UnitConfigManager.getInstance();
+        if (configManager.isConfigLoaded()) {
+            configManager.applyConfigToUnit('CannonTower', cannonScript, ['buildCost', 'collisionRadius']);
+        }
+        const talentEffectManager = TalentEffectManager.getInstance();
+        talentEffectManager.applyUnitEnhancements('CannonTower', cannonScript);
+        talentEffectManager.applyTalentEffects(cannonScript);
+
+        cannonScript.buildCost = this.getActualBuildCost('CannonTower');
+
+        if (panel && gx >= 0 && gy >= 0 && gy + 1 < panel.gridHeight) {
+            if (panel.occupyGrid(gx, gy, tower) && panel.occupyGrid(gx, gy + 1, tower)) {
+                cannonScript.gridX = gx;
+                cannonScript.gridY = gy;
+                const gridPos = panel.gridToWorld(gx, gy);
+                if (gridPos) {
+                    tower.setWorldPosition(new Vec3(gridPos.x, gridPos.y, gridPos.z));
+                }
+            } else {
+                cannonScript.gridX = -1;
+                cannonScript.gridY = -1;
+            }
+        }
+
+        const cannonAny = cannonScript as any;
+        const maxH = Math.max(1, cannonAny.maxHealth || mh);
+        cannonAny.maxHealth = maxH;
+        cannonAny.currentHealth = Math.max(1, Math.min(maxH, hp));
+
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        if (this.gameManager) {
+            this.gameManager.checkUnitFirstAppearance('CannonTower', cannonScript);
         }
     }
 

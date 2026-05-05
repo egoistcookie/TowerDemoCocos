@@ -359,6 +359,30 @@
       "回收奖励": "2金币"
     }
   },
+  "CannonTower": {
+    "baseStats": {
+      "maxHealth": 100,
+      "buildCost": 15,
+      "attackRange": 250,
+      "attackDamage": 100,
+      "attackInterval": 3,
+      "goldReward": 2,
+      "level": 1,
+      "collisionRadius": 25
+    },
+    "displayInfo": {
+      "name": "炮塔",
+      "description": "由哨塔升级，重炮溅射范围杀伤。"
+    },
+    "displayStats": {
+      "生命值": 100,
+      "攻击力": 100,
+      "攻击范围": "250像素",
+      "攻击间隔": "3秒",
+      "建造成本": "升级获得",
+      "回收奖励": "2金币"
+    }
+  },
   "IceTower": {
     "baseStats": {
       "maxHealth": 100,

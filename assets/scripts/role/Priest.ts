@@ -4,6 +4,7 @@ import { GameManager, GameState } from '../GameManager';
 import { DamageStatistics } from '../DamageStatistics';
 import { AudioManager } from '../AudioManager';
 import type { UnitInfo } from '../UnitInfoPanel';
+import { getWatchTowerFamilyScript } from '../WatchTowerFamily';
 const { ccclass, property } = _decorator;
 
 @ccclass('Priest')
@@ -987,7 +988,7 @@ export class Priest extends Role {
             const warAncientTree = node.getComponent('WarAncientTree') as any;
             const church = node.getComponent('Church') as any;
             const iceTower = node.getComponent('IceTower') as any;
-            const watchTower = node.getComponent('WatchTower') as any;
+            const watchTower = getWatchTowerFamilyScript(node);
             const thunderTower = node.getComponent('ThunderTower') as any;
             const stoneWall = node.getComponent('StoneWall') as any;
 

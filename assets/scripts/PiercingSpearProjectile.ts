@@ -1,6 +1,7 @@
 import { _decorator, Component, Node, Vec3, find } from 'cc';
 import { GameState } from './GameState';
 import { gatherSpearPierceCandidateNodes } from './PierceTargetGatherer';
+import { getWatchTowerFamilyScript } from './WatchTowerFamily';
 
 const { ccclass, property } = _decorator;
 
@@ -135,7 +136,7 @@ export class PiercingSpearProjectile extends Component {
         const eagleScript = targetNode.getComponent('Eagle') as any;
         const priestScript = targetNode.getComponent('Priest') as any;
         const mageScript = targetNode.getComponent('Mage') as any;
-        const watchTowerScript = targetNode.getComponent('WatchTower') as any;
+        const watchTowerScript = getWatchTowerFamilyScript(targetNode);
         const iceTowerScript = targetNode.getComponent('IceTower') as any;
         const thunderTowerScript = targetNode.getComponent('ThunderTower') as any;
         const mageTowerScript = targetNode.getComponent('MageTower') as any;

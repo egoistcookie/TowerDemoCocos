@@ -1,6 +1,7 @@
 import { _decorator, SpriteFrame, Vec3, tween, Tween, find, view, Node, AudioClip } from 'cc';
 import { Enemy } from './Enemy';
 import { AudioManager } from '../AudioManager';
+import { getWatchTowerFamilyScript } from '../WatchTowerFamily';
 
 const { ccclass, property } = _decorator;
 
@@ -210,7 +211,7 @@ export class Wolf extends Enemy {
         }
         return !!(
             node.getComponent('StoneWall') ||
-            node.getComponent('WatchTower') ||
+            getWatchTowerFamilyScript(node) ||
             node.getComponent('IceTower') ||
             node.getComponent('ThunderTower')
         );
@@ -233,7 +234,7 @@ export class Wolf extends Enemy {
         }
 
         const towerScript =
-            (target.getComponent('WatchTower') as any) ||
+            (getWatchTowerFamilyScript(target) as any) ||
             (target.getComponent('IceTower') as any) ||
             (target.getComponent('ThunderTower') as any);
         if (!towerScript || (towerScript.isAlive && !towerScript.isAlive())) {
@@ -547,6 +548,7 @@ export class Wolf extends Enemy {
             }
         };
         scanDefenseTowers('Canvas/WatchTowers', 'WatchTower');
+        scanDefenseTowers('Canvas/WatchTowers', 'CannonTower');
         scanDefenseTowers('Canvas/IceTowers', 'IceTower');
         scanDefenseTowers('Canvas/ThunderTowers', 'ThunderTower');
 

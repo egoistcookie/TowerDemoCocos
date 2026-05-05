@@ -264,37 +264,6 @@ export class ElfSwordsman extends Role {
         return this.attackRange * 8; // 8倍攻击范围用于移动（ElfSwordsman 特殊处理）
     }
 
-    /**
-     * 防线模式：剑士站在石墙网格内，或站在网格面板正下方带状区域（与网格列对齐、在其底边以下）时，
-     * 只考虑「已进入石墙网格」的敌人；移出该区域后恢复通用索敌。
-     */
-    private isSwordsmanInWallDefenseZone(): boolean {
-        const panel = this.getStoneWallGridPanel();
-        if (!panel?.node?.isValid) {
-            return false;
-        }
-        const wp = this.node.worldPosition;
-        if (panel.worldToGrid(wp)) {
-            return true;
-        }
-        return this.isWorldPositionBelowStoneWallGridBand(panel, wp);
-    }
-
-    /** 与 worldToGrid 同一套局部坐标：在网格包围盒水平投影内，且位于网格底边外侧（面板局部 offsetY < 0） */
-    private isWorldPositionBelowStoneWallGridBand(panel: StoneWallGridPanel, worldPos: Vec3): boolean {
-        const localPos = new Vec3();
-        Vec3.subtract(localPos, worldPos, panel.node.worldPosition);
-        const stride = panel.cellSize + panel.cellSpacing;
-        const gridTotalWidth = stride * panel.gridWidth - panel.cellSpacing;
-        const gridTotalHeight = stride * panel.gridHeight - panel.cellSpacing;
-        const startX = -gridTotalWidth / 2;
-        const startY = -gridTotalHeight / 2;
-        const offsetX = localPos.x - startX;
-        const offsetY = localPos.y - startY;
-        const inHorizontal = offsetX >= 0 && offsetX <= gridTotalWidth;
-        return inHorizontal && offsetY < 0;
-    }
-
     /** 判断敌人是否站在石墙网格上（用于防线模式过滤） */
     private isEnemyOnStoneWallGrid(enemy: Node): boolean {
         const panel = this.getStoneWallGridPanel();
@@ -359,17 +328,20 @@ export class ElfSwordsman extends Role {
         return [...enemies, r];
     }
 
-    /** 索敌列表过滤：防线模式下只保留已进入石墙网格的敌人 */
+    /**
+     * 索敌列表过滤：仅当剑士双脚站在石墙网格格子内（不含网格下方待命带）时，只保留已进入网格的敌人。
+     * 待命带上的敌人 worldToGrid 为 null，若对该区域也过滤会导致无法近战。
+     */
     protected filterEnemiesForFindTarget(enemies: Node[]): Node[] {
-        if (!this.isSwordsmanInWallDefenseZone()) {
+        if (!this.isSwordsmanStrictlyOnStoneWallGridCells()) {
             return enemies;
         }
         return enemies.filter((e) => e && e.isValid && e.active && this.isEnemyOnStoneWallGrid(e));
     }
 
-    /** 防线模式下目标若已离开石墙网格，立即丢弃，避免继续追击网格外敌人（反击登记目标除外） */
+    /** 同上：仅在站在网格格子内时丢弃「已离开网格」的目标（反击登记目标除外） */
     private clearCurrentTargetIfWallDefenseRuleViolated(): void {
-        if (!this.isSwordsmanInWallDefenseZone()) {
+        if (!this.isSwordsmanStrictlyOnStoneWallGridCells()) {
             return;
         }
         const t = this.currentTarget;

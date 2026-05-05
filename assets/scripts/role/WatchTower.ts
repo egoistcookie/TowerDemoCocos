@@ -19,7 +19,7 @@ enum CaptureState {
 }
 
 // 建造阶段枚举（与冰塔、雷塔保持一致）
-enum ConstructionStage {
+export enum ConstructionStage {
     FOUNDATION = 0,    // 地基
     HALF_BUILT = 1,    // 半成品
     COMPLETE = 2       // 完全体
@@ -110,12 +110,12 @@ export class WatchTower extends Build {
     weatheringSprite3: SpriteFrame = null!; // 风化贴图3
 
     // 建造阶段相关
-    private constructionStage: ConstructionStage = ConstructionStage.FOUNDATION; // 当前建造阶段
-    private constructionProgress: number = 0; // 建造进度（0-1）
-    private constructionTimer: number = 0; // 建造计时器
+    protected constructionStage: ConstructionStage = ConstructionStage.FOUNDATION; // 当前建造阶段
+    protected constructionProgress: number = 0; // 建造进度（0-1）
+    protected constructionTimer: number = 0; // 建造计时器
     private readonly CONSTRUCTION_TIME: number = 5; // 每个阶段建造时间（秒）
-    private constructionProgressBar: Node = null!; // 建造进度条节点
-    private constructionProgressGraphics: Graphics = null!; // 建造进度条图形组件
+    protected constructionProgressBar: Node = null!; // 建造进度条节点
+    protected constructionProgressGraphics: Graphics = null!; // 建造进度条图形组件
 
     // 被破坏阶段相关
     private isDestroying: boolean = false; // 是否正在播放被破坏动画
@@ -127,6 +127,14 @@ export class WatchTower extends Build {
     private weatheringStage: WeatheringStage = WeatheringStage.NONE; // 当前风化阶段
     private weatheringTimer: number = 0; // 风化计时器
     private readonly WEATHERING_TIME: number = 5; // 每个风化阶段时间（秒）
+
+    /** 九宫格「升级炮塔」消耗金币 */
+    private static readonly CANNON_UPGRADE_COST = 10;
+    /** 升级为炮塔的读条时长（秒） */
+    private static readonly CANNON_UPGRADE_CHANNEL_SEC = 5;
+
+    private _isChannelingCannonUpgrade = false;
+    private _cannonUpgradeChannelElapsed = 0;
 
     // 基准Y已在父类 Build 中声明，这里只复用
 
@@ -182,6 +190,9 @@ export class WatchTower extends Build {
         this.lastEnemyCount = 0;
         this.lastAdvantage = 'balanced';
         this.hideCaptureIndicator();
+
+        this._isChannelingCannonUpgrade = false;
+        this._cannonUpgradeChannelElapsed = 0;
         
         // 获取UnitManager
         this.unitManager = UnitManager.getInstance();
@@ -315,9 +326,9 @@ export class WatchTower extends Build {
     }
 
     /**
-     * 构造哨塔的单位信息（包含回收和升级回调，供九宫格面板使用）
+     * 构造哨塔的单位信息（包含回收与「升级炮塔」回调，供九宫格面板使用）
      */
-    private buildUnitInfo(): UnitInfo {
+    protected buildUnitInfo(): UnitInfo {
         return {
             name: '哨塔',
             level: this.level,
@@ -328,12 +339,15 @@ export class WatchTower extends Build {
             populationCost: this.populationCost,
             icon: this.cardIcon || this.defaultSpriteFrame,
             collisionRadius: this.collisionRadius,
+            upgradeCost: WatchTower.CANNON_UPGRADE_COST,
             onSellClick: () => {
                 this.onSellClick();
             },
-            onUpgradeClick: () => {
-                this.onUpgradeClick();
-            }
+            onUpgradeClick: this._isChannelingCannonUpgrade
+                ? undefined
+                : () => {
+                      this.onUpgradeClick();
+                  },
         };
     }
     
@@ -447,54 +461,34 @@ export class WatchTower extends Build {
     }
 
     /**
-     * 升级按钮点击事件（参考Role的升级机制）
+     * 九宫格右上角：消耗 10 金币后开始 5 秒读条，完成后替换为炮塔
      */
     protected onUpgradeClick(event?: EventTouch) {
         if (event) {
             event.propagationStopped = true;
         }
-        
-        // 限制最高等级为3级
-        if (this.level >= 3) {
+        if (this._isChannelingCannonUpgrade) {
             return;
         }
-
         if (!this.gameManager) {
             this.findGameManager();
         }
-
         if (!this.gameManager) {
             return;
         }
-
-        // 升级费用：1到2级是10金币，此后每次升级多10金币
-        // 公式：10 + (level - 1) * 10
-        const upgradeCost = 10 + (this.level - 1) * 10;
-        
+        const upgradeCost = WatchTower.CANNON_UPGRADE_COST;
         if (!this.gameManager.canAfford(upgradeCost)) {
             return;
         }
-
-        // 消耗金币
         this.gameManager.spendGold(upgradeCost);
+        this._isChannelingCannonUpgrade = true;
+        this._cannonUpgradeChannelElapsed = 0;
+        this.createConstructionProgressBar();
+        this.updateCannonUpgradeProgressBar();
 
-        // 升级单位
-        this.level++;
-        this.attackDamage = Math.floor(this.attackDamage * 1.25); // 攻击力增加25%
-        this.attackInterval = this.attackInterval / 1.1; // 攻击速度增加10%（间隔减少10%）
-
-        // 更新单位信息面板
         if (this.unitSelectionManager && this.unitSelectionManager.isUnitSelected(this.node)) {
-            this.unitSelectionManager.updateUnitInfo({
-                level: this.level,
-                attackDamage: this.attackDamage,
-                currentHealth: this.currentHealth,
-                maxHealth: this.maxHealth,
-                attackFrequency: 1.0 / this.attackInterval
-            });
+            this.unitSelectionManager.updateUnitInfo(this.buildUnitInfo());
         }
-
-        // 隐藏面板
         this.hideSelectionPanel();
     }
 
@@ -621,6 +615,21 @@ export class WatchTower extends Build {
                 this.hideCaptureIndicator();
                 return;
             }
+        }
+
+        // 升级为炮塔读条（进行中时不攻击）
+        if (this._isChannelingCannonUpgrade) {
+            this._cannonUpgradeChannelElapsed += deltaTime;
+            this.updateCannonUpgradeProgressBar();
+            if (this._cannonUpgradeChannelElapsed >= WatchTower.CANNON_UPGRADE_CHANNEL_SEC) {
+                this._isChannelingCannonUpgrade = false;
+                this._cannonUpgradeChannelElapsed = 0;
+                if (this.constructionProgressBar) {
+                    this.constructionProgressBar.active = false;
+                }
+                this.finishUpgradeToCannonTower();
+            }
+            return;
         }
 
         // 处理占领逻辑
@@ -1077,6 +1086,11 @@ export class WatchTower extends Build {
         return nearestTarget;
     }
 
+    /** 是否使用远程弹道（箭矢等）；炮塔子类可改为炮弹预制体 */
+    protected hasRangedProjectile(): boolean {
+        return !!this.arrowPrefab;
+    }
+
     /**
      * 攻击目标
      */
@@ -1115,9 +1129,9 @@ export class WatchTower extends Build {
             AudioManager.Instance.playSFX(this.shootSound);
         }
 
-        // 创建弓箭
-        if (this.arrowPrefab) {
-            this.createArrow();
+        // 创建弓箭 / 或子类炮弹
+        if (this.hasRangedProjectile()) {
+            this.fireProjectile();
         } else {
             // 如果没有弓箭预制体，直接造成伤害
             if (targetScript.takeDamage) {
@@ -1128,10 +1142,15 @@ export class WatchTower extends Build {
         }
     }
 
+    /** 子类可改为炮弹等 */
+    protected fireProjectile(): void {
+        this.createArrow();
+    }
+
     /**
      * 创建弓箭
      */
-    private createArrow() {
+    protected createArrow() {
         if (!this.arrowPrefab || !this.currentTarget) {
             return;
         }
@@ -1239,6 +1258,9 @@ export class WatchTower extends Build {
             return;
         }
 
+        this._isChannelingCannonUpgrade = false;
+        this._cannonUpgradeChannelElapsed = 0;
+
         this.isDestroyed = true;
         this.isDestroying = true;
         this.destructionTimer = 0;
@@ -1320,6 +1342,46 @@ export class WatchTower extends Build {
         }, 0.1);
     }
 
+    private updateCannonUpgradeProgressBar() {
+        if (!this.constructionProgressBar || !this.constructionProgressGraphics) {
+            return;
+        }
+        this.constructionProgressBar.active = true;
+        const ratio = Math.max(
+            0,
+            Math.min(1, this._cannonUpgradeChannelElapsed / WatchTower.CANNON_UPGRADE_CHANNEL_SEC),
+        );
+        const g = this.constructionProgressGraphics;
+        g.clear();
+        const width = 60;
+        const height = 6;
+        g.strokeColor = new Color(0, 0, 0, 255);
+        g.lineWidth = 1;
+        g.rect(-width / 2, -height / 2, width, height);
+        g.stroke();
+        const progressWidth = width * ratio;
+        g.fillColor = new Color(220, 140, 40, 255);
+        g.rect(-width / 2 + 1, -height / 2 + 1, Math.max(0, progressWidth - 2), height - 2);
+        g.fill();
+    }
+
+    private finishUpgradeToCannonTower() {
+        const tbNode = find('Canvas/TowerBuilder') || find('TowerBuilder');
+        const tb = tbNode?.getComponent('TowerBuilder') as any;
+        if (tb && typeof tb.upgradeWatchTowerToCannonTower === 'function') {
+            tb.upgradeWatchTowerToCannonTower(this);
+        }
+    }
+
+    public resetForPoolReuse() {
+        super.resetForPoolReuse();
+        this._isChannelingCannonUpgrade = false;
+        this._cannonUpgradeChannelElapsed = 0;
+        if (this.constructionProgressBar?.isValid) {
+            this.constructionProgressBar.active = false;
+        }
+    }
+
     /**
      * 创建建造进度条
      */
@@ -1379,7 +1441,7 @@ export class WatchTower extends Build {
     /**
      * 根据当前阶段更新贴图和高度
      */
-    private updateSprite() {
+    protected updateSprite() {
         if (!this.sprite) {
             const s = this.node.getComponent(Sprite);
             if (s) {
@@ -1433,16 +1495,18 @@ export class WatchTower extends Build {
             this.setHeightWithFixedBottomGeneric(0.66);
             return;
         }
-        if (this.constructionStage === ConstructionStage.COMPLETE && this.completeSprite) {
-            this.sprite.spriteFrame = this.completeSprite;
+        // 建成：优先 completeSprite；未配则用 Build 在 start 时记录的 defaultSpriteFrame（避免炮塔等攻击动画播完后贴图无法还原）
+        if (this.constructionStage === ConstructionStage.COMPLETE) {
+            const idleFrame = this.completeSprite || this.defaultSpriteFrame;
+            if (idleFrame) {
+                this.sprite.spriteFrame = idleFrame;
+            }
             this.setHeightWithFixedBottomGeneric(1.0);
             return;
         }
 
         // 如果没有配置贴图，默认按高度阶段缩放
-        if (this.constructionStage === ConstructionStage.COMPLETE) {
-            this.setHeightWithFixedBottomGeneric(1.0);
-        } else if (this.constructionStage === ConstructionStage.HALF_BUILT) {
+        if (this.constructionStage === ConstructionStage.HALF_BUILT) {
             this.setHeightWithFixedBottomGeneric(0.66);
         } else if (this.constructionStage === ConstructionStage.FOUNDATION) {
             this.setHeightWithFixedBottomGeneric(0.5);

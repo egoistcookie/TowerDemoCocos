@@ -4,6 +4,7 @@ import { UnitManager } from '../UnitManager';
 import { GameState } from '../GameState';
 import { AudioManager } from '../AudioManager';
 import { EnemyPool } from '../EnemyPool';
+import { getWatchTowerFamilyScript } from '../WatchTowerFamily';
 
 const { ccclass, property } = _decorator;
 
@@ -300,7 +301,7 @@ export class Dragon extends Enemy {
                               unit.getComponent('ElfSwordsman') as any ||
                               unit.getComponent('Mage') as any ||
                               unit.getComponent('Priest') as any ||
-                              unit.getComponent('WatchTower') as any ||
+                              getWatchTowerFamilyScript(unit) ||
                               unit.getComponent('IceTower') as any ||
                               unit.getComponent('ThunderTower') as any ||
                               unit.getComponent('WarAncientTree') as any ||

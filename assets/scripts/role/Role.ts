@@ -23,6 +23,7 @@ import {
     scheduleTransientManaBarHide,
 } from '../TransientHealthBar';
 import { getEnemyLikeScript } from '../EnemyScriptLookup';
+import { getWatchTowerFamilyScript } from '../WatchTowerFamily';
 // import { PerformanceMonitor } from './PerformanceMonitor';
 const { ccclass, property } = _decorator;
 
@@ -2621,7 +2622,7 @@ export class Role extends Component {
             const towers = this.unitManager.getDefenseTowers();
             for (const tower of towers) {
                 if (!tower || !tower.active || !tower.isValid) continue;
-                const watchTowerScript = tower.getComponent('WatchTower') as any;
+                const watchTowerScript = getWatchTowerFamilyScript(tower);
                 const iceTowerScript = tower.getComponent('IceTower') as any;
                 const thunderTowerScript = tower.getComponent('ThunderTower') as any;
                 const towerScript = watchTowerScript || iceTowerScript || thunderTowerScript;

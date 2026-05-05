@@ -87,7 +87,7 @@
     }
   },
   "unitTypeCategories": {
-    "tower": ["WatchTower", "IceTower", "ThunderTower"],
+    "tower": ["WatchTower", "CannonTower", "IceTower", "ThunderTower"],
     "role": ["Arrower", "Eagle", "EagleArcher", "Hunter", "ElfSwordsman", "Priest", "Mage"],
     "building": ["WarAncientTree", "HunterHall", "SwordsmanHall", "Church", "MoonWell", "StoneWall"]
   }

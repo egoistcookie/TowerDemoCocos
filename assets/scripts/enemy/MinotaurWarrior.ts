@@ -40,6 +40,7 @@ import { EnemyPool } from '../EnemyPool';
 import { UnitManager } from '../UnitManager';
 import { Boss } from './Boss';
 import { getEnemyLikeScript } from '../EnemyScriptLookup';
+import { getWatchTowerFamilyScript } from '../WatchTowerFamily';
 const { ccclass, property } = _decorator;
 
 @ccclass('MinotaurWarrior')
@@ -292,7 +293,7 @@ export class MinotaurWarrior extends Boss {
         
         // 查找所有建筑物（Build）
         const findBuildings = (node: Node) => {
-            const buildScript = node.getComponent('WatchTower') as any ||
+            const buildScript = getWatchTowerFamilyScript(node) ||
                                node.getComponent('IceTower') as any ||
                                node.getComponent('ThunderTower') as any ||
                                node.getComponent('WarAncientTree') as any ||
@@ -355,7 +356,7 @@ export class MinotaurWarrior extends Boss {
             const buildings = this.unitManager.getBuildings();
             for (const building of buildings) {
                 if (building && building.isValid && building.active) {
-                    const buildScript = building.getComponent('WatchTower') as any ||
+                    const buildScript = getWatchTowerFamilyScript(building) ||
                                        building.getComponent('IceTower') as any ||
                                        building.getComponent('ThunderTower') as any ||
                                        building.getComponent('WarAncientTree') as any ||
@@ -408,7 +409,7 @@ export class MinotaurWarrior extends Boss {
                                   unit.getComponent('ElfSwordsman') as any ||
                                   unit.getComponent('Mage') as any ||
                                   unit.getComponent('Priest') as any ||
-                                  unit.getComponent('WatchTower') as any ||
+                                  getWatchTowerFamilyScript(unit) ||
                                   unit.getComponent('IceTower') as any ||
                                   unit.getComponent('ThunderTower') as any ||
                                   unit.getComponent('WarAncientTree') as any ||
@@ -1163,7 +1164,7 @@ export class MinotaurWarrior extends Boss {
                 const priestScript = this.currentTarget.getComponent('Priest') as any;
                 const mageScript = this.currentTarget.getComponent('Mage') as any;
                 const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-                const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
+                const watchTowerScript = getWatchTowerFamilyScript(this.currentTarget);
                 const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
                 const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
                 const mageTowerScript = this.currentTarget.getComponent('MageTower') as any;
@@ -1513,7 +1514,7 @@ export class MinotaurWarrior extends Boss {
         let watchTowers: Node[] = [];
         if (this.unitManager) {
             watchTowers = this.unitManager.getBuildings().filter(building => {
-                const watchTowerScript = building.getComponent('WatchTower') as any;
+                const watchTowerScript = getWatchTowerFamilyScript(building);
                 return watchTowerScript && watchTowerScript.isAlive && watchTowerScript.isAlive();
             });
         } else {
@@ -1525,7 +1526,7 @@ export class MinotaurWarrior extends Boss {
         
         for (const watchTower of watchTowers) {
             if (!watchTower || !watchTower.active || !watchTower.isValid) continue;
-            const watchTowerScript = watchTower.getComponent('WatchTower') as any;
+            const watchTowerScript = getWatchTowerFamilyScript(watchTower);
             if (!watchTowerScript || !watchTowerScript.isAlive || !watchTowerScript.isAlive()) continue;
             const distance = Vec3.distance(this.node.worldPosition, watchTower.worldPosition);
             if (distance <= detectionRange) {
@@ -1629,7 +1630,7 @@ export class MinotaurWarrior extends Boss {
             const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
             const priestScript = this.currentTarget.getComponent('Priest') as any;
             const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-            const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
+            const watchTowerScript = getWatchTowerFamilyScript(this.currentTarget);
             const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
             const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
             const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
@@ -1824,7 +1825,7 @@ export class MinotaurWarrior extends Boss {
         const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
         const priestScript = this.currentTarget.getComponent('Priest') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-        const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
+        const watchTowerScript = getWatchTowerFamilyScript(this.currentTarget);
         const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
         const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
         const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
@@ -2040,7 +2041,7 @@ export class MinotaurWarrior extends Boss {
             const buildings = this.unitManager.getBuildings();
             for (const building of buildings) {
                 if (building && building.isValid && building.active) {
-                    const buildScript = building.getComponent('WatchTower') as any ||
+                    const buildScript = getWatchTowerFamilyScript(building) ||
                                        building.getComponent('IceTower') as any ||
                                        building.getComponent('ThunderTower') as any ||
                                        building.getComponent('WarAncientTree') as any ||
@@ -2129,7 +2130,7 @@ export class MinotaurWarrior extends Boss {
         const elfSwordsmanScript = target.getComponent('ElfSwordsman') as any;
         const priestScript = target.getComponent('Priest') as any;
         const stoneWallScript = target.getComponent('StoneWall') as any;
-        const watchTowerScript = target.getComponent('WatchTower') as any;
+        const watchTowerScript = getWatchTowerFamilyScript(target);
         const iceTowerScript = target.getComponent('IceTower') as any;
         const thunderTowerScript = target.getComponent('ThunderTower') as any;
         const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || churchScript || priestScript || crystalScript || hunterScript || mageScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;

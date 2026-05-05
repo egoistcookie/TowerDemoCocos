@@ -3,7 +3,7 @@
 """
 一键日报脚本：
 1) MySQL 获取最近 N 天核心数据
-2) GitHub 获取 工程提示词.md 并提取最近 N 天版本记录
+2) 工程提示词.md：默认从 GitHub API 拉取；失败或未配置 token 时再读本地；简报中注明来源
 3) 发送企业微信机器人简报
 """
 
@@ -19,7 +19,7 @@ import urllib.error
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import pymysql
 
@@ -402,49 +402,44 @@ def query_daily_metrics(cfg: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def fetch_github_file(cfg: Dict[str, Any]) -> str:
-    def _resolve_local_prompt_path(local_path: str) -> Optional[Path]:
-        p = Path(local_path)
-        candidates: List[Path] = []
-        if p.is_absolute():
-            candidates.append(p)
-        else:
-            cwd = Path.cwd()
-            script_dir = Path(__file__).resolve().parent
-            project_root = script_dir.parent
-            candidates.extend(
-                [
-                    cwd / p,
-                    script_dir / p,
-                    project_root / p,
-                    project_root / "工程提示词.md",
-                ]
-            )
+def _resolve_local_prompt_path(local_path: str) -> Optional[Path]:
+    p = Path(local_path)
+    candidates: List[Path] = []
+    if p.is_absolute():
+        candidates.append(p)
+    else:
+        cwd = Path.cwd()
+        script_dir = Path(__file__).resolve().parent
+        project_root = script_dir.parent
+        candidates.extend(
+            [
+                cwd / p,
+                script_dir / p,
+                project_root / p,
+                project_root / "工程提示词.md",
+            ]
+        )
 
-        for c in candidates:
-            if c.exists():
-                return c
-        return None
+    for c in candidates:
+        if c.exists():
+            return c
+    return None
 
-    gh = cfg.get("github")
-    if not isinstance(gh, dict):
-        local_path = cfg.get("report", {}).get("local_prompt_path", "工程提示词.md")
-        resolved = _resolve_local_prompt_path(local_path)
-        if not resolved:
-            raise ValueError("github 未配置且本地工程提示词文件不存在")
-        return resolved.read_text(encoding="utf-8")
-    owner = gh["owner"]
-    repo = gh["repo"]
-    ref = gh.get("ref", "master")
-    path = gh.get("path", "工程提示词.md")
-    token = gh.get("token", "").strip()
-    if not token:
-        local_path = gh.get("local_fallback_path") or cfg.get("report", {}).get("local_prompt_path", "工程提示词.md")
-        resolved = _resolve_local_prompt_path(local_path)
-        if resolved:
-            return resolved.read_text(encoding="utf-8")
-        raise ValueError("github.token 为空，且本地回退文件不存在，无法拉取工程提示词")
 
+def _read_local_prompt_md(cfg: Dict[str, Any]) -> Tuple[str, Path]:
+    """读取本地工程提示词；成功返回 (文本, 实际路径)。"""
+    gh = cfg.get("github") if isinstance(cfg.get("github"), dict) else {}
+    local_path = (
+        (gh.get("local_fallback_path") if isinstance(gh, dict) else None)
+        or cfg.get("report", {}).get("local_prompt_path", "工程提示词.md")
+    )
+    resolved = _resolve_local_prompt_path(str(local_path))
+    if not resolved:
+        raise FileNotFoundError(f"本地工程提示词不存在（已尝试路径含: {local_path}）")
+    return resolved.read_text(encoding="utf-8"), resolved
+
+
+def _fetch_github_prompt_raw(owner: str, repo: str, ref: str, path: str, token: str) -> str:
     url = (
         f"https://api.github.com/repos/{owner}/{repo}/contents/"
         f"{urllib.parse.quote(path)}?ref={urllib.parse.quote(ref)}"
@@ -455,8 +450,107 @@ def fetch_github_file(cfg: Dict[str, Any]) -> str:
     req.add_header("X-GitHub-Api-Version", "2022-11-28")
     with urllib.request.urlopen(req, timeout=30) as resp:
         payload = json.loads(resp.read().decode("utf-8"))
-    content = base64.b64decode(payload["content"]).decode("utf-8")
-    return content
+    content = payload.get("content")
+    if content is None:
+        raise ValueError("GitHub API 返回无 content 字段（可能不是文件节点）")
+    return base64.b64decode(content).decode("utf-8")
+
+
+def fetch_prompt_markdown(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    默认从 GitHub 拉取工程提示词；失败或未配置 token 时再读本地。
+    返回 dict: text, source(github|local|none), github_ref, note(写入日报说明用), local_path(可选)
+    """
+    gh = cfg.get("github")
+    report = cfg.get("report", {}) if isinstance(cfg.get("report"), dict) else {}
+
+    def _fmt_gh_ref(o: str, r: str, ref: str, path: str) -> str:
+        return f"{o}/{r} ref={ref} path={path}"
+
+    if not isinstance(gh, dict) or not str(gh.get("owner", "")).strip() or not str(gh.get("repo", "")).strip():
+        try:
+            text, p = _read_local_prompt_md(cfg)
+        except FileNotFoundError as e:
+            return {
+                "text": "",
+                "source": "none",
+                "github_ref": "",
+                "note": f"未配置 github.owner/repo，无法从 Git 拉取；本地也不存在：{e}",
+                "local_path": "",
+            }
+        return {
+            "text": text,
+            "source": "local",
+            "github_ref": "",
+            "note": "未配置 github 仓库信息（owner/repo），未请求远程，已使用本地工程提示词.md。",
+            "local_path": str(p),
+        }
+
+    owner = str(gh["owner"]).strip()
+    repo = str(gh["repo"]).strip()
+    ref = str(gh.get("ref", "master")).strip() or "master"
+    path = str(gh.get("path", "工程提示词.md")).strip() or "工程提示词.md"
+    token = (str(gh.get("token", "") or "").strip() or os.getenv("GITHUB_TOKEN", "").strip() or os.getenv("GH_TOKEN", "").strip())
+    gref = _fmt_gh_ref(owner, repo, ref, path)
+
+    if not token:
+        try:
+            text, p = _read_local_prompt_md(cfg)
+        except FileNotFoundError as e:
+            return {
+                "text": "",
+                "source": "none",
+                "github_ref": gref,
+                "note": f"未配置 github.token（且无环境变量 GITHUB_TOKEN/GH_TOKEN），无法请求 GitHub；本地文件也不存在：{e}",
+                "local_path": "",
+            }
+        return {
+            "text": text,
+            "source": "local",
+            "github_ref": gref,
+            "note": "GitHub 未请求（未配置 token 或 GITHUB_TOKEN），已改用本地工程提示词.md。",
+            "local_path": str(p),
+        }
+
+    try:
+        text = _fetch_github_prompt_raw(owner, repo, ref, path, token)
+        return {
+            "text": text,
+            "source": "github",
+            "github_ref": gref,
+            "note": "",
+            "local_path": "",
+        }
+    except Exception as e:
+        err_short = str(e)
+        if isinstance(e, urllib.error.HTTPError):
+            try:
+                body = e.read().decode("utf-8", errors="replace")
+            except Exception:
+                body = ""
+            if len(body) > 180:
+                body = body[:180] + "..."
+            err_short = f"HTTP {e.code} {e.reason}" + (f" | {body}" if body else "")
+        elif isinstance(e, urllib.error.URLError):
+            err_short = f"网络错误 {e.reason!s}"
+
+        try:
+            text, p = _read_local_prompt_md(cfg)
+            return {
+                "text": text,
+                "source": "local",
+                "github_ref": gref,
+                "note": f"GitHub 拉取失败（{err_short}），已改用本地工程提示词.md。",
+                "local_path": str(p),
+            }
+        except FileNotFoundError as le:
+            return {
+                "text": "",
+                "source": "none",
+                "github_ref": gref,
+                "note": f"GitHub 拉取失败（{err_short}）；本地工程提示词也不存在：{le}",
+                "local_path": "",
+            }
 
 
 def parse_recent_versions(md_text: str, days: int) -> Dict[str, Any]:
@@ -643,7 +737,20 @@ def build_brief_text(metrics: Dict[str, Any], versions: Dict[str, Any]) -> str:
         lines.append("- 近三天无可统计选卡数据")
 
     lines.append("")
-    lines.append("六、工程提示词近三天版本记录（GitHub）")
+    lines.append("六、工程提示词近三天版本记录")
+    src = versions.get("prompt_source", "")
+    if src == "github":
+        lines.append(f"- 版本来源：已从 GitHub 拉取（{versions.get('prompt_github_ref', '')}）")
+    elif src == "local":
+        note = (versions.get("prompt_note") or "").strip()
+        lines.append(f"- 版本来源：{note}" if note else "- 版本来源：本地工程提示词.md")
+        if versions.get("prompt_local_path"):
+            lines.append(f"  · 本地路径：{versions.get('prompt_local_path')}")
+    elif src == "none":
+        lines.append("- 版本来源：未能加载工程提示词（远程与本地均失败）。" + (versions.get("prompt_note") or ""))
+    else:
+        lines.append("- 版本来源：未标注（请升级 daily_brief_pipeline）")
+
     if versions["versions"]:
         for sec in versions["versions"]:
             lines.append(f"- [{sec['date']}] {compact_text(sec['title'])}")
@@ -655,7 +762,7 @@ def build_brief_text(metrics: Dict[str, Any], versions: Dict[str, Any]) -> str:
                     short_item = short_item + "..."
                 lines.append(f"  · {compact_text(short_item)}")
     else:
-        lines.append("- 未解析到最近三天版本记录（请检查工程提示词.md格式）")
+        lines.append("- 未解析到最近三天版本记录（请检查工程提示词.md 格式，或远程与本地内容是否过旧）")
 
     return "\n".join(lines)
 
@@ -699,6 +806,8 @@ def analyze_with_claude(cfg: Dict[str, Any], metrics: Dict[str, Any], versions: 
             {"date": v.get("date"), "title": v.get("title"), "items": (v.get("items") or [])[:3]}
             for v in (versions.get("versions", [])[:3])
         ],
+        "engineering_prompt_source": versions.get("prompt_source"),
+        "engineering_prompt_note": versions.get("prompt_note") or "",
     }
 
     try:
@@ -782,12 +891,13 @@ def main() -> None:
     days = int(cfg.get("report", {}).get("days", 3))
 
     metrics = query_daily_metrics(cfg)
-    try:
-        prompt_md = fetch_github_file(cfg)
-    except Exception:
-        # 版本记录属于补充信息，读取失败时不影响日报主流程
-        prompt_md = ""
+    prompt_fetch = fetch_prompt_markdown(cfg)
+    prompt_md = prompt_fetch.get("text") or ""
     versions = parse_recent_versions(prompt_md, days=days)
+    versions["prompt_source"] = prompt_fetch.get("source", "")
+    versions["prompt_note"] = prompt_fetch.get("note", "")
+    versions["prompt_github_ref"] = prompt_fetch.get("github_ref", "")
+    versions["prompt_local_path"] = prompt_fetch.get("local_path", "")
     brief_main = build_brief_text(metrics, versions)
     claude_summary = analyze_with_claude(cfg, metrics, versions, brief_main)
     brief_claude = build_claude_summary_text(claude_summary)
@@ -800,6 +910,13 @@ def main() -> None:
         "brief_claude": brief_claude,
         "brief": brief,
         "claude_summary": claude_summary,
+        "prompt_fetch_meta": {
+            "source": prompt_fetch.get("source"),
+            "note": prompt_fetch.get("note"),
+            "github_ref": prompt_fetch.get("github_ref"),
+            "local_path": prompt_fetch.get("local_path"),
+            "text_len": len(prompt_md),
+        },
     }
 
     if args.dry_run:

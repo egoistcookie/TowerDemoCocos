@@ -10,6 +10,7 @@ import { SniperMark } from '../SniperMark';
 import { BattleFloatTextPool } from '../BattleFloatTextPool';
 import { cancelTransientHealthBarHide, scheduleTransientHealthBarHide } from '../TransientHealthBar';
 import { getEnemyLikeScript } from '../EnemyScriptLookup';
+import { getWatchTowerFamilyScript } from '../WatchTowerFamily';
 const { ccclass, property } = _decorator;
 
 /**
@@ -514,7 +515,7 @@ export class Boss extends Component {
                 const priestScript = this.currentTarget.getComponent('Priest') as any;
                 const mageScript = this.currentTarget.getComponent('Mage') as any;
                 const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-                const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
+                const watchTowerScript = getWatchTowerFamilyScript(this.currentTarget);
                 const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
                 const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
                 const bearScript = this.currentTarget.getComponent('Bear') as any;
@@ -795,7 +796,7 @@ export class Boss extends Component {
         let watchTowers: Node[] = [];
         if (this.unitManager) {
             watchTowers = this.unitManager.getBuildings().filter(building => {
-                const watchTowerScript = building.getComponent('WatchTower') as any;
+                const watchTowerScript = getWatchTowerFamilyScript(building);
                 return watchTowerScript && watchTowerScript.isAlive && watchTowerScript.isAlive();
             });
         } else {
@@ -809,7 +810,7 @@ export class Boss extends Component {
         for (const watchTower of watchTowers) {
             if (!watchTower || !watchTower.active || !watchTower.isValid) continue;
             
-            const watchTowerScript = watchTower.getComponent('WatchTower') as any;
+            const watchTowerScript = getWatchTowerFamilyScript(watchTower);
             if (!watchTowerScript || !watchTowerScript.isAlive || !watchTowerScript.isAlive()) continue;
             
             const myPos = this.node.worldPosition;
@@ -940,7 +941,7 @@ export class Boss extends Component {
             const priestScript = this.currentTarget.getComponent('Priest') as any;
             const mageScript = this.currentTarget.getComponent('Mage') as any;
             const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-            const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
+            const watchTowerScript = getWatchTowerFamilyScript(this.currentTarget);
             const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
             const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
             const bearScript = this.currentTarget.getComponent('Bear') as any;
@@ -1723,7 +1724,7 @@ export class Boss extends Component {
         const priestScript = this.currentTarget.getComponent('Priest') as any;
         const mageScript = this.currentTarget.getComponent('Mage') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-        const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
+        const watchTowerScript = getWatchTowerFamilyScript(this.currentTarget);
         const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
         const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
         const bearScript = this.currentTarget.getComponent('Bear') as any;
@@ -2031,7 +2032,7 @@ export class Boss extends Component {
         const priestScript = this.currentTarget.getComponent('Priest') as any;
         const mageScript = this.currentTarget.getComponent('Mage') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
-        const watchTowerScript = this.currentTarget.getComponent('WatchTower') as any;
+        const watchTowerScript = getWatchTowerFamilyScript(this.currentTarget);
         const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
         const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
         const bearScript = this.currentTarget.getComponent('Bear') as any;

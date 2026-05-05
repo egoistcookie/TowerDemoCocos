@@ -1,4 +1,5 @@
 import { find, Node } from 'cc';
+import { getWatchTowerFamilyScript } from './WatchTowerFamily';
 
 /**
  * 投矛手穿透攻击：收集与 Enemy.findTargetInRange 一致的可攻击我方单位节点（用于线段穿透检测）。
@@ -25,7 +26,7 @@ export function gatherSpearPierceCandidateNodes(): Node[] {
     if (watchTowersNode) {
         for (const tower of watchTowersNode.children) {
             if (tower?.active && tower.isValid) {
-                const towerScript = tower.getComponent('WatchTower') as any;
+                const towerScript = getWatchTowerFamilyScript(tower);
                 if (towerScript?.isAlive?.()) {
                     allTargets.push(tower);
                 }
