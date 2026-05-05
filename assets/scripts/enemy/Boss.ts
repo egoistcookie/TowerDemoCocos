@@ -2052,7 +2052,7 @@ export class Boss extends Component {
         const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript || bearScript;
 
         if (targetScript && targetScript.takeDamage) {
-            targetScript.takeDamage(this.attackDamage);
+            targetScript.takeDamage(this.attackDamage, undefined, this.node);
 
             // 检查目标是否仍然存活，特别是石墙
             if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {

@@ -1584,7 +1584,7 @@ export class Enemy extends Component {
             if (this.tempVec3_1.length() > 0.001) {
                 this.tempVec3_1.normalize();
             }
-            targetScript.takeDamage(this.attackDamage, this.tempVec3_1);
+            targetScript.takeDamage(this.attackDamage, this.tempVec3_1, this.node);
             
             // 检查目标是否仍然存活，特别是石墙
             if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {

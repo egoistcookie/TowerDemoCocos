@@ -617,7 +617,7 @@ export class Portal extends Component {
                     (targetNode.getComponent('Priest') as any) ||
                     (targetNode.getComponent('Mage') as any);
                 if (role && typeof role.takeDamage === 'function') {
-                    role.takeDamage(dmg, hitDir);
+                    role.takeDamage(dmg, hitDir, this.node);
                     this.tryShowFirstPortalAttackIntro();
                     return;
                 }

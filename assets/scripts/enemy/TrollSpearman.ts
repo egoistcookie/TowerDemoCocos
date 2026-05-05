@@ -353,7 +353,7 @@ export class TrollSpearman extends Enemy {
                         eagleScript;
 
                     if (targetScript && targetScript.takeDamage) {
-                        targetScript.takeDamage(damage, hitDirection);
+                        targetScript.takeDamage(damage, hitDirection, this.node);
                     } else {
                         this.currentTarget = null!;
                     }

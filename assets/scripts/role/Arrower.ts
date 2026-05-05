@@ -7,6 +7,7 @@ import { UnitInfo } from '../UnitInfoPanel';
 import { PlayerDataManager } from '../PlayerDataManager';
 import { GamePopup } from '../GamePopup';
 import { GameState } from '../GameManager';
+import { StoneWallGridPanel } from '../StoneWallGridPanel';
 const { ccclass, property } = _decorator;
 
 @ccclass('Arrower')
@@ -187,6 +188,12 @@ export class Arrower extends Role {
     private _lastTrapSetupFrameIdx: number = -1;
     private readonly SPIKE_TRAP_BUILD_DURATION: number = 4.0;
 
+    /** 在同一块空白石墙网格上站立超过此时长（秒），静默放置陷阱（无闲置判定、无动画） */
+    private readonly SILENT_TRAP_STAND_SEC = 8;
+    private _silentTrapStandTimer = 0;
+    private _silentTrapCellKey: string | null = null;
+    private _cachedTrapStoneWallGridPanel: StoneWallGridPanel | null = null;
+
     // 技能相关属性
     private readonly PENETRATE_ARROW_MANA_COST: number = 10; // 穿透箭消耗蓝量
     private isPenetrateArrowEnabled: boolean = false; // 穿透箭开关（每个弓箭手独立，默认关闭）
@@ -262,6 +269,9 @@ export class Arrower extends Role {
     protected override resetRoleState(): void {
         this.chainArrowKillCount = 0;
         this.chainArrowUnlocked = false;
+        this._silentTrapStandTimer = 0;
+        this._silentTrapCellKey = null;
+        this._cachedTrapStoneWallGridPanel = null;
         super.resetRoleState();
     }
 
@@ -894,6 +904,7 @@ export class Arrower extends Role {
             return;
         }
 
+        this.tickSilentStandTrap(deltaTime);
         this.updateSpikeTrapBehavior(deltaTime);
 
         // 【关键优化】在 super.update() 之前完成钓鱼状态初始化和检查
@@ -990,6 +1001,91 @@ export class Arrower extends Role {
         if (this.isFishing) {
             return;
         }
+    }
+
+    private getTrapStoneWallGridPanel(): StoneWallGridPanel | null {
+        if (this._cachedTrapStoneWallGridPanel?.isValid) {
+            return this._cachedTrapStoneWallGridPanel;
+        }
+        const n = find('Canvas/StoneWallGridPanel') || find('StoneWallGridPanel');
+        this._cachedTrapStoneWallGridPanel =
+            (n && (n.getComponent('StoneWallGridPanel') as StoneWallGridPanel)) || null;
+        return this._cachedTrapStoneWallGridPanel;
+    }
+
+    private clearSilentTrapAccum(): void {
+        this._silentTrapStandTimer = 0;
+        this._silentTrapCellKey = null;
+    }
+
+    /**
+     * 在石墙网格同一空白格连续站立 SILENT_TRAP_STAND_SEC 秒后静默生成陷阱（无闲置判定、无口号与挖坑动画）。
+     */
+    private tickSilentStandTrap(deltaTime: number): void {
+        if (this.isFishing || !this.canUseSpikeTrapBehavior()) {
+            this.clearSilentTrapAccum();
+            return;
+        }
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        const gm = this.gameManager as any;
+        // 非 Playing（暂停等）：不累加时间，也不清零站立计时，避免暂停导致进度被重算
+        if (gm?.getGameState && gm.getGameState() !== GameState.Playing) {
+            return;
+        }
+
+        const grid = this.getTrapStoneWallGridPanel();
+        if (!grid?.node?.isValid) {
+            this.clearSilentTrapAccum();
+            return;
+        }
+
+        const cell = grid.worldToGrid(this.node.worldPosition);
+        if (!cell) {
+            this.clearSilentTrapAccum();
+            return;
+        }
+        if (grid.isGridOccupied(cell.x, cell.y) || grid.hasTrapAt(cell.x, cell.y)) {
+            this.clearSilentTrapAccum();
+            return;
+        }
+
+        const key = `${cell.x},${cell.y}`;
+        if (key !== this._silentTrapCellKey) {
+            this._silentTrapCellKey = key;
+            this._silentTrapStandTimer = 0;
+        }
+        this._silentTrapStandTimer += deltaTime;
+
+        if (this._silentTrapStandTimer < this.SILENT_TRAP_STAND_SEC) {
+            return;
+        }
+
+        this.applySilentTrapAtGrid(grid, cell);
+
+        this._silentTrapStandTimer = 0;
+        this._silentTrapCellKey = null;
+        this._trapIdleTimer = 0;
+        this._trapCheckTimer = 0;
+    }
+
+    private applySilentTrapAtGrid(grid: StoneWallGridPanel, cell: { x: number; y: number }): void {
+        const trapSprite =
+            this.spikeTrapGridSprite ||
+            (this.spikeTrapTriggerFrames && this.spikeTrapTriggerFrames.length > 0
+                ? this.spikeTrapTriggerFrames[0]
+                : null) ||
+            (this.spikeTrapSetupFrames && this.spikeTrapSetupFrames.length > 0
+                ? this.spikeTrapSetupFrames[0]
+                : null);
+        grid.placeTrapAt(
+            cell.x,
+            cell.y,
+            this.getEffectiveAttackDamage(),
+            trapSprite,
+            this.spikeTrapTriggerFrames || [],
+        );
     }
 
     private updateSpikeTrapBehavior(deltaTime: number) {

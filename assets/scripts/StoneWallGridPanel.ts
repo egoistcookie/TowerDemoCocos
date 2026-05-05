@@ -891,6 +891,7 @@ export class StoneWallGridPanel extends Component {
             'Canvas/OrcWarlords',
             'Canvas/OrcShamans',
             'Canvas/MinotaurWarriors',
+            'Canvas/Wolves',
             'Canvas/Boss',
             'Canvas/Bosses',
         ];
@@ -930,6 +931,7 @@ export class StoneWallGridPanel extends Component {
             'Canvas/OrcWarlords',
             'Canvas/OrcShamans',
             'Canvas/MinotaurWarriors',
+            'Canvas/Wolves',
             'Canvas/Boss',
             'Canvas/Bosses',
         ];

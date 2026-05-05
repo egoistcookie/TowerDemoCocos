@@ -140,6 +140,10 @@ export class Role extends Component {
     @property
     collisionRadius: number = 15; // 碰撞半径（像素）
 
+    /** 单位顶部距画面上边的安全距离（像素），子类可覆写以允许更高/更低移动 */
+    @property({ tooltip: '单位顶部距画面上边的安全距离（像素），子类可覆写以允许更高/更低移动' })
+    protected topScreenMargin: number = 100; // 顶部安全边距，子类可覆写（如剑士设为更小值以到达传送门高度）
+
     @property(SpriteFrame)
     cardIcon: SpriteFrame = null!; // 单位名片图片
 
@@ -203,6 +207,8 @@ export class Role extends Component {
     protected idleAnimationOriginalScale: Vec3 | null = null; // 待机动画前的原始缩放
     protected moveAnimationDisplaySize: { width: number; height: number } | null = null; // 移动动画时的实际显示大小
     protected currentIdleAnimationSegmentIndex: number = -1; // 当前播放的待机动画段落索引（用于判断是否是第三段）
+    /** 当前待机动画 schedule 回调，便于强制停止（如剑士维修抢帧） */
+    private _idleAnimationUpdateFn: ((dt: number) => void) | null = null;
     protected avoidDirection: Vec3 = new Vec3(); // 避障方向
     protected avoidTimer: number = 0; // 避障计时器
     protected collisionCheckCount: number = 0; // 碰撞检测调用计数（用于调试）
@@ -1315,7 +1321,7 @@ export class Role extends Component {
             // 首次查找或按间隔查找
             const shouldFindByInterval = !this.hasFoundFirstTarget || this.targetFindTimer >= this.TARGET_FIND_INTERVAL;
             
-            if (needFindTarget || shouldFindByInterval) {
+            if ((needFindTarget || shouldFindByInterval) && this.canSeekAndFightEnemy()) {
                 this.targetFindTimer = 0; // 重置计时器
                 // const findTargetStartTime = PerformanceMonitor.startTiming('Role.findTarget');
                 this.findTarget();
@@ -1327,7 +1333,7 @@ export class Role extends Component {
             }
             
             // 防御状态下，只攻击范围内的敌人，不移动
-            if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
+            if (this.canSeekAndFightEnemy() && this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
                 // 性能优化：使用平方距离比较
                 const myPos = this.node.worldPosition;
                 const targetPos = this.currentTarget.worldPosition;
@@ -1388,7 +1394,7 @@ export class Role extends Component {
             // 首次查找或按间隔查找
             const shouldFindByInterval = !this.hasFoundFirstTarget || this.targetFindTimer >= this.TARGET_FIND_INTERVAL;
             
-            if (needFindTarget || shouldFindByInterval) {
+            if ((needFindTarget || shouldFindByInterval) && this.canSeekAndFightEnemy()) {
                 this.targetFindTimer = 0; // 重置计时器
                 // const findTargetStartTime2 = PerformanceMonitor.startTiming('Role.findTarget');
                 this.findTarget();
@@ -1451,7 +1457,7 @@ export class Role extends Component {
         }
 
         // 处理自动移动和攻击逻辑
-        if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
+        if (this.canSeekAndFightEnemy() && this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
             // 性能优化：使用平方距离比较，缓存worldPosition
             const myPos = this.node.worldPosition;
             const targetPos = this.currentTarget.worldPosition;
@@ -1519,6 +1525,8 @@ export class Role extends Component {
                     this.stopMoving();
                 }
             }
+        } else if (!this.canSeekAndFightEnemy()) {
+            // 子类接管移动（例如剑士自动维修），不在此处 stopMoving
         } else {
             // 没有目标，停止移动
             this.stopMoving();
@@ -1901,6 +1909,21 @@ export class Role extends Component {
     protected getPriorityTargetType(): string | null {
         return null;
     }
+
+    /**
+     * 索敌列表聚合后再筛选（默认不过滤）。
+     * 例如剑士在防线区域内只锁定已进入石墙网格的敌人。
+     */
+    protected filterEnemiesForFindTarget(enemies: Node[]): Node[] {
+        return enemies;
+    }
+
+    /**
+     * 在 filter 之后可向索敌列表追加额外节点（例如剑士反击：列表外但仍需追击的敌人）。
+     */
+    protected amendEnemiesForFindTarget(enemies: Node[]): Node[] {
+        return enemies;
+    }
     
     /** 获取目标 */
     findTarget() {
@@ -1912,7 +1935,9 @@ export class Role extends Component {
         const priorityTargetType = this.getPriorityTargetType();
 
         // 使用公共函数获取敌人（已优化，使用 UnitManager）
-        const enemies = this.getEnemies(true, detectionRange);
+        const enemies = this.amendEnemiesForFindTarget(
+            this.filterEnemiesForFindTarget(this.getEnemies(true, detectionRange)),
+        );
 
         const myPos = this.node.worldPosition;
 
@@ -1953,7 +1978,9 @@ export class Role extends Component {
             // 强制更新一次敌人列表
             this.unitManager.refreshUnitLists();
             // 再次尝试获取
-            const enemiesRetry = this.getEnemies(true, detectionRange);
+            const enemiesRetry = this.amendEnemiesForFindTarget(
+                this.filterEnemiesForFindTarget(this.getEnemies(true, detectionRange)),
+            );
             if (enemiesRetry.length > 0) {
                 // 重试阶段同样先尝试优先目标类型
                 if (priorityTargetType) {
@@ -2260,8 +2287,8 @@ export class Role extends Component {
             if (!this.isMoving || !this.sprite || !this.sprite.isValid || this.isDestroyed) {
                 this.isPlayingMoveAnimation = false;
                 this.unschedule(animationUpdate);
-                // 恢复默认SpriteFrame
-                if (this.sprite && this.sprite.isValid && this.defaultSpriteFrame) {
+                // 恢复默认SpriteFrame（子类维修动画等可跳过）
+                if (!this.shouldPreserveSpriteOnStopMove() && this.sprite && this.sprite.isValid && this.defaultSpriteFrame) {
                     this.sprite.spriteFrame = this.defaultSpriteFrame;
                 }
                 return;
@@ -2286,8 +2313,8 @@ export class Role extends Component {
 
     stopMoveAnimation() {
         this.isPlayingMoveAnimation = false;
-        // 恢复默认SpriteFrame
-        if (this.sprite && this.sprite.isValid && this.defaultSpriteFrame) {
+        // 恢复默认SpriteFrame（子类维修动画等可跳过）
+        if (!this.shouldPreserveSpriteOnStopMove() && this.sprite && this.sprite.isValid && this.defaultSpriteFrame) {
             this.sprite.spriteFrame = this.defaultSpriteFrame;
         }
         // 如果不在攻击状态，尝试播放待机动画
@@ -2631,6 +2658,8 @@ export class Role extends Component {
      * @returns 限制在屏幕范围内的位置
      */
     clampPositionToScreen(position: Vec3): Vec3 {
+        // ⚠️ PERFORMANCE-CRITICAL: 每次移动帧调用（checkCollisionAndAdjust → clampPositionToScreen）
+        // view.getVisibleSize() / getDesignResolutionSize() 是原生层调用，建议缓存结果
         // 使用cc.view获取屏幕尺寸和设计分辨率
         const visibleSize = view.getVisibleSize();
         const designResolution = view.getDesignResolutionSize();
@@ -2639,8 +2668,14 @@ export class Role extends Component {
         const minX = this.collisionRadius;
         const maxX = designResolution.width - this.collisionRadius;
         const minY = this.collisionRadius;
-        // 限制顶部：距离画面顶部100像素
-        const maxY = designResolution.height - this.collisionRadius - 100;
+        // 限制顶部：根据屏幕分辨率（可见视口）动态计算 topScreenMargin
+        // 当存在黑边（letterboxing）时，可见视口高度小于设计分辨率，
+        // 实际可用的 maxY = designResolution.height - collisionRadius - 黑边高度 - topScreenMargin
+        const visibleHeight = view.getVisibleSize().height;
+        const designHeight = view.getDesignResolutionSize().height;
+        const letterboxHeight = Math.max(0, designHeight - visibleHeight);
+        const topMargin = this.topScreenMargin + letterboxHeight;
+        const maxY = designResolution.height - this.collisionRadius - topMargin;
         
         // 限制位置在屏幕范围内
         const clampedPos = new Vec3(position);
@@ -3311,11 +3346,24 @@ export class Role extends Component {
      * 停止所有动画
      */
     stopAllAnimations() {
+        this.stopIdleAnimationPlayback();
         this.isPlayingAttackAnimation = false;
         this.isPlayingHitAnimation = false;
         this.isPlayingIdleAnimation = false;
         // 不停止死亡动画
         this.isHit = false; // 清除被攻击标志
+    }
+
+    /** 立即停止待机动画调度与相关缩放恢复（子类可在高优先级动画前调用） */
+    protected stopIdleAnimationPlayback(): void {
+        if (this._idleAnimationUpdateFn) {
+            this.unschedule(this._idleAnimationUpdateFn);
+            this._idleAnimationUpdateFn = null;
+        }
+        if (this.isPlayingIdleAnimation) {
+            this.isPlayingIdleAnimation = false;
+            this.restoreIdleAnimationSettings();
+        }
     }
 
     /**
@@ -3336,6 +3384,9 @@ export class Role extends Component {
         }
         // 如果正在设置陷阱（Arrower 特有），不播放待机动画
         if ((this as any)._isSettingSpikeTrap) {
+            return;
+        }
+        if (this.shouldBlockIdleAnimation()) {
             return;
         }
 
@@ -3461,9 +3512,17 @@ export class Role extends Component {
         }
         // 使用 update 方法逐帧播放（整体结构与移动动画一致）
         const animationUpdate = (deltaTime: number) => {
+            if (this.shouldBlockIdleAnimation()) {
+                this.isPlayingIdleAnimation = false;
+                this._idleAnimationUpdateFn = null;
+                this.unschedule(animationUpdate);
+                this.restoreIdleAnimationSettings();
+                return;
+            }
             // 如果角色开始移动或攻击，停止待机动画
             if (this.isMoving || this.isPlayingAttackAnimation || !this.sprite || !this.sprite.isValid || this.isDestroyed || (this as any)._isSettingSpikeTrap) {
                 this.isPlayingIdleAnimation = false;
+                this._idleAnimationUpdateFn = null;
                 this.unschedule(animationUpdate);
                 // 恢复原始设置（即便当前实现没有改动尺寸/缩放，这里留作安全兜底）
                 this.restoreIdleAnimationSettings();
@@ -3482,6 +3541,7 @@ export class Role extends Component {
 
                 // 停止动画更新
                 this.isPlayingIdleAnimation = false;
+                this._idleAnimationUpdateFn = null;
                 this.unschedule(animationUpdate);
 
                 // 第三段动画播放完成，立即恢复原始缩放
@@ -3492,6 +3552,9 @@ export class Role extends Component {
                 // 随机等待 2-5 秒后播放下一段待机动画
                 const waitTime = 2 + Math.random() * 3;
                 this.scheduleOnce(() => {
+                    if (this.shouldBlockIdleAnimation()) {
+                        return;
+                    }
                     // 等待结束后，如果仍然处于待机状态，播放下一段待机动画
                     if (!this.isMoving && !this.isPlayingAttackAnimation && !this.isPlayingHitAnimation && !this.isPlayingDeathAnimation && !(this as any)._isSettingSpikeTrap) {
                         this.checkAndPlayIdleAnimation();
@@ -3519,9 +3582,11 @@ export class Role extends Component {
             }
         };
 
-        // 先取消之前的调度，避免重复调度
-        this.unschedule(animationUpdate);
-        // 开始动画更新（每帧更新）
+        if (this._idleAnimationUpdateFn) {
+            this.unschedule(this._idleAnimationUpdateFn);
+            this._idleAnimationUpdateFn = null;
+        }
+        this._idleAnimationUpdateFn = animationUpdate;
         this.schedule(animationUpdate, 0);
     }
 
@@ -3911,9 +3976,36 @@ export class Role extends Component {
         }, 0.1);
     }
 
+    /** 子类可重写：是否允许本帧索敌与对当前目标追击/攻击（例如剑士自动维修时关闭） */
+    protected canSeekAndFightEnemy(): boolean {
+        return true;
+    }
+
+    /** 子类可重写：受伤时是否播放受击动画 */
+    protected shouldPlayHitAnimationOnDamage(): boolean {
+        return true;
+    }
+
+    /** 子类可重写：阻止待机动画（例如剑士贴近维修时） */
+    protected shouldBlockIdleAnimation(): boolean {
+        return false;
+    }
+
+    /** 子类可重写：停止移动或移动动画收尾时是否不要写回 defaultSpriteFrame（避免掐断子类维修等序列帧） */
+    protected shouldPreserveSpriteOnStopMove(): boolean {
+        return false;
+    }
+
     // 最近一次受击方向（用于伤害数字沿攻击方向飘动）
 
-    takeDamage(damage: number, hitDirection?: Vec3) {
+    /**
+     * 受到伤害结算后调用（实际扣血之后）。damageSource 为造成伤害的单位节点（可选，由攻击方传入）。
+     */
+    protected onReceivedDamage(finalDamage: number, hitDirection?: Vec3, damageSource?: Node | null): void {
+        // 子类如 ElfSwordsman 可重写（防线反击索敌等）
+    }
+
+    takeDamage(damage: number, hitDirection?: Vec3, damageSource?: Node | null) {
         if (this.isDestroyed) {
             return;
         }
@@ -3936,21 +4028,28 @@ export class Role extends Component {
 		const drPercent = Math.max(0, Math.min(90, typeof drPercentRaw === 'number' ? drPercentRaw : 0));
 		const finalDamage = drPercent > 0 ? Math.max(1, Math.floor(criticalDamage * (1 - drPercent / 100))) : criticalDamage;
 
-		// 显示伤害数字
+        // 显示伤害数字
         this.showDamageNumber(finalDamage, isCritical, hitDirection);
         
-        // 播放受击动画
-        this.playHitAnimation();
+        // 播放受击动画（子类可关闭，例如维修中不打断表现）
+        if (this.shouldPlayHitAnimationOnDamage()) {
+            this.playHitAnimation();
+        }
 
         this.currentHealth -= finalDamage;
 
-        // 受击口号：弓箭手 / 女猎手 / 精灵剑士 30% 概率喊“我需要治疗！”或“牧师在哪里？”
+        this.onReceivedDamage(finalDamage, hitDirection, damageSource ?? undefined);
+
+        // 受击口号：弓箭手 / 女猎手 / 精灵剑士（unitName 为「剑士」）30% 概率喊治疗相关口号；剑士第一句为「速来救治！」
         // 只在仍然存活时触发，避免死亡瞬间重复刷语音
         if (this.currentHealth > 0) {
             const nameForSlogan = this.unitName || this.constructor.name;
-            if ((nameForSlogan === '弓箭手' || nameForSlogan === '女猎手' || nameForSlogan === '精灵剑士')
+            if ((nameForSlogan === '弓箭手' || nameForSlogan === '女猎手' || nameForSlogan === '精灵剑士' || nameForSlogan === '剑士')
                 && Math.random() < 0.3) {
-                const healSlogans = ['我需要治疗！', '牧师在哪里？'];
+                const healSlogans =
+                    nameForSlogan === '精灵剑士' || nameForSlogan === '剑士'
+                        ? ['速来救治！', '牧师在哪里？']
+                        : ['我需要治疗！', '牧师在哪里？'];
                 const idx = Math.floor(Math.random() * healSlogans.length);
                 const text = healSlogans[idx];
                 this.createDialog(text, false);

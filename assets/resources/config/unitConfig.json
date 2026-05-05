@@ -469,7 +469,7 @@
     },
     "displayInfo": {
       "name": "狼",
-      "description": "兽人饲养的狼，可跃过石墙。"
+      "description": "兽人饲养的狼，可跃过石墙，直取古树。"
     },
     "displayStats": {
       "生命值": 50,

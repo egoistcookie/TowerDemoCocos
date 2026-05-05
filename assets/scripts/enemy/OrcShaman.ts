@@ -300,7 +300,7 @@ export class OrcShaman extends Enemy {
                                         stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
                     
                     if (targetScript && targetScript.takeDamage) {
-                        targetScript.takeDamage(damage, hitDirection);
+                        targetScript.takeDamage(damage, hitDirection, this.node);
                     } else {
                         // 目标无效，清除目标
                         this.currentTarget = null!;

@@ -327,9 +327,8 @@ export class Wisp extends Role {
             }
         }
 
-        // 显示治疗特效和数字
+        // 治疗数字由 Build.heal → showHealEffect（黑边绿字）；此处不再叠第二层预制体飘字
         this.showRepairEffect(this.repairTarget);
-        this.showRepairNumber(this.repairTarget, healAmount);
     }
     
     /**
@@ -514,35 +513,6 @@ export class Wisp extends Role {
         }
     }
     
-    /**
-     * 显示维修数字
-     */
-    private showRepairNumber(target: Node, amount: number) {
-        if (this.damageNumberPrefab && target && target.isValid) {
-            const healNode = instantiate(this.damageNumberPrefab);
-            const canvas = find('Canvas');
-            if (canvas) {
-                healNode.setParent(canvas);
-            } else if (this.node.scene) {
-                healNode.setParent(this.node.scene);
-            }
-            
-            // 设置治疗数字位置（在建筑物上方）
-            const targetPos = target.worldPosition.clone();
-            healNode.setWorldPosition(targetPos.add3f(0, 50, 0));
-            healNode.active = true;
-            
-            // 获取DamageNumber组件并设置治疗数值和颜色
-            const healScript = healNode.getComponent('DamageNumber' as any) as any;
-            if (healScript) {
-                // 设置治疗量，使用负数表示治疗
-                healScript.setDamage(-amount);
-                // 设置为绿色
-                healScript.setColor(new Color(0, 255, 0, 255));
-            }
-        }
-    }
-
     /**
      * 更新小精灵在树林网格中的半透明隐身效果：
      * - 进入任意一片树林网格：身体变淡到 50% 不透明度

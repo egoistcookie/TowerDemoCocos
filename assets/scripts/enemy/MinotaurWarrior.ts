@@ -2142,7 +2142,7 @@ export class MinotaurWarrior extends Boss {
             if (hitDir.length() > 0.001) {
                 hitDir.normalize();
             }
-            targetScript.takeDamage(this.attackDamage, hitDir);
+            targetScript.takeDamage(this.attackDamage, hitDir, this.node);
         }
     }
 
