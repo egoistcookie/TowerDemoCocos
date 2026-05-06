@@ -325,10 +325,20 @@ export class WatchTower extends Build {
         this.node.setWorldPosition(adjustedPos);
     }
 
+    /** 第 5 关起才显示「升级为炮塔」；与 GameManager.isCannonTowerUpgradeFromWatchTowerUnlocked 一致 */
+    protected isCannonUpgradeUnlocked(): boolean {
+        if (!this.gameManager) {
+            this.findGameManager();
+        }
+        const gm = this.gameManager as GameManager | null;
+        return !!(gm && typeof gm.isCannonTowerUpgradeFromWatchTowerUnlocked === 'function' && gm.isCannonTowerUpgradeFromWatchTowerUnlocked());
+    }
+
     /**
      * 构造哨塔的单位信息（包含回收与「升级炮塔」回调，供九宫格面板使用）
      */
     protected buildUnitInfo(): UnitInfo {
+        const showCannonUpgrade = this.isCannonUpgradeUnlocked() && !this._isChannelingCannonUpgrade;
         return {
             name: '哨塔',
             level: this.level,
@@ -339,15 +349,15 @@ export class WatchTower extends Build {
             populationCost: this.populationCost,
             icon: this.cardIcon || this.defaultSpriteFrame,
             collisionRadius: this.collisionRadius,
-            upgradeCost: WatchTower.CANNON_UPGRADE_COST,
+            upgradeCost: showCannonUpgrade ? WatchTower.CANNON_UPGRADE_COST : undefined,
             onSellClick: () => {
                 this.onSellClick();
             },
-            onUpgradeClick: this._isChannelingCannonUpgrade
-                ? undefined
-                : () => {
+            onUpgradeClick: showCannonUpgrade
+                ? () => {
                       this.onUpgradeClick();
-                  },
+                  }
+                : undefined,
         };
     }
     
@@ -468,6 +478,9 @@ export class WatchTower extends Build {
             event.propagationStopped = true;
         }
         if (this._isChannelingCannonUpgrade) {
+            return;
+        }
+        if (!this.isCannonUpgradeUnlocked()) {
             return;
         }
         if (!this.gameManager) {

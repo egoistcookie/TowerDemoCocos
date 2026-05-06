@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, resources, SpriteFrame, assetManager, Prefab, instantiate, BlockInputEvents, sys, Texture2D, ImageAsset, Mask, UIOpacity, LabelOutline, AudioSource, tween, ScrollView, EventTouch, Widget } from 'cc';
+import { _decorator, Component, Node, Label, director, find, Graphics, Color, UITransform, view, Sprite, Button, Vec3, Vec2, resources, SpriteFrame, assetManager, Prefab, instantiate, BlockInputEvents, sys, Texture2D, ImageAsset, Mask, UIOpacity, LabelOutline, AudioSource, tween, ScrollView, EventTouch, Widget } from 'cc';
 // 微信小游戏全局对象声明（避免 TypeScript 报错）
 declare const wx: any;
 import { Crystal } from './role/Crystal';
@@ -129,6 +129,7 @@ export class GameManager extends Component {
     private hasShownLevel2MageTowerUnlockIntro: boolean = false; // 第2关小精灵介绍后，法师塔解锁介绍仅弹一次
     private hasShownLevel2HunterTornadoAwakenIntro: boolean = false; // 第2关通关后，女猎手龙卷觉醒介绍仅弹一次
     private hasShownLevel4EagleNestUnlockIntro: boolean = false; // 第 4 关通关后，角鹰兽栏解锁介绍仅弹一次
+    private hasShownLevel4CannonTowerUnlockIntro: boolean = false; // 第 4 关通关后，炮塔解锁介绍仅弹一次（第 5 关起可由哨塔升级）
     private shownFirstBuffCardLevels: Set<number> = new Set(); // 每关“首次抽卡”标记（用于固定SP卡逻辑）
     private originalTimeScale: number = 1; // 保存原始时间缩放值
     
@@ -332,6 +333,9 @@ export class GameManager extends Component {
     private cachedTopHudSafeTopUi: number = 0;
     @property
     topPortalTopMargin: number = 300; // 顶部三个初始传送门距离上边界的边距（原100，整体下移200）
+    /** 传送门中心 Y 至少高于石墙网格顶（世界坐标）的间距；长屏上画布高度与 view 可见区组合不一致时避免贴石墙 */
+    @property
+    portalMinGapAboveStoneWallGrid: number = 210;
     @property
     bottomActionButtonBaseMargin: number = 20; // 建造/退出按钮基础底边距
     @property
@@ -1283,6 +1287,7 @@ export class GameManager extends Component {
         this.hasShownLevel2MageTowerUnlockIntro = false;
         this.hasShownLevel2HunterTornadoAwakenIntro = false;
         this.hasShownLevel4EagleNestUnlockIntro = false;
+        this.hasShownLevel4CannonTowerUnlockIntro = false;
         this.debugUnitTypes = [];
         this.hasShownArrowerNeedPriestDialog = false;
         this.hasShownPriestProtectBuildingDialog = false;
@@ -3995,6 +4000,35 @@ export class GameManager extends Component {
             }
         });
     }
+
+    // 使用单位介绍框展示炮塔解锁（resources/textures/炮塔2.png）
+    private showCannonTowerUnlockViaIntro(onClosed?: () => void) {
+        if (!this.unitIntroPopup) {
+            if (onClosed) onClosed();
+            return;
+        }
+        const finish = (icon: SpriteFrame | null) => {
+            this.unitIntroPopup.show({
+                unitName: '炮塔',
+                unitDescription: '已解锁新防御塔：炮塔，由哨塔升级而成！',
+                unitIcon: icon,
+                unitType: 'CannonTower',
+                unitId: 'CannonTower',
+                onCloseCallback: () => {
+                    if (onClosed) onClosed();
+                }
+            });
+        };
+        resources.load('textures/炮塔2/spriteFrame', SpriteFrame, (err, sf) => {
+            if (!err && sf) {
+                finish(sf);
+            } else {
+                resources.load('textures/炮塔2', SpriteFrame, (err2, sf2) => {
+                    finish(!err2 && sf2 ? sf2 : null);
+                });
+            }
+        });
+    }
     
     /**
      * 显示游戏结算面板（统一方法，用于游戏结束和主动退出）
@@ -4030,6 +4064,14 @@ export class GameManager extends Component {
             if (finalState === GameState.Victory && level === 3 && !(this as any)._hasShownLevel4EagleNestUnlockOnce) {
                 (this as any)._hasShownLevel4EagleNestUnlockOnce = true;
                 this.showEagleNestUnlockViaIntro(() => {
+                    this.showGameResultPanel(state);
+                });
+                return;
+            }
+            // 第4关胜利：解锁炮塔（第5关起可由哨塔升级）
+            if (finalState === GameState.Victory && level === 4 && !this.hasShownLevel4CannonTowerUnlockIntro) {
+                this.hasShownLevel4CannonTowerUnlockIntro = true;
+                this.showCannonTowerUnlockViaIntro(() => {
                     this.showGameResultPanel(state);
                 });
                 return;
@@ -5444,6 +5486,7 @@ export class GameManager extends Component {
         this.hasShownLevel2MageTowerUnlockIntro = false;
         this.hasShownLevel2HunterTornadoAwakenIntro = false;
         this.hasShownLevel4EagleNestUnlockIntro = false;
+        this.hasShownLevel4CannonTowerUnlockIntro = false;
         this.hasShownArrowerNeedPriestDialog = false;
         this.hasShownPriestProtectBuildingDialog = false;
         this.hasShownGoldReach100ArrowerDialog = false;
@@ -5951,6 +5994,38 @@ export class GameManager extends Component {
     }
     
     /**
+     * 顶部传送门 Y：先按 view 可见区估算，再保证不低于「石墙网格顶 + 间距」，
+     * 避免 fitWidth 长屏下画布高度与 view 不同步时传送门与石墙几乎贴在一起。
+     */
+    private resolveInitialPortalWorldY(visibleOrigin: Readonly<Vec2 | Vec3>, visibleSize: { width: number; height: number }): number {
+        let y =
+            visibleOrigin.y +
+            visibleSize.height -
+            Math.max(0, this.topPortalTopMargin) -
+            200;
+        const minFromGrid = this.getMinPortalWorldYFromStoneWallGridTop();
+        if (minFromGrid !== null) {
+            y = Math.max(y, minFromGrid);
+        }
+        return y;
+    }
+
+    private getMinPortalWorldYFromStoneWallGridTop(): number | null {
+        const gridNode = find('Canvas/StoneWallGridPanel');
+        if (!gridNode?.isValid) return null;
+        const ut = gridNode.getComponent(UITransform);
+        if (!ut) return null;
+        try {
+            const rect = ut.getBoundingBoxToWorld();
+            if (!rect || !Number.isFinite(rect.y) || !Number.isFinite(rect.height)) return null;
+            const wallTopWorldY = rect.y + rect.height;
+            return wallTopWorldY + Math.max(0, this.portalMinGapAboveStoneWallGrid);
+        } catch {
+            return null;
+        }
+    }
+
+    /**
      * 在画面上方生成三个敌人传送门（使用用户提供的传送门预制体）
      * - 优先从分包 'prefabs_sub' 加载 'Portal'
      * - 回退到主包 resources.load('Portal')
@@ -6013,8 +6088,8 @@ export class GameManager extends Component {
         const midX = 0 + offsetX;
         const visibleOrigin = view.getVisibleOrigin();
         const visibleSize = view.getVisibleSize();
-        // 在当前基础上再下移 200 像素
-        const y = visibleOrigin.y + visibleSize.height - Math.max(0, this.topPortalTopMargin) - 200;
+        // 在当前基础上再下移 200 像素；并与石墙网格顶对齐，避免长屏/Pro 机型上画布高度与 view 组合导致贴石墙
+        const y = this.resolveInitialPortalWorldY(visibleOrigin, visibleSize);
         const positions = [new Vec3(leftX, y, 0), new Vec3(midX, y, 0), new Vec3(rightX, y, 0)];
         const tryInstantiate = (prefab: Prefab | null) => {
             if (!prefab) {
@@ -6528,7 +6603,7 @@ export class GameManager extends Component {
             this.debugUnitTypes = Array.from(this.appearedUnitTypes);
 
             // 特殊建筑首次出现时不弹单位介绍框：弓箭手小屋 / 猎手大厅 / 法师塔 / 剑士小屋 / 教堂 / 角鹰兽栏
-            const introBlockedNames = new Set<string>(['弓箭手小屋', '猎手大厅', '法师塔', '剑士小屋', '教堂', '角鹰兽栏']);
+            const introBlockedNames = new Set<string>(['弓箭手小屋', '猎手大厅', '法师塔', '剑士小屋', '教堂', '角鹰兽栏', '炮塔']);
             const shouldShowIntro = !introBlockedNames.has(uniqueUnitType);
             const isFirstArrower = unitType === 'Arrower' || unitScript?.unitType === 'Arrower' || unitScript?.prefabName === 'Arrower' || uniqueUnitType === '弓箭手';
             const isFirstSwordsman =
@@ -6544,10 +6619,8 @@ export class GameManager extends Component {
             const shouldDeferIntroToClick =
                 rawUnitId === 'StoneWall' ||
                 rawUnitId === 'WatchTower' ||
-                rawUnitId === 'CannonTower' ||
                 uniqueUnitType === '石墙' ||
-                uniqueUnitType === '哨塔' ||
-                uniqueUnitType === '炮塔';
+                uniqueUnitType === '哨塔';
             if (shouldDeferIntroToClick) {
                 this.deferredIntroUnitIds.add(String(rawUnitId));
                 return true;
@@ -8795,6 +8868,11 @@ export class GameManager extends Component {
             }
         }
         return level;
+    }
+
+    /** 第 5 关起：允许将哨塔升级为炮塔（第 4 关通关时提示解锁） */
+    public isCannonTowerUpgradeFromWatchTowerUnlocked(): boolean {
+        return this.getCurrentLevelSafe() >= 5;
     }
 
     private showMageTowerUnlockIntro() {
