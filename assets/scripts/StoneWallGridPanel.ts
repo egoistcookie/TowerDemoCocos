@@ -832,11 +832,44 @@ export class StoneWallGridPanel extends Component {
         return this.trapCells.has(this.trapKey(gridX, gridY));
     }
 
+    /**
+     * 是否可在该格放置地刺陷阱：不能与已有陷阱重叠；可与石墙、防御塔同格，其它占用体仍不可。
+     */
+    public canPlaceTrapAt(gridX: number, gridY: number): boolean {
+        if (gridX < 0 || gridX >= this.gridWidth || gridY < 0 || gridY >= this.gridHeight) {
+            return false;
+        }
+        if (this.hasTrapAt(gridX, gridY)) {
+            return false;
+        }
+        if (!this.isGridOccupied(gridX, gridY)) {
+            return true;
+        }
+        return this.isTrapOverlapAllowedOccupant(gridX, gridY);
+    }
+
+    /** 占用格上的建筑是否为可与陷阱叠放的类型（石墙、各类防御塔） */
+    private isTrapOverlapAllowedOccupant(gridX: number, gridY: number): boolean {
+        this.ensureGridInitialized();
+        const cell = this.gridCells[gridY][gridX];
+        const n = cell?.buildingNode;
+        if (!n || !n.isValid) {
+            return false;
+        }
+        return !!(
+            n.getComponent('StoneWall') ||
+            n.getComponent('WatchTower') ||
+            n.getComponent('CannonTower') ||
+            n.getComponent('IceTower') ||
+            n.getComponent('ThunderTower')
+        );
+    }
+
     public placeTrapAt(gridX: number, gridY: number, damage: number, trapSprite?: SpriteFrame | null, triggerFrames?: SpriteFrame[]): boolean {
         if (gridX < 0 || gridX >= this.gridWidth || gridY < 0 || gridY >= this.gridHeight) {
             return false;
         }
-        if (this.isGridOccupied(gridX, gridY) || this.hasTrapAt(gridX, gridY)) {
+        if (!this.canPlaceTrapAt(gridX, gridY)) {
             return false;
         }
         const visualNode = this.createTrapVisual(gridX, gridY, trapSprite || null);

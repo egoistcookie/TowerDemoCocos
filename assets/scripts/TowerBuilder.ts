@@ -3255,6 +3255,13 @@ export class TowerBuilder extends Component {
             
             // 然后设置建造成本（使用实际成本）
             towerScript.buildCost = actualCost;
+
+            // 与开局生成的哨塔一致：配置写完后按关卡重算防御塔血量（对象池复用时不会再次走 start 的倍率）
+            const twAny = towerScript as any;
+            twAny.findGameManager();
+            twAny.originalMaxHealthForLevelScaling = -1;
+            twAny.applyLevelBasedDefenseTowerHealthIfNeeded();
+            twAny.currentHealth = twAny.maxHealth;
             
             // 哨塔只能放置在石墙网格内，占用网格
             if (!this.stoneWallGridPanelComponent) {
@@ -3323,46 +3330,56 @@ export class TowerBuilder extends Component {
     }
 
     /**
-     * 哨塔读条结束后替换为炮塔（同一双格占位、继承当前/最大生命）
+     * SP 卡等：在石墙网格最下两层（gridY=0 与 1）找随机双格空位生成炮塔。
      */
-    public upgradeWatchTowerToCannonTower(watch: WatchTower) {
-        if (!this.cannonTowerPrefab || !watch?.node?.isValid) {
-            if (this.gameManager) {
-                this.gameManager.addGold(10);
-            }
-            GamePopup.showMessage('炮塔预制体未加载，已退回金币', true, 2);
-            return;
+    public async spawnCannonTowerFromSpCard(): Promise<boolean> {
+        if (!this.cannonTowerPrefab) {
+            return false;
         }
-
         if (!this.stoneWallGridPanelComponent) {
             this.findStoneWallGridPanel();
         }
         const panel = this.stoneWallGridPanelComponent;
-        const gx = watch.gridX;
-        const gy = watch.gridY;
-        const watchAny = watch as any;
-        const hp = watchAny.currentHealth as number;
-        const mh = watchAny.maxHealth as number;
+        if (!panel || panel.gridHeight < 2) {
+            return false;
+        }
+        const baseY = 0;
+        const xs: number[] = [];
+        for (let x = 0; x < panel.gridWidth; x++) {
+            if (!panel.isGridOccupied(x, baseY) && !panel.isGridOccupied(x, baseY + 1)) {
+                xs.push(x);
+            }
+        }
+        for (let i = xs.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [xs[i], xs[j]] = [xs[j], xs[i]];
+        }
+        if (xs.length === 0) {
+            return false;
+        }
+        const gx = xs[0];
+        const created = await this.createAndPlaceCannonTower(panel, gx, baseY, null);
+        return !!created;
+    }
 
-        watchAny.hideSelectionPanel?.();
-        watchAny.findUnitSelectionManager?.();
-        const usm = watchAny.unitSelectionManager;
-        if (usm && typeof (usm as any).isUnitSelected === 'function' && (usm as any).isUnitSelected(watch.node)) {
-            (usm as any).clearSelection?.();
+    /** 创建炮塔节点、应用配置与关卡血量并占用双格；inheritHp 为 null 时满血 */
+    private async createAndPlaceCannonTower(
+        panel: StoneWallGridPanel,
+        gx: number,
+        gy: number,
+        inheritHp: number | null,
+    ): Promise<CannonTower | null> {
+        try {
+            await UnitConfigManager.getInstance().loadConfig();
+        } catch (_e) {
+            // 配置加载失败时仍尝试用预制体数值建塔
         }
 
-        if (panel && gx >= 0 && gy >= 0 && gy + 1 < panel.gridHeight) {
-            panel.releaseGrid(gx, gy);
-            panel.releaseGrid(gx, gy + 1);
+        if (!this.cannonTowerPrefab || gy < 0 || gy + 1 >= panel.gridHeight) {
+            return null;
         }
 
         const pool = BuildingPool.getInstance();
-        if (pool) {
-            pool.release(watch.node, 'WatchTower');
-        } else if (watch.node?.isValid) {
-            watch.node.destroy();
-        }
-
         let tower: Node | null = null;
         if (pool) {
             const stats = pool.getStats();
@@ -3375,11 +3392,7 @@ export class TowerBuilder extends Component {
             tower = instantiate(this.cannonTowerPrefab);
         }
         if (!tower?.isValid) {
-            if (this.gameManager) {
-                this.gameManager.addGold(10);
-            }
-            GamePopup.showMessage('创建炮塔失败，已退回金币', true, 2);
-            return;
+            return null;
         }
 
         if (!this.watchTowerContainer) {
@@ -3400,12 +3413,8 @@ export class TowerBuilder extends Component {
 
         const cannonScript = tower.getComponent(CannonTower);
         if (!cannonScript) {
-            if (this.gameManager) {
-                this.gameManager.addGold(10);
-            }
             tower.destroy();
-            GamePopup.showMessage('炮塔组件缺失，已退回金币', true, 2);
-            return;
+            return null;
         }
 
         cannonScript.prefabName = 'CannonTower';
@@ -3419,30 +3428,116 @@ export class TowerBuilder extends Component {
 
         cannonScript.buildCost = this.getActualBuildCost('CannonTower');
 
-        if (panel && gx >= 0 && gy >= 0 && gy + 1 < panel.gridHeight) {
-            if (panel.occupyGrid(gx, gy, tower) && panel.occupyGrid(gx, gy + 1, tower)) {
-                cannonScript.gridX = gx;
-                cannonScript.gridY = gy;
-                const gridPos = panel.gridToWorld(gx, gy);
-                if (gridPos) {
-                    tower.setWorldPosition(new Vec3(gridPos.x, gridPos.y, gridPos.z));
-                }
-            } else {
-                cannonScript.gridX = -1;
-                cannonScript.gridY = -1;
+        const cnAny = cannonScript as any;
+        cnAny.findGameManager();
+        cnAny.originalMaxHealthForLevelScaling = -1;
+        cnAny.applyLevelBasedDefenseTowerHealthIfNeeded();
+
+        if (panel.occupyGrid(gx, gy, tower) && panel.occupyGrid(gx, gy + 1, tower)) {
+            cannonScript.gridX = gx;
+            cannonScript.gridY = gy;
+            const gridPos = panel.gridToWorld(gx, gy);
+            if (gridPos) {
+                tower.setWorldPosition(new Vec3(gridPos.x, gridPos.y, gridPos.z));
             }
+        } else {
+            cannonScript.gridX = -1;
+            cannonScript.gridY = -1;
+            const relPool = BuildingPool.getInstance();
+            if (relPool) {
+                relPool.release(tower, 'CannonTower');
+            } else if (tower?.isValid) {
+                tower.destroy();
+            }
+            return null;
         }
 
         const cannonAny = cannonScript as any;
-        const maxH = Math.max(1, cannonAny.maxHealth || mh);
-        cannonAny.maxHealth = maxH;
-        cannonAny.currentHealth = Math.max(1, Math.min(maxH, hp));
+        if (inheritHp != null) {
+            cannonAny.currentHealth = Math.max(1, Math.min(cannonAny.maxHealth, inheritHp));
+        } else {
+            cannonAny.currentHealth = cannonAny.maxHealth;
+        }
 
         if (!this.gameManager) {
             this.findGameManager();
         }
         if (this.gameManager) {
             this.gameManager.checkUnitFirstAppearance('CannonTower', cannonScript);
+        }
+        return cannonScript;
+    }
+
+    /**
+     * 哨塔读条结束后替换为炮塔（同一双格占位、继承当前生命，上限以炮塔自身 maxHealth 为准）
+     */
+    public upgradeWatchTowerToCannonTower(watch: WatchTower) {
+        if (!this.cannonTowerPrefab || !watch?.node?.isValid) {
+            if (this.gameManager) {
+                this.gameManager.addGold(WatchTower.CANNON_UPGRADE_COST);
+            }
+            GamePopup.showMessage('炮塔预制体未加载，已退回金币', true, 2);
+            return;
+        }
+        void this.upgradeWatchTowerToCannonTowerAsync(watch);
+    }
+
+    /**
+     * 先等待 unitConfig 加载再拆哨塔建炮塔，避免配置未就绪时跳过 applyConfigToUnit 导致攻击力仍为哨塔默认 15。
+     */
+    private async upgradeWatchTowerToCannonTowerAsync(watch: WatchTower) {
+        try {
+            await UnitConfigManager.getInstance().loadConfig();
+        } catch (_e) {
+            // 加载失败时仍尝试建塔（可能为预制体默认数值）
+        }
+
+        if (!this.cannonTowerPrefab || !watch?.node?.isValid) {
+            if (this.gameManager) {
+                this.gameManager.addGold(WatchTower.CANNON_UPGRADE_COST);
+            }
+            GamePopup.showMessage('哨塔已失效，升级中止，已退回金币', true, 2);
+            return;
+        }
+
+        if (!this.stoneWallGridPanelComponent) {
+            this.findStoneWallGridPanel();
+        }
+        const panel = this.stoneWallGridPanelComponent;
+        const gx = watch.gridX;
+        const gy = watch.gridY;
+        const watchAny = watch as any;
+        const hp = watchAny.currentHealth as number;
+
+        watchAny.hideSelectionPanel?.();
+        watchAny.findUnitSelectionManager?.();
+        const usm = watchAny.unitSelectionManager;
+        if (usm && typeof (usm as any).isUnitSelected === 'function' && (usm as any).isUnitSelected(watch.node)) {
+            (usm as any).clearSelection?.();
+        }
+
+        if (panel && gx >= 0 && gy >= 0 && gy + 1 < panel.gridHeight) {
+            panel.releaseGrid(gx, gy);
+            panel.releaseGrid(gx, gy + 1);
+        }
+
+        const pool = BuildingPool.getInstance();
+        if (pool) {
+            pool.release(watch.node, 'WatchTower');
+        } else if (watch.node?.isValid) {
+            watch.node.destroy();
+        }
+
+        const cannonScript =
+            panel && gx >= 0 && gy >= 0 && gy + 1 < panel.gridHeight
+                ? await this.createAndPlaceCannonTower(panel, gx, gy, hp)
+                : null;
+
+        if (!cannonScript) {
+            if (this.gameManager) {
+                this.gameManager.addGold(WatchTower.CANNON_UPGRADE_COST);
+            }
+            GamePopup.showMessage('创建炮塔失败，已退回金币', true, 2);
         }
     }
 

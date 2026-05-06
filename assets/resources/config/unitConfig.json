@@ -361,7 +361,7 @@
   },
   "CannonTower": {
     "baseStats": {
-      "maxHealth": 100,
+      "maxHealth": 200,
       "buildCost": 15,
       "attackRange": 250,
       "attackDamage": 100,
@@ -372,10 +372,10 @@
     },
     "displayInfo": {
       "name": "炮塔",
-      "description": "由哨塔升级，重炮溅射范围杀伤。"
+      "description": "爆炸就是艺术！"
     },
     "displayStats": {
-      "生命值": 100,
+      "生命值": 200,
       "攻击力": 100,
       "攻击范围": "250像素",
       "攻击间隔": "3秒",

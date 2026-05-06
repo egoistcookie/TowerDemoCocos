@@ -72,7 +72,8 @@ export class BuffManager {
         'selfHealingWall',
         'thunderChainPlus',
         'iceCrawl',
-        'ballista'
+        'ballista',
+        'cannonTowerPlus'
     ]);
 
     private isSpBuffType(buffType: string): boolean {
@@ -368,6 +369,9 @@ export class BuffManager {
                     unitScript._spWatchKnockbackPower = 10 * level;
                     break;
                 }
+                case 'cannonTowerPlus':
+                    // 由抽卡逻辑直接生成炮塔，此处不对单位属性生效
+                    break;
             }
         }
     }

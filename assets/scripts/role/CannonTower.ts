@@ -1,7 +1,8 @@
-import { _decorator, Prefab, instantiate, find, SpriteFrame, Vec3, UITransform } from 'cc';
+import { _decorator, Prefab, instantiate, find, SpriteFrame, Vec3, UITransform, Node } from 'cc';
 import { WatchTower, ConstructionStage } from './WatchTower';
 import { UnitInfo } from '../UnitInfoPanel';
 import { CannonBall } from '../CannonBall';
+import { getEnemyLikeScript } from '../EnemyScriptLookup';
 const { ccclass, property } = _decorator;
 
 /**
@@ -22,6 +23,18 @@ export class CannonTower extends WatchTower {
     /** 炮塔以炮弹为准；仅有箭矢预制体无炮弹时不再误判为远程（否则 fireProjectile 打不出伤害） */
     protected hasRangedProjectile(): boolean {
         return !!this.cannonBallPrefab;
+    }
+
+    /** 炮塔为地面炮火，不锁定飞行单位（如飞龙） */
+    protected canAttackEnemyNode(enemy: Node): boolean {
+        if (enemy.getComponent('Dragon')) {
+            return false;
+        }
+        const s = getEnemyLikeScript(enemy);
+        if (s && (s as any).isFlying === true) {
+            return false;
+        }
+        return true;
     }
 
     onEnable() {

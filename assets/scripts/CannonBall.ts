@@ -19,6 +19,7 @@ const ENEMY_CONTAINER_PATHS: readonly string[] = [
     'Canvas/Wolves',
     'Canvas/Boss',
     'Canvas/Bosses',
+    'Canvas/Portals',
 ];
 
 /**

@@ -122,6 +122,8 @@ export class Build extends Component {
         this.isMoving = false;
         this.gridX = -1;
         this.gridY = -1;
+        // 必须清空，否则 setHeightWithFixedBottomGeneric 会沿用上一实例的底部基准，双格塔（哨塔/炮塔）会整体错位，看起来像占了下一格
+        this.baseY = Number.NaN;
         this.starLevel = 1;
         // 清理复用节点上残留的星标容器，避免新建 1 星时短暂显示旧的 2/3 星
         try {
@@ -180,6 +182,8 @@ export class Build extends Component {
         this.gridX = -1;
         this.gridY = -1;
         this.isMoving = false;
+        // 与 start() 一致：池化复用后必须重算“贴网格底部”的基准，否则会沿用旧 baseY 导致位置偏到下一格附近
+        this.baseY = Number.NaN;
         
         // 重新查找单位选择管理器
         this.findUnitSelectionManager();

@@ -325,6 +325,17 @@ export class Portal extends Component {
 		}
 	}
 
+    /** 与 Role/Build 一致，供哨塔/炮塔索敌与开火前校验 */
+    public isAlive(): boolean {
+        if (!this.node || !this.node.isValid || !this.node.active) {
+            return false;
+        }
+        if (this.isDormantNow()) {
+            return false;
+        }
+        return this.currentHealth > 0;
+    }
+
     public takeDamage(amount: number) {
         if (this.isDormantNow()) {
             return;
@@ -654,6 +665,7 @@ export class Portal extends Component {
     private findNearestFriendlyInRange(radius: number): Node | null {
         const containers = [
             'Canvas/Towers',       // 弓箭手等远程单位
+            'Canvas/WatchTowers',   // 哨塔/炮塔/冰塔雷塔等防御塔（与 TowerBuilder 父节点一致）
             'Canvas/Hunters',
             'Canvas/ElfSwordsmans', // 实际项目中剑士容器常用命名
             'Canvas/Swordsmen',
@@ -671,6 +683,12 @@ export class Portal extends Component {
             if (!container) continue;
             for (const child of container.children) {
                 if (!child.active || !child.isValid) continue;
+
+                if (path === 'Canvas/WatchTowers') {
+                    const buildScript = child.getComponent('Build') as any;
+                    if (!buildScript || buildScript.isDestroyed) continue;
+                    if (typeof buildScript.isAlive === 'function' && !buildScript.isAlive()) continue;
+                }
 
                 // 检查巨熊是否存活
                 if (path === 'Canvas/Bears') {

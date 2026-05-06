@@ -4,6 +4,7 @@ import { AnalyticsManager, OperationType, CardSelectionItem, CardSelectionMode }
 import { SoundManager } from './SoundManager';
 import { AudioManager } from './AudioManager';
 import { MemoryProbe } from './MemoryProbe';
+import { GamePopup } from './GamePopup';
 const { ccclass, property } = _decorator;
 
 /**
@@ -1011,7 +1012,20 @@ export class BuffCardPopup extends Component {
         }
         // 中间的单位图片（从预制体的 unitIcon 获取）
         //console.info(`[BuffCardPopup] updateCard: 单位=${data.unitName}, unitId=${data.unitId}, unitIcon存在=${!!data.unitIcon}, unitImageSprite存在=${!!unitImageSprite}, 稀有度=${data.rarity}`);
-        if (data.unitIcon && unitImageSprite) {
+        if (data.buffType === 'cannonTowerPlus' && unitImageSprite) {
+            unitImageSprite.node.active = true;
+            resources.load('textures/炮塔2/spriteFrame', SpriteFrame, (err, sf) => {
+                if (!err && sf && unitImageSprite?.isValid && unitImageSprite.node?.isValid) {
+                    unitImageSprite.spriteFrame = sf;
+                    return;
+                }
+                resources.load('textures/炮塔2', SpriteFrame, (err2, sf2) => {
+                    if (!err2 && sf2 && unitImageSprite?.isValid && unitImageSprite.node?.isValid) {
+                        unitImageSprite.spriteFrame = sf2;
+                    }
+                });
+            });
+        } else if (data.unitIcon && unitImageSprite) {
             // 确保图片节点是激活的
             if (!unitImageSprite.node.active) {
                 unitImageSprite.node.active = true;
@@ -1433,6 +1447,23 @@ export class BuffCardPopup extends Component {
             buffManager.addBuff('global', cardData.buffType, cardData.buffValue);
             return;
         }
+
+        if (cardData.buffType === 'cannonTowerPlus') {
+            const tbNode = find('Canvas/TowerBuilder') || find('TowerBuilder');
+            const tb = tbNode?.getComponent('TowerBuilder') as any;
+            if (!tb || typeof tb.spawnCannonTowerFromSpCard !== 'function') {
+                GamePopup.showMessage('石墙网格最下两层没有空位放置炮塔', true, 2);
+                return;
+            }
+            void Promise.resolve(tb.spawnCannonTowerFromSpCard()).then((ok: boolean) => {
+                if (!ok) {
+                    GamePopup.showMessage('石墙网格最下两层没有空位放置炮塔', true, 2);
+                    return;
+                }
+                buffManager.addBuff('CannonTowerPlus', 'cannonTowerPlus', cardData.buffValue);
+            });
+            return;
+        }
         
         // 处理单位增益
         if (!cardData.unitId) {
@@ -1452,7 +1483,16 @@ export class BuffCardPopup extends Component {
                 continue;
             }
             
-            const unitScript = unit.getComponent(cardData.unitId) as any;
+            let unitScript: any = null;
+            if (cardData.unitId === 'WatchTower') {
+                if (!unit.getComponent('CannonTower')) {
+                    unitScript = unit.getComponent('WatchTower') as any;
+                }
+            } else if (cardData.unitId === 'CannonTower') {
+                unitScript = unit.getComponent('CannonTower') as any;
+            } else {
+                unitScript = unit.getComponent(cardData.unitId) as any;
+            }
             if (unitScript) {
                 // 统一走 BuffManager 重新计算（尤其 SP 需要按等级覆盖式应用）
                 buffManager.applyBuffsToUnit(unitScript, cardData.unitId);
@@ -1649,6 +1689,7 @@ export class BuffCardPopup extends Component {
             'Priest': ['Canvas/Towers'],
             'StoneWall': ['Canvas/StoneWalls'],
             'WatchTower': ['Canvas/WatchTowers'],
+            'CannonTower': ['Canvas/WatchTowers'],
             'IceTower': ['Canvas/IceTowers'],
             'ThunderTower': ['Canvas/ThunderTowers'],
             'WarAncientTree': ['Canvas/WarAncientTrees'],
@@ -1664,10 +1705,18 @@ export class BuffCardPopup extends Component {
             if (container) {
                 for (const child of container.children) {
                     if (child && child.isValid && child.active) {
-                        // 检查是否有对应的组件
-                        const script = child.getComponent(unitId) as any ||
+                        let script: any = null;
+                        if (unitId === 'WatchTower') {
+                            if (!child.getComponent('CannonTower')) {
+                                script = child.getComponent('WatchTower') as any;
+                            }
+                        } else if (unitId === 'CannonTower') {
+                            script = child.getComponent('CannonTower') as any;
+                        } else {
+                            script = child.getComponent(unitId) as any ||
                                       child.getComponent('Role') as any ||
                                       child.getComponent('Build') as any;
+                        }
                         if (script) {
                             units.push(child);
                         }

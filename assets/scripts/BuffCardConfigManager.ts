@@ -136,6 +136,11 @@ export class BuffCardConfigManager {
             return null;
         }
 
+        // 炮塔单独从配置「塔」列表中拆出，避免与哨塔混池；数值仍走 tower 的 R/SR/SSR 表
+        if (unitType === 'CannonTower') {
+            return 'tower';
+        }
+
         const categories = this.config.unitTypeCategories;
         if (categories.tower.indexOf(unitType) !== -1) {
             return 'tower';

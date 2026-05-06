@@ -36,6 +36,8 @@ export interface UnitInfo {
     onSkill3Click?: () => void; // 第三技能按钮点击回调（用于角鹰射手：狙击优先攻击）
     // 升级相关
     upgradeCost?: number; // 升级费用（用于显示）
+    /** 为 true 时升级按钮置灰但仍可点击（用于未解锁提示） */
+    upgradeLocked?: boolean;
     maxLevel?: number; // 最高等级（用于判断是否满级）
     // 集结点相关
     rallyPoint?: Vec3 | null; // 集结点位置（用于显示）
@@ -825,6 +827,8 @@ export class UnitInfoPanel extends Component {
         if (unitInfo.onUpgradeClick && this.buttonNodes[2]) {
             const upgradeButton = this.buttonNodes[2];
             upgradeButton.active = true;
+            const upgradeLocked = unitInfo.upgradeLocked === true;
+            const dim = upgradeLocked ? new Color(150, 150, 150, 255) : new Color(255, 255, 255, 255);
             
             // 显示升级费用标签
             const costLabelNode = upgradeButton.getChildByName('CostLabel');
@@ -832,6 +836,7 @@ export class UnitInfoPanel extends Component {
                 const costLabel = costLabelNode.getComponent(Label);
                 if (costLabel && unitInfo.upgradeCost !== undefined) {
                     costLabel.string = `${unitInfo.upgradeCost}`;
+                    costLabel.color = dim;
                     costLabelNode.active = true;
                 } else {
                     costLabelNode.active = false;
@@ -840,9 +845,16 @@ export class UnitInfoPanel extends Component {
             
             // 加载升级按钮贴图
             this.loadButtonSprite(2, 'up.png', 'up_down.png');
+            const upSp = this.buttonSprites.get(2);
+            if (upSp) {
+                upSp.color = dim;
+            }
             
             // 设置点击事件，点击时切换贴图
             upgradeButton.on(Node.EventType.TOUCH_START, () => {
+                if (upgradeLocked) {
+                    return;
+                }
                 const sprite = this.buttonSprites.get(2);
                 const downSprite = this.buttonDownSprites.get(2);
                 if (sprite && downSprite && sprite.node && sprite.node.isValid) {
@@ -1234,6 +1246,8 @@ export class UnitInfoPanel extends Component {
         if (firstUnitInfo.onUpgradeClick && this.buttonNodes[2]) {
             const upgradeButton = this.buttonNodes[2];
             upgradeButton.active = true;
+            const upgradeLocked = firstUnitInfo.upgradeLocked === true;
+            const dim = upgradeLocked ? new Color(150, 150, 150, 255) : new Color(255, 255, 255, 255);
             
             // 显示升级费用标签
             const costLabelNode = upgradeButton.getChildByName('CostLabel');
@@ -1241,6 +1255,7 @@ export class UnitInfoPanel extends Component {
                 const costLabel = costLabelNode.getComponent(Label);
                 if (costLabel && firstUnitInfo.upgradeCost !== undefined) {
                     costLabel.string = `${firstUnitInfo.upgradeCost}`;
+                    costLabel.color = dim;
                     costLabelNode.active = true;
                 } else {
                     costLabelNode.active = false;
@@ -1249,9 +1264,16 @@ export class UnitInfoPanel extends Component {
             
             // 加载升级按钮贴图
             this.loadButtonSprite(2, 'up.png', 'up_down.png');
+            const upSp2 = this.buttonSprites.get(2);
+            if (upSp2) {
+                upSp2.color = dim;
+            }
             
             // 设置点击事件，批量升级
             upgradeButton.on(Node.EventType.TOUCH_START, () => {
+                if (upgradeLocked) {
+                    return;
+                }
                 const sprite = this.buttonSprites.get(2);
                 const downSprite = this.buttonDownSprites.get(2);
                 if (sprite && downSprite && sprite.node && sprite.node.isValid) {

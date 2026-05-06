@@ -1019,7 +1019,8 @@ export class Arrower extends Role {
     }
 
     /**
-     * 在石墙网格同一空白格连续站立 SILENT_TRAP_STAND_SEC 秒后静默生成陷阱（无闲置判定、无口号与挖坑动画）。
+     * 在石墙网格同一格连续站立 SILENT_TRAP_STAND_SEC 秒后静默生成陷阱（无闲置判定、无口号与挖坑动画）。
+     * 可与石墙、防御塔同格，不可与已有陷阱或其它占用体重叠。
      */
     private tickSilentStandTrap(deltaTime: number): void {
         if (this.isFishing || !this.canUseSpikeTrapBehavior()) {
@@ -1046,7 +1047,7 @@ export class Arrower extends Role {
             this.clearSilentTrapAccum();
             return;
         }
-        if (grid.isGridOccupied(cell.x, cell.y) || grid.hasTrapAt(cell.x, cell.y)) {
+        if (!grid.canPlaceTrapAt(cell.x, cell.y)) {
             this.clearSilentTrapAccum();
             return;
         }
@@ -1161,11 +1162,7 @@ export class Arrower extends Role {
             return;
         }
 
-        // 新需求：陷阱放在“空地格子”，不是石墙本体
-        if (grid.isGridOccupied && grid.isGridOccupied(cell.x, cell.y)) {
-            return;
-        }
-        if (grid.hasTrapAt && grid.hasTrapAt(cell.x, cell.y)) {
+        if (!grid.canPlaceTrapAt?.(cell.x, cell.y)) {
             return;
         }
 

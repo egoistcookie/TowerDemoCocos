@@ -774,6 +774,138 @@ def _json_preview(data: Any, max_len: int = 8000) -> str:
     return text[: max_len - 3] + "..."
 
 
+def _ratio_pct(numerator: float, denominator: float, nd: int = 2) -> Optional[float]:
+    """百分比 0–100；分母为 0 时返回 None。"""
+    if denominator <= 0:
+        return None
+    return round(numerator * 100.0 / denominator, nd)
+
+
+def _daily_top_n_as_rank_and_share(
+    top_map: Dict[str, List[Dict[str, Any]]],
+    name_field: str,
+    count_field: str = "count",
+) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    将「每日 TopN 榜单」转为名次 + 在该日 TopN 条目中的占比（分母为当日榜单次数之和，非全站总量）。
+    便于模型看排名与结构集中度，弱化绝对次数。
+    """
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for d in sorted(top_map.keys()):
+        items = top_map.get(d) or []
+        if not items:
+            out[str(d)] = []
+            continue
+        total = sum(int(it.get(count_field, 0) or 0) for it in items)
+        ranked: List[Dict[str, Any]] = []
+        for idx, it in enumerate(items, start=1):
+            c = int(it.get(count_field, 0) or 0)
+            ranked.append(
+                {
+                    "rank": idx,
+                    name_field: it.get(name_field),
+                    "share_among_this_day_top10_pct": _ratio_pct(c, float(total)),
+                }
+            )
+        out[str(d)] = ranked
+    return out
+
+
+def build_claude_ratio_focus_payload(metrics: Dict[str, Any], versions: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    供 Claude 使用的指标：以比率、占比为主，弱化绝对量（对局数/抽卡次数/玩家数等与投放强相关）。
+    """
+    daily_funnel_rates: List[Dict[str, Any]] = []
+    for row in metrics.get("daily", []) or []:
+        ts = int(row.get("total_sessions", 0) or 0)
+        swd = int(row.get("sessions_with_draw", 0) or 0)
+        fin = int(row.get("finished_sessions", 0) or 0)
+        suc = int(row.get("success_sessions", 0) or 0)
+        de = int(row.get("draw_events", 0) or 0)
+        ad_de = int(row.get("ad_draw_events", 0) or 0)
+        daily_funnel_rates.append(
+            {
+                "date": row.get("d"),
+                "session_card_draw_rate_pct": _ratio_pct(swd, ts),
+                "session_finish_rate_pct": _ratio_pct(fin, ts),
+                "win_rate_among_finished_pct": _ratio_pct(suc, fin),
+                "ad_draw_share_of_draw_events_pct": _ratio_pct(ad_de, de),
+            }
+        )
+
+    player_draw_participation: List[Dict[str, Any]] = []
+    for row in metrics.get("daily_player_compare", []) or []:
+        pc = int(row.get("player_count", 0) or 0)
+        dpc = int(row.get("draw_player_count", 0) or 0)
+        adpc = int(row.get("ad_draw_player_count", 0) or 0)
+        player_draw_participation.append(
+            {
+                "date": row.get("d"),
+                "players_who_drew_share_pct": _ratio_pct(dpc, pc),
+                "ad_draw_players_share_among_drawing_players_pct": _ratio_pct(adpc, dpc),
+            }
+        )
+
+    day_mode_totals: Dict[str, int] = collections.defaultdict(int)
+    day_mode_counts: Dict[str, Dict[str, int]] = collections.defaultdict(lambda: collections.defaultdict(int))
+    for row in metrics.get("ad_mode_daily_detail", []) or []:
+        d = str(row.get("d", ""))
+        mode = str(row.get("selection_mode", ""))
+        c = int(row.get("trigger_count", 0) or 0)
+        day_mode_counts[d][mode] += c
+        day_mode_totals[d] += c
+
+    ad_mode_mix_pct_by_day: Dict[str, Dict[str, float]] = {}
+    for d, modes in day_mode_counts.items():
+        total = day_mode_totals.get(d, 0)
+        if total <= 0:
+            continue
+        ad_mode_mix_pct_by_day[d] = {str(m): round(v * 100.0 / total, 2) for m, v in modes.items()}
+
+    window_mode_counts: Dict[str, int] = collections.defaultdict(int)
+    for row in metrics.get("ad_mode_detail", []) or []:
+        mode = str(row.get("selection_mode", ""))
+        window_mode_counts[mode] += int(row.get("trigger_count", 0) or 0)
+    wtotal = sum(window_mode_counts.values())
+    ad_mode_mix_window_pct: Dict[str, float] = {}
+    if wtotal > 0:
+        ad_mode_mix_window_pct = {str(m): round(c * 100.0 / wtotal, 2) for m, c in window_mode_counts.items()}
+
+    top_ops = metrics.get("daily_top_operations") or {}
+    top_cards = metrics.get("daily_top_card_selections") or {}
+    if not isinstance(top_ops, dict):
+        top_ops = {}
+    if not isinstance(top_cards, dict):
+        top_cards = {}
+    daily_top10_operations_rank_share = _daily_top_n_as_rank_and_share(top_ops, "operation_type")
+    daily_top10_card_selections_rank_share = _daily_top_n_as_rank_and_share(top_cards, "card_key")
+
+    return {
+        "meta": {
+            "analysis_focus": "rates_and_shares",
+            "note_cn": (
+                "字段均为比率或占比（%）。对局数、抽卡次数、玩家数等绝对量随广告投放变化，"
+                "请勿把总量涨跌当作游戏品质主结论；应关注各率跨日变化与版本关联。"
+                "另含每日「操作前十」「选卡前十」：请关注名次升降与榜单内占比（集中度/头部是否过强），"
+                "不要以原始次数解读投放规模。"
+            ),
+        },
+        "time_window": {"start": metrics.get("start"), "end": metrics.get("end"), "days": metrics.get("days")},
+        "daily_funnel_rates": daily_funnel_rates,
+        "daily_player_draw_participation": player_draw_participation,
+        "ad_mode_mix_pct_by_day": ad_mode_mix_pct_by_day,
+        "ad_mode_mix_window_pct": ad_mode_mix_window_pct,
+        "daily_top10_operations_rank_share": daily_top10_operations_rank_share,
+        "daily_top10_card_selections_rank_share": daily_top10_card_selections_rank_share,
+        "recent_versions": [
+            {"date": v.get("date"), "title": v.get("title"), "items": (v.get("items") or [])[:3]}
+            for v in (versions.get("versions", [])[:3])
+        ],
+        "engineering_prompt_source": versions.get("prompt_source"),
+        "engineering_prompt_note": versions.get("prompt_note") or "",
+    }
+
+
 def analyze_with_claude(cfg: Dict[str, Any], metrics: Dict[str, Any], versions: Dict[str, Any], brief: str) -> str:
     ai_cfg = cfg.get("anthropic", {})
     token = (ai_cfg.get("token") or os.getenv("ANTHROPIC_AUTH_TOKEN") or "").strip()
@@ -792,23 +924,17 @@ def analyze_with_claude(cfg: Dict[str, Any], metrics: Dict[str, Any], versions: 
         endpoint = base_url.rstrip("/")
 
     system_prompt = (
-        "你是游戏数据分析师。请基于给定近三天数据和版本变更，输出精炼中文分析。"
-        "要求：1) 先给总体判断；2) 给3-5条关键发现（用事实和数值）；3) 给3条可执行建议。"
-        "控制在220字以内，避免空话。"
+        "你是游戏数据分析师。输入数据已刻意做成「比率/占比」口径，绝对量（对局数、抽卡次数、玩家数等）"
+        "与广告投放规模强相关，不要把这些总量当作主要判断依据，更不要用总量涨跌推断留存或难度。"
+        "请优先分析：有抽卡的对局占比、完赛率、已完赛中的胜率、广告类抽卡在抽卡事件中的占比、"
+        "玩家侧抽卡参与率、广告抽卡玩家在抽卡玩家中的占比、各广告模式在广告抽卡中的结构占比；"
+        "并分析每日「操作前十」「选卡前十」：名次变化、是否出现新条目进榜、头部条目在当日前十内的占比是否过高（集中度），"
+        "同样不要以原始次数下结论。"
+        "并结合近三天趋势与工程版本变更做归因猜测（注明是推测）。"
+        "输出：1) 一两句总体判断（基于比率趋势）；2) 3–5 条关键发现（必须引用具体百分比或占比，避免只报次数）；"
+        "3) 3 条可执行建议。控制在 220 字以内，避免空话。"
     )
-    user_payload = {
-        "time_window": {"start": metrics.get("start"), "end": metrics.get("end"), "days": metrics.get("days")},
-        "daily": metrics.get("daily", []),
-        "daily_player_compare": metrics.get("daily_player_compare", []),
-        "ad_mode_detail": metrics.get("ad_mode_detail", []),
-        "ad_mode_daily_unique_players": metrics.get("ad_mode_daily_unique_players", []),
-        "recent_versions": [
-            {"date": v.get("date"), "title": v.get("title"), "items": (v.get("items") or [])[:3]}
-            for v in (versions.get("versions", [])[:3])
-        ],
-        "engineering_prompt_source": versions.get("prompt_source"),
-        "engineering_prompt_note": versions.get("prompt_note") or "",
-    }
+    user_payload = build_claude_ratio_focus_payload(metrics, versions)
 
     try:
         def _call_once(content_text: str, call_timeout: int) -> Dict[str, Any]:
@@ -827,17 +953,24 @@ def analyze_with_claude(cfg: Dict[str, Any], metrics: Dict[str, Any], versions: 
             with urllib.request.urlopen(req, timeout=call_timeout) as resp:
                 return json.loads(resp.read().decode("utf-8"))
 
-        prompt_text = "请分析以下日报数据并给出小结与建议：\n" + _json_preview(user_payload, max_len=5000)
+        prompt_text = (
+            "请仅基于「比率/占比」、榜单名次与榜单内占比、以及跨日变化做分析（见 meta.note_cn）。\n"
+            + _json_preview(user_payload, max_len=5000)
+        )
         try:
             raw = _call_once(prompt_text, timeout)
         except Exception:
             retry_payload = {
-                "time_window": user_payload["time_window"],
-                "daily": user_payload["daily"],
-                "daily_player_compare": user_payload["daily_player_compare"],
+                "meta": user_payload.get("meta"),
+                "time_window": user_payload.get("time_window"),
+                "daily_funnel_rates": user_payload.get("daily_funnel_rates"),
+                "daily_player_draw_participation": user_payload.get("daily_player_draw_participation"),
+                "ad_mode_mix_window_pct": user_payload.get("ad_mode_mix_window_pct"),
+                "daily_top10_operations_rank_share": user_payload.get("daily_top10_operations_rank_share"),
+                "daily_top10_card_selections_rank_share": user_payload.get("daily_top10_card_selections_rank_share"),
             }
             retry_text = (
-                "首次请求超时，请基于精简数据快速给出小结与建议（不超过180字）：\n"
+                "首次请求超时。仍请只谈比率/占比趋势，勿强调绝对量。快速小结与建议（不超过180字）：\n"
                 + _json_preview(retry_payload, max_len=2200)
             )
             raw = _call_once(retry_text, max(45, timeout // 2))

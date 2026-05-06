@@ -9032,8 +9032,16 @@ export class GameManager extends Component {
                                 unitType === 'StoneWall' ||
                                 unitType === 'WarAncientTree' || unitType === 'HunterHall' || 
                                 unitType === 'SwordsmanHall' || unitType === 'Church') {
-                                // 建筑类单位，检查具体的组件类名
-                                script = child.getComponent(unitType) as any;
+                                // 建筑类单位：炮塔继承哨塔脚本，getComponent('WatchTower') 会误匹配炮塔，须区分
+                                if (unitType === 'WatchTower') {
+                                    if (!child.getComponent('CannonTower')) {
+                                        script = child.getComponent('WatchTower') as any;
+                                    }
+                                } else if (unitType === 'CannonTower') {
+                                    script = child.getComponent('CannonTower') as any;
+                                } else {
+                                    script = child.getComponent(unitType) as any;
+                                }
                             } else {
                                 // 其他单位，必须精确匹配组件类名
                                 // 特殊处理：查找 Arrower 时排除 EagleArcher（避免转职单位被误识别为普通弓箭手）
@@ -9127,6 +9135,9 @@ export class GameManager extends Component {
             try {
                 const buffCardConfigManager = BuffCardConfigManager.getInstance();
                 const spEligibleTypes = activeUnitTypes.filter((t) => {
+                    if (t === 'CannonTower') {
+                        return false;
+                    }
                     const cat = buffCardConfigManager.getUnitTypeCategory(t);
                     return cat === 'role' || cat === 'tower' || t === 'StoneWall';
                 });
@@ -9411,6 +9422,9 @@ export class GameManager extends Component {
         // SP 彩色卡：允许从“角色 + 防御塔 + StoneWall”单位池中抽取
         if (rarity === 'SP') {
             const spEligible = activeUnitTypes.filter((t) => {
+                if (t === 'CannonTower') {
+                    return false;
+                }
                 const cat = buffCardConfigManager.getUnitTypeCategory(t);
                 return cat === 'role' || cat === 'tower' || t === 'StoneWall';
             });
@@ -9434,7 +9448,17 @@ export class GameManager extends Component {
         const unitInstance = this.findFirstUnitInstance(unitType);
         //console.info(`[GameManager] generateUnitBuffCard: 查找单位类型 ${unitType}，找到实例=${!!unitInstance}`);
         if (unitInstance) {
-            const unitScript = unitInstance.getComponent(unitType) as any ||
+            let unitScript: any = null;
+            if (unitType === 'WatchTower') {
+                if (!unitInstance.getComponent('CannonTower')) {
+                    unitScript = unitInstance.getComponent('WatchTower') as any;
+                }
+            } else if (unitType === 'CannonTower') {
+                unitScript = unitInstance.getComponent('CannonTower') as any;
+            } else {
+                unitScript = unitInstance.getComponent(unitType) as any;
+            }
+            unitScript = unitScript ||
                              unitInstance.getComponent('Role') as any ||
                              unitInstance.getComponent('Build') as any;
             if (unitScript) {
@@ -9461,9 +9485,9 @@ export class GameManager extends Component {
         // 获取单位类型分类
         const unitCategory = buffCardConfigManager.getUnitTypeCategory(unitType);
         
-        // 如果是 SP（彩色）卡片：目前支持 角色 + 防御塔(Watch/Ice/Thunder) + 石墙
+        // 如果是 SP（彩色）卡片：目前支持 角色 + 防御塔(哨塔/冰/雷) + 石墙（炮塔无 SP）
         // 其它单位暂不支持 SP，降级为 SSR 普通属性卡
-        const spAllowedNonRoleUnits = new Set<string>(['StoneWall', 'WatchTower', 'CannonTower', 'IceTower', 'ThunderTower']);
+        const spAllowedNonRoleUnits = new Set<string>(['StoneWall', 'WatchTower', 'IceTower', 'ThunderTower']);
         if (rarity === 'SP' && unitCategory !== 'role' && !spAllowedNonRoleUnits.has(unitType)) {
             rarity = 'SSR';
         }
@@ -9495,23 +9519,30 @@ export class GameManager extends Component {
                 Priest: ['widePrayer'],
                 Mage: ['bangBangBang'],
                 StoneWall: ['selfHealingWall'],
-                ThunderTower: ['thunderChainPlus'],
-                IceTower: ['iceCrawl'],
-                WatchTower: ['ballista']
+                ThunderTower: ['thunderChainPlus', 'cannonTowerPlus'],
+                IceTower: ['iceCrawl', 'cannonTowerPlus'],
+                WatchTower: ['ballista', 'cannonTowerPlus']
             };
             const allowed = spMap[unitType] || [];
             buffTypes = buffTypes.filter(t => allowed.indexOf(t) !== -1);
 
-            // 已满 3 级的 SP 不再出现
+            // 已满 3 级的 SP 不再出现（炮塔+1 使用独立 unitId 计数）
             try {
                 const bm = BuffManager.getInstance();
-                buffTypes = buffTypes.filter((t) => bm.getSpLevel(unitType, t) < 3);
+                buffTypes = buffTypes.filter((t) => {
+                    const uid = t === 'cannonTowerPlus' ? 'CannonTowerPlus' : unitType;
+                    return bm.getSpLevel(uid, t) < 3;
+                });
             } catch {}
         }
         // 法师不提供攻速增幅：仅允许攻击力与移动速度
         // 注意：SP 卡片已经做过“法师专属彩色效果”过滤，这里不能再覆盖掉，否则会把 SP 错当成普通属性卡（例如把攻击力+20%带出来）
         if (unitType === 'Mage' && rarity !== 'SP') {
             buffTypes = buffTypes.filter(type => type === 'attackDamage' || type === 'moveSpeed');
+        }
+        // 炮塔仅攻击力与生命增幅，无攻速卡
+        if (unitType === 'CannonTower' && rarity !== 'SP') {
+            buffTypes = buffTypes.filter((type) => type === 'attackDamage' || type === 'maxHealth');
         }
         // 建筑物（如 弓箭手小屋/教堂/猎手大厅/剑士小屋 等）不出现“攻击力增幅”卡片
         if (unitCategory === 'building') {
@@ -9559,7 +9590,8 @@ export class GameManager extends Component {
         // SP：三级升级 + 罗马数字（抽到即等级+1，最多3；效果按级级累加：1->3->6）
         if (rarity === 'SP') {
             const bm = BuffManager.getInstance();
-            const curLv = bm.getSpLevel(unitType, randomBuffType);
+            const spOwnerId = randomBuffType === 'cannonTowerPlus' ? 'CannonTowerPlus' : unitType;
+            const curLv = bm.getSpLevel(spOwnerId, randomBuffType);
             const nextLv = Math.min(3, curLv + 1);
             const roman = (lv: number) => (lv === 1 ? 'I' : lv === 2 ? 'II' : 'III');
             const tri = (lv: number) => (lv * (lv + 1)) / 2; // 1->1,2->3,3->6
@@ -9579,7 +9611,8 @@ export class GameManager extends Component {
                 selfHealingWall: '无声自愈',
                 thunderChainPlus: '我就是闪电！',
                 iceCrawl: '寸步难行',
-                ballista: '巨弩'
+                ballista: '巨弩',
+                cannonTowerPlus: '炮塔+1'
             };
             const spName = spNameMap[randomBuffType] || randomBuffType;
 
@@ -9605,13 +9638,25 @@ export class GameManager extends Component {
                 desc = `${spName}${roman(nextLv)}：波及范围增加，减速效果增强`;
             } else if (randomBuffType === 'ballista') {
                 desc = `${spName}${roman(nextLv)}：箭矢体积增加，命中可小幅击退`;
+            } else if (randomBuffType === 'cannonTowerPlus') {
+                desc = `炮塔+1：在防线中随机位置生成一座炮塔`;
             }
         }
 
+        let outUnitId = unitType;
+        let outUnitName = unitName;
+        let outIcon = unitIcon;
+        if (rarity === 'SP' && randomBuffType === 'cannonTowerPlus') {
+            outUnitId = 'CannonTowerPlus';
+            outUnitName = '炮塔+1';
+            // 卡面贴图由 BuffCardPopup 从 resources/textures/炮塔2 异步加载
+            outIcon = null;
+        }
+
         return {
-            unitId: unitType,
-            unitName: unitName,
-            unitIcon: unitIcon,
+            unitId: outUnitId,
+            unitName: outUnitName,
+            unitIcon: outIcon,
             buffType: randomBuffType,
             buffValue: finalBuffValue,
             buffDescription: desc,
@@ -9630,7 +9675,17 @@ export class GameManager extends Component {
         let unitIcon: SpriteFrame | null = null;
         const unitInstance = this.findFirstUnitInstance(unitType);
         if (unitInstance) {
-            const unitScript = unitInstance.getComponent(unitType) as any ||
+            let unitScript: any = null;
+            if (unitType === 'WatchTower') {
+                if (!unitInstance.getComponent('CannonTower')) {
+                    unitScript = unitInstance.getComponent('WatchTower') as any;
+                }
+            } else if (unitType === 'CannonTower') {
+                unitScript = unitInstance.getComponent('CannonTower') as any;
+            } else {
+                unitScript = unitInstance.getComponent(unitType) as any;
+            }
+            unitScript = unitScript ||
                 unitInstance.getComponent('Role') as any ||
                 unitInstance.getComponent('Build') as any;
             if (unitScript) {
@@ -9706,8 +9761,15 @@ export class GameManager extends Component {
                     if (unitType === 'WatchTower' || unitType === 'CannonTower' || unitType === 'IceTower' || unitType === 'ThunderTower' ||
                         unitType === 'WarAncientTree' || unitType === 'HunterHall' || 
                         unitType === 'SwordsmanHall' || unitType === 'Church') {
-                        // 建筑类单位，检查具体的组件类名
-                        script = child.getComponent(unitType) as any;
+                        if (unitType === 'WatchTower') {
+                            if (!child.getComponent('CannonTower')) {
+                                script = child.getComponent('WatchTower') as any;
+                            }
+                        } else if (unitType === 'CannonTower') {
+                            script = child.getComponent('CannonTower') as any;
+                        } else {
+                            script = child.getComponent(unitType) as any;
+                        }
                     } else {
                         // 其他单位，必须精确匹配组件类名
                         // 特殊处理：查找 Arrower 时排除 EagleArcher（避免转职单位被误识别）
@@ -11285,13 +11347,15 @@ export class GameManager extends Component {
                         if (eagleArcherScript) {
                             // 强化属性：提升生命值、攻击力、攻击速度
                             const buffFactor = 1.5; // 提升 50%
-                            const eagleArcherDragonMeatMaxHp = 1000; // 龙肉多次喂养：生命上限最多叠到 1000；攻击力不设顶
+                            const eagleArcherDragonMeatMaxHp = 500; // 龙肉多次喂养：生命上限最多叠到 500
+                            const eagleArcherDragonMeatMaxAttack = 150; // 同上：攻击力最多叠到 150
                             if (eagleArcherScript.maxHealth !== undefined) {
                                 const nextMax = Math.floor(eagleArcherScript.maxHealth * buffFactor);
                                 eagleArcherScript.maxHealth = Math.min(eagleArcherDragonMeatMaxHp, nextMax);
                             }
                             if (eagleArcherScript.attackDamage !== undefined) {
-                                eagleArcherScript.attackDamage = Math.floor(eagleArcherScript.attackDamage * buffFactor);
+                                const nextAtk = Math.floor(eagleArcherScript.attackDamage * buffFactor);
+                                eagleArcherScript.attackDamage = Math.min(eagleArcherDragonMeatMaxAttack, nextAtk);
                             }
                             if (eagleArcherScript.attackInterval !== undefined) {
                                 eagleArcherScript.attackInterval = Math.max(0.3, eagleArcherScript.attackInterval / buffFactor); // 攻击间隔缩短，但不低于 0.3 秒
@@ -11635,9 +11699,10 @@ export class GameManager extends Component {
                     scale: originalScale
                 }, { easing: 'sineInOut' })
                 .call(() => {
-                    // 如果是最后一圈（第 3 圈），更换为角鹰射手贴图
+                    // 如果是最后一圈（第 3 圈），更换为角鹰射手贴图，并播放与磨剑高分/抽卡同款音效
                     if (flipCount === totalFlips && eagleArcherSpriteFrame) {
                         cardSprite.spriteFrame = eagleArcherSpriteFrame;
+                        BuffCardPopup.playCardSelectSfxIfAny();
                     }
 
                     // 如果还没翻完 3 圈，继续翻

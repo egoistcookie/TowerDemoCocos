@@ -71,7 +71,8 @@
       "tower": {
         "thunderChainPlus": { "value": 1, "desc": "我就是闪电！（闪电链额外弹跳+1，最低伤害5点）" },
         "iceCrawl": { "value": 1, "desc": "寸步难行（波及范围+5，减速效果+10%）" },
-        "ballista": { "value": 1, "desc": "巨弩（箭矢体积增大，命中可小幅击退）" }
+        "ballista": { "value": 1, "desc": "巨弩（箭矢体积增大，命中可小幅击退）" },
+        "cannonTowerPlus": { "value": 1, "desc": "炮塔+1（在防线中随机位置生成一座炮塔）" }
       },
       "role": {
         "multiArrow": { "value": 1, "desc": "彩色卡片：多重箭（抽到升级，最多三级）" },
@@ -87,7 +88,7 @@
     }
   },
   "unitTypeCategories": {
-    "tower": ["WatchTower", "CannonTower", "IceTower", "ThunderTower"],
+    "tower": ["WatchTower", "IceTower", "ThunderTower"],
     "role": ["Arrower", "Eagle", "EagleArcher", "Hunter", "ElfSwordsman", "Priest", "Mage"],
     "building": ["WarAncientTree", "HunterHall", "SwordsmanHall", "Church", "MoonWell", "StoneWall"]
   }

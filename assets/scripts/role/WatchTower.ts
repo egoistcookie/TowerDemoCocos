@@ -5,6 +5,7 @@ import { StoneWallGridPanel } from '../StoneWallGridPanel';
 import { UnitType } from './WarAncientTree';
 import { BuildingPool } from '../BuildingPool';
 import { GameManager, GameState } from '../GameManager';
+import { GamePopup } from '../GamePopup';
 import { Arrow } from '../Arrow';
 import { AudioManager } from '../AudioManager';
 import { UnitManager } from '../UnitManager';
@@ -128,8 +129,8 @@ export class WatchTower extends Build {
     private weatheringTimer: number = 0; // 风化计时器
     private readonly WEATHERING_TIME: number = 5; // 每个风化阶段时间（秒）
 
-    /** 九宫格「升级炮塔」消耗金币 */
-    private static readonly CANNON_UPGRADE_COST = 10;
+    /** 九宫格「升级炮塔」消耗金币（失败退款金额需与之一致） */
+    public static readonly CANNON_UPGRADE_COST = 20;
     /** 升级为炮塔的读条时长（秒） */
     private static readonly CANNON_UPGRADE_CHANNEL_SEC = 5;
 
@@ -338,7 +339,9 @@ export class WatchTower extends Build {
      * 构造哨塔的单位信息（包含回收与「升级炮塔」回调，供九宫格面板使用）
      */
     protected buildUnitInfo(): UnitInfo {
-        const showCannonUpgrade = this.isCannonUpgradeUnlocked() && !this._isChannelingCannonUpgrade;
+        const channeling = this._isChannelingCannonUpgrade;
+        const unlocked = !channeling && this.isCannonUpgradeUnlocked();
+        const showUpgradeSlot = !channeling;
         return {
             name: '哨塔',
             level: this.level,
@@ -349,11 +352,12 @@ export class WatchTower extends Build {
             populationCost: this.populationCost,
             icon: this.cardIcon || this.defaultSpriteFrame,
             collisionRadius: this.collisionRadius,
-            upgradeCost: showCannonUpgrade ? WatchTower.CANNON_UPGRADE_COST : undefined,
+            upgradeCost: showUpgradeSlot ? WatchTower.CANNON_UPGRADE_COST : undefined,
+            upgradeLocked: showUpgradeSlot && !unlocked,
             onSellClick: () => {
                 this.onSellClick();
             },
-            onUpgradeClick: showCannonUpgrade
+            onUpgradeClick: showUpgradeSlot
                 ? () => {
                       this.onUpgradeClick();
                   }
@@ -471,7 +475,7 @@ export class WatchTower extends Build {
     }
 
     /**
-     * 九宫格右上角：消耗 10 金币后开始 5 秒读条，完成后替换为炮塔
+     * 九宫格右上角：消耗金币后开始读条，完成后替换为炮塔
      */
     protected onUpgradeClick(event?: EventTouch) {
         if (event) {
@@ -481,6 +485,7 @@ export class WatchTower extends Build {
             return;
         }
         if (!this.isCannonUpgradeUnlocked()) {
+            GamePopup.showMessage('第五关即可解锁炮塔', true, 2);
             return;
         }
         if (!this.gameManager) {
@@ -664,6 +669,10 @@ export class WatchTower extends Build {
             if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
                 this.hasFoundFirstTarget = true;
             }
+        }
+
+        if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active && !this.canAttackEnemyNode(this.currentTarget)) {
+            this.currentTarget = null!;
         }
 
         // 处理攻击逻辑（使用平方距离比较）
@@ -980,6 +989,11 @@ export class WatchTower extends Build {
         }
     }
 
+    /** 子类可排除不可攻击的敌人（如炮塔不打飞行单位） */
+    protected canAttackEnemyNode(enemy: Node): boolean {
+        return true;
+    }
+
     /**
      * 查找最近的敌人
      */
@@ -992,6 +1006,9 @@ export class WatchTower extends Build {
             const enemies = this.unitManager.getEnemiesInRange(center, maxRange, true);
             const maxRangeSq = maxRange * maxRange;
             for (const enemy of enemies) {
+                if (!this.canAttackEnemyNode(enemy)) {
+                    continue;
+                }
                 const enemyPos = enemy.worldPosition;
                 const dx = center.x - enemyPos.x;
                 const dy = center.y - enemyPos.y;
@@ -1004,8 +1021,17 @@ export class WatchTower extends Build {
             return nearestTarget;
         }
 
-        // 降级方案：直接查找
-        const enemyContainers = ['Canvas/Enemies', 'Canvas/Orcs', 'Canvas/TrollSpearmans', 'Canvas/OrcWarriors', 'Canvas/OrcWarlords', 'Canvas/MinotaurWarriors', 'Canvas/Wolves'];
+        // 降级方案：直接查找（含传送门，与 UnitManager 敌人列表一致）
+        const enemyContainers = [
+            'Canvas/Enemies',
+            'Canvas/Orcs',
+            'Canvas/TrollSpearmans',
+            'Canvas/OrcWarriors',
+            'Canvas/OrcWarlords',
+            'Canvas/MinotaurWarriors',
+            'Canvas/Wolves',
+            'Canvas/Portals',
+        ];
         
         for (const containerName of enemyContainers) {
             const containerNode = find(containerName);
@@ -1014,6 +1040,9 @@ export class WatchTower extends Build {
                     if (!enemy || !enemy.isValid || !enemy.active) continue;
                     const enemyScript = getEnemyLikeScript(enemy);
                     if (!enemyScript || !enemyScript.isAlive || !enemyScript.isAlive()) continue;
+                    if (!this.canAttackEnemyNode(enemy)) {
+                        continue;
+                    }
                     const enemyPos = enemy.worldPosition;
                     const dx = center.x - enemyPos.x;
                     const dy = center.y - enemyPos.y;
