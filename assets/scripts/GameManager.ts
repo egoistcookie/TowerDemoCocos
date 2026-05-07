@@ -6694,6 +6694,7 @@ export class GameManager extends Component {
     private getAvailableEnemyTypesForSnipe(): string[] {
         return [
             'Orc',        // 兽人
+            'DualBladeOrc', // 双刀兽人
             'OrcWarrior', // 兽人战士
             'Wolf',       // 狼
             'OrcWarlord', // 兽人督军
@@ -10723,6 +10724,7 @@ export class GameManager extends Component {
         this.scheduleOnce(() => {
             // 兽人战士
             this.loadEnemyPrefabFromSubpackage(bundle, ['OrcWarrior', 'orcwarrior', 'orc_warrior'], 'OrcWarrior', () => {});
+            this.loadEnemyPrefabFromSubpackage(bundle, ['DualBladeOrc', 'dualbladeorc', 'dual_blade_orc'], 'DualBladeOrc', () => {});
             this.loadEnemyPrefabFromSubpackage(bundle, ['Wolf', 'wolf'], 'Wolf', () => {});
             // 督军
             this.loadEnemyPrefabFromSubpackage(bundle, ['OrcWarlord', 'orcwarlord', 'orc_warlord'], 'OrcWarlord', () => {});
@@ -10766,6 +10768,7 @@ export class GameManager extends Component {
                         'Orc': 'sharedOrcPrefab',
                         'TrollSpearman': 'sharedTrollSpearmanPrefab',
                         'OrcWarrior': 'sharedOrcWarriorPrefab',
+                        'DualBladeOrc': 'sharedDualBladeOrcPrefab',
                         'Wolf': 'sharedWolfPrefab',
                         'OrcWarlord': 'sharedOrcWarlordPrefab',
                         'Dragon': 'sharedDragonPrefab',

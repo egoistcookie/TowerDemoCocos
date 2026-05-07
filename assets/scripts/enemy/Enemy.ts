@@ -1192,11 +1192,33 @@ export class Enemy extends Component {
                 }
             }
         } else {
-            // 攻击动画播放完成，重置状态
-            this.isPlayingAttackAnimation = false;
-            this.attackComplete = false;
-            this.playIdleAnimation();
+            // 攻击动画播放完成
+            this.handleAttackAnimationEnded();
         }
+    }
+
+    /**
+     * 攻击动画（帧动画）播放结束，或 Animation 组件路径上的结束回调。
+     * 子类可重写 onAttackAnimationFinished：返回 true 表示已自行衔接下一动作，不再进入默认待机动画。
+     */
+    protected handleAttackAnimationEnded() {
+        if (!this.isPlayingAttackAnimation) {
+            return;
+        }
+        if (this.onAttackAnimationFinished()) {
+            return;
+        }
+        if (this.attackCallback) {
+            this.attackCallback();
+            this.attackCallback = null;
+        }
+        this.isPlayingAttackAnimation = false;
+        this.attackComplete = false;
+        this.playIdleAnimation();
+    }
+
+    protected onAttackAnimationFinished(): boolean {
+        return false;
     }
 
     // 更新被攻击动画
@@ -1356,18 +1378,7 @@ export class Enemy extends Component {
             // const onceStartTime = PerformanceMonitor.startTiming('Enemy.playAttackAnimation.animationOnce');
             this.animationComponent.once(Animation.EventType.FINISHED, () => {
                 if (this.isPlayingAttackAnimation) {
-                    // 调用攻击回调函数（如果存在，用于特殊攻击逻辑如远程攻击）
-                    if (this.attackCallback) {
-                        this.attackCallback();
-                        this.attackCallback = null;
-                    }
-                    
-                    // 结束动画
-                    this.isPlayingAttackAnimation = false;
-                    this.attackComplete = false;
-                    
-                    // 动画结束后切换回待机动画
-                    this.playIdleAnimation();
+                    this.handleAttackAnimationEnded();
                 }
             });
             // PerformanceMonitor.endTiming('Enemy.playAttackAnimation.animationOnce', onceStartTime, 0);
@@ -1392,18 +1403,7 @@ export class Enemy extends Component {
             const finishTimer = this.attackAnimationDuration;
             this.scheduleOnce(() => {
                 if (this.isPlayingAttackAnimation) {
-                    // 调用攻击回调函数（如果存在，用于特殊攻击逻辑如远程攻击）
-                    if (this.attackCallback) {
-                        this.attackCallback();
-                        this.attackCallback = null;
-                    }
-                    
-                    // 结束动画
-                    this.isPlayingAttackAnimation = false;
-                    this.attackComplete = false;
-                    
-                    // 动画结束后切换回待机动画
-                    this.playIdleAnimation();
+                    this.handleAttackAnimationEnded();
                 }
             }, finishTimer);
             // PerformanceMonitor.endTiming('Enemy.playAttackAnimation.scheduleOnce', scheduleStartTime, 0);
@@ -1577,7 +1577,8 @@ export class Enemy extends Component {
         const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
         const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
         const bearScript = this.currentTarget.getComponent('Bear') as any;
-        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || churchScript || priestScript || crystalScript || hunterScript || mageScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript || bearScript;
+        const wispScript = this.currentTarget.getComponent('Wisp') as any;
+        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || churchScript || priestScript || crystalScript || hunterScript || mageScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript || bearScript || wispScript;
         
         if (targetScript && targetScript.takeDamage) {
             // 计算受击方向：从敌人指向目标 - 使用复用的临时对象
@@ -2527,7 +2528,7 @@ export class Enemy extends Component {
     /**
      * 重置敌人状态（用于对象池回收）
      */
-    private resetEnemyState() {
+    protected resetEnemyState() {
         this.restoreBloodRageAttributesIfNeeded();
         this.clearIceSlowDownState();
         // 重置所有状态变量

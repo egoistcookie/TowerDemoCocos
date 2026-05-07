@@ -646,7 +646,7 @@ export class UnitManager extends Component {
             return null;
         }
         
-        const possibleComponentNames = ['TrollSpearman', 'Wolf', 'OrcWarrior', 'OrcWarlord', 'MinotaurWarrior', 'Boss', 'Enemy', 'Orc', 'Portal'];
+        const possibleComponentNames = ['TrollSpearman', 'Wolf', 'DualBladeOrc', 'OrcWarrior', 'OrcWarlord', 'MinotaurWarrior', 'Boss', 'Enemy', 'Orc', 'Portal'];
         for (const compName of possibleComponentNames) {
             const comp = node.getComponent(compName);
             if (comp && (comp as any).unitType === UnitType.ENEMY) {

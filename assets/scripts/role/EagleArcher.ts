@@ -494,6 +494,7 @@ export class EagleArcher extends Arrower {
         // 固定返回所有可能的敌人类型
         return [
             'Orc',        // 兽人
+            'DualBladeOrc', // 双刀兽人
             'OrcWarrior', // 兽人战士
             'OrcWarlord', // 兽人督军
             'TrollSpearman', // 巨魔投矛手

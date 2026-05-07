@@ -982,6 +982,7 @@ export class GamePopup extends Component {
     private static getUnitTypeNameMap(): Record<string, string> {
         return {
             'Orc': '兽人',
+            'DualBladeOrc': '双刀兽人',
             'OrcWarrior': '兽人战士',
             'OrcWarlord': '兽人督军',
             'TrollSpearman': '巨魔投矛手',

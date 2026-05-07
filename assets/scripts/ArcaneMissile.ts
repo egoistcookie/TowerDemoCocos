@@ -116,7 +116,7 @@ export class ArcaneMissile extends Component {
 
     private getEnemyScript(node: Node): any {
         if (!node || !node.isValid || !node.active) return null;
-        const names = ['Portal', 'TrollSpearman', 'OrcWarrior', 'OrcWarlord', 'OrcShaman', 'Dragon', 'Enemy', 'Boss', 'MinotaurWarrior'];
+        const names = ['Portal', 'TrollSpearman', 'DualBladeOrc', 'OrcWarrior', 'OrcWarlord', 'OrcShaman', 'Dragon', 'Enemy', 'Boss', 'MinotaurWarrior'];
         for (const name of names) {
             const comp = node.getComponent(name) as any;
             if (comp) return comp;

@@ -8,6 +8,7 @@ import { UnitType } from './UnitType';
 const ENEMY_COMPONENT_NAMES: readonly string[] = [
     'OrcWarlord',
     'Wolf',
+    'DualBladeOrc',
     'OrcWarrior',
     'OrcShaman',
     'Orc',

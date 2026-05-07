@@ -62,7 +62,7 @@ export class EnemySpawner extends Component {
     testMode: boolean = false;
 
     @property({
-        tooltip: "测试模式下的敌人类型（Orc, OrcWarrior, OrcWarlord, TrollSpearman）",
+        tooltip: "测试模式下的敌人类型（Orc, DualBladeOrc, OrcWarrior, OrcWarlord, TrollSpearman 等）",
         visible: function() { return this.testMode; }
     })
     testEnemyType: string = "Orc";
@@ -141,6 +141,7 @@ export class EnemySpawner extends Component {
     // Orc / OrcWarrior / TrollSpearman / Dragon / OrcWarlord / OrcShaman 敌人预制体（从分包懒加载并注入），减少主包体积
     private static sharedOrcPrefab: Prefab | null = null; // 所有 EnemySpawner 实例共享
     private static sharedOrcWarriorPrefab: Prefab | null = null;
+    private static sharedDualBladeOrcPrefab: Prefab | null = null;
     private static sharedWolfPrefab: Prefab | null = null;
     private static sharedTrollSpearmanPrefab: Prefab | null = null;
     private static sharedDragonPrefab: Prefab | null = null;
@@ -149,6 +150,7 @@ export class EnemySpawner extends Component {
     private static sharedMinotaurWarriorPrefab: Prefab | null = null; // 牛头人领主预制体
     private static orcPrefabLoaded: boolean = false; // 全局标记：整个游戏过程中只加载一次
     private static orcWarriorPrefabLoaded: boolean = false;
+    private static dualBladeOrcPrefabLoaded: boolean = false;
     private static wolfPrefabLoaded: boolean = false;
     private static trollSpearmanPrefabLoaded: boolean = false;
     private static dragonPrefabLoaded: boolean = false;
@@ -255,6 +257,7 @@ export class EnemySpawner extends Component {
             // 将已经加载到内存中的敌人预制体注入当前 Spawner 的映射表
             this.injectOrcPrefabToMap();
             this.injectOrcWarriorPrefabToMap();
+            this.injectDualBladeOrcPrefabToMap();
             this.injectWolfPrefabToMap();
             this.injectTrollSpearmanPrefabToMap();
             this.injectDragonPrefabToMap();
@@ -598,6 +601,21 @@ export class EnemySpawner extends Component {
             );
         }
 
+        // 双刀兽人
+        if (!EnemySpawner.dualBladeOrcPrefabLoaded) {
+            pending++;
+            this.loadSingleEnemyPrefabFromSubpackage(
+                ['DualBladeOrc', 'dualbladeorc', 'dual_blade_orc', 'Dual_Blade_Orc'],
+                (prefab) => {
+                    if (prefab) {
+                        EnemySpawner.sharedDualBladeOrcPrefab = prefab;
+                        EnemySpawner.dualBladeOrcPrefabLoaded = true;
+                    }
+                    doneOne();
+                }
+            );
+        }
+
         // 需要加载 Wolf
         if (!EnemySpawner.wolfPrefabLoaded) {
             pending++;
@@ -827,7 +845,8 @@ export class EnemySpawner extends Component {
                 // 如果尝试的是 'Orc'，确保不匹配 'OrcWarrior', 'OrcWarlord' 等
                 if (!prefabName.includes('warrior') && 
                     !prefabName.includes('warlord') && 
-                    !prefabName.includes('shaman')) {
+                    !prefabName.includes('shaman') &&
+                    !prefabName.includes('dualblade')) {
                     return true;
                 }
             } else {
@@ -851,6 +870,12 @@ export class EnemySpawner extends Component {
     private injectOrcWarriorPrefabToMap() {
         if (EnemySpawner.sharedOrcWarriorPrefab) {
             this.enemyPrefabMap.set('OrcWarrior', EnemySpawner.sharedOrcWarriorPrefab);
+        }
+    }
+
+    private injectDualBladeOrcPrefabToMap() {
+        if (EnemySpawner.sharedDualBladeOrcPrefab) {
+            this.enemyPrefabMap.set('DualBladeOrc', EnemySpawner.sharedDualBladeOrcPrefab);
         }
     }
 
@@ -950,9 +975,11 @@ export class EnemySpawner extends Component {
                 prefabName = 'OrcWarlord';
             } else if (prefabName.toLowerCase().includes('wolf')) {
                 prefabName = 'Wolf';
+            } else if (prefabName.toLowerCase().includes('dualblade')) {
+                prefabName = 'DualBladeOrc';
             } else if (prefabName.toLowerCase().includes('orcwarrior') || (prefabName.toLowerCase().includes('orc') && prefabName.toLowerCase().includes('warrior'))) {
                 prefabName = 'OrcWarrior';
-            } else if (prefabName.toLowerCase() === 'orc' || (prefabName.toLowerCase().includes('orc') && !prefabName.toLowerCase().includes('warrior') && !prefabName.toLowerCase().includes('warlord') && !prefabName.toLowerCase().includes('shaman'))) {
+            } else if (prefabName.toLowerCase() === 'orc' || (prefabName.toLowerCase().includes('orc') && !prefabName.toLowerCase().includes('warrior') && !prefabName.toLowerCase().includes('warlord') && !prefabName.toLowerCase().includes('shaman') && !prefabName.toLowerCase().includes('dualblade'))) {
                 prefabName = 'Orc';
             } else if (prefabName.toLowerCase().includes('troll') || prefabName.toLowerCase().includes('spearman')) {
                 prefabName = 'TrollSpearman';
@@ -1082,6 +1109,7 @@ export class EnemySpawner extends Component {
                     // 将已经加载到内存中的敌人预制体注入当前 Spawner 的映射表
                     this.injectOrcPrefabToMap();
                     this.injectOrcWarriorPrefabToMap();
+                    this.injectDualBladeOrcPrefabToMap();
                     this.injectWolfPrefabToMap();
                     this.injectTrollSpearmanPrefabToMap();
                     this.injectDragonPrefabToMap();
@@ -2420,6 +2448,7 @@ export class EnemySpawner extends Component {
         // 重要：重新注入从分包加载的预制体（这些预制体已经在内存中，不需要重新加载）
         this.injectOrcPrefabToMap();
         this.injectOrcWarriorPrefabToMap();
+        this.injectDualBladeOrcPrefabToMap();
         this.injectWolfPrefabToMap();
         this.injectTrollSpearmanPrefabToMap();
         this.injectDragonPrefabToMap();

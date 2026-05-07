@@ -53,7 +53,7 @@ select player_id,count(*) from game_sessions where DATE(created_at) = CURDATE()-
 group by player_id ;
 
 --选卡明细表
-select * from card_selection_events  order by created_at desc ;
+select * from card_selection_events where cards_json like '%CannonTowerPlus%' order by created_at desc ;
 --查询当天有多少次非测试抽卡
 select session_id,player_id,level,game_time ,selection_mode,cards_json,created_at  from card_selection_events where DATE(created_at) = CURDATE()
  and player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1775652153130_8335','player_1772722064044_978','player_1772465771074_4106') and player_id not in (select player_id from visitor_source_records where channel='unknown')  

@@ -200,6 +200,8 @@ export class EnemyPool extends Component {
             // 尝试匹配常见的敌人名称
             if (nodeName.includes('MinotaurWarrior') || nodeName.includes('Minotaur')) {
                 prefabName = 'MinotaurWarrior';
+            } else if (nodeName.includes('DualBladeOrc') || nodeName.includes('DualBlade')) {
+                prefabName = 'DualBladeOrc';
             } else if (nodeName.includes('OrcShaman') || nodeName.includes('Shaman')) {
                 prefabName = 'OrcShaman';
             } else if (nodeName.includes('OrcWarlord') || nodeName.includes('Warlord')) {
