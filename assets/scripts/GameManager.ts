@@ -6694,7 +6694,7 @@ export class GameManager extends Component {
     private getAvailableEnemyTypesForSnipe(): string[] {
         return [
             'Orc',        // 兽人
-            'DualBladeOrc', // 双刀兽人
+            'DualBladeOrc', // 兽人剑士
             'OrcWarrior', // 兽人战士
             'Wolf',       // 狼
             'OrcWarlord', // 兽人督军
@@ -9343,6 +9343,35 @@ export class GameManager extends Component {
         return null;
     }
 
+    /** 金币不足以买 SP（80）时：若三张全是 SP，则替换一张为 SP 以下（与 generateBuffCards 同一套生成逻辑） */
+    private ensureAtLeastOneBelowSpRarity(
+        cards: BuffCardData[],
+        activeUnitTypes: string[],
+        configManager: UnitConfigManager,
+        buffCardConfigManager: BuffCardConfigManager
+    ) {
+        if (cards.some((c) => c.rarity !== 'SP')) {
+            return;
+        }
+        const urEligible = this.getUREligibleUnitTypes(activeUnitTypes);
+        const tryOrder: ('UR' | 'SSR' | 'SR' | 'R')[] =
+            urEligible.length > 0 ? ['UR', 'SSR', 'SR', 'R'] : ['SSR', 'SR', 'R'];
+        for (const r of tryOrder) {
+            const typesForCard = r === 'UR' ? urEligible : activeUnitTypes;
+            const replacement = this.generateCardByForcedRarity(
+                r,
+                typesForCard,
+                configManager,
+                buffCardConfigManager,
+                0
+            );
+            if (replacement && replacement.rarity !== 'SP') {
+                cards[0] = replacement;
+                return;
+            }
+        }
+    }
+
     private applyCivilianDrawProtection(
         cards: BuffCardData[],
         activeUnitTypes: string[],
@@ -9350,15 +9379,23 @@ export class GameManager extends Component {
         buffCardConfigManager: BuffCardConfigManager
     ) {
         const gold = this.getGold();
+
+        // 金币 [40, 80)：单张 SP 需 80 金，此区间买不起 SP；至少保证一张 SP 以下稀有度可抽
+        if (gold >= 40 && gold < 80) {
+            this.ensureAtLeastOneBelowSpRarity(cards, activeUnitTypes, configManager, buffCardConfigManager);
+        }
+
+        if (gold >= 40) {
+            return;
+        }
+
         let maxAffordableRarity: 'R' | 'SR' | 'SSR' | null = null;
         if (gold < 5) {
             maxAffordableRarity = 'R';
         } else if (gold < 20) {
             maxAffordableRarity = 'SR';
-        } else if (gold < 40) {
-            maxAffordableRarity = 'SSR';
         } else {
-            return;
+            maxAffordableRarity = 'SSR';
         }
 
         const affordableMaxCost = this.getCardGoldCostByRarity(maxAffordableRarity);

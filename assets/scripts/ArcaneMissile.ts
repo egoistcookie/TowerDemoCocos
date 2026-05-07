@@ -17,6 +17,15 @@ export class ArcaneMissile extends Component {
     @property
     damage: number = 6;
 
+    @property({
+        tooltip:
+            '目标世界坐标单帧位移超过此距离（像素平方）视为闪现/传送：从当前飞弹位置重算弹道，避免兽人剑士剑舞后飞弹卡在空中。',
+    })
+    teleportResnapThresholdPx: number = 72;
+
+    @property({ tooltip: '超时强制销毁，防止目标异常时飞弹永久残留。' })
+    maxFlightSeconds: number = 14;
+
     private targetNode: Node = null!;
     private ownerNode: Node = null!;
     private startPos: Vec3 = new Vec3();
@@ -34,6 +43,12 @@ export class ArcaneMissile extends Component {
     private lastPos: Vec3 = new Vec3();
     private currentDirection: Vec3 = new Vec3(1, 0, 0);
     private trailNode: Node | null = null;
+
+    /** 上一帧记录的目标位置，用于检测闪现 */
+    private readonly _lastTargetWorldPos: Vec3 = new Vec3();
+    private _hasLastTargetPos: boolean = false;
+    /** 墙上时钟，避免暂停时 deltaTime 为 0 导致超时永远不触发 */
+    private _spawnWallClockMs: number = 0;
 
     init(
         startPos: Vec3,
@@ -68,6 +83,8 @@ export class ArcaneMissile extends Component {
         this.refreshTravelTime();
         this.elapsedTime = 0;
         this.isFlying = this.travelTime > 0;
+        this._spawnWallClockMs = Date.now();
+        this._hasLastTargetPos = false;
 
         // 初始朝向：面向目标位置
         const initialDir = new Vec3();
@@ -100,6 +117,42 @@ export class ArcaneMissile extends Component {
         trail.stroke = 10;          // 宽度
         trail.color = new Color(160, 200, 255, 200); // 淡蓝
         (trail as any).fastMode = true;
+
+        if (this.targetNode && this.targetNode.isValid) {
+            const tw = this.targetNode.worldPosition;
+            this._lastTargetWorldPos.set(tw.x, tw.y, tw.z);
+            this._hasLastTargetPos = true;
+        }
+
+        this.scheduleFallbackDestroy();
+
+        // 起点终点重合等导致 travelTime==0、isFlying==false 时仍须走完命中并销毁，否则会残留节点
+        if (!this.isFlying) {
+            this.scheduleOnce(() => this.hitTarget(), 0);
+        }
+    }
+
+    private destroyMissileSafe() {
+        this.isFlying = false;
+        this.unschedule(this._fallbackDestroyBound);
+        if (this.node && this.node.isValid) {
+            this.node.destroy();
+        }
+    }
+
+    /** schedule 兜底：即使 update 未执行也会销毁 */
+    private readonly _fallbackDestroyBound = () => {
+        if (this.isValid && this.node?.isValid) {
+            this.destroyMissileSafe();
+        }
+    };
+
+    /**
+     * init 完成后由 Mage 调用链触发；单独抽出以便预制体在 init 里 schedule 兜底。
+     */
+    private scheduleFallbackDestroy() {
+        this.unschedule(this._fallbackDestroyBound);
+        this.scheduleOnce(this._fallbackDestroyBound, this.maxFlightSeconds + 0.5);
     }
 
     private refreshTravelTime() {
@@ -192,6 +245,9 @@ export class ArcaneMissile extends Component {
     }
 
     private hitTarget() {
+        if (!this.node?.isValid) {
+            return;
+        }
         this.isFlying = false;
         const hitDirection = new Vec3(this.currentDirection.x, this.currentDirection.y, this.currentDirection.z);
         if (hitDirection.length() <= 0.001) {
@@ -202,25 +258,30 @@ export class ArcaneMissile extends Component {
         } else {
             hitDirection.set(0, -1, 0);
         }
-        //console.info('[ArcaneMissile.hitTarget] target=', this.targetNode?.name, 'damage=', this.damage);
-        if (this.onHitCallback) {
-            this.onHitCallback(this.damage, hitDirection, this.targetNode || null);
-        }
-        if (this.node && this.node.isValid) {
-            this.node.destroy();
+        try {
+            //console.info('[ArcaneMissile.hitTarget] target=', this.targetNode?.name, 'damage=', this.damage);
+            if (this.onHitCallback) {
+                this.onHitCallback(this.damage, hitDirection, this.targetNode || null);
+            }
+        } catch (e) {
+            console.warn('[ArcaneMissile.hitTarget] onHitCallback error', e);
+        } finally {
+            this.destroyMissileSafe();
         }
     }
 
     update(deltaTime: number) {
         if (!this.isFlying) return;
 
+        const wallMs = Date.now() - this._spawnWallClockMs;
+        if (wallMs >= this.maxFlightSeconds * 1000) {
+            this.destroyMissileSafe();
+            return;
+        }
+
         if (!this.gameManager) {
             const gmNode = find('GameManager') || find('Canvas/GameManager');
             if (gmNode) this.gameManager = gmNode.getComponent('GameManager' as any);
-        }
-        if (this.gameManager && this.gameManager.getGameState) {
-            const gameState = this.gameManager.getGameState();
-            if (gameState !== GameState.Playing) return;
         }
 
         if (!this.targetNode || !this.targetNode.isValid || !this.targetNode.active || !this.isAliveEnemy(this.targetNode)) {
@@ -229,14 +290,40 @@ export class ArcaneMissile extends Component {
                 this.targetNode = newTarget;
                 this.startPos = this.node.worldPosition.clone();
                 this.targetPos = newTarget.worldPosition.clone();
+                const tw = newTarget.worldPosition;
+                this._lastTargetWorldPos.set(tw.x, tw.y, tw.z);
+                this._hasLastTargetPos = true;
                 this.elapsedTime = 0;
                 this.refreshTravelTime();
             } else {
-                if (this.node && this.node.isValid) this.node.destroy();
+                this.destroyMissileSafe();
                 return;
             }
         } else {
-            this.targetPos = this.targetNode.worldPosition.clone();
+            const tw = this.targetNode.worldPosition;
+            const th = this.teleportResnapThresholdPx * this.teleportResnapThresholdPx;
+            if (this._hasLastTargetPos) {
+                const dx = tw.x - this._lastTargetWorldPos.x;
+                const dy = tw.y - this._lastTargetWorldPos.y;
+                if (dx * dx + dy * dy >= th) {
+                    this.startPos = this.node.worldPosition.clone();
+                    this.targetPos.set(tw.x, tw.y, tw.z);
+                    this.elapsedTime = 0;
+                    this.refreshTravelTime();
+                }
+            }
+            this._lastTargetWorldPos.set(tw.x, tw.y, tw.z);
+            this._hasLastTargetPos = true;
+            this.targetPos.set(tw.x, tw.y, tw.z);
+        }
+
+        // 非 Playing 时不推进弹道与计时，但仍执行上文目标失效/接力判定，避免暂停时目标死亡导致永久悬空
+        let gameState: GameState = GameState.Playing;
+        if (this.gameManager && this.gameManager.getGameState) {
+            gameState = this.gameManager.getGameState();
+        }
+        if (gameState !== GameState.Playing) {
+            return;
         }
 
         if (this.travelTime <= 0) {

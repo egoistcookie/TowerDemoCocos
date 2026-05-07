@@ -117,7 +117,7 @@ export class Enemy extends Component {
     private tempVec3_3: Vec3 = new Vec3(); // 临时 Vec3 对象 3（复用）
     private tempColor: Color = new Color(); // 临时 Color 对象（复用）
     // 最近一次受击方向（世界坐标系下的力方向，用于伤害跳字反方向飘动）
-    private lastHitDirection: Vec3 = new Vec3(); // 预创建对象，避免条件判断中创建
+    protected lastHitDirection: Vec3 = new Vec3(); // 预创建对象，避免条件判断中创建（子类重写受击时可写入）
     
     // 对象池相关：预制体名称（用于对象池回收）
     public prefabName: string = "Orc"; // 默认值，子类可以重写
@@ -150,7 +150,7 @@ export class Enemy extends Component {
     private isPlayingIdleAnimation: boolean = false;
     private isPlayingWalkAnimation: boolean = false;
     protected isPlayingAttackAnimation: boolean = false;
-    private isPlayingHitAnimation: boolean = false;
+    protected isPlayingHitAnimation: boolean = false;
     protected isPlayingDeathAnimation: boolean = false;
     protected defaultSpriteFrame: SpriteFrame = null!;
     protected defaultScale: Vec3 = new Vec3(1, 1, 1); // 默认缩放比例，用于方向翻转
@@ -2123,6 +2123,9 @@ export class Enemy extends Component {
             }
         }
 
+        // 子类：常规索敌后仍无可用目标时，可扩大范围或指定兜底（避免误判为无目标而 moveDownwards）
+        this.tryEnsureFallbackCombatTarget();
+
         // 步骤2：根据是否有目标决定行动
         if (this.currentTarget && this.currentTarget.isValid) {
             // 有目标：计算平方距离
@@ -2158,6 +2161,7 @@ export class Enemy extends Component {
         } else {
             // 没有目标：朝下方移动（受击时不要位移，以免盖住击退）
             if (!this.isPlayingHitAnimation) {
+                this.onSimpleAINoTargetWillMoveDown(deltaTime);
                 this.moveDownwards(deltaTime);
             } else {
                 this.stopMoving();
@@ -2177,6 +2181,17 @@ export class Enemy extends Component {
     }
 
     /**
+     * 简化 AI：在步骤 1 索敌之后调用。若仍无有效目标，子类可在此扩大索敌或指定水晶等兜底。
+     * 默认不处理。
+     */
+    protected tryEnsureFallbackCombatTarget(): void {}
+
+    /**
+     * 简化 AI 判定为无有效目标、即将执行 moveDownwards 之前调用（子类可打日志）。
+     */
+    protected onSimpleAINoTargetWillMoveDown(_deltaTime: number): void {}
+
+    /**
      * 有目标且不在攻击动画中时：返回 attack / move，或由子类返回 handled（本帧不再移动普攻）。
      */
     protected resolveCombatMovement(distanceSq: number, attackRangeSq: number, _deltaTime: number): 'attack' | 'move' | 'handled' {
@@ -2194,14 +2209,34 @@ export class Enemy extends Component {
     }
 
     /**
+     * 简化 AI 索敌半径的平方（画面下方三分之一时半径更大）。
+     * 子类可在特殊位移后临时扩大（例如剑舞闪现后需重索敌全图目标）。
+     */
+    protected pickSimpleAIDetectionRangeSq(): number {
+        const screenHeight = view.getVisibleSize().height;
+        const isInLowerThird = this.node.worldPosition.y < screenHeight / 3;
+        const detectionRange = isInLowerThird ? 400 : 200;
+        return detectionRange * detectionRange;
+    }
+
+    /**
      * 在索敌范围内查找目标（所有单位一视同仁）
      */
     protected findTargetInRange() {
-        // 动态索敌范围：在画面下方三分之一时扩大索敌范围
-        const screenHeight = view.getVisibleSize().height;
-        const isInLowerThird = this.node.worldPosition.y < screenHeight / 3;
-        const detectionRange = isInLowerThird ? 400 : 200; // 下方区域索敌范围扩大至400像素
-        const detectionRangeSq = detectionRange * detectionRange;
+        this.applyFindTargetInRange(this.pickSimpleAIDetectionRangeSq());
+    }
+
+    /**
+     * 简化 AI 收集石墙时是否纳入该节点；默认全部纳入，子类可限制为「仅挡路墙」等。
+     */
+    protected shouldConsiderStoneWallTarget(_wallNode: Node): boolean {
+        return true;
+    }
+
+    /**
+     * 使用已给定的索敌半径平方执行扫描（供子类在自定义优先级后复用同一套目标列表逻辑）。
+     */
+    protected applyFindTargetInRange(detectionRangeSq: number) {
         const myPos = this.node.worldPosition;
 
         let nearestTarget: Node | null = null;
@@ -2218,6 +2253,9 @@ export class Enemy extends Component {
                     const wallScript = wall.getComponent('StoneWall') as any;
                     if (wallScript && wallScript.isAlive && wallScript.isAlive()) {
                         if (wallScript.isSpikeTrapActive && wallScript.isSpikeTrapActive()) {
+                            continue;
+                        }
+                        if (!this.shouldConsiderStoneWallTarget(wall)) {
                             continue;
                         }
                         allTargets.push(wall);

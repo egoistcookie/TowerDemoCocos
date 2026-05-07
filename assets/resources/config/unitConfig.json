@@ -455,6 +455,33 @@
       "经验奖励": "1点"
     }
   },
+  "DualBladeOrc": {
+    "baseStats": {
+      "maxHealth": 48,
+      "attackRange": 60,
+      "attackDamage": 8,
+      "attackInterval": 1.0,
+      "moveSpeed": 52,
+      "collisionRadius": 2,
+      "tenacity": 0.5,
+      "goldReward": 3,
+      "expReward": 5
+    },
+    "displayInfo": {
+      "name": "狂兽人",
+      "description": "战技高超，渴望战斗。"
+    },
+    "displayStats": {
+      "生命值": 100,
+      "攻击力": 8,
+      "攻击范围": "60像素",
+      "攻击间隔": "1.0秒",
+      "移动速度": "52像素/秒",
+      "韧性": "0.5",
+      "金币奖励": "3金币",
+      "经验奖励": "5点"
+    }
+  },
   "OrcWarrior": {
     "baseStats": {
       "maxHealth": 50,

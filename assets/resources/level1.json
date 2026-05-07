@@ -47,7 +47,22 @@
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 4,
+          "count": 1,
+          "interval": 1.8
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 1.8
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 1.8
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
           "interval": 1.8
         },
         {
@@ -70,7 +85,32 @@
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 6,
+          "count": 1,
+          "interval": 1.5
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 1.5
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 1.5
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 1.5
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 1.5
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
           "interval": 1.5
         },
         {
@@ -93,7 +133,42 @@
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 8,
+          "count": 1,
+          "interval": 1.3
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 1.3
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 1.3
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 1.3
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 1.3
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 1.3
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 1.3
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
           "interval": 1.3
         },
         {
@@ -121,7 +196,37 @@
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 7,
+          "count": 1,
+          "interval": 1.3
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 1.3
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 1.3
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 1.3
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 1.3
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 1.3
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
           "interval": 1.3
         },
         {
@@ -144,7 +249,47 @@
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 9,
+          "count": 1,
+          "interval": 1.2
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 1.2
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 1.2
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 1.2
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 1.2
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 1.2
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 1.2
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 1.2
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
           "interval": 1.2
         },
         {
@@ -167,7 +312,62 @@
         },
         {
           "prefabName": "OrcWarrior",
-          "count": 12,
+          "count": 1,
+          "interval": 0.95
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 0.95
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 0.95
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 0.95
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 0.95
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 0.95
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 0.95
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 0.95
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 0.95
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 0.95
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 0.95
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
           "interval": 0.95
         },
         {
@@ -184,6 +384,76 @@
           "prefabName": "TrollSpearman",
           "count": 13,
           "interval": 0.65
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 1.0
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 1.0
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 1.0
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 1.0
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 1.0
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 1.0
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 1.0
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 1.0
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 1.0
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 1.0
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 1.0
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 1.0
+        },
+        {
+          "prefabName": "DualBladeOrc",
+          "count": 1,
+          "interval": 1.0
+        },
+        {
+          "prefabName": "OrcWarrior",
+          "count": 1,
+          "interval": 1.0
         }
       ]
     }

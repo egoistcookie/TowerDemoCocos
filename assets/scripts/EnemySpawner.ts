@@ -415,7 +415,11 @@ export class EnemySpawner extends Component {
         if (prefabName === 'Orc' && this.shouldCoSpawnWolfWithBasicOrc() && this.levelSpawnsWolves()) {
             const slave = this.node.getComponent(EnemySlaveWolfSpawner);
             slave?.spawnMirrorWolfAt(spawnPos.clone(), true);
-        } else if (prefabName === 'OrcWarrior' && this.shouldCoSpawnWolfWithOrc() && this.levelSpawnsWolves()) {
+        } else if (
+            (prefabName === 'OrcWarrior' || prefabName === 'DualBladeOrc') &&
+            this.shouldCoSpawnWolfWithOrc() &&
+            this.levelSpawnsWolves()
+        ) {
             const slave = this.node.getComponent(EnemySlaveWolfSpawner);
             slave?.spawnMirrorWolfAt(spawnPos.clone(), false);
         }
@@ -601,7 +605,7 @@ export class EnemySpawner extends Component {
             );
         }
 
-        // 双刀兽人
+        // 兽人剑士（DualBladeOrc）
         if (!EnemySpawner.dualBladeOrcPrefabLoaded) {
             pending++;
             this.loadSingleEnemyPrefabFromSubpackage(
