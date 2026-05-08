@@ -998,6 +998,18 @@ export class TowerBuilder extends Component {
         return building?.name || '';
     }
 
+    /** 建筑升星埋点：仅 push 到本局 operations，与建造操作同一上报链路；无额外网络请求 */
+    private recordBuildingStarUpgrade(typeId: string, fromStar: number, toStar: number, path: 'merge_nodes' | 'merge_candidate') {
+        const analytics = AnalyticsManager.getInstance();
+        if (!analytics || !this.gameManager) return;
+        analytics.recordOperation(OperationType.UPGRADE_BUILDING_STAR, this.gameManager.getGameTime(), {
+            buildingType: typeId,
+            fromStar,
+            toStar,
+            path,
+        });
+    }
+
     private tryMergeBuildings(source: Node, target: Node): boolean {
         if (!source || !target || !source.isValid || !target.isValid) return false;
         const srcBuild = (source.getComponent(Build) || source.getComponent('Build')) as any;
@@ -1039,6 +1051,7 @@ export class TowerBuilder extends Component {
             },
             { includeSceneNodes: true }
         );
+        this.recordBuildingStarUpgrade(srcKey, srcStar, nextStar, 'merge_nodes');
         this.playStarUpgradeFxAndAutoHide(target);
         this.playUpgradeEffectForProducedUnits(dstBuild, nextStar);
 
@@ -1113,6 +1126,7 @@ export class TowerBuilder extends Component {
             },
             { includeSceneNodes: true }
         );
+        this.recordBuildingStarUpgrade(srcTypeId, dstStar, nextStar, 'merge_candidate');
         this.playStarUpgradeFxAndAutoHide(target);
         this.playUpgradeEffectForProducedUnits(dstBuild, nextStar);
 

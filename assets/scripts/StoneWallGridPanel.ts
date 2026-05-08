@@ -3,6 +3,7 @@ import { GameState } from './GameState';
 import { GridBuildingSelectionPanel } from './GridBuildingSelectionPanel';
 import { UnitSelectionManager } from './UnitSelectionManager';
 import { getEnemyLikeScript } from './EnemyScriptLookup';
+import { DamageStatistics } from './DamageStatistics';
 const { ccclass, property } = _decorator;
 
 /**
@@ -948,6 +949,11 @@ export class StoneWallGridPanel extends Component {
                     enemyScript.takeDamage(damage);
                     hit = true;
                     damaged++;
+                    DamageStatistics.getInstance().recordDamage(
+                        DamageStatistics.CONTRIBUTION_TRAP_UNIT_TYPE,
+                        DamageStatistics.CONTRIBUTION_TRAP_UNIT_NAME,
+                        damage
+                    );
                 }
             }
         }

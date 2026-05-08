@@ -13,6 +13,12 @@ export class Arrow extends Component {
     @property
     damage: number = 10; // 伤害值
 
+    @property({
+        tooltip:
+            '超时强制销毁（墙上时钟）。用于狂兽人剑舞闪现、暂停或非 Playing 时 delta 不累计等情况，避免普通箭永久残留（对齐穿透箭 Arrow2）。',
+    })
+    maxFlightSeconds: number = 8;
+
     private targetNode: Node = null!;
     private startPos: Vec3 = new Vec3(); 
     private targetPos: Vec3 = new Vec3();
@@ -25,6 +31,28 @@ export class Arrow extends Component {
     private gameManager: any = null; // GameManager引用（使用any避免循环依赖）
     // 当前飞行方向（每帧更新，用于命中时确定受力方向）
     private currentDirection: Vec3 = new Vec3();
+
+    /** 生成时刻（真实时间），与 update 是否因暂停跳过无关 */
+    private _spawnWallClockMs: number = 0;
+
+    private destroyArrowSafe() {
+        this.isFlying = false;
+        this.unschedule(this._fallbackDestroyBound);
+        if (this.node?.isValid) {
+            this.node.destroy();
+        }
+    }
+
+    private readonly _fallbackDestroyBound = () => {
+        if (this.isValid && this.node?.isValid) {
+            this.destroyArrowSafe();
+        }
+    };
+
+    private scheduleFallbackDestroy() {
+        this.unschedule(this._fallbackDestroyBound);
+        this.scheduleOnce(this._fallbackDestroyBound, this.maxFlightSeconds + 0.5);
+    }
 
     /**
      * 初始化弓箭
@@ -56,18 +84,30 @@ export class Arrow extends Component {
         const dy = this.startPos.y - this.targetPos.y;
         const distanceSq = dx * dx + dy * dy;
         if (distanceSq < 0.01) {
+            this.scheduleOnce(() => {
+                if (this.node?.isValid) {
+                    this.node.destroy();
+                }
+            }, 0);
             return;
         }
         const distance = Math.sqrt(distanceSq);
-        
+
         this.travelTime = distance / this.speed;
         if (this.travelTime <= 0) {
+            this.scheduleOnce(() => {
+                if (this.node?.isValid) {
+                    this.node.destroy();
+                }
+            }, 0);
             return;
         }
-        
+
         this.elapsedTime = 0;
         this.isFlying = true;
         this.lastPos = this.startPos.clone();
+        this._spawnWallClockMs = Date.now();
+        this.scheduleFallbackDestroy();
 
         // 设置初始旋转角度（指向目标），并记录初始飞行方向
         const initialDirection = new Vec3();
@@ -124,8 +164,6 @@ export class Arrow extends Component {
             }
         }
 
-        this.isFlying = false;
-
         // 计算受力方向（箭矢飞行方向）：优先使用当前飞行方向
         const hitDirection = new Vec3();
         if (this.currentDirection.length() > 0.001) {
@@ -142,25 +180,21 @@ export class Arrow extends Component {
             hitDirection.set(0, -1, 0);
         }
 
-        // 调试日志：箭矢命中方向
-        // console.info('[Arrow.hitTarget] hitDirection:', hitDirection, 
-        //     'currentDirection:', this.currentDirection, 
-        //     'startPos:', this.startPos, 
-        //     'targetPos:', this.targetPos);
-
-        // 调用命中回调
         if (this.onHitCallback) {
             this.onHitCallback(this.damage, hitDirection);
         }
 
-        // 立即销毁弓箭节点，避免在 timeScale=0 时 scheduleOnce 不执行
-        if (this.node && this.node.isValid) {
-            this.node.destroy();
-        }
+        this.destroyArrowSafe();
     }
 
     update(deltaTime: number) {
         if (!this.isFlying) {
+            return;
+        }
+
+        const wallMs = Date.now() - this._spawnWallClockMs;
+        if (wallMs >= this.maxFlightSeconds * 1000) {
+            this.destroyArrowSafe();
             return;
         }
 
@@ -172,11 +206,10 @@ export class Arrow extends Component {
             }
         }
         
-        // 检查游戏状态，如果不是Playing状态，停止飞行
+        // 非 Playing 时不推进弹道；墙上时钟仍在本方法开头超时销毁（对齐 Arrow2）
         if (this.gameManager && this.gameManager.getGameState) {
             const gameState = this.gameManager.getGameState();
             if (gameState !== GameState.Playing) {
-                // 游戏已暂停或结束，停止飞行
                 return;
             }
         }
@@ -191,9 +224,7 @@ export class Arrow extends Component {
         
         // 如果目标已失效，提前销毁
         if (this.targetNode && (!this.targetNode.isValid || !this.targetNode.active)) {
-            if (this.node && this.node.isValid) {
-                this.node.destroy();
-            }
+            this.destroyArrowSafe();
             return;
         }
         
@@ -243,17 +274,13 @@ export class Arrow extends Component {
         
         // 如果飞行完成但未命中目标，销毁弓箭
         if (currentRatio >= 1) {
-            if (this.node && this.node.isValid) {
-                this.node.destroy();
-            }
+            this.destroyArrowSafe();
             return;
         }
-        
+
         // 如果飞行时间过长（超过预期时间2倍），销毁弓箭（防止卡住）
         if (this.elapsedTime > this.travelTime * 2) {
-            if (this.node && this.node.isValid) {
-                this.node.destroy();
-            }
+            this.destroyArrowSafe();
         }
     }
     
@@ -339,7 +366,8 @@ export class Arrow extends Component {
         
         // 停止飞行状态
         this.isFlying = false;
-        
+        this.unschedule(this._fallbackDestroyBound);
+
         // 将箭矢设为尸体的子节点
         // 这样当尸体被销毁时，箭矢也会被自动销毁
         this.node.removeFromParent();

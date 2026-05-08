@@ -25,10 +25,13 @@ export enum OperationType {
     UPGRADE_UNIT = 'upgrade_unit',                   // 升级单位
     RECYCLE_UNIT = 'recycle_unit',                   // 回收单位
     UPGRADE_BUILDING = 'upgrade_building',           // 升级建筑
+    UPGRADE_BUILDING_STAR = 'upgrade_building_star', // 建筑合并升星（同类型同星叠放）
     RECYCLE_BUILDING = 'recycle_building',           // 回收建筑
     SELECT_BUFF_CARD = 'select_buff_card',           // 选择增益卡片
     USE_TALENT_POINT = 'use_talent_point',           // 使用天赋点
     REVIVE = 'revive',                               // 复活（失败结算页看视频复活）
+    /** 关卡结算（胜/败）贡献榜快照（简化 topN），写入本局 operations 最后一条 */
+    LEVEL_END_CONTRIBUTION = 'level_end_contribution',
     TRIGGER_BEAR = 'trigger_bear',                   // 触发巨熊（中立巨熊被击败后开始驯化）
     BUILD_EAGLE_NEST = 'build_eagle_nest',           // 建造角鹰兽栏
     TRAIN_EAGLE = 'train_eagle',                     // 训练角鹰（角鹰兽栏产出）

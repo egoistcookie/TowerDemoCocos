@@ -43,6 +43,34 @@ export class Boomerang extends Component {
     private hasHitTarget: boolean = false; // 是否已命中目标
     private gameManager: GameManager | null = null; // 游戏管理器引用
 
+    @property({
+        tooltip:
+            '超时强制销毁（墙上时钟）。用于狂兽人剑舞闪现、暂停或非 Playing 时 delta 不累计等情况，避免回旋镖永久残留（对齐穿透箭 Arrow2）。',
+    })
+    maxFlightSeconds: number = 15;
+
+    /** 生成时刻（真实时间），与 update 是否因暂停跳过无关 */
+    private _spawnWallClockMs: number = 0;
+
+    private destroyBoomerangSafe() {
+        this.isFlying = false;
+        this.unschedule(this._fallbackDestroyBound);
+        if (this.node?.isValid) {
+            this.node.destroy();
+        }
+    }
+
+    private readonly _fallbackDestroyBound = () => {
+        if (this.isValid && this.node?.isValid) {
+            this.destroyBoomerangSafe();
+        }
+    };
+
+    private scheduleFallbackDestroy() {
+        this.unschedule(this._fallbackDestroyBound);
+        this.scheduleOnce(this._fallbackDestroyBound, this.maxFlightSeconds + 0.5);
+    }
+
     /**
      * 初始化回旋镖
      * @param startPos 起始位置
@@ -88,17 +116,29 @@ export class Boomerang extends Component {
         const distanceSq = dx * dx + dy * dy;
         const distance = Math.sqrt(distanceSq);
         if (distance < 0.1) {
+            this.scheduleOnce(() => {
+                if (this.node?.isValid) {
+                    this.node.destroy();
+                }
+            }, 0);
             return;
         }
-        
+
         this.travelTime = distance / this.speed;
         if (this.travelTime <= 0) {
+            this.scheduleOnce(() => {
+                if (this.node?.isValid) {
+                    this.node.destroy();
+                }
+            }, 0);
             return;
         }
-        
+
         this.elapsedTime = 0;
         this.isFlying = true;
         this.lastPos = this.startPos.clone();
+        this._spawnWallClockMs = Date.now();
+        this.scheduleFallbackDestroy();
 
         // 设置初始旋转角度（指向目标）
         const initialDirection = new Vec3();
@@ -344,10 +384,9 @@ export class Boomerang extends Component {
     startReturn() {
         if (!this.ownerNode || !this.ownerNode.isValid) {
             // 如果没有女猎手节点，直接销毁
+            this.unschedule(this._fallbackDestroyBound);
             this.scheduleOnce(() => {
-                if (this.node && this.node.isValid) {
-                    this.node.destroy();
-                }
+                this.destroyBoomerangSafe();
             }, 0.1);
             return;
         }
@@ -373,12 +412,9 @@ export class Boomerang extends Component {
     returnComplete() {
         this.isFlying = false;
         this.isReturning = false;
-        
-        // 销毁弓箭节点
+        this.unschedule(this._fallbackDestroyBound);
         this.scheduleOnce(() => {
-            if (this.node && this.node.isValid) {
-                this.node.destroy();
-            }
+            this.destroyBoomerangSafe();
         }, 0.1);
     }
 
@@ -407,16 +443,21 @@ export class Boomerang extends Component {
             return;
         }
 
+        const wallMs = Date.now() - this._spawnWallClockMs;
+        if (wallMs >= this.maxFlightSeconds * 1000) {
+            this.destroyBoomerangSafe();
+            return;
+        }
+
         // 检查游戏状态 - 如果GameManager不存在，尝试重新查找
         if (!this.gameManager) {
             this.gameManager = find('GameManager')?.getComponent(GameManager);
         }
-        
-        // 检查游戏状态，如果不是Playing状态，停止飞行
+
+        // 检查游戏状态，如果不是Playing状态，停止飞行（墙上时钟仍会在本方法开头超时销毁）
         if (this.gameManager) {
             const gameState = this.gameManager.getGameState();
             if (gameState !== GameState.Playing) {
-                // 游戏已暂停或结束，停止飞行
                 return;
             }
         }
@@ -591,6 +632,7 @@ export class Boomerang extends Component {
         // 命中尸体不触发伤害回调
         // 清除回调，防止后续调用
         this.onHitCallback = null;
+        this.unschedule(this._fallbackDestroyBound);
     }
 
     /**

@@ -22,6 +22,10 @@ export interface UnitDamageData {
  */
 @ccclass('DamageStatistics')
 export class DamageStatistics {
+    /** 石墙地刺陷阱伤害在贡献榜中的类型标识（与弓箭手箭矢伤害分离） */
+    public static readonly CONTRIBUTION_TRAP_UNIT_TYPE = 'SpikeTrap';
+    public static readonly CONTRIBUTION_TRAP_UNIT_NAME = '地刺陷阱';
+
     private static instance: DamageStatistics | null = null;
     
     // 存储每个单位的伤害数据（key: unitName，避免代码压缩后 unitType 相同导致合并）
@@ -208,6 +212,45 @@ export class DamageStatistics {
     public getAllDamageData(): UnitDamageData[] {
         return Array.from(this.damageMap.values());
     }
+
+    /**
+     * 结算「贡献榜」同款排序后的前 topN 条（仅数值与类型，供埋点/session 最后一条）
+     * 规则与 GameManager.createDamageStatsPanel 一致：剑士用承伤、牧师用治疗、其余用总伤害
+     */
+    public getContributionLeaderboardSnapshot(topN: number = 3): Array<{
+        unitType: string;
+        unitName: string;
+        value: number;
+        metric: 'damage' | 'taken' | 'heal';
+    }> {
+        const getContributionValue = (unit: UnitDamageData): number => {
+            if (unit.unitName === '剑士' || unit.unitType === 'ElfSwordsman') {
+                return unit.damageTaken || 0;
+            }
+            if (unit.unitName === '牧师' || unit.unitType === 'Priest') {
+                return unit.healAmount || 0;
+            }
+            return unit.totalDamage || 0;
+        };
+
+        const all = this.getAllDamageData();
+        const filtered = all.filter((u) => getContributionValue(u) > 0);
+        filtered.sort((a, b) => getContributionValue(b) - getContributionValue(a));
+        return filtered.slice(0, Math.max(0, topN)).map((u) => {
+            let metric: 'damage' | 'taken' | 'heal' = 'damage';
+            if (u.unitName === '剑士' || u.unitType === 'ElfSwordsman') {
+                metric = 'taken';
+            } else if (u.unitName === '牧师' || u.unitType === 'Priest') {
+                metric = 'heal';
+            }
+            return {
+                unitType: u.unitType,
+                unitName: u.unitName,
+                value: Math.floor(getContributionValue(u)),
+                metric,
+            };
+        });
+    }
     
     /**
      * 获取DPS排名前N位的单位
@@ -270,6 +313,7 @@ export class DamageStatistics {
         map.set('HunterHall', '猎手大厅');
         map.set('WarAncientTree', '弓箭手小屋');
         map.set('Priest', '牧师');
+        map.set(DamageStatistics.CONTRIBUTION_TRAP_UNIT_TYPE, DamageStatistics.CONTRIBUTION_TRAP_UNIT_NAME);
         return map;
     }
 }

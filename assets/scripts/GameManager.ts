@@ -4271,6 +4271,13 @@ export class GameManager extends Component {
             const finalPopulation = this.population || 0;
             const killCount = this.totalKillCount || 0;
 
+            // 胜负结算：贡献榜简化快照写入本局 operations 末条（须在 reportGameData 之前，其内会 stopRecording）
+            const contributionTop = damageStats.getContributionLeaderboardSnapshot(3);
+            this.analyticsManager.recordOperation(OperationType.LEVEL_END_CONTRIBUTION, this.getGameTime(), {
+                outcome: result,
+                top: contributionTop,
+            });
+
             this.analyticsManager.reportGameData(
                 result,
                 defendTime,
@@ -4386,6 +4393,10 @@ export class GameManager extends Component {
                                   'HunterHall', 'MageTower', 'SwordsmanHall', 'Church', 'StoneWall'];
             return buildingTypes.indexOf(unit.unitType) >= 0;
         };
+
+        const isTrapContribution = (unit: any): boolean =>
+            unit?.unitType === DamageStatistics.CONTRIBUTION_TRAP_UNIT_TYPE ||
+            unit?.unitName === DamageStatistics.CONTRIBUTION_TRAP_UNIT_NAME;
         
         const filteredUnits = allUnits.filter(u => getContributionValue(u) > 0);
         // 按贡献值从高到低排序
@@ -4399,7 +4410,7 @@ export class GameManager extends Component {
         for (const unit of filteredUnits) {
             const isUnitBuilding = isBuilding(unit);
           //console.log(`[GameManager.createDamageStatsPanel] 检查单位: ${unit.unitName} (${unit.unitType}), 是建筑物: ${isUnitBuilding}`);
-            if (!isUnitBuilding) {
+            if (!isUnitBuilding && !isTrapContribution(unit)) {
                 mvpUnitForHint = unit;
               //console.log(`[GameManager.createDamageStatsPanel] 找到非建筑物单位: ${unit.unitName} (${unit.unitType})`);
                 break;
@@ -4541,6 +4552,9 @@ export class GameManager extends Component {
             } else if (unit.unitName === '牧师') {
                 centerSuffix = '（治疗量）';
                 contribValueLabel.color = new Color(0, 255, 0, 255);   // 绿色数字
+            } else if (isTrapContribution(unit)) {
+                centerSuffix = '（陷阱）';
+                contribValueLabel.color = new Color(255, 180, 80, 255);
             } else {
                 // 其他单位：无后缀，白色数字
                 contribValueLabel.color = new Color(255, 255, 255, 255);
@@ -7554,7 +7568,7 @@ export class GameManager extends Component {
 
         const infoNode = new Node('Info');
         infoNode.setParent(panel);
-        infoNode.setPosition(0, -165, 0);
+        infoNode.setPosition(0, -138, 0);
         const infoTr = infoNode.addComponent(UITransform);
         infoTr.setContentSize(360, 40);
         const infoLabel = infoNode.addComponent(Label);
@@ -7588,6 +7602,37 @@ export class GameManager extends Component {
         this.swordSharpenMiniGameClickLabel.verticalAlign = Label.VerticalAlign.CENTER;
         this.swordSharpenMiniGameClickLabel.string = '打磨次数：0';
 
+        // 下方：拒绝按钮（可随时停止小游戏）
+        const rejectBtnNode = new Node('RejectButton');
+        rejectBtnNode.setParent(panel);
+        rejectBtnNode.setPosition(0, -178, 0);
+        const rejectBtnTr = rejectBtnNode.addComponent(UITransform);
+        rejectBtnTr.setContentSize(132, 40);
+        const rejectBtnBg = rejectBtnNode.addComponent(Graphics);
+        rejectBtnBg.fillColor = new Color(58, 66, 95, 255);
+        rejectBtnBg.roundRect(-66, -20, 132, 40, 8);
+        rejectBtnBg.fill();
+        rejectBtnBg.strokeColor = new Color(155, 170, 220, 255);
+        rejectBtnBg.lineWidth = 2;
+        rejectBtnBg.roundRect(-66, -20, 132, 40, 8);
+        rejectBtnBg.stroke();
+
+        const rejectBtnLabelNode = new Node('RejectButtonLabel');
+        rejectBtnLabelNode.setParent(rejectBtnNode);
+        rejectBtnLabelNode.setPosition(0, 0, 0);
+        rejectBtnLabelNode.addComponent(UITransform).setContentSize(120, 34);
+        const rejectBtnLabel = rejectBtnLabelNode.addComponent(Label);
+        rejectBtnLabel.string = '拒绝';
+        rejectBtnLabel.fontSize = 18;
+        rejectBtnLabel.color = new Color(230, 236, 255, 255);
+        rejectBtnLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        rejectBtnLabel.verticalAlign = Label.VerticalAlign.CENTER;
+
+        rejectBtnNode.addComponent(Button);
+        rejectBtnNode.on(Button.EventType.CLICK, () => {
+            this.abortSwordsmanSharpenMiniGameByReject();
+        }, this);
+
         // 实时 UI 更新：真实时间（setInterval），不受 timeScale 影响
         this.swordSharpenMiniGameRealtimeLoopId = setInterval(() => {
             if (!this.swordSharpenMiniGameRoot || !this.swordSharpenMiniGameRoot.isValid || this.swordSharpenMiniGameFinalized) {
@@ -7604,9 +7649,17 @@ export class GameManager extends Component {
             }
         }, 50) as unknown as number;
 
-        const onClick = () => {
+        const onClick = (event?: any) => {
             if (this.swordSharpenMiniGameFinalized) {
                 return;
+            }
+            const loc = event?.getUILocation?.() || event?.getLocation?.();
+            if (loc && rejectBtnTr && rejectBtnTr.isValid) {
+                const local = rejectBtnTr.convertToNodeSpaceAR(new Vec3(loc.x, loc.y, 0));
+                const s = rejectBtnTr.contentSize;
+                if (Math.abs(local.x) <= s.width / 2 && Math.abs(local.y) <= s.height / 2) {
+                    return;
+                }
             }
             const now = Date.now();
             if (now >= this.swordSharpenMiniGameEndAtMs) {
@@ -7645,6 +7698,32 @@ export class GameManager extends Component {
             this.finalizeSwordsmanSharpenMiniGame();
         }, 5_000);
         MemoryProbe.snapshot('MiniGame.swordSharpen.open', { requireInputGuard });
+    }
+
+    private abortSwordsmanSharpenMiniGameByReject() {
+        if (this.swordSharpenMiniGameFinalized) {
+            return;
+        }
+        this.swordSharpenMiniGameFinalized = true;
+        this.clearSwordSharpenRealtimeLoop();
+        this.clearSwordSharpenMiniGameAnimTimeout();
+        this.swordSharpenMiniGameAnimPendingCount = 0;
+        this.swordSharpenMiniGameAnimRunning = false;
+        this.swordSharpenMiniGameShouldFinalizeUIAfterAnim = false;
+        this.swordSharpenMiniGameEndAtMs = 0;
+
+        const root = this.swordSharpenMiniGameRoot;
+        if (root && root.isValid) {
+            this.fadeOutSwordSharpenMiniGameRoot(0.2, 0, () => {
+                this.resumeGame();
+                GamePopup.showMessage('已拒绝磨剑', true, 1.2);
+            });
+            return;
+        }
+
+        this.resetSwordSharpenMiniGameRefs();
+        this.resumeGame();
+        GamePopup.showMessage('已拒绝磨剑', true, 1.2);
     }
 
     private finalizeSwordsmanSharpenMiniGame() {
