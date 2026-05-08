@@ -232,6 +232,9 @@ export class Role extends Component {
     private autoRoamScheduled: boolean = false;
     private autoRoamCallback: (() => void) | null = null;
 
+    /** 当前 manualMoveTarget 是否来自 6 秒自动上移（非玩家点地）；用于索敌优先时可区分并取消上移 */
+    protected autoRoamManualMoveActive: boolean = false;
+
     // 是否被手动控制过（如果是，则取消自动上移）
     private wasManuallyControlled: boolean = false;
     
@@ -1368,6 +1371,10 @@ export class Role extends Component {
 
         // 优先处理手动移动目标
         if (this.manualMoveTarget) {
+            // 自动上移过程中仍以索敌优先：发现敌人则取消上移，转入本帧后续追击/攻击逻辑
+            this.tryInterruptAutoRoamForEnemyPriority();
+
+            if (this.manualMoveTarget) {
             // 性能优化：使用平方距离比较
             const myPos = this.node.worldPosition;
             const dx = this.manualMoveTarget.x - myPos.x;
@@ -1380,11 +1387,13 @@ export class Role extends Component {
                 // 到达手动移动目标，清除手动目标
                 this.manualMoveTarget = null!;
                 this.isManuallyControlled = false;
+                this.autoRoamManualMoveActive = false;
                 this.stopMoving();
             } else {
                 // 移动到手动目标位置
                 this.moveToPosition(this.manualMoveTarget, deltaTime);
                 return; // 手动移动时，不执行自动寻敌
+            }
             }
         }
 
@@ -3983,6 +3992,32 @@ export class Role extends Component {
         return true;
     }
 
+    /**
+     * 自动上移（autoRoamManualMoveActive）时优先索敌：探测到敌人则取消上移并返回 true。
+     * 牧师等治疗职业请在子类重写，避免 findTarget 把 currentTarget 设为敌人。
+     */
+    protected tryInterruptAutoRoamForEnemyPriority(): boolean {
+        if (!this.manualMoveTarget || !this.autoRoamManualMoveActive || !this.canSeekAndFightEnemy()) {
+            return false;
+        }
+        const needFindTarget = !this.currentTarget || !this.currentTarget.isValid || !this.currentTarget.active;
+        const shouldFindByInterval = !this.hasFoundFirstTarget || this.targetFindTimer >= this.TARGET_FIND_INTERVAL;
+        if (!(needFindTarget || shouldFindByInterval)) {
+            return false;
+        }
+        this.targetFindTimer = 0;
+        this.findTarget();
+        if (this.currentTarget && this.currentTarget.isValid && this.currentTarget.active) {
+            this.hasFoundFirstTarget = true;
+            this.manualMoveTarget = null!;
+            this.isManuallyControlled = false;
+            this.autoRoamManualMoveActive = false;
+            this.stopMoving();
+            return true;
+        }
+        return false;
+    }
+
     /** 子类可重写：受伤时是否播放受击动画 */
     protected shouldPlayHitAnimationOnDamage(): boolean {
         return true;
@@ -4355,6 +4390,7 @@ export class Role extends Component {
         this.moveTarget = null!;
         this.manualMoveTarget = null!;
         this.isManuallyControlled = false;
+        this.autoRoamManualMoveActive = false;
         this.isDefending = false; // 重置防御状态
         this.hasFoundFirstTarget = false;
         this.autoRoamScheduled = false;
@@ -4594,6 +4630,7 @@ export class Role extends Component {
                     }
                     this.manualMoveTarget.set(adjustedPos);
                     this.isManuallyControlled = true;
+                    this.autoRoamManualMoveActive = true;
                     this.currentTarget = null!;
                 };
                 // 延迟 6 秒执行
@@ -4842,6 +4879,7 @@ if (!isInSelectionArea) {
         }
         this.manualMoveTarget.set(adjustedPos);
         this.isManuallyControlled = true;
+        this.autoRoamManualMoveActive = false;
 
         // 清除当前自动寻敌目标，优先执行手动移动
         this.currentTarget = null!;

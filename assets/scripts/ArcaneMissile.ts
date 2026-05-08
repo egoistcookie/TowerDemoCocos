@@ -19,7 +19,7 @@ export class ArcaneMissile extends Component {
 
     @property({
         tooltip:
-            '目标世界坐标单帧位移超过此距离（像素平方）视为闪现/传送：从当前飞弹位置重算弹道，避免兽人剑士剑舞后飞弹卡在空中。',
+            '目标世界坐标单帧位移超过此距离（像素平方）视为闪现/传送：从当前飞弹位置重算弹道，避免狂兽人剑舞后飞弹卡在空中。',
     })
     teleportResnapThresholdPx: number = 72;
 

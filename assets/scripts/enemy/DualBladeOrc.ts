@@ -4,7 +4,7 @@ import { Enemy } from './Enemy';
 const { ccclass, property } = _decorator;
 
 /**
- * 兽人剑士：优先索敌我方地面 Role；对地面 Role 普攻时有概率触发「剑舞」——
+ * 狂兽人：优先索敌我方地面 Role；对地面 Role 普攻时有概率触发「剑舞」——
  * 以当前锁定的目标所在位置为圆心、半径内筛选我方地面 Role，1 秒内至多 4 次闪现斩击，
  * 满 1 秒后回到发起剑舞时的位置。
  */
@@ -27,7 +27,7 @@ export class DualBladeOrc extends Enemy {
 
     @property({
         tooltip:
-            '仅把横向偏移不超过此值的石墙当作「挡路」目标；过大视为侧面墙，不拆（兽人剑士以 Role 为主）。',
+            '仅把横向偏移不超过此值的石墙当作「挡路」目标；过大视为侧面墙，不拆（狂兽人以 Role 为主）。',
     })
     stoneWallMaxSideOffsetPx: number = 88;
 
@@ -39,13 +39,13 @@ export class DualBladeOrc extends Enemy {
 
     public prefabName: string = 'DualBladeOrc';
 
-    maxHealth: number = 48;
+    maxHealth: number = 200;
     moveSpeed: number = 52;
-    attackDamage: number = 8;
+    attackDamage: number = 16;
     attackInterval: number = 1.0;
     attackRange: number = 60;
     collisionRadius: number = 2;
-    unitName: string = '兽人剑士';
+    unitName: string = '狂兽人';
     unitDescription: string = '渴望战斗';
     goldReward: number = 3;
     expReward: number = 5;

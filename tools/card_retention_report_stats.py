@@ -360,6 +360,10 @@ def main() -> None:
     prev7_start = max(start_dt, end_dt - timedelta(days=13))
     prev7_end = end_dt - timedelta(days=7)
     last7_start = end_dt - timedelta(days=6)
+    # 自然历「最近 7 日」：以 end 日为准往回共 7 个日历日（含首尾）
+    last7_calendar_begin = datetime.combine(end_dt.date() - timedelta(days=6), datetime.min.time()).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
 
     comparable_cond = (
         "gs.id IN (SELECT session_id FROM card_selection_events WHERE game_time != 0) "
@@ -375,6 +379,8 @@ def main() -> None:
             "prev7_start": prev7_start.strftime("%Y-%m-%d %H:%M:%S"),
             "prev7_end": prev7_end.strftime("%Y-%m-%d %H:%M:%S"),
             "last7_start": last7_start.strftime("%Y-%m-%d %H:%M:%S"),
+            "last7_calendar_begin": last7_calendar_begin,
+            "last7_calendar_note": "自 end 日往回 7 个日历日，含 end 当日",
         }
     }
 
@@ -427,6 +433,200 @@ def main() -> None:
             args.end,
         ),
     )
+
+    # 粘性（弃局）：按「最后一次有效选卡」（game_time>0）的 game_time；0422 起存在 game_time=0 的起始事件，不参与弃局时长
+    output["stickiness_prev7_last7"] = fetch_all(
+        conn,
+        f"""
+        SELECT period,
+               COUNT(*) sessions,
+               SUM(CASE WHEN last_game_time <= 30 THEN 1 ELSE 0 END) quit_0_30,
+               ROUND(SUM(CASE WHEN last_game_time <= 30 THEN 1 ELSE 0 END)*100.0/COUNT(*),2) quit_0_30_pct,
+               SUM(CASE WHEN last_game_time BETWEEN 31 AND 60 THEN 1 ELSE 0 END) quit_31_60,
+               ROUND(SUM(CASE WHEN last_game_time BETWEEN 31 AND 60 THEN 1 ELSE 0 END)*100.0/COUNT(*),2) quit_31_60_pct,
+               SUM(CASE WHEN last_game_time > 180 THEN 1 ELSE 0 END) deep_180_plus,
+               ROUND(SUM(CASE WHEN last_game_time > 180 THEN 1 ELSE 0 END)*100.0/COUNT(*),2) deep_180_plus_pct
+        FROM (
+          SELECT
+            CASE
+              WHEN gs.start_time BETWEEN UNIX_TIMESTAMP(%s)*1000 AND UNIX_TIMESTAMP(%s)*1000 THEN 'prev7'
+              WHEN gs.start_time BETWEEN UNIX_TIMESTAMP(%s)*1000 AND UNIX_TIMESTAMP(%s)*1000 THEN 'last7'
+              ELSE 'other'
+            END AS period,
+            (
+              SELECT c.game_time FROM card_selection_events c
+              WHERE c.session_id = gs.id AND c.game_time > 0
+              ORDER BY c.event_time DESC
+              LIMIT 1
+            ) AS last_game_time
+          FROM game_sessions gs
+          WHERE {filters["base_session"]}
+            AND EXISTS (
+              SELECT 1 FROM card_selection_events c2
+              WHERE c2.session_id = gs.id AND c2.game_time > 0
+            )
+        ) t
+        WHERE period IN ('prev7','last7')
+          AND last_game_time IS NOT NULL
+        GROUP BY period
+        ORDER BY period
+        """,
+        (
+            prev7_start.strftime("%Y-%m-%d %H:%M:%S"),
+            prev7_end.strftime("%Y-%m-%d %H:%M:%S"),
+            last7_start.strftime("%Y-%m-%d %H:%M:%S"),
+            args.end,
+        ),
+    )
+
+    output["stickiness_report_periods"] = fetch_all(
+        conn,
+        f"""
+        SELECT period,
+               COUNT(*) sessions,
+               SUM(CASE WHEN last_game_time <= 30 THEN 1 ELSE 0 END) quit_0_30,
+               ROUND(SUM(CASE WHEN last_game_time <= 30 THEN 1 ELSE 0 END)*100.0/COUNT(*),2) quit_0_30_pct,
+               SUM(CASE WHEN last_game_time BETWEEN 31 AND 60 THEN 1 ELSE 0 END) quit_31_60,
+               ROUND(SUM(CASE WHEN last_game_time BETWEEN 31 AND 60 THEN 1 ELSE 0 END)*100.0/COUNT(*),2) quit_31_60_pct,
+               SUM(CASE WHEN last_game_time > 180 THEN 1 ELSE 0 END) deep_180_plus,
+               ROUND(SUM(CASE WHEN last_game_time > 180 THEN 1 ELSE 0 END)*100.0/COUNT(*),2) deep_180_plus_pct
+        FROM (
+          SELECT
+            CASE
+              WHEN gs.start_time BETWEEN UNIX_TIMESTAMP('2026-04-10 00:00:00')*1000
+                   AND UNIX_TIMESTAMP('2026-04-18 23:59:59')*1000 THEN 'prev_report_0410_0418'
+              WHEN gs.start_time BETWEEN UNIX_TIMESTAMP(%s)*1000 AND UNIX_TIMESTAMP(%s)*1000 THEN 'current_report'
+              ELSE 'other'
+            END AS period,
+            (
+              SELECT c.game_time FROM card_selection_events c
+              WHERE c.session_id = gs.id AND c.game_time > 0
+              ORDER BY c.event_time DESC
+              LIMIT 1
+            ) AS last_game_time
+          FROM game_sessions gs
+          WHERE {filters["base_session"]}
+            AND EXISTS (
+              SELECT 1 FROM card_selection_events c2
+              WHERE c2.session_id = gs.id AND c2.game_time > 0
+            )
+        ) t
+        WHERE period IN ('prev_report_0410_0418','current_report')
+          AND last_game_time IS NOT NULL
+        GROUP BY period
+        ORDER BY period
+        """,
+        (args.start, args.end),
+    )
+
+    # 关卡分布：本期全区间 + prev7/last7 分段（分母为各段内「有会话开始」的总局数，含未完成）
+    output["level_distribution_overall"] = fetch_all(
+        conn,
+        f"""
+        SELECT gs.level,
+               COUNT(*) AS sessions,
+               ROUND(COUNT(*)*100.0/SUM(COUNT(*)) OVER (), 2) AS pct
+        FROM game_sessions gs
+        WHERE {filters["base_session"]}
+          AND gs.start_time BETWEEN UNIX_TIMESTAMP(%s)*1000 AND UNIX_TIMESTAMP(%s)*1000
+        GROUP BY gs.level
+        ORDER BY gs.level
+        """,
+        (args.start, args.end),
+    )
+
+    output["level_distribution_segments"] = fetch_all(
+        conn,
+        f"""
+        SELECT period,
+               level,
+               COUNT(*) AS sessions,
+               ROUND(COUNT(*)*100.0/SUM(COUNT(*)) OVER (PARTITION BY period), 2) AS pct_within_period
+        FROM (
+          SELECT
+            gs.level,
+            CASE
+              WHEN gs.start_time BETWEEN UNIX_TIMESTAMP(%s)*1000 AND UNIX_TIMESTAMP(%s)*1000 THEN 'prev7'
+              WHEN gs.start_time BETWEEN UNIX_TIMESTAMP(%s)*1000 AND UNIX_TIMESTAMP(%s)*1000 THEN 'last7'
+              ELSE 'other'
+            END AS period
+          FROM game_sessions gs
+          WHERE {filters["base_session"]}
+            AND gs.start_time BETWEEN UNIX_TIMESTAMP(%s)*1000 AND UNIX_TIMESTAMP(%s)*1000
+        ) t
+        WHERE period IN ('prev7','last7')
+        GROUP BY period, level
+        ORDER BY period, level
+        """,
+        (
+            prev7_start.strftime("%Y-%m-%d %H:%M:%S"),
+            prev7_end.strftime("%Y-%m-%d %H:%M:%S"),
+            last7_start.strftime("%Y-%m-%d %H:%M:%S"),
+            args.end,
+            args.start,
+            args.end,
+        ),
+    )
+
+    # 最近 7 个日历日：逐日首抽率、完赛率（分母为当日开局会话总数）
+    output["last7_daily_draw_finish_rates"] = fetch_all(
+        conn,
+        f"""
+        SELECT DATE(FROM_UNIXTIME(gs.start_time/1000)) AS d,
+               COUNT(*) AS total_sessions,
+               SUM(CASE WHEN EXISTS (
+                 SELECT 1 FROM card_selection_events c
+                 WHERE c.session_id = gs.id AND c.game_time != 0
+               ) THEN 1 ELSE 0 END) AS sessions_with_draw,
+               ROUND(SUM(CASE WHEN EXISTS (
+                 SELECT 1 FROM card_selection_events c
+                 WHERE c.session_id = gs.id AND c.game_time != 0
+               ) THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) AS first_draw_rate_pct,
+               SUM(CASE WHEN gs.result IS NOT NULL THEN 1 ELSE 0 END) AS sessions_finished,
+               ROUND(SUM(CASE WHEN gs.result IS NOT NULL THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) AS finish_rate_pct
+        FROM game_sessions gs
+        WHERE {filters["base_session"]}
+          AND gs.start_time >= UNIX_TIMESTAMP(%s) * 1000
+          AND gs.start_time <= UNIX_TIMESTAMP(%s) * 1000
+        GROUP BY DATE(FROM_UNIXTIME(gs.start_time/1000))
+        ORDER BY d
+        """,
+        (last7_calendar_begin, args.end),
+    )
+    for row in output["last7_daily_draw_finish_rates"]:
+        row["version_label"] = version_label(row["d"])
+
+    # 最近 7 个日历日：逐日关卡占比（用于观察第 1/2 关等比率趋势）
+    output["last7_daily_level_distribution"] = fetch_all(
+        conn,
+        f"""
+        SELECT DATE(FROM_UNIXTIME(gs.start_time/1000)) AS d,
+               gs.level,
+               COUNT(*) AS sessions,
+               ROUND(
+                 COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (
+                   PARTITION BY DATE(FROM_UNIXTIME(gs.start_time/1000))
+                 ),
+                 2
+               ) AS pct_within_day
+        FROM game_sessions gs
+        WHERE {filters["base_session"]}
+          AND gs.start_time >= UNIX_TIMESTAMP(%s) * 1000
+          AND gs.start_time <= UNIX_TIMESTAMP(%s) * 1000
+        GROUP BY DATE(FROM_UNIXTIME(gs.start_time/1000)), gs.level
+        ORDER BY d, gs.level
+        """,
+        (last7_calendar_begin, args.end),
+    )
+    by_day_levels: Dict[str, List[Dict[str, Any]]] = {}
+    for row in output["last7_daily_level_distribution"]:
+        day = str(row.get("d", ""))
+        if day not in by_day_levels:
+            by_day_levels[day] = []
+        by_day_levels[day].append(row)
+    for day, rows in by_day_levels.items():
+        rows.sort(key=lambda r: int(r.get("level", 0) or 0))
+    output["last7_daily_level_distribution_by_day"] = by_day_levels
 
     output["previous_report_period_compare"] = fetch_all(
         conn,

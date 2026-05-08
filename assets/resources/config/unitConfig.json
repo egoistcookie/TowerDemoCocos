@@ -457,9 +457,9 @@
   },
   "DualBladeOrc": {
     "baseStats": {
-      "maxHealth": 48,
+      "maxHealth": 200,
       "attackRange": 60,
-      "attackDamage": 8,
+      "attackDamage": 16,
       "attackInterval": 1.0,
       "moveSpeed": 52,
       "collisionRadius": 2,
@@ -469,11 +469,11 @@
     },
     "displayInfo": {
       "name": "狂兽人",
-      "description": "战技高超，渴望战斗。"
+      "description": "战技高超，脆皮勿近。"
     },
     "displayStats": {
-      "生命值": 100,
-      "攻击力": 8,
+      "生命值": 200,
+      "攻击力": 16,
       "攻击范围": "60像素",
       "攻击间隔": "1.0秒",
       "移动速度": "52像素/秒",

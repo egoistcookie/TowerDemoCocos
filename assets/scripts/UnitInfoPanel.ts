@@ -414,7 +414,7 @@ export class UnitInfoPanel extends Component {
     private getUnitTypeName(unitType: string): string {
         const typeMap: Record<string, string> = {
             'Orc': '兽人',
-            'DualBladeOrc': '兽人剑士',
+            'DualBladeOrc': '狂兽人',
             'OrcWarrior': '兽人战士',
             'Wolf': '狼',
             'OrcWarlord': '兽人督军',

@@ -28,6 +28,15 @@ export class Arrow2 extends Component {
     private penetrationDistance: number = 100; // 穿透后继续飞行的距离（像素）
     private hitEnemies: Set<Node> = new Set(); // 已命中的敌人集合，避免重复伤害
 
+    @property({
+        tooltip:
+            '超时强制销毁（墙上时钟）。用于狂兽人剑舞闪现、暂停或非 Playing 时 delta 不累计等情况，避免穿透箭永久残留。',
+    })
+    maxFlightSeconds: number = 8;
+
+    /** 墙上时钟，避免暂停或非 Playing 时 traveledDistance 不增长导致永远不销毁（对齐 ArcaneMissile） */
+    private _spawnWallClockMs: number = 0;
+
     /**
      * 初始化穿透箭
      * @param startPos 起始位置
@@ -81,6 +90,28 @@ export class Arrow2 extends Component {
         this.node.setRotationFromEuler(0, 0, angle);
 
         this.isFlying = true;
+        this._spawnWallClockMs = Date.now();
+        this.scheduleFallbackDestroy();
+    }
+
+    private destroyArrowSafe() {
+        this.isFlying = false;
+        this.unschedule(this._fallbackDestroyBound);
+        if (this.node?.isValid) {
+            this.node.destroy();
+        }
+    }
+
+    /** schedule 兜底：即使 update 很少执行或非 Playing 卡住也会销毁 */
+    private readonly _fallbackDestroyBound = () => {
+        if (this.isValid && this.node?.isValid) {
+            this.destroyArrowSafe();
+        }
+    };
+
+    private scheduleFallbackDestroy() {
+        this.unschedule(this._fallbackDestroyBound);
+        this.scheduleOnce(this._fallbackDestroyBound, this.maxFlightSeconds + 0.5);
     }
 
     /**
@@ -128,11 +159,17 @@ export class Arrow2 extends Component {
             return;
         }
 
+        const wallMs = Date.now() - this._spawnWallClockMs;
+        if (wallMs >= this.maxFlightSeconds * 1000) {
+            this.destroyArrowSafe();
+            return;
+        }
+
         // 检查游戏状态
         if (!this.gameManager) {
             this.gameManager = find('GameManager')?.getComponent(GameManager);
         }
-        
+
         if (this.gameManager) {
             const gameState = this.gameManager.getGameState();
             if (gameState !== GameState.Playing) {
@@ -153,25 +190,8 @@ export class Arrow2 extends Component {
 
         // 检查是否达到最大飞行距离
         if (this.traveledDistance >= this.travelDistance) {
-            // 飞行完成，销毁箭矢
-            this.isFlying = false;
-            this.scheduleOnce(() => {
-                if (this.node && this.node.isValid) {
-                    this.node.destroy();
-                }
-            }, 0.1);
+            this.scheduleOnce(() => this.destroyArrowSafe(), 0.1);
             return;
-        }
-
-        // 如果飞行时间过长（超过预期时间2倍），销毁弓箭（防止卡住）
-        const expectedTime = this.travelDistance / this.speed;
-        if (this.traveledDistance > this.travelDistance * 2) {
-            this.isFlying = false;
-            this.scheduleOnce(() => {
-                if (this.node && this.node.isValid) {
-                    this.node.destroy();
-                }
-            }, 0.1);
         }
     }
 

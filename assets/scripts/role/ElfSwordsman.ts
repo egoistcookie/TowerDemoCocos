@@ -675,6 +675,7 @@ export class ElfSwordsman extends Role {
         this.currentTarget = null!;
         this.manualMoveTarget = null!;
         this.isManuallyControlled = false;
+        this.autoRoamManualMoveActive = false;
         this.stopMoving();
         (this as any).isPlayingMoveAnimation = false;
         (this as any).isPlayingAttackAnimation = false;

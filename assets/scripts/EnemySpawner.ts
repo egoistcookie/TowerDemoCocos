@@ -605,7 +605,7 @@ export class EnemySpawner extends Component {
             );
         }
 
-        // 兽人剑士（DualBladeOrc）
+        // 狂兽人（DualBladeOrc）
         if (!EnemySpawner.dualBladeOrcPrefabLoaded) {
             pending++;
             this.loadSingleEnemyPrefabFromSubpackage(

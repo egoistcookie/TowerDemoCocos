@@ -122,6 +122,24 @@ export class Priest extends Role {
     private readonly AUTO_HOLY_PRAYER_INTERVAL: number = 10;  // 自动祈祷间隔（秒）
 
     /**
+     * 自动上移时仅检测附近敌人并取消上移，不调用 findTarget（避免把治疗目标 currentTarget 写成敌人节点）。
+     */
+    protected tryInterruptAutoRoamForEnemyPriority(): boolean {
+        if (!this.manualMoveTarget || !this.autoRoamManualMoveActive) {
+            return false;
+        }
+        const enemies = this.getEnemies(true, this.getDetectionRange());
+        if (!enemies || enemies.length === 0) {
+            return false;
+        }
+        this.manualMoveTarget = null!;
+        this.isManuallyControlled = false;
+        this.autoRoamManualMoveActive = false;
+        this.stopMoving();
+        return true;
+    }
+
+    /**
      * 节点启用时：标记拥有技能，让父类创建和更新蓝量条
      */
     onEnable() {
@@ -218,6 +236,9 @@ export class Priest extends Role {
         }
 
         // 手动移动优先
+        if (this.manualMoveTarget) {
+            this.tryInterruptAutoRoamForEnemyPriority();
+        }
         if (this.manualMoveTarget) {
             // 性能优化：使用平方距离比较
             const myPos2 = this.node.worldPosition;
