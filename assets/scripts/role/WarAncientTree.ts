@@ -1070,6 +1070,7 @@ export class WarAncientTree extends Build {
             { nodeName: 'Canvas/Towers', scriptName: 'Priest' },
             { nodeName: 'Canvas/EagleArchers', scriptName: 'EagleArcher' }, // 新增：角鹰射手专属容器
             { nodeName: 'Canvas/Mages', scriptName: 'Mage' }, // 新增：与法师保持最小间距，避免重叠
+            { nodeName: 'Canvas/Mercenaries', scriptName: 'MercenarySoldier' },
         ];
         const crossTypeMinDist = 60; // 跨类型单位最小间距
         const crossTypeMinDistSq = crossTypeMinDist * crossTypeMinDist;

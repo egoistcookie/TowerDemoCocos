@@ -292,12 +292,15 @@ export class OrcShaman extends Enemy {
                     const priestScript = targetNode.getComponent('Priest') as any;
                     const mageScript = targetNode.getComponent('Mage') as any;
                     const elfSwordsmanScript = targetNode.getComponent('ElfSwordsman') as any;
+                    const mercenarySoldierScript = targetNode.getComponent('MercenarySoldier') as any;
+                    const eagleArcherScript = targetNode.getComponent('EagleArcher') as any;
                     const stoneWallScript = targetNode.getComponent('StoneWall') as any;
                     const watchTowerScript = getWatchTowerFamilyScript(targetNode);
                     const iceTowerScript = targetNode.getComponent('IceTower') as any;
                     const thunderTowerScript = targetNode.getComponent('ThunderTower') as any;
                     const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || crystalScript ||
                                         hunterScript || priestScript || mageScript || elfSwordsmanScript ||
+                                        mercenarySoldierScript || eagleArcherScript ||
                                         stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
                     
                     if (targetScript && targetScript.takeDamage) {

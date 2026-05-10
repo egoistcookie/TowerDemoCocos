@@ -281,6 +281,7 @@ export class MinotaurWarrior extends Boss {
             const roleScript = node.getComponent('Arrower') as any ||
                               node.getComponent('Hunter') as any ||
                               node.getComponent('ElfSwordsman') as any ||
+                              node.getComponent('MercenarySoldier') as any ||
                               node.getComponent('Mage') as any ||
                               node.getComponent('Priest') as any ||
                               node.getComponent('Eagle') as any ||
@@ -350,6 +351,18 @@ export class MinotaurWarrior extends Boss {
                     const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
                     if (swordsmanScript && swordsmanScript.isAlive && swordsmanScript.isAlive()) {
                         friendlyUnits.push(swordsman);
+                    }
+                }
+            }
+
+            const mercenariesNode = find('Canvas/Mercenaries');
+            if (mercenariesNode && mercenariesNode.children) {
+                for (const m of mercenariesNode.children) {
+                    if (m && m.isValid && m.active) {
+                        const ms = m.getComponent('MercenarySoldier') as any;
+                        if (ms && ms.isAlive && ms.isAlive()) {
+                            friendlyUnits.push(m);
+                        }
                     }
                 }
             }
@@ -429,6 +442,7 @@ export class MinotaurWarrior extends Boss {
                 const unitScript = unit.getComponent('Arrower') as any ||
                                   unit.getComponent('Hunter') as any ||
                                   unit.getComponent('ElfSwordsman') as any ||
+                                  unit.getComponent('MercenarySoldier') as any ||
                                   unit.getComponent('Mage') as any ||
                                   unit.getComponent('Priest') as any ||
                                   unit.getComponent('Eagle') as any ||
@@ -1185,6 +1199,8 @@ export class MinotaurWarrior extends Boss {
                 const crystalScript = this.currentTarget.getComponent('Crystal') as any;
                 const hunterScript = this.currentTarget.getComponent('Hunter') as any;
                 const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
+                const mercenarySoldierScript = this.currentTarget.getComponent('MercenarySoldier') as any;
+                const eagleArcherScript = this.currentTarget.getComponent('EagleArcher') as any;
                 const priestScript = this.currentTarget.getComponent('Priest') as any;
                 const mageScript = this.currentTarget.getComponent('Mage') as any;
                 const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
@@ -1192,7 +1208,7 @@ export class MinotaurWarrior extends Boss {
                 const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
                 const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
                 const mageTowerScript = this.currentTarget.getComponent('MageTower') as any;
-                const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript || mageTowerScript;
+                const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || mercenarySoldierScript || eagleArcherScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript || mageTowerScript;
 
                 // 检查目标是否存活（直接检查血量和 destroyed 状态，因为 isAlive 是 protected）
                 if (targetScript && (targetScript.isDestroyed || targetScript.currentHealth <= 0)) {
@@ -1474,6 +1490,26 @@ export class MinotaurWarrior extends Boss {
             }
         }
 
+        const mercenariesNodeForFind = find('Canvas/Mercenaries');
+        if (mercenariesNodeForFind && mercenariesNodeForFind.children) {
+            for (const m of mercenariesNodeForFind.children) {
+                if (m && m.active && m.isValid) {
+                    const ms = m.getComponent('MercenarySoldier') as any;
+                    if (ms && ms.isAlive && ms.isAlive()) {
+                        const distance = Vec3.distance(this.node.worldPosition, m.worldPosition);
+                        if (distance <= detectionRange) {
+                            if (PRIORITY.CHARACTER < targetPriority ||
+                                (PRIORITY.CHARACTER === targetPriority && distance < minDistance)) {
+                                minDistance = distance;
+                                nearestTarget = m;
+                                targetPriority = PRIORITY.CHARACTER;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // 4) 法师（在 Canvas/Mages 容器中）
         let mages: Node[] = [];
         const magesNode = find('Canvas/Mages');
@@ -1652,12 +1688,14 @@ export class MinotaurWarrior extends Boss {
             const crystalScript = this.currentTarget.getComponent('Crystal') as any;
             const hunterScript = this.currentTarget.getComponent('Hunter') as any;
             const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
+            const mercenarySoldierScript = this.currentTarget.getComponent('MercenarySoldier') as any;
+            const eagleArcherScript = this.currentTarget.getComponent('EagleArcher') as any;
             const priestScript = this.currentTarget.getComponent('Priest') as any;
             const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
             const watchTowerScript = getWatchTowerFamilyScript(this.currentTarget);
             const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
             const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
-            const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
+            const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || mercenarySoldierScript || eagleArcherScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
             
             if (targetScript && targetScript.isAlive && targetScript.isAlive()) {
                 return;
@@ -1847,12 +1885,14 @@ export class MinotaurWarrior extends Boss {
         const crystalScript = this.currentTarget.getComponent('Crystal') as any;
         const hunterScript = this.currentTarget.getComponent('Hunter') as any;
         const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
+        const mercenarySoldierScript = this.currentTarget.getComponent('MercenarySoldier') as any;
+        const eagleArcherScript = this.currentTarget.getComponent('EagleArcher') as any;
         const priestScript = this.currentTarget.getComponent('Priest') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
         const watchTowerScript = getWatchTowerFamilyScript(this.currentTarget);
         const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
         const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
-        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
+        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || crystalScript || hunterScript || elfSwordsmanScript || mercenarySoldierScript || eagleArcherScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
         
         if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
             this.isPlayingAttackAnimation = false;
@@ -2061,6 +2101,18 @@ export class MinotaurWarrior extends Boss {
                 }
             }
 
+            const mercenariesNode = find('Canvas/Mercenaries');
+            if (mercenariesNode && mercenariesNode.children) {
+                for (const m of mercenariesNode.children) {
+                    if (m && m.isValid && m.active) {
+                        const ms = m.getComponent('MercenarySoldier') as any;
+                        if (ms && ms.isAlive && ms.isAlive()) {
+                            potentialTargets.push(m);
+                        }
+                    }
+                }
+            }
+
             // 获取所有建筑物
             const buildings = this.unitManager.getBuildings();
             for (const building of buildings) {
@@ -2152,12 +2204,14 @@ export class MinotaurWarrior extends Boss {
         const hunterScript = target.getComponent('Hunter') as any;
         const mageScript = target.getComponent('Mage') as any;
         const elfSwordsmanScript = target.getComponent('ElfSwordsman') as any;
+        const mercenarySoldierScript = target.getComponent('MercenarySoldier') as any;
+        const eagleArcherScript = target.getComponent('EagleArcher') as any;
         const priestScript = target.getComponent('Priest') as any;
         const stoneWallScript = target.getComponent('StoneWall') as any;
         const watchTowerScript = getWatchTowerFamilyScript(target);
         const iceTowerScript = target.getComponent('IceTower') as any;
         const thunderTowerScript = target.getComponent('ThunderTower') as any;
-        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || churchScript || priestScript || crystalScript || hunterScript || mageScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
+        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || churchScript || priestScript || crystalScript || hunterScript || mageScript || elfSwordsmanScript || mercenarySoldierScript || eagleArcherScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript;
 
         if (targetScript && targetScript.takeDamage && typeof targetScript.takeDamage === 'function') {
             // 计算受击方向：从牛头人指向目标
@@ -2725,6 +2779,22 @@ export class MinotaurWarrior extends Boss {
                 }
             }
         }
+
+        let mercenariesNode = find('Canvas/Mercenaries');
+        if (!mercenariesNode && this.node.scene) {
+            mercenariesNode = findNodeRecursive(this.node.scene, 'Mercenaries');
+        }
+        if (mercenariesNode) {
+            const mercs = mercenariesNode.children || [];
+            for (const m of mercs) {
+                if (m && m.active && m.isValid) {
+                    const ms = m.getComponent('MercenarySoldier') as any;
+                    if (ms && ms.isAlive && ms.isAlive()) {
+                        allPotentialTargets.push(m);
+                    }
+                }
+            }
+        }
         
         let warAncientTrees = find('WarAncientTrees');
         if (!warAncientTrees && this.node.scene) {
@@ -2783,7 +2853,7 @@ export class MinotaurWarrior extends Boss {
                 targetPriority = PRIORITY.CRYSTAL;
             } else if (target.getComponent('StoneWall')) {
                 targetPriority = PRIORITY.STONEWALL;
-            } else if (target.getComponent('Arrower') || target.getComponent('Hunter') || target.getComponent('ElfSwordsman')) {
+            } else if (target.getComponent('Arrower') || target.getComponent('Hunter') || target.getComponent('ElfSwordsman') || target.getComponent('MercenarySoldier') || target.getComponent('EagleArcher') || target.getComponent('Mage') || target.getComponent('Priest')) {
                 targetPriority = PRIORITY.CHARACTER;
             } else if (target.getComponent('WarAncientTree') || target.getComponent('HunterHall')) {
                 targetPriority = PRIORITY.BUILDING;

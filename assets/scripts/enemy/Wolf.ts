@@ -505,6 +505,19 @@ export class Wolf extends Enemy {
             }
         }
 
+        const mercenariesNode = find('Canvas/Mercenaries');
+        if (mercenariesNode) {
+            for (const m of mercenariesNode.children) {
+                if (!m?.active || !m.isValid) {
+                    continue;
+                }
+                const mercScript = m.getComponent('MercenarySoldier') as any;
+                if (mercScript) {
+                    this.considerFriendlyUnitForPriorityOne(m, mercScript, myPos, detectionRangeSq, isGroundMelee, state);
+                }
+            }
+        }
+
         const best = state.best;
 
         if (best) {

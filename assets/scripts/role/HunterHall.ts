@@ -576,6 +576,7 @@ export class HunterHall extends Build {
             { base: 'Towers', scriptName: 'Priest' },
             { base: 'ElfSwordsmans', scriptName: 'ElfSwordsman' },
             { base: 'Mages', scriptName: 'Mage' },
+            { base: 'Mercenaries', scriptName: 'MercenarySoldier' },
         ];
         const crossTypeMinDist = 60; // 跨类型单位最小间距
         const crossTypeMinDistSq = crossTypeMinDist * crossTypeMinDist;

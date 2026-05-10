@@ -625,6 +625,7 @@ export class Portal extends Component {
                     (targetNode.getComponent('Arrower') as any) ||
                     (targetNode.getComponent('Hunter') as any) ||
                     (targetNode.getComponent('ElfSwordsman') as any) ||
+                    (targetNode.getComponent('MercenarySoldier') as any) ||
                     (targetNode.getComponent('Priest') as any) ||
                     (targetNode.getComponent('Mage') as any);
                 if (role && typeof role.takeDamage === 'function') {
@@ -673,7 +674,8 @@ export class Portal extends Component {
             'Canvas/Mages',
             'Canvas/Bears',         // 巨熊（中立状态时也是目标）
             'Canvas/Eagles',        // 角鹰（飞行单位）
-            'Canvas/EagleArchers'   // 角鹰射手（独立容器）
+            'Canvas/EagleArchers',   // 角鹰射手（独立容器）
+            'Canvas/Mercenaries'
         ];
         const center = this.node.worldPosition;
         let best: Node | null = null;

@@ -1568,6 +1568,8 @@ export class Enemy extends Component {
         const hunterScript = this.currentTarget.getComponent('Hunter') as any;
         const mageScript = this.currentTarget.getComponent('Mage') as any;
         const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
+        const mercenarySoldierScript = this.currentTarget.getComponent('MercenarySoldier') as any;
+        const eagleArcherScript = this.currentTarget.getComponent('EagleArcher') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
         if (stoneWallScript && stoneWallScript.isSpikeTrapActive && stoneWallScript.isSpikeTrapActive()) {
             this.currentTarget = null!;
@@ -1578,7 +1580,7 @@ export class Enemy extends Component {
         const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
         const bearScript = this.currentTarget.getComponent('Bear') as any;
         const wispScript = this.currentTarget.getComponent('Wisp') as any;
-        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || churchScript || priestScript || crystalScript || hunterScript || mageScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript || bearScript || wispScript;
+        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || churchScript || priestScript || crystalScript || hunterScript || mageScript || elfSwordsmanScript || mercenarySoldierScript || eagleArcherScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript || bearScript || wispScript;
         
         if (targetScript && targetScript.takeDamage) {
             // 计算受击方向：从敌人指向目标 - 使用复用的临时对象
@@ -2382,6 +2384,18 @@ export class Enemy extends Component {
                     const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
                     if (swordsmanScript && swordsmanScript.isAlive && swordsmanScript.isAlive()) {
                         allTargets.push(swordsman);
+                    }
+                }
+            }
+        }
+
+        const mercNode = find('Canvas/Mercenaries');
+        if (mercNode) {
+            for (const m of mercNode.children) {
+                if (m && m.active && m.isValid) {
+                    const ms = m.getComponent('MercenarySoldier') as any;
+                    if (ms && ms.isAlive && ms.isAlive()) {
+                        allTargets.push(m);
                     }
                 }
             }

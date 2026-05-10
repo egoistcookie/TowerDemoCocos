@@ -122,6 +122,18 @@ export function gatherSpearPierceCandidateNodes(): Node[] {
         }
     }
 
+    const mercenariesNode = find('Canvas/Mercenaries');
+    if (mercenariesNode) {
+        for (const m of mercenariesNode.children) {
+            if (m?.active && m.isValid) {
+                const ms = m.getComponent('MercenarySoldier') as any;
+                if (ms?.isAlive?.()) {
+                    allTargets.push(m);
+                }
+            }
+        }
+    }
+
     const treesNode = find('Canvas/WarAncientTrees');
     if (treesNode) {
         for (const tree of treesNode.children) {

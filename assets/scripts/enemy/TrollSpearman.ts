@@ -339,6 +339,8 @@ export class TrollSpearman extends Enemy {
                     const crystalScript = targetNode.getComponent('Crystal') as any;
                     const hunterScript = targetNode.getComponent('Hunter') as any;
                     const elfSwordsmanScript = targetNode.getComponent('ElfSwordsman') as any;
+                    const mercenarySoldierScript = targetNode.getComponent('MercenarySoldier') as any;
+                    const eagleArcherScript = targetNode.getComponent('EagleArcher') as any;
                     const stoneWallScript = targetNode.getComponent('StoneWall') as any;
                     const eagleScript = targetNode.getComponent('Eagle') as any;
                     const targetScript =
@@ -349,6 +351,8 @@ export class TrollSpearman extends Enemy {
                         crystalScript ||
                         hunterScript ||
                         elfSwordsmanScript ||
+                        mercenarySoldierScript ||
+                        eagleArcherScript ||
                         stoneWallScript ||
                         eagleScript;
 

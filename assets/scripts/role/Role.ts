@@ -2581,6 +2581,29 @@ export class Role extends Component {
             }
         }
 
+        // 检查与雇佣士兵的碰撞
+        const mercenariesNode = find('Canvas/Mercenaries');
+        if (mercenariesNode) {
+            for (const m of mercenariesNode.children) {
+                if (m && m.isValid && m.active && m !== this.node) {
+                    const mercScript = m.getComponent('MercenarySoldier') as any;
+                    if (!mercScript) {
+                        continue;
+                    }
+                    const mpos = m.worldPosition;
+                    const dx = position.x - mpos.x;
+                    const dy = position.y - mpos.y;
+                    const distanceSq = dx * dx + dy * dy;
+                    const otherRadius = mercScript.collisionRadius ? mercScript.collisionRadius : this.collisionRadius;
+                    const minDistance = (this.collisionRadius + otherRadius) * 1.2;
+                    const minDistanceSq = minDistance * minDistance;
+                    if (distanceSq < minDistanceSq) {
+                        return true;
+                    }
+                }
+            }
+        }
+
         // 检查与敌人的碰撞 - 使用公共敌人获取函数（已优化，使用 UnitManager），使用平方距离
         const enemies = this.getEnemies(true);
         for (const enemy of enemies) {
@@ -3881,6 +3904,20 @@ export class Role extends Component {
     /** 箭矢命中并结算伤害后的钩子（弓箭手系用于连环箭击杀计数等） */
     protected onAfterArrowDamagedEnemy(_targetNode: Node, _enemyScript: any): void {}
 
+    /** 箭矢/投掷物发射音效（子类可覆盖以换音色或音量） */
+    protected playProjectileLaunchSound(): void {
+        if (this.shootSound && AudioManager.Instance) {
+            AudioManager.Instance.playSFX(this.shootSound);
+        }
+    }
+
+    /** 箭矢/投掷物命中音效 */
+    protected playProjectileHitSound(): void {
+        if (this.hitSound && AudioManager.Instance) {
+            AudioManager.Instance.playSFX(this.hitSound);
+        }
+    }
+
     protected createArrow() {
         if (!this.arrowPrefab || !this.currentTarget) {
             return;
@@ -3918,9 +3955,7 @@ export class Role extends Component {
         }
 
         // 播放箭矢射出音效
-        if (this.shootSound && AudioManager.Instance) {
-            AudioManager.Instance.playSFX(this.shootSound);
-        }
+        this.playProjectileLaunchSound();
 
         // 保存当前目标的引用，避免回调函数中引用失效的目标
         const targetNode = this.currentTarget;
@@ -3932,10 +3967,8 @@ export class Role extends Component {
             this.attackDamage,
             (damage: number, hitDirection: Vec3) => {
                 // 播放箭矢击中音效
-                if (this.hitSound) {
-                    AudioManager.Instance?.playSFX(this.hitSound);
-                }
-                
+                this.playProjectileHitSound();
+
                 // 检查目标是否仍然有效
                 if (targetNode && targetNode.isValid && targetNode.active) {
                     // 检查目标是否是存活的敌人

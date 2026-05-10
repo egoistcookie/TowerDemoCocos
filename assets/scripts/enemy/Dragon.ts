@@ -202,6 +202,11 @@ export class Dragon extends Enemy {
             const swordsmen = this.unitManager.getElfSwordsmans();
             friendlyUnits.push(...swordsmen);
 
+            const mercenariesNodeUm = find('Canvas/Mercenaries');
+            if (mercenariesNodeUm && mercenariesNodeUm.children) {
+                friendlyUnits.push(...mercenariesNodeUm.children);
+            }
+
             // 法师：UnitManager 可能未提供统一方法，降级到场景容器
             const magesNode = find('Canvas/Mages');
             if (magesNode) {
@@ -241,6 +246,11 @@ export class Dragon extends Enemy {
             const swordsmenNode = find('Canvas/ElfSwordsmans');
             if (swordsmenNode) {
                 friendlyUnits.push(...swordsmenNode.children);
+            }
+
+            const mercenariesNode = find('Canvas/Mercenaries');
+            if (mercenariesNode) {
+                friendlyUnits.push(...mercenariesNode.children);
             }
 
             // 角鹰（飞行单位）
@@ -299,6 +309,7 @@ export class Dragon extends Enemy {
             const unitScript = unit.getComponent('Arrower') as any ||
                               unit.getComponent('Hunter') as any ||
                               unit.getComponent('ElfSwordsman') as any ||
+                              unit.getComponent('MercenarySoldier') as any ||
                               unit.getComponent('Mage') as any ||
                               unit.getComponent('Priest') as any ||
                               getWatchTowerFamilyScript(unit) ||

@@ -592,6 +592,11 @@ export class UnitInfoPanel extends Component {
             return '角鹰';
         }
 
+        const mercenaryScript = unitNode.getComponent('MercenarySoldier') as any;
+        if (mercenaryScript && mercenaryScript.unitName) {
+            return mercenaryScript.unitName;
+        }
+
         // 尝试从Role组件获取单位名称
         const roleScript = unitNode.getComponent('Role') as any;
         if (roleScript && roleScript.unitName) {

@@ -786,6 +786,30 @@
       "攻击间隔": "0.5 秒",
       "建造成本": "5 金币"
     }
+  },
+  "MercenarySoldier": {
+    "baseStats": {
+      "maxHealth": 100,
+      "attackRange": 250,
+      "attackDamage": 15,
+      "attackInterval": 1.0,
+      "moveSpeed": 100,
+      "collisionRadius": 10,
+      "buildCost": 0,
+      "level": 1
+    },
+    "displayInfo": {
+      "name": "雇佣兵",
+      "description": "人族雇佣兵，远投长矛近挥剑。"
+    },
+    "displayStats": {
+      "生命值": 100,
+      "攻击力": 15,
+      "远程范围": "250 像素",
+      "近战范围": "50 像素",
+      "攻击间隔": "1.0 秒",
+      "人口占用": "0"
+    }
   }
 }
 

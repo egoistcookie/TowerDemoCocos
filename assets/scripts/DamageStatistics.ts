@@ -313,6 +313,7 @@ export class DamageStatistics {
         map.set('HunterHall', '猎手大厅');
         map.set('WarAncientTree', '弓箭手小屋');
         map.set('Priest', '牧师');
+        map.set('MercenarySoldier', '雇佣士兵');
         map.set(DamageStatistics.CONTRIBUTION_TRAP_UNIT_TYPE, DamageStatistics.CONTRIBUTION_TRAP_UNIT_NAME);
         return map;
     }

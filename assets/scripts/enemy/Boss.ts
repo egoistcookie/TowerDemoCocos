@@ -512,6 +512,8 @@ export class Boss extends Component {
                 const crystalScript = this.currentTarget.getComponent('Crystal') as any;
                 const hunterScript = this.currentTarget.getComponent('Hunter') as any;
                 const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
+                const mercenarySoldierScript = this.currentTarget.getComponent('MercenarySoldier') as any;
+                const eagleArcherScript = this.currentTarget.getComponent('EagleArcher') as any;
                 const priestScript = this.currentTarget.getComponent('Priest') as any;
                 const mageScript = this.currentTarget.getComponent('Mage') as any;
                 const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
@@ -519,7 +521,7 @@ export class Boss extends Component {
                 const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
                 const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
                 const bearScript = this.currentTarget.getComponent('Bear') as any;
-                const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript || bearScript;
+                const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || mercenarySoldierScript || eagleArcherScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript || bearScript;
 
                 // 检查巨熊是否死亡
                 if (bearScript && (!bearScript.isAlive || !bearScript.isAlive() || bearScript.isDead || bearScript.isDestroyed)) {
@@ -938,6 +940,8 @@ export class Boss extends Component {
             const crystalScript = this.currentTarget.getComponent('Crystal') as any;
             const hunterScript = this.currentTarget.getComponent('Hunter') as any;
             const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
+            const mercenarySoldierScript = this.currentTarget.getComponent('MercenarySoldier') as any;
+            const eagleArcherScript = this.currentTarget.getComponent('EagleArcher') as any;
             const priestScript = this.currentTarget.getComponent('Priest') as any;
             const mageScript = this.currentTarget.getComponent('Mage') as any;
             const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
@@ -945,7 +949,7 @@ export class Boss extends Component {
             const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
             const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
             const bearScript = this.currentTarget.getComponent('Bear') as any;
-            const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript || bearScript;
+            const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || mercenarySoldierScript || eagleArcherScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript || bearScript;
             
             // 如果当前目标仍然存活，保持当前目标不变
             if (targetScript && targetScript.isAlive && targetScript.isAlive()) {
@@ -1543,6 +1547,22 @@ export class Boss extends Component {
                 }
             }
         }
+
+        let mercenariesNode = find('Canvas/Mercenaries');
+        if (!mercenariesNode && this.node.scene) {
+            mercenariesNode = findNodeRecursive(this.node.scene, 'Mercenaries');
+        }
+        if (mercenariesNode) {
+            const mercs = mercenariesNode.children || [];
+            for (const m of mercs) {
+                if (m && m.active && m.isValid) {
+                    const ms = m.getComponent('MercenarySoldier') as any;
+                    if (ms && ms.isAlive && ms.isAlive()) {
+                        allPotentialTargets.push(m);
+                    }
+                }
+            }
+        }
         
         // 6. 添加建筑物
         // 4.1) 战争古树
@@ -1614,7 +1634,7 @@ export class Boss extends Component {
                 targetPriority = PRIORITY.CRYSTAL;
             } else if (target.getComponent('StoneWall')) {
                 targetPriority = PRIORITY.STONEWALL;
-            } else if (target.getComponent('Arrower') || target.getComponent('Hunter') || target.getComponent('ElfSwordsman')) {
+            } else if (target.getComponent('Arrower') || target.getComponent('Hunter') || target.getComponent('ElfSwordsman') || target.getComponent('MercenarySoldier') || target.getComponent('EagleArcher') || target.getComponent('Mage') || target.getComponent('Priest')) {
                 targetPriority = PRIORITY.CHARACTER;
             } else if (target.getComponent('WarAncientTree') || target.getComponent('HunterHall')) {
                 targetPriority = PRIORITY.BUILDING;
@@ -1721,6 +1741,8 @@ export class Boss extends Component {
         const crystalScript = this.currentTarget.getComponent('Crystal') as any;
         const hunterScript = this.currentTarget.getComponent('Hunter') as any;
         const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
+        const mercenarySoldierScript = this.currentTarget.getComponent('MercenarySoldier') as any;
+        const eagleArcherScript = this.currentTarget.getComponent('EagleArcher') as any;
         const priestScript = this.currentTarget.getComponent('Priest') as any;
         const mageScript = this.currentTarget.getComponent('Mage') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
@@ -1728,7 +1750,7 @@ export class Boss extends Component {
         const iceTowerScript = this.currentTarget.getComponent('IceTower') as any;
         const thunderTowerScript = this.currentTarget.getComponent('ThunderTower') as any;
         const bearScript = this.currentTarget.getComponent('Bear') as any;
-        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript || bearScript;
+        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || mercenarySoldierScript || eagleArcherScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript || bearScript;
         
         if (targetScript && targetScript.isAlive && !targetScript.isAlive()) {
             // 目标已被摧毁，停止攻击动画
@@ -2029,6 +2051,8 @@ export class Boss extends Component {
         const crystalScript = this.currentTarget.getComponent('Crystal') as any;
         const hunterScript = this.currentTarget.getComponent('Hunter') as any;
         const elfSwordsmanScript = this.currentTarget.getComponent('ElfSwordsman') as any;
+        const mercenarySoldierScript = this.currentTarget.getComponent('MercenarySoldier') as any;
+        const eagleArcherScript = this.currentTarget.getComponent('EagleArcher') as any;
         const priestScript = this.currentTarget.getComponent('Priest') as any;
         const mageScript = this.currentTarget.getComponent('Mage') as any;
         const stoneWallScript = this.currentTarget.getComponent('StoneWall') as any;
@@ -2050,7 +2074,7 @@ export class Boss extends Component {
             }
         }
 
-        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript || bearScript;
+        const targetScript = towerScript || warAncientTreeScript || hallScript || swordsmanHallScript || priestScript || mageScript || crystalScript || hunterScript || elfSwordsmanScript || mercenarySoldierScript || eagleArcherScript || stoneWallScript || watchTowerScript || iceTowerScript || thunderTowerScript || bearScript;
 
         if (targetScript && targetScript.takeDamage) {
             targetScript.takeDamage(this.attackDamage, undefined, this.node);

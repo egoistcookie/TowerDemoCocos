@@ -27,6 +27,7 @@ import { AnalyticsManager, OperationType } from './AnalyticsManager';
 import { PlayerProfilePopup } from './PlayerProfilePopup';
 import { PlayerDetailPopup, PlayerDetailData } from './PlayerDetailPopup';
 import { WeChatShareManager } from './WeChatShareManager';
+import { MercenarySummonHud } from './MercenarySummonHud';
 const { ccclass, property } = _decorator;
 
 // 重新导出 GameState 以保持向后兼容
@@ -1984,6 +1985,16 @@ export class GameManager extends Component {
             if (checkInBtn && checkInBtn.isValid) {
                 checkInBtn.active = false;
             }
+        }
+
+        // 雇佣军召唤按钮：仅战斗中显示，胜利/失败/首页/暂停等与局内 HUD 一致
+        const mercHudNode = find('Canvas/MercenarySummonHud');
+        if (mercHudNode && mercHudNode.isValid) {
+            if (!visible) {
+                const mercComp = mercHudNode.getComponent(MercenarySummonHud);
+                mercComp?.interruptDrag();
+            }
+            mercHudNode.active = visible;
         }
     }
 
@@ -5517,6 +5528,7 @@ export class GameManager extends Component {
         this.buildButtonBattleHintBlinkSeqId++;
         this.lastDefenseStructureHealthSnapshot = -1;
         this.lastFriendlyUnitCountSnapshot = -1;
+        MercenarySummonHud.resetForRestart();
         this.gameState = GameState.Ready;
         this.hasEndGameTriggered = false;
 
@@ -5874,6 +5886,8 @@ export class GameManager extends Component {
 
             // 显示所有游戏元素
             this.showGameElements();
+
+            MercenarySummonHud.ensureInstalled();
 
             // 在右下角创建池塘背景（在游戏开始后、初始化石墙前）
             this.createPondBackground();

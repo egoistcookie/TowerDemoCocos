@@ -456,6 +456,7 @@ export class Church extends Build {
             { nodeName: 'Canvas/Towers', scriptName: 'Priest' },
             { nodeName: 'Canvas/Mages', scriptName: 'Mage' },
             { nodeName: 'ElfSwordsmans', scriptName: 'ElfSwordsman' },
+            { nodeName: 'Canvas/Mercenaries', scriptName: 'MercenarySoldier' },
         ];
         for (const { nodeName, scriptName } of friendlyContainers) {
             const containerNode = find(nodeName);

@@ -70,6 +70,7 @@ const IRON_BLOCK_ROLE_AOE_PATHS: readonly string[] = [
     'Canvas/EagleArchers',
     'Canvas/Hunters',
     'Canvas/ElfSwordsmans',
+    'Canvas/Mercenaries',
     'Canvas/Eagles',
     'Canvas/Wisps',
 ];
@@ -78,7 +79,7 @@ function getAliveRoleDamageScript(node: Node | null): any {
     if (!node?.isValid || !node.activeInHierarchy) {
         return null;
     }
-    const tryNames = ['EagleArcher', 'Arrower', 'Priest', 'Hunter', 'Mage', 'ElfSwordsman', 'Eagle', 'Wisp'] as const;
+    const tryNames = ['EagleArcher', 'Arrower', 'Priest', 'Hunter', 'Mage', 'ElfSwordsman', 'MercenarySoldier', 'Eagle', 'Wisp'] as const;
     for (const name of tryNames) {
         const s = node.getComponent(name) as any;
         if (s?.takeDamage && s.isAlive && s.isAlive()) {

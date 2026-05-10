@@ -1001,6 +1001,7 @@ export class Priest extends Role {
             const eagleArcher = node.getComponent('EagleArcher') as any;
             const hunter = node.getComponent('Hunter') as any;
             const swordsman = node.getComponent('ElfSwordsman') as any;
+            const mercenary = node.getComponent('MercenarySoldier') as any;
             const priest = node.getComponent('Priest') as any;
             const role = node.getComponent('Role') as any;
             const buildBase = node.getComponent('Build') as any;
@@ -1018,6 +1019,7 @@ export class Priest extends Role {
                 arrower ||
                 hunter ||
                 swordsman ||
+                mercenary ||
                 priest ||
                 role ||
                 buildBase ||
@@ -1147,9 +1149,10 @@ export class Priest extends Role {
         const eagleArcher = targetNode.getComponent('EagleArcher') as any;
         const hunter = targetNode.getComponent('Hunter') as any;
         const swordsman = targetNode.getComponent('ElfSwordsman') as any;
+        const mercenary = targetNode.getComponent('MercenarySoldier') as any;
         const mage = targetNode.getComponent('Mage') as any;
         const priest = targetNode.getComponent('Priest') as any;
-        const script = eagleArcher || arrower || hunter || swordsman || mage || priest;
+        const script = eagleArcher || arrower || hunter || swordsman || mercenary || mage || priest;
 
         if (!script) {
             this.currentTarget = null!;
