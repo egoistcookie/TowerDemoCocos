@@ -308,8 +308,8 @@ export class SwordsmanHall extends Build {
                         const sp = swordsman.worldPosition;
                         targetPos = new Vec3(sp.x + directionX * this.moveAwayDistance, sp.y, sp.z);
                     }
-                    // 集结/跑开目标再按场景占用收束一格，减少多单位落同点重叠
-                    targetPos = this.findAvailableSpawnPosition(targetPos);
+                    // 集结/跑开目标再按场景占用收束；排除自身以免集结点在脚下时被误判占用
+                    targetPos = this.findAvailableSpawnPosition(targetPos, swordsman);
                     // 使用setManualMoveTargetPosition方法设置移动目标
                     if (swordsmanScript.setManualMoveTargetPosition) {
                         swordsmanScript.setManualMoveTargetPosition(targetPos);
@@ -362,13 +362,13 @@ export class SwordsmanHall extends Build {
         }
     }
 
-    findAvailableSpawnPosition(initialPos: Vec3): Vec3 {
+    findAvailableSpawnPosition(initialPos: Vec3, excludeUnit: Node | null = null): Vec3 {
         const checkRadius = 38; // 生成站位半径（略大于逻辑碰撞，减少视觉重叠）
         const offsetStep = 54; // 每次平移的距离（增大步长，确保不会重叠）
         const maxAttempts = 20; // 最多尝试20次（左右各10次）
 
         // 检查初始位置是否可用
-        if (!this.hasUnitAtPosition(initialPos, checkRadius)) {
+        if (!this.hasUnitAtPosition(initialPos, checkRadius, excludeUnit)) {
             return initialPos;
         }
 
@@ -377,13 +377,13 @@ export class SwordsmanHall extends Build {
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             // 先尝试右侧
             const rightPos = new Vec3(initialPos.x + offsetStep * attempt, initialPos.y, initialPos.z);
-            if (!this.hasUnitAtPosition(rightPos, checkRadius)) {
+            if (!this.hasUnitAtPosition(rightPos, checkRadius, excludeUnit)) {
                 return rightPos;
             }
 
             // 再尝试左侧
             const leftPos = new Vec3(initialPos.x - offsetStep * attempt, initialPos.y, initialPos.z);
-            if (!this.hasUnitAtPosition(leftPos, checkRadius)) {
+            if (!this.hasUnitAtPosition(leftPos, checkRadius, excludeUnit)) {
                 return leftPos;
             }
         }
@@ -392,13 +392,13 @@ export class SwordsmanHall extends Build {
         for (let attempt = 1; attempt <= maxAttempts / 2; attempt++) {
             // 尝试上方
             const upPos = new Vec3(initialPos.x, initialPos.y + offsetStep * attempt, initialPos.z);
-            if (!this.hasUnitAtPosition(upPos, checkRadius)) {
+            if (!this.hasUnitAtPosition(upPos, checkRadius, excludeUnit)) {
                 return upPos;
             }
 
             // 尝试下方
             const downPos = new Vec3(initialPos.x, initialPos.y - offsetStep * attempt, initialPos.z);
-            if (!this.hasUnitAtPosition(downPos, checkRadius)) {
+            if (!this.hasUnitAtPosition(downPos, checkRadius, excludeUnit)) {
                 return downPos;
             }
         }
@@ -415,7 +415,7 @@ export class SwordsmanHall extends Build {
             ];
 
             for (const pos of positions) {
-                if (!this.hasUnitAtPosition(pos, checkRadius)) {
+                if (!this.hasUnitAtPosition(pos, checkRadius, excludeUnit)) {
                     return pos;
                 }
             }
@@ -425,7 +425,7 @@ export class SwordsmanHall extends Build {
         return initialPos;
     }
 
-    hasUnitAtPosition(position: Vec3, radius: number): boolean {
+    hasUnitAtPosition(position: Vec3, radius: number, excludeUnit: Node | null = null): boolean {
         const minDistance = radius * 2; // 最小距离（两个半径）
 
         // 检查与水晶的碰撞（使用平方距离比较）
@@ -466,6 +466,7 @@ export class SwordsmanHall extends Build {
             for (const swordsman of swordsmen) {
                 // 勿要求 active：新单位先 setPosition 再 active=true，否则同帧第二只会误判空位而重叠
                 if (swordsman && swordsman.isValid) {
+                    if (excludeUnit && swordsman === excludeUnit) continue;
                     const swordsmanScript = swordsman.getComponent('ElfSwordsman') as any;
                     if (swordsmanScript && swordsmanScript.isAlive && swordsmanScript.isAlive()) {
                         // 获取ElfSwordsman的实时位置（包括正在移动的ElfSwordsman）
@@ -552,18 +553,20 @@ export class SwordsmanHall extends Build {
             { base: 'Hunters', scriptName: 'Hunter' },
             { base: 'Mages', scriptName: 'Mage' },
         ];
-        const crossTypeMinDist = 60; // 跨类型单位最小间距
-        const crossTypeMinDistSq = crossTypeMinDist * crossTypeMinDist;
         for (const { base, scriptName } of friendlyContainers) {
             const containerNode = this.resolveUnitsContainerNode(base);
             if (!containerNode) continue;
             for (const unit of containerNode.children) {
                 if (!unit || !unit.isValid) continue;
+                if (excludeUnit && unit === excludeUnit) continue;
                 const unitScript = unit.getComponent(scriptName) as any;
                 if (unitScript && unitScript.isAlive && unitScript.isAlive()) {
                     const up = unit.worldPosition;
                     const udx = up.x - position.x, udy = up.y - position.y;
-                    if (udx * udx + udy * udy < crossTypeMinDistSq) return true;
+                    const otherR = Math.max(10, unitScript.collisionRadius ?? 25);
+                    const safe = (radius + otherR) * 1.25;
+                    const safeSq = safe * safe;
+                    if (udx * udx + udy * udy < safeSq) return true;
                 }
             }
         }

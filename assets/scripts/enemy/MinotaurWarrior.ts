@@ -19,7 +19,7 @@
  *    - 范围：200像素
  *    - 伤害：两倍攻击力（attackDamage * 2）
  *    - 冷却：20秒
- *    - 影响所有我方单位（Role和Build、防御塔）
+ *    - 影响所有我方单位（Role、角鹰 Eagle、角鹰射手 EagleArcher、Build、防御塔）
  * 
  * 注意：由于OrcWarlord代码量很大（2494行），此文件为基础结构
  * 需要从OrcWarlord.ts复制以下方法的完整实现：
@@ -282,7 +282,9 @@ export class MinotaurWarrior extends Boss {
                               node.getComponent('Hunter') as any ||
                               node.getComponent('ElfSwordsman') as any ||
                               node.getComponent('Mage') as any ||
-                              node.getComponent('Priest') as any;
+                              node.getComponent('Priest') as any ||
+                              node.getComponent('Eagle') as any ||
+                              node.getComponent('EagleArcher') as any;
             if (roleScript && roleScript.isAlive && roleScript.isAlive()) {
                 friendlyUnits.push(node);
             }
@@ -351,6 +353,26 @@ export class MinotaurWarrior extends Boss {
                     }
                 }
             }
+
+            const eagles = this.unitManager.getEagles();
+            for (const eagle of eagles) {
+                if (eagle && eagle.isValid && eagle.active) {
+                    const eagleScript = eagle.getComponent('Eagle') as any;
+                    if (eagleScript && eagleScript.isAlive && eagleScript.isAlive()) {
+                        friendlyUnits.push(eagle);
+                    }
+                }
+            }
+
+            const eagleArchers = this.unitManager.getEagleArchers();
+            for (const ea of eagleArchers) {
+                if (ea && ea.isValid && ea.active) {
+                    const eaScript = ea.getComponent('EagleArcher') as any;
+                    if (eaScript && eaScript.isAlive && eaScript.isAlive()) {
+                        friendlyUnits.push(ea);
+                    }
+                }
+            }
             
             // 获取所有建筑物
             const buildings = this.unitManager.getBuildings();
@@ -409,6 +431,8 @@ export class MinotaurWarrior extends Boss {
                                   unit.getComponent('ElfSwordsman') as any ||
                                   unit.getComponent('Mage') as any ||
                                   unit.getComponent('Priest') as any ||
+                                  unit.getComponent('Eagle') as any ||
+                                  unit.getComponent('EagleArcher') as any ||
                                   getWatchTowerFamilyScript(unit) ||
                                   unit.getComponent('IceTower') as any ||
                                   unit.getComponent('ThunderTower') as any ||

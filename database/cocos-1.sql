@@ -5,6 +5,7 @@
 --260423：145局 31至少1抽 10局到结束（0老玩家） 	3/10成功率
 --查询非测试游戏记录
 select * from game_sessions order by created_at desc;
+select * from game_sessions where player_id='player_1778221363335_3461';
 select * from game_sessions where 
  player_id not in ('player_1772462826043_800','player_1772466497770_5671','player_1772530937065_3381','player_1772722064044_978','player_1772465771074_4106') and player_id not in (select player_id from visitor_source_records where channel='unknown') 
 order by created_at desc;
@@ -82,7 +83,7 @@ order by created_at desc;
 select * from game_records where defend_time !=0 order by created_at desc;
 --玩家信息表
 select * from player_statistics where created_at>'20260429' order by created_at desc;
-select * from player_statistics where player_id like '%player_1775465792664_5664';
+select * from player_statistics where player_id like '%player_1778221363335_3461';
 --统计：一个敌人都没击败的玩家： 0个
 select * from player_statistics where total_kills =0;
 --操作类型统计表
@@ -114,7 +115,7 @@ select unit_id,rarity,count(*) from card_selection_summary group by unit_id,rari
 -- player_1772465771074_4106 家里开发工具
 -- player_1772530937065_3381 公司360浏览器
 --  公司开发工具
-select * from player_leaderboard ps where ps.player_id ='player_1775465792664_5664' ;
+select * from player_leaderboard ps where ps.player_id ='player_1778221363335_3461' ;
 --视图-关卡难度分析
 select * from level_difficulty_analysis;
 --视图-击杀榜

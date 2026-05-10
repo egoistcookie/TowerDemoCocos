@@ -47,6 +47,10 @@ export class Crystal extends Component {
     @property
     wispSpawnOffset: number = 100; // 小精灵生成位置偏移（像素）
 
+    /** 相对场景中摆放位置整体上移（本地 Y，像素）；不改预制体即可微调水晶高度 */
+    @property
+    extraPositionY: number = 50;
+
     private currentHealth: number = 100;
     private isDestroyed: boolean = false;
 
@@ -96,6 +100,13 @@ export class Crystal extends Component {
     private trainWispProgress: number = 0; // 训练小精灵进度（0-1）
     private trainWispProgressBar: Node = null!; // 训练小精灵进度条节点
     private trainWispProgressGraphics: Graphics = null!; // 训练小精灵进度条Graphics组件
+
+    onLoad() {
+        if (this.extraPositionY !== 0) {
+            const p = this.node.position;
+            this.node.setPosition(p.x, p.y + this.extraPositionY, p.z);
+        }
+    }
 
     start() {
         this.currentHealth = this.maxHealth;

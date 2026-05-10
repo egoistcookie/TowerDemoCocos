@@ -80,6 +80,8 @@ app.post('/api/analytics/report', async (req, res) => {
         
         try {
             // 1. 插入游戏记录（原有逻辑：结束时整包上报）
+            // 注意：不对 operations 做类型白名单过滤；客户端新增埋点（如 upgrade_watchtower_to_cannon、build_cannon_tower）
+            // 会原样入库，供通关阵容等解析使用。
             const operationsJson = JSON.stringify(data.operations);
             // 新增：将各单位强化等级信息作为JSON一起入库（例如 { Arrower: 15, StoneWall: 44 }）
             const unitLevelsJson = data.unitLevels ? JSON.stringify(data.unitLevels) : null;

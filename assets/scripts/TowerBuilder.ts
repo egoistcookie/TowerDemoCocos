@@ -3372,7 +3372,13 @@ export class TowerBuilder extends Component {
             return false;
         }
         const gx = xs[0];
-        const created = await this.createAndPlaceCannonTower(panel, gx, baseY, null);
+        const created = await this.createAndPlaceCannonTower(
+            panel,
+            gx,
+            baseY,
+            null,
+            OperationType.BUILD_CANNON_TOWER
+        );
         return !!created;
     }
 
@@ -3382,6 +3388,8 @@ export class TowerBuilder extends Component {
         gx: number,
         gy: number,
         inheritHp: number | null,
+        /** 成功落位后写入埋点（强制写入，避免 isRecording 或结算竞态丢条） */
+        recordOperationOnSuccess: OperationType | null = null,
     ): Promise<CannonTower | null> {
         try {
             await UnitConfigManager.getInstance().loadConfig();
@@ -3479,6 +3487,18 @@ export class TowerBuilder extends Component {
         if (this.gameManager) {
             this.gameManager.checkUnitFirstAppearance('CannonTower', cannonScript);
         }
+
+        if (recordOperationOnSuccess) {
+            if (!this.gameManager) {
+                this.findGameManager();
+            }
+            const analytics = AnalyticsManager.getInstance();
+            if (analytics && this.gameManager && typeof this.gameManager.getGameTime === 'function') {
+                analytics.recordOperationForce(recordOperationOnSuccess, this.gameManager.getGameTime(), {
+                    position: { x: gx, y: gy },
+                });
+            }
+        }
         return cannonScript;
     }
 
@@ -3544,7 +3564,7 @@ export class TowerBuilder extends Component {
 
         const cannonScript =
             panel && gx >= 0 && gy >= 0 && gy + 1 < panel.gridHeight
-                ? await this.createAndPlaceCannonTower(panel, gx, gy, hp)
+                ? await this.createAndPlaceCannonTower(panel, gx, gy, hp, OperationType.UPGRADE_WATCHTOWER_TO_CANNON)
                 : null;
 
         if (!cannonScript) {
@@ -3552,6 +3572,7 @@ export class TowerBuilder extends Component {
                 this.gameManager.addGold(WatchTower.CANNON_UPGRADE_COST);
             }
             GamePopup.showMessage('创建炮塔失败，已退回金币', true, 2);
+            return;
         }
     }
 

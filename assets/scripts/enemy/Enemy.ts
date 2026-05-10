@@ -1949,10 +1949,21 @@ export class Enemy extends Component {
     }
 
     /**
+     * 攻城器械等：不参与堵门「燃血狂暴」数值与 Boss「战争咆哮」加成。
+     * 子类重写为 true 时，{@link enterBloodRage} 直接返回；Boss 咆哮也不会对其 {@link applyWarcryBuff}。
+     */
+    protected ignoresBloodRageAndWarcry(): boolean {
+        return false;
+    }
+
+    /**
      * 外部调用：进入燃血狂暴（数值翻倍 + 红色泛光 + 持续掉血）
      */
     public enterBloodRage(tier: number = 1) {
         if (this.isDestroyed) {
+            return;
+        }
+        if (this.ignoresBloodRageAndWarcry()) {
             return;
         }
         const targetTier = tier > 1 ? 2 : 1;

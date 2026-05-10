@@ -270,6 +270,11 @@ export class UnitIntroPopup extends Component {
         return !!(this.container && this.container.isValid && this.container.active);
     }
 
+    /** 是否还有待播的单位介绍（关闭当前条后即将接上） */
+    public hasPendingIntro(): boolean {
+        return this.pendingIntroQueue.length > 0;
+    }
+
     /**
      * 显示单位介绍弹窗
      * @param unitInfo 单位信息对象
@@ -299,8 +304,10 @@ export class UnitIntroPopup extends Component {
             this.gameManager.pauseGame();
         }
 
-        // 禁用建造按钮
-        this.disableBuildButton();
+        // 禁用建造按钮（第一关 48s 新手介绍等可传 keepBuildButtonInteractable 保留可点建造）
+        if (!unitInfo?.keepBuildButtonInteractable) {
+            this.disableBuildButton();
+        }
 
         // 设置单位信息
         if (unitInfo.unitIcon && this.unitIcon) {
@@ -430,7 +437,7 @@ export class UnitIntroPopup extends Component {
             tween(uiOpacity).to(0.3, { opacity: 180 }).start();
         }
     }
-    
+
     /**
      * 隐藏遮罩层
      */
@@ -452,6 +459,7 @@ export class UnitIntroPopup extends Component {
             this.maskLayer.active = false;
         }
     }
+
     
     /**
      * 播放高亮显示动画
@@ -598,7 +606,7 @@ export class UnitIntroPopup extends Component {
      */
     hide() {
         if (!this.container) return;
-        
+
         // 停止所有动画
         tween(this.container).stop();
         
@@ -622,28 +630,26 @@ export class UnitIntroPopup extends Component {
         
         // 隐藏遮罩层
         this.hideMaskLayer();
-        
+
         // 启用建造按钮
         this.enableBuildButton();
         
-        // 继续游戏
-        if (this.gameManager) {
-            this.gameManager.resumeGame();
-            // 小精灵（unitId 为 Wisp）首次介绍框关闭后，在第一关触发新手教程（建造按钮高亮）
-            if (this.lastShownUnitType === 'Wisp') {
-                this.triggerBuildTutorialIfLevel1();
-            }
-        }
-
+        const wispNeedBuildTutorial = this.lastShownUnitType === 'Wisp';
         this.lastShownUnitType = '';
 
         const closeCallback = this.currentCloseCallback;
         this.currentCloseCallback = null;
 
-        const nextIntro = this.pendingIntroQueue.length > 0 ? this.pendingIntroQueue.shift()! : null;
+        let nextIntro = this.pendingIntroQueue.length > 0 ? this.pendingIntroQueue.shift()! : null;
 
         // 先隐藏当前弹窗，再异步执行关闭回调，避免回调里新弹窗被本次 hide 立刻关闭
         this.container.active = false;
+
+        // 继续游戏（在关掉本框之后，避免 isOpen 仍判 true）
+        if (this.gameManager) {
+            this.gameManager.resumeGame();
+        }
+
         if (closeCallback || nextIntro) {
             this.scheduleOnce(() => {
                 if (closeCallback) {
@@ -653,8 +659,30 @@ export class UnitIntroPopup extends Component {
                         console.warn('[UnitIntroPopup] 执行关闭回调失败:', e);
                     }
                 }
+                // 48s 新手：关闭台词后立刻进入「仅点建造」遮罩；若队列里还有下一条介绍（如金币100生命之树），推迟到遮罩结束后再播
+                const gm = this.gameManager;
+                if (
+                    nextIntro &&
+                    gm &&
+                    typeof (gm as any).isLevel1BuildHutTutorialAwaitingBuildClick === 'function' &&
+                    (gm as any).isLevel1BuildHutTutorialAwaitingBuildClick()
+                ) {
+                    this.pendingIntroQueue.unshift(nextIntro);
+                    nextIntro = null;
+                }
                 if (nextIntro) {
                     this._applyShowUnitInfo(nextIntro);
+                } else if (wispNeedBuildTutorial) {
+                    // 有单位介绍框（含队列中下一条）时不要叠小精灵新手提示
+                    if (!this.pendingIntroQueue.length && !this.gameManager?.isUnitIntroPanelOpen?.()) {
+                        this.triggerBuildTutorialIfLevel1();
+                    }
+                }
+            }, 0);
+        } else if (wispNeedBuildTutorial) {
+            this.scheduleOnce(() => {
+                if (!this.pendingIntroQueue.length && !this.gameManager?.isUnitIntroPanelOpen?.()) {
+                    this.triggerBuildTutorialIfLevel1();
                 }
             }, 0);
         }
@@ -671,6 +699,12 @@ export class UnitIntroPopup extends Component {
      * 第一关时触发新手教程：GamePopup 提示 + 建造按钮闪烁
      */
     private triggerBuildTutorialIfLevel1() {
+        if (this.gameManager?.isUnitIntroPanelOpen?.()) {
+            return;
+        }
+        if (this.pendingIntroQueue.length > 0) {
+            return;
+        }
         const uiManagerNode = find('UIManager') || find('UI/UIManager') || find('Canvas/UI/UIManager');
         const uiManager = uiManagerNode?.getComponent('UIManager') as any;
         if (!uiManager || typeof uiManager.getCurrentLevel !== 'function') return;

@@ -10,6 +10,7 @@ const ENEMY_COMPONENT_NAMES: readonly string[] = [
     'Wolf',
     'DualBladeOrc',
     'OrcWarrior',
+    'Catapult',
     'OrcShaman',
     'Orc',
     'Dragon',

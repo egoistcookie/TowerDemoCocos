@@ -62,7 +62,7 @@ export class EnemySpawner extends Component {
     testMode: boolean = false;
 
     @property({
-        tooltip: "测试模式下的敌人类型（Orc, DualBladeOrc, OrcWarrior, OrcWarlord, TrollSpearman 等）",
+        tooltip: '测试模式下的敌人类型（Orc, DualBladeOrc, OrcWarrior, OrcWarlord, TrollSpearman, Catapult 等）',
         visible: function() { return this.testMode; }
     })
     testEnemyType: string = "Orc";
@@ -147,6 +147,7 @@ export class EnemySpawner extends Component {
     private static sharedDragonPrefab: Prefab | null = null;
     private static sharedOrcWarlordPrefab: Prefab | null = null;
     private static sharedOrcShamanPrefab: Prefab | null = null;
+    private static sharedCatapultPrefab: Prefab | null = null;
     private static sharedMinotaurWarriorPrefab: Prefab | null = null; // 牛头人领主预制体
     private static orcPrefabLoaded: boolean = false; // 全局标记：整个游戏过程中只加载一次
     private static orcWarriorPrefabLoaded: boolean = false;
@@ -156,6 +157,7 @@ export class EnemySpawner extends Component {
     private static dragonPrefabLoaded: boolean = false;
     private static orcWarlordPrefabLoaded: boolean = false;
     private static orcShamanPrefabLoaded: boolean = false;
+    private static catapultPrefabLoaded: boolean = false;
     private static minotaurWarriorPrefabLoaded: boolean = false; // 牛头人领主加载标记
     
     // 对象池引用
@@ -251,6 +253,7 @@ export class EnemySpawner extends Component {
         if (!this.node.getComponent(EnemySlaveWolfSpawner)) {
             this.node.addComponent(EnemySlaveWolfSpawner);
         }
+        this.node.getComponent(EnemySlaveWolfSpawner)?.resetWarlordCatapultAccumulator();
 
         // 敌人预制体：从分包懒加载 Orc / OrcWarrior / TrollSpearman / Dragon / OrcWarlord / OrcShaman，全部尝试完成后再初始化对象池和波次配置
         this.loadAllEnemyPrefabsFromSubpackage(() => {
@@ -263,6 +266,7 @@ export class EnemySpawner extends Component {
             this.injectDragonPrefabToMap();
             this.injectOrcWarlordPrefabToMap();
             this.injectOrcShamanPrefabToMap();
+            this.injectCatapultPrefabToMap();
             this.injectMinotaurWarriorPrefabToMap();
 
             // 初始化对象池并加载关卡配置
@@ -422,6 +426,10 @@ export class EnemySpawner extends Component {
         ) {
             const slave = this.node.getComponent(EnemySlaveWolfSpawner);
             slave?.spawnMirrorWolfAt(spawnPos.clone(), false);
+        }
+
+        if (prefabName === 'OrcWarlord') {
+            this.node.getComponent(EnemySlaveWolfSpawner)?.onOrcWarlordSpawnedFromWave(spawnPos.clone());
         }
 
         // 增加已生成敌人计数并处理切换/结束逻辑
@@ -695,6 +703,21 @@ export class EnemySpawner extends Component {
             );
         }
 
+        // 投石车
+        if (!EnemySpawner.catapultPrefabLoaded) {
+            pending++;
+            this.loadSingleEnemyPrefabFromSubpackage(
+                ['Catapult', 'catapult'],
+                (prefab) => {
+                    if (prefab) {
+                        EnemySpawner.sharedCatapultPrefab = prefab;
+                        EnemySpawner.catapultPrefabLoaded = true;
+                    }
+                    doneOne();
+                }
+            );
+        }
+
         // 牛头人领主：只在第 4 关及之后才加载
         if (this.currentLevel >= 4 && !EnemySpawner.minotaurWarriorPrefabLoaded) {
             pending++;
@@ -913,6 +936,12 @@ export class EnemySpawner extends Component {
         }
     }
 
+    private injectCatapultPrefabToMap() {
+        if (EnemySpawner.sharedCatapultPrefab) {
+            this.enemyPrefabMap.set('Catapult', EnemySpawner.sharedCatapultPrefab);
+        }
+    }
+
     private injectMinotaurWarriorPrefabToMap() {
         if (EnemySpawner.sharedMinotaurWarriorPrefab) {
             this.enemyPrefabMap.set('MinotaurWarrior', EnemySpawner.sharedMinotaurWarriorPrefab);
@@ -1119,6 +1148,7 @@ export class EnemySpawner extends Component {
                     this.injectDragonPrefabToMap();
                     this.injectOrcWarlordPrefabToMap();
                     this.injectOrcShamanPrefabToMap();
+                    this.injectCatapultPrefabToMap();
                     this.injectMinotaurWarriorPrefabToMap();
 
                     // 重新初始化对象池并加载关卡配置
@@ -1851,6 +1881,46 @@ export class EnemySpawner extends Component {
         }
     }
 
+    /**
+     * 从刷怪器：每累计 2 只兽人督军后刷一辆投石车（同坐标），不计入波次配置进度条。
+     */
+    public spawnPairedCatapultForSlave(spawnPos: Vec3) {
+        const prefabName = 'Catapult';
+        const enemyPrefab = this.enemyPrefabMap.get(prefabName);
+        if (!enemyPrefab) {
+            return;
+        }
+        let enemy: Node | null = null;
+        if (this.enemyPool) {
+            enemy = this.enemyPool.get(prefabName);
+        }
+        if (!enemy) {
+            enemy = instantiate(enemyPrefab);
+        }
+        enemy.setParent(this.enemyContainer || this.node);
+        enemy.setWorldPosition(spawnPos);
+
+        const enemyScript = getEnemyLikeScript(enemy);
+
+        if (enemyScript) {
+            enemyScript.prefabName = prefabName;
+            if (enemyScript.loadRewardsFromConfig && typeof enemyScript.loadRewardsFromConfig === 'function') {
+                enemyScript.loadRewardsFromConfig();
+            }
+            this.applyLevelBuff(enemyScript);
+            if (this.targetCrystal) {
+                enemyScript.targetCrystal = this.targetCrystal;
+            }
+            if (this.gameManager) {
+                const unitType = enemyScript.unitType || prefabName;
+                this.gameManager.checkUnitFirstAppearance(unitType, enemyScript);
+            }
+            if (this.isOrcRageSpawnBuffActive) {
+                this.applyBloodRageToEnemy(enemy, enemyScript, this.currentOrcRageTier);
+            }
+        }
+    }
+
     /** 同屏刷怪上限用：狼不计入（与 Canvas/Wolves 下的单位一致） */
     private getActiveEnemyCountExcludingWolvesForSpawnCap(): number {
         const unitManager = UnitManager.getInstance();
@@ -2322,11 +2392,21 @@ export class EnemySpawner extends Component {
         return name.includes('orc');
     }
 
-    private applyBloodRageToEnemy(enemyNode: Node, enemyScript: any, rageTier: number = 1) {
-        if (!enemyNode || !enemyNode.isValid || !enemyScript) return;
+    private applyBloodRageToEnemy(enemyNode: Node, enemyScript: any, rageTier: number = 1): boolean {
+        if (!enemyNode || !enemyNode.isValid || !enemyScript) {
+            return false;
+        }
+        if (
+            typeof enemyScript.ignoresBloodRageAndWarcry === 'function' &&
+            enemyScript.ignoresBloodRageAndWarcry()
+        ) {
+            return false;
+        }
         if (typeof enemyScript.enterBloodRage === 'function') {
             enemyScript.enterBloodRage(rageTier);
+            return true;
         }
+        return false;
     }
 
     private applyBloodRageToAllActiveEnemies(rageTier: number): number {
@@ -2345,8 +2425,9 @@ export class EnemySpawner extends Component {
                 if (!enemy || !enemy.isValid || !enemy.active) continue;
                 const script = this.resolveEnemyScript(enemy);
                 if (!script || (script.isAlive && !script.isAlive())) continue;
-                this.applyBloodRageToEnemy(enemy, script, rageTier);
-                affectedCount++;
+                if (this.applyBloodRageToEnemy(enemy, script, rageTier)) {
+                    affectedCount++;
+                }
             }
         }
         return affectedCount;
@@ -2439,7 +2520,8 @@ export class EnemySpawner extends Component {
         this.isLastWaveCompleted = false; // 重置最后一波完成标志
         this.victoryCheckTimer = 0; // 重置胜利检查计时器
         this.isCountdownActive = false; // 重置倒计时状态
-        
+        this.node.getComponent(EnemySlaveWolfSpawner)?.resetWarlordCatapultAccumulator();
+
         // 清除倒计时自动继续定时器
         if (this.countdownAutoContinueTimer) {
             clearTimeout(this.countdownAutoContinueTimer);
@@ -2458,6 +2540,7 @@ export class EnemySpawner extends Component {
         this.injectDragonPrefabToMap();
         this.injectOrcWarlordPrefabToMap();
         this.injectOrcShamanPrefabToMap();
+        this.injectCatapultPrefabToMap();
         this.injectMinotaurWarriorPrefabToMap();
         
         //console.log(`[EnemySpawner] 预制体映射表重置完成，当前预制体数量: ${this.enemyPrefabMap.size}`);

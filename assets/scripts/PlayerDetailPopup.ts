@@ -60,6 +60,7 @@ export class PlayerDetailPopup extends Component {
         'build_bear_den': { roleId: 'Bear', roleName: '巨熊', iconPath: 'textures/role/Bear' },
         // 防御塔
         'build_watchtower': { roleId: 'WatchTower', roleName: '哨塔', iconPath: 'textures/role/WatchTower', isTower: true },
+        'build_cannon_tower': { roleId: 'CannonTower', roleName: '炮塔', iconPath: 'textures/role/CannonTower', isTower: true },
         'build_thunder_tower': { roleId: 'ThunderTower', roleName: '雷塔', iconPath: 'textures/role/ThunderTower', isTower: true },
         'build_ice_tower': { roleId: 'IceTower', roleName: '冰塔', iconPath: 'textures/role/IceTower', isTower: true },
         // 石墙
@@ -87,6 +88,7 @@ export class PlayerDetailPopup extends Component {
     // 防御塔/石墙的 roleId 到信息的映射（用于从 towerCountMap 恢复显示信息）
     private readonly TOWER_ROLE_INFO: Record<string, { roleName: string; iconPath: string }> = {
         'WatchTower': { roleName: '哨塔', iconPath: 'textures/role/WatchTower' },
+        'CannonTower': { roleName: '炮塔', iconPath: 'textures/role/CannonTower' },
         'ThunderTower': { roleName: '雷塔', iconPath: 'textures/role/ThunderTower' },
         'IceTower': { roleName: '冰塔', iconPath: 'textures/role/IceTower' },
         'StoneWall': { roleName: '石墙', iconPath: 'textures/role/StoneWall' },
@@ -351,8 +353,10 @@ export class PlayerDetailPopup extends Component {
 
         // 解析并显示通关阵容
         if (data.game_record) {
-            console.log('[PlayerDetailPopup] game_record exists, operations:', data.game_record.operations_json?.length, 'unitLevels:', data.game_record.unit_levels_json);
-            this.populateRoleLineup(data.game_record.operations_json, data.game_record.unit_levels_json);
+            const ops = this.normalizeOperationsJson(data.game_record.operations_json);
+            const levels = this.normalizeUnitLevelsJson(data.game_record.unit_levels_json);
+            console.log('[PlayerDetailPopup] game_record exists, operations:', ops?.length, 'unitLevels:', levels);
+            this.populateRoleLineup(ops, levels);
         } else {
             console.warn('[PlayerDetailPopup] no game_record in data');
         }
@@ -696,6 +700,49 @@ export class PlayerDetailPopup extends Component {
         });
     }
 
+    /** 服务端可能返回 JSON 字符串或嵌套字段 */
+    private normalizeOperationsJson(raw: any): any[] {
+        if (raw == null) {
+            return [];
+        }
+        if (Array.isArray(raw)) {
+            return raw;
+        }
+        if (typeof raw === 'string') {
+            try {
+                const p = JSON.parse(raw);
+                if (Array.isArray(p)) {
+                    return p;
+                }
+                if (p && Array.isArray(p.operations)) {
+                    return p.operations;
+                }
+            } catch {
+                return [];
+            }
+            return [];
+        }
+        if (typeof raw === 'object' && Array.isArray(raw.operations)) {
+            return raw.operations;
+        }
+        return [];
+    }
+
+    private normalizeUnitLevelsJson(raw: any): Record<string, number> {
+        if (raw == null || typeof raw !== 'object') {
+            return {};
+        }
+        if (typeof raw === 'string') {
+            try {
+                const p = JSON.parse(raw);
+                return p && typeof p === 'object' && !Array.isArray(p) ? p : {};
+            } catch {
+                return {};
+            }
+        }
+        return raw as Record<string, number>;
+    }
+
     /**
      * 解析操作数据为角色展示项
      * 从 operations 提取所有建筑和防御塔，从 unit_levels_json 获取等级
@@ -713,7 +760,15 @@ export class PlayerDetailPopup extends Component {
         // 遍历所有操作，统计防御塔建造次数
         console.log('[PlayerDetailPopup] 遍历 operations，数量:', operations?.length);
         for (const op of operations) {
-            const opType = op.type;
+            const opType = op?.type ?? op?.operation_type ?? op?.operationType;
+            // 哨塔升级为炮塔：阵容统计与哨塔一致为「座」，哨塔数量 -1、炮塔 +1
+            if (opType === 'upgrade_watchtower_to_cannon') {
+                towerCountMap['WatchTower'] = Math.max(0, (towerCountMap['WatchTower'] || 0) - 1);
+                towerCountMap['CannonTower'] = (towerCountMap['CannonTower'] || 0) + 1;
+                console.log('[PlayerDetailPopup] 哨塔升级炮塔计数:', towerCountMap);
+                continue;
+            }
+
             const mapping = this.BUILDING_TO_ROLE[opType];
             console.log('[PlayerDetailPopup] 检查操作:', opType, 'mapping:', mapping);
 
@@ -770,6 +825,9 @@ export class PlayerDetailPopup extends Component {
         console.log('[PlayerDetailPopup] 准备添加防御塔到 roles，towerCountMap:', towerCountMap);
         for (const roleId of Object.keys(towerCountMap)) {
             const count = towerCountMap[roleId];
+            if (count <= 0) {
+                continue;
+            }
             const towerInfo = this.TOWER_ROLE_INFO[roleId];
             console.log('[PlayerDetailPopup] 添加防御塔到 roles:', { roleId, count, towerInfo });
             if (towerInfo) {
@@ -1038,6 +1096,7 @@ export class PlayerDetailPopup extends Component {
             'EagleArcher': 'EagleArcher',
             // 防御塔
             'WatchTower': 'WatchTower',
+            'CannonTower': 'CannonTower',
             'ThunderTower': 'ThunderTower',
             'IceTower': 'IceTower',
             // 石墙
@@ -1166,6 +1225,7 @@ export class PlayerDetailPopup extends Component {
             'Arrower': new Color(150, 200, 100, 255),      // 黄绿色
             // 防御塔
             'WatchTower': new Color(120, 120, 120, 255),   // 灰色
+            'CannonTower': new Color(160, 90, 50, 255),    // 炮塔（赭石）
             'ThunderTower': new Color(255, 215, 0, 255),   // 金色
             'IceTower': new Color(100, 200, 255, 255),     // 冰蓝色
             // 石墙

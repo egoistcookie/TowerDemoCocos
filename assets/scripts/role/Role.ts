@@ -1724,6 +1724,7 @@ export class Role extends Component {
             'DualBladeOrc',
             'OrcWarrior',
             'OrcWarlord',
+            'Catapult',
             'OrcShaman',
             'Dragon',
             'MinotaurWarrior',
@@ -2062,7 +2063,7 @@ export class Role extends Component {
     private getEnemyType(enemy: Node): string | null {
         // 尝试获取各种敌人组件
         const scripts = enemy.getComponentsInChildren(Component);
-        const enemyTypes = ['Orc', 'DualBladeOrc', 'OrcWarrior', 'OrcWarlord', 'TrollSpearman', 'Dragon', 'OrcShaman', 'MinotaurWarrior', 'Boss'];
+        const enemyTypes = ['Orc', 'DualBladeOrc', 'OrcWarrior', 'OrcWarlord', 'TrollSpearman', 'Dragon', 'OrcShaman', 'Catapult', 'MinotaurWarrior', 'Boss'];
         for (const script of scripts) {
             const className = script.constructor.name;
             // 返回匹配的敌人类型

@@ -309,6 +309,8 @@ export class Church extends Build {
                     const pp = priest.worldPosition;
                     targetPos = new Vec3(pp.x + dirX * this.moveAwayDistance, pp.y, pp.z);
                 }
+                // 与剑士小屋一致：跑开/集结终点再做占位收束；排除自身以免集结点在脚下时被误判占用
+                targetPos = this.findAvailableSpawnPosition(targetPos, priest);
 
                 if ((priestScript as any).setManualMoveTargetPosition) {
                     (priestScript as any).setManualMoveTargetPosition(targetPos);
@@ -351,31 +353,57 @@ export class Church extends Build {
         }
     }
 
-    private findAvailableSpawnPosition(initialPos: Vec3): Vec3 {
+    private findAvailableSpawnPosition(initialPos: Vec3, excludeUnit: Node | null = null): Vec3 {
         const checkRadius = 30;
         const offsetStep = 50;
         const maxAttempts = 20;
 
-        if (!this.hasUnitAtPosition(initialPos, checkRadius)) {
+        if (!this.hasUnitAtPosition(initialPos, checkRadius, excludeUnit)) {
             return initialPos;
         }
 
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             const right = new Vec3(initialPos.x + offsetStep * attempt, initialPos.y, initialPos.z);
-            if (!this.hasUnitAtPosition(right, checkRadius)) {
+            if (!this.hasUnitAtPosition(right, checkRadius, excludeUnit)) {
                 return right;
             }
 
             const left = new Vec3(initialPos.x - offsetStep * attempt, initialPos.y, initialPos.z);
-            if (!this.hasUnitAtPosition(left, checkRadius)) {
+            if (!this.hasUnitAtPosition(left, checkRadius, excludeUnit)) {
                 return left;
+            }
+        }
+
+        for (let attempt = 1; attempt <= maxAttempts / 2; attempt++) {
+            const up = new Vec3(initialPos.x, initialPos.y + offsetStep * attempt, initialPos.z);
+            if (!this.hasUnitAtPosition(up, checkRadius, excludeUnit)) {
+                return up;
+            }
+            const down = new Vec3(initialPos.x, initialPos.y - offsetStep * attempt, initialPos.z);
+            if (!this.hasUnitAtPosition(down, checkRadius, excludeUnit)) {
+                return down;
+            }
+        }
+
+        for (let attempt = 1; attempt <= maxAttempts / 2; attempt++) {
+            const d = offsetStep * attempt;
+            const diagonals = [
+                new Vec3(initialPos.x + d, initialPos.y + d, initialPos.z),
+                new Vec3(initialPos.x - d, initialPos.y + d, initialPos.z),
+                new Vec3(initialPos.x + d, initialPos.y - d, initialPos.z),
+                new Vec3(initialPos.x - d, initialPos.y - d, initialPos.z),
+            ];
+            for (const p of diagonals) {
+                if (!this.hasUnitAtPosition(p, checkRadius, excludeUnit)) {
+                    return p;
+                }
             }
         }
 
         return initialPos;
     }
 
-    private hasUnitAtPosition(position: Vec3, radius: number): boolean {
+    private hasUnitAtPosition(position: Vec3, radius: number, excludeUnit: Node | null = null): boolean {
         const minDistance = radius * 2;
 
         const crystal = find('Crystal');
@@ -400,7 +428,9 @@ export class Church extends Build {
         if (towersNode) {
             const towers = towersNode.children || [];
             for (const tower of towers) {
-                if (!tower || !tower.isValid || !tower.active) continue;
+                // 勿要求 active：与剑士小屋一致，避免同帧刚 setPosition、尚未 active 的单位漏检导致重叠
+                if (!tower || !tower.isValid) continue;
+                if (excludeUnit && tower === excludeUnit) continue;
                 const script = tower.getComponent('Arrower') as any || tower.getComponent(Priest) as any;
                 if (script && script.isAlive && script.isAlive()) {
                     const tp = tower.worldPosition;
@@ -413,13 +443,13 @@ export class Church extends Build {
         }
 
         // 检查与其他类型友军单位的碰撞（跨类型防重叠）
-        if (this.checkOtherFriendlyUnits(position, radius)) return true;
+        if (this.checkOtherFriendlyUnits(position, radius, excludeUnit)) return true;
 
         return false;
     }
 
     // 检查与其他类型友军单位的碰撞（跨类型防重叠）
-    private checkOtherFriendlyUnits(position: Vec3, radius: number): boolean {
+    private checkOtherFriendlyUnits(position: Vec3, radius: number, excludeUnit: Node | null = null): boolean {
         // 检查与其他类型友军单位的碰撞（跨类型防重叠）
         const friendlyContainers: Array<{ nodeName: string; scriptName: string }> = [
             { nodeName: 'Canvas/Towers', scriptName: 'Arrower' },
@@ -427,18 +457,20 @@ export class Church extends Build {
             { nodeName: 'Canvas/Mages', scriptName: 'Mage' },
             { nodeName: 'ElfSwordsmans', scriptName: 'ElfSwordsman' },
         ];
-        const crossTypeMinDist = 60; // 跨类型单位最小间距
-        const crossTypeMinDistSq = crossTypeMinDist * crossTypeMinDist;
         for (const { nodeName, scriptName } of friendlyContainers) {
             const containerNode = find(nodeName);
             if (!containerNode) continue;
             for (const unit of containerNode.children) {
-                if (!unit || !unit.isValid || !unit.active) continue;
+                if (!unit || !unit.isValid) continue;
+                if (excludeUnit && unit === excludeUnit) continue;
                 const unitScript = unit.getComponent(scriptName) as any;
                 if (unitScript && unitScript.isAlive && unitScript.isAlive()) {
                     const up = unit.worldPosition;
                     const udx = up.x - position.x, udy = up.y - position.y;
-                    if (udx * udx + udy * udy < crossTypeMinDistSq) return true;
+                    const otherR = Math.max(10, unitScript.collisionRadius ?? 25);
+                    const safe = (radius + otherR) * 1.25;
+                    const safeSq = safe * safe;
+                    if (udx * udx + udy * udy < safeSq) return true;
                 }
             }
         }

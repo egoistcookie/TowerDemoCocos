@@ -7,6 +7,8 @@ const { ccclass } = _decorator;
  */
 export enum OperationType {
     BUILD_WATCHTOWER = 'build_watchtower',           // 建造哨塔
+    BUILD_CANNON_TOWER = 'build_cannon_tower',         // 直接放置炮塔（如 SP 卡等）
+    UPGRADE_WATCHTOWER_TO_CANNON = 'upgrade_watchtower_to_cannon', // 哨塔升级为炮塔
     BUILD_WAR_ANCIENT_TREE = 'build_war_ancient_tree', // 建造战争古树
     BUILD_HUNTER_HALL = 'build_hunter_hall',         // 建造猎手大厅
     BUILD_SWORDSMAN_HALL = 'build_swordsman_hall',   // 建造剑士小屋

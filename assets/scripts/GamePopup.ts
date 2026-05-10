@@ -988,6 +988,7 @@ export class GamePopup extends Component {
             'TrollSpearman': '巨魔投矛手',
             'Dragon': '飞龙',
             'OrcShaman': '兽人萨满',
+            'Catapult': '投石车',
             'MinotaurWarrior': '牛头人领主',
             'Wolf': '狼',
             'wolf': '狼'

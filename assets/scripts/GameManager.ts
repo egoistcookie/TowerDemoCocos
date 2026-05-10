@@ -118,6 +118,8 @@ export class GameManager extends Component {
     private readonly level1BuildHutTutorialBtnWorldPos: Vec3 = new Vec3();
     /** 第一关引导：暂停时仍可用真实时间做建造按钮循环闪烁 */
     private level1BuildHutTutorialBtnBlinkStartMs: number = 0;
+    /** 小精灵介绍后「点建造」引导窗口结束时间戳（ms），期间不插播战斗台词/生命之树提示，避免与新手抢焦点 */
+    private level1PostWispBuildGuideActiveUntilMs: number = 0;
     // 埋点相关
     private analyticsManager: AnalyticsManager | null = null;
     private totalKillCount: number = 0;
@@ -5509,6 +5511,7 @@ export class GameManager extends Component {
         this.pendingHighlightSwordsmanHallCandidateAfterBuild = false;
         this.hasShownLevel1BuildHutTutorialAt48s = false;
         this.level1BuildHutTutorialAwaitingBuildClick = false;
+        this.level1PostWispBuildGuideActiveUntilMs = 0;
         this.removeLevel1BuildHutTutorialMask();
         this.restoreLevel1BuildHutTutorialBuildButton();
         this.buildButtonBattleHintBlinkSeqId++;
@@ -5544,6 +5547,18 @@ export class GameManager extends Component {
     /** 单位介绍框是否正在显示（兽穴感叹号/巨熊流程等需与暂停态一致，避免打断） */
     isUnitIntroPanelOpen(): boolean {
         return this.unitIntroPopup?.isOpen?.() ?? false;
+    }
+
+    /** 第一关 48s 建造引导：是否处于「仅可点建造」遮罩阶段（供 UnitIntroPopup 推迟队列中的后续介绍） */
+    public isLevel1BuildHutTutorialAwaitingBuildClick(): boolean {
+        return this.level1BuildHutTutorialAwaitingBuildClick;
+    }
+
+    /**
+     * 第一关小精灵介绍关闭后：在若干秒内优先保留「点建造」引导，不插播金币/木材等战斗台词介绍框。
+     */
+    public activateLevel1PostWispBuildGuidePriorityWindow(durationSec: number = 12): void {
+        this.level1PostWispBuildGuideActiveUntilMs = Date.now() + Math.max(1, durationSec) * 1000;
     }
 
     /**
@@ -8020,6 +8035,22 @@ export class GameManager extends Component {
     }
 
     /**
+     * 第一关仅一座营地建筑且 48s 建造引导尚未触发完成前，不插播战斗台词类介绍（与新手引导抢焦点）。
+     */
+    private shouldDeferBattleHintsForLevel1SingleHutBefore48sTutorial(): boolean {
+        if (this.getCurrentLevelSafe() !== 1) {
+            return false;
+        }
+        if (this.hasShownLevel1BuildHutTutorialAt48s) {
+            return false;
+        }
+        if (this.countActiveWarAncientTreesOnField() !== 1) {
+            return false;
+        }
+        return this.gameTime < 48;
+    }
+
+    /**
      * 战斗中动态单位对话（均为“一局一次”触发）
      * 要求：不使用递归，只扫描固定容器的一层 children。
      */
@@ -8031,11 +8062,14 @@ export class GameManager extends Component {
         const canDebugLog = now - this.lastBattleDialogDebugLogMs >= 1500;
         this.autoCreateUnitIntroPopup();
 
+        // 第一关「仅点建造」遮罩阶段：不插播任何战斗台词介绍框，避免禁用建造按钮导致卡死
+        if (this.level1BuildHutTutorialAwaitingBuildClick) {
+            return;
+        }
+
         // A 提示触发后，可能在对话弹窗期间就已经打开建造面板；因此这里不依赖 intro popup 是否激活
         this.tryHighlightChurchCandidateAfterBuild();
         this.tryHighlightSwordsmanHallCandidateAfterBuild();
-        // 第一关 48s 仍只有初始弓箭手小屋：引导建造（不与其他介绍框叠加）
-        this.tryTriggerLevel1BuildHutTutorialAt48s();
 
         if (this.unitIntroPopup && this.unitIntroPopup.container && this.unitIntroPopup.container.active) {
             // 已有介绍框在显示时不叠加，下一帧再尝试
@@ -8043,6 +8077,17 @@ export class GameManager extends Component {
                //console.log('[BattleDialog] skip: intro popup active');
                 this.lastBattleDialogDebugLogMs = now;
             }
+            return;
+        }
+
+        // 无单位介绍框时再触发 48s 建造新手（与其它台词框/队列互斥）
+        this.tryTriggerLevel1BuildHutTutorialAt48s();
+
+        if (this.shouldDeferBattleHintsForLevel1SingleHutBefore48sTutorial()) {
+            return;
+        }
+        // 小精灵关闭后的短窗口内优先保留 GamePopup + 建造闪烁，不插播生命之树/木材等台词框
+        if (now < this.level1PostWispBuildGuideActiveUntilMs) {
             return;
         }
 
@@ -8307,6 +8352,13 @@ export class GameManager extends Component {
         if (this.unitIntroPopup && this.unitIntroPopup.container && this.unitIntroPopup.container.active) {
             return;
         }
+        if (
+            this.unitIntroPopup &&
+            typeof this.unitIntroPopup.hasPendingIntro === 'function' &&
+            this.unitIntroPopup.hasPendingIntro()
+        ) {
+            return;
+        }
         const arrower = this.getFirstActiveUnitScriptInContainers(['Canvas/Towers'], 'Arrower');
         if (!arrower) {
             return;
@@ -8319,7 +8371,8 @@ export class GameManager extends Component {
             'Arrower',
             () => {
                 this.beginLevel1BuildHutTutorialAfterIntroClose();
-            }
+            },
+            { keepBuildButtonInteractable: true }
         );
     }
 
@@ -8740,7 +8793,14 @@ export class GameManager extends Component {
         this.scheduleOnce(() => setRestore(), loops * Math.max(0, highlightSec + restoreSec));
     }
 
-    private showQuickUnitIntro(unitScript: any, unitName: string, unitDescription: string, unitId: string, onCloseCallback?: () => void) {
+    private showQuickUnitIntro(
+        unitScript: any,
+        unitName: string,
+        unitDescription: string,
+        unitId: string,
+        onCloseCallback?: () => void,
+        introOpts?: { keepBuildButtonInteractable?: boolean }
+    ) {
         this.autoCreateUnitIntroPopup();
         if (!this.unitIntroPopup) {
             return;
@@ -8752,7 +8812,8 @@ export class GameManager extends Component {
             unitIcon,
             unitType: unitId,
             unitId,
-            onCloseCallback: onCloseCallback
+            onCloseCallback: onCloseCallback,
+            keepBuildButtonInteractable: introOpts?.keepBuildButtonInteractable === true,
         });
     }
 

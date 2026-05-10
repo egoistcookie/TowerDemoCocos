@@ -2257,6 +2257,13 @@ export class Boss extends Component {
     }
     
     protected applyWarcryBuff(enemy: Node, enemyScript: any, currentTime: number) {
+        if (
+            enemyScript &&
+            typeof enemyScript.ignoresBloodRageAndWarcry === 'function' &&
+            enemyScript.ignoresBloodRageAndWarcry()
+        ) {
+            return;
+        }
         if (!enemyScript._originalMoveSpeed) {
             enemyScript._originalMoveSpeed = enemyScript.moveSpeed;
         }

@@ -632,6 +632,31 @@
       "经验奖励": "8点"
     }
   },
+  "Catapult": {
+    "baseStats": {
+      "maxHealth": 220,
+      "attackRange": 600,
+      "attackDamage": 32,
+      "attackInterval": 3.0,
+      "moveSpeed": 18,
+      "collisionRadius": 2,
+      "goldReward": 10,
+      "expReward": 10
+    },
+    "displayInfo": {
+      "name": "投石车",
+      "description": "攻城器械，范围伤害。"
+    },
+    "displayStats": {
+      "生命值": 220,
+      "攻击力": 32,
+      "攻击范围": "600像素",
+      "攻击间隔": "3.0秒",
+      "移动速度": "18像素/秒",
+      "金币奖励": "10金币",
+      "经验奖励": "10点"
+    }
+  },
   "MinotaurWarrior": {
     "baseStats": {
       "maxHealth": 2000,
