@@ -97,9 +97,46 @@ export class MercenarySummonHud extends Component {
             const uit = hudNode.addComponent(UITransform);
             uit.setContentSize(BTN_SIZE, BTN_SIZE);
             hudNode.addComponent(MercenarySummonHud);
-            hudNode.setSiblingIndex(canvas.children.length - 1);
         }
+        MercenarySummonHud.applyCanvasSiblingOrder(hudNode);
         hudNode.active = true;
+    }
+
+    /**
+     * docs/节点路径.md：Canvas/UnitInfoPanel≈35，雇佣按钮须在其下层，避免遮挡单位信息框。
+     * 仅当雇佣按钮 index >= 信息框时才下移，避免重复调用把层级再次颠倒。
+     */
+    private static applyCanvasSiblingOrder(hudNode: Node) {
+        const canvas = hudNode.parent;
+        if (!canvas?.isValid) {
+            return;
+        }
+
+        const unitInfoPanel = find('Canvas/UnitInfoPanel');
+        if (unitInfoPanel?.isValid && unitInfoPanel.parent === canvas) {
+            const panelIdx = unitInfoPanel.getSiblingIndex();
+            if (hudNode.getSiblingIndex() >= panelIdx) {
+                hudNode.setSiblingIndex(Math.max(0, panelIdx));
+            }
+            return;
+        }
+
+        const uiNode = find('Canvas/UI');
+        if (uiNode?.isValid && uiNode.parent === canvas) {
+            const targetIdx = uiNode.getSiblingIndex() + 1;
+            if (hudNode.getSiblingIndex() > targetIdx) {
+                hudNode.setSiblingIndex(targetIdx);
+            }
+            return;
+        }
+
+        const bottomSelection = find('Canvas/BottomSelection');
+        if (bottomSelection?.isValid && bottomSelection.parent === canvas) {
+            const targetIdx = bottomSelection.getSiblingIndex();
+            if (hudNode.getSiblingIndex() > targetIdx) {
+                hudNode.setSiblingIndex(targetIdx);
+            }
+        }
     }
 
     onLoad() {
@@ -149,6 +186,7 @@ export class MercenarySummonHud extends Component {
             this.canvasForCapture.on(Node.EventType.TOUCH_END, this.onCanvasTouchEndCapture, this, true);
             this.canvasForCapture.on(Node.EventType.TOUCH_CANCEL, this.onCanvasTouchEndCapture, this, true);
         }
+        MercenarySummonHud.applyCanvasSiblingOrder(this.node);
         this.layoutLeft();
         this.ensureMercenarySoldierPrefab(() => {});
     }
@@ -167,7 +205,8 @@ export class MercenarySummonHud extends Component {
     private layoutLeft() {
         const vo = view.getVisibleOrigin();
         const half = BTN_SIZE / 2;
-        this.node.setWorldPosition(vo.x + half, vo.y + 200, 0);
+        // 与 GameManager.updateBottomActionButtonsLayout 中建造按钮 targetBottom=250 对齐
+        this.node.setWorldPosition(vo.x + half, vo.y + 250, 0);
     }
 
     update(dt: number) {

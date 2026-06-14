@@ -1546,10 +1546,27 @@ export class UnitInfoPanel extends Component {
             this.initPanel();
         }
         if (this.panelNode) {
+            this.ensureAboveMercenarySummonHud();
             this.panelNode.active = true;
            //console.info('[UnitInfoPanel] show: panelNode.active =', this.panelNode.active);
         } else {
            //console.info('[UnitInfoPanel] show: panelNode不存在，无法显示面板');
+        }
+    }
+
+    /** 选中单位时信息框须盖过 Canvas/MercenarySummonHud（左下角雇佣按钮） */
+    private ensureAboveMercenarySummonHud() {
+        const panel = this.panelNode;
+        if (!panel?.isValid) {
+            return;
+        }
+        const mercHud = find('Canvas/MercenarySummonHud');
+        if (!mercHud?.isValid || mercHud.parent !== panel.parent) {
+            return;
+        }
+        const mercIdx = mercHud.getSiblingIndex();
+        if (panel.getSiblingIndex() <= mercIdx) {
+            panel.setSiblingIndex(mercIdx + 1);
         }
     }
 
